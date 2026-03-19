@@ -34,6 +34,11 @@ type OrderHistoryEvent = {
   synthetic?: boolean;
 };
 
+type HistoryDetail = {
+  label: string;
+  value: string;
+};
+
 export default function OrdersScreen({
   token, segmento: _segmento, displaySlug, onShowQR,
 }: {
@@ -125,6 +130,72 @@ export default function OrdersScreen({
     };
   };
 
+  const getOrderReference = (order: Order, isDelivery: boolean) => {
+    const observation = String((order as any).observation || '');
+    const mesaMatch = observation.match(/Mesa\s+(\d+)/i);
+    const senhaPedido = (order as any).senha_pedido;
+    const hasSenha = senhaPedido && senhaPedido !== 0;
+
+    if (isDelivery) {
+      return { label: 'Canal', value: 'DEL' };
+    }
+
+    if (hasSenha) {
+      return { label: 'Senha', value: String(senhaPedido).padStart(2, '0') };
+    }
+
+    if (mesaMatch) {
+      return { label: 'Mesa', value: mesaMatch[1] };
+    }
+
+    return { label: 'Pedido', value: String(order.id) };
+  };
+
+  const getOrderChannelMeta = (order: Order, isDelivery: boolean, isLevar: boolean) => {
+    if (isDelivery) {
+      return {
+        label: 'Delivery',
+        style: 'bg-orange-100 text-orange-700 border-orange-200',
+      };
+    }
+
+    if (isLevar) {
+      return {
+        label: 'Para levar',
+        style: 'bg-amber-100 text-amber-700 border-amber-200',
+      };
+    }
+
+    return {
+      label: 'Consumo local',
+      style: 'bg-blue-100 text-blue-700 border-blue-200',
+    };
+  };
+
+  const getElapsedLabel = (createdAt: string) => {
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
+
+    if (elapsed === 0) return 'Agora';
+    if (elapsed === 1) return '1 min';
+    if (elapsed < 60) return `${elapsed} min`;
+
+    const hours = Math.floor(elapsed / 60);
+    const minutes = elapsed % 60;
+
+    if (minutes === 0) return `${hours}h`;
+
+    return `${hours}h ${minutes}min`;
+  };
+
+  const primaryActionClassName =
+    'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-colors';
+  const secondaryActionClassName =
+    'inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50';
+  const warningActionClassName =
+    'inline-flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100';
+  const dangerActionClassName =
+    'inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100';
+
   const closeRefundModal = () => {
     setShowRefundModal(false);
     setOrderToRefund(null);
@@ -139,6 +210,13 @@ export default function OrdersScreen({
     setHistoryEvents([]);
     setHistoryError('');
     setHistoryLoading(false);
+  };
+
+  const closeCancelModal = () => {
+    setShowCancelModal(false);
+    setOrderToCancel(null);
+    setCancelPassword('');
+    setCancelReason('');
   };
 
   const openHistoryModal = async (order: Order) => {
@@ -290,10 +368,7 @@ export default function OrdersScreen({
       const data = await res.json().catch(() => null);
 
       if (res.ok) {
-        setShowCancelModal(false);
-        setOrderToCancel(null);
-        setCancelPassword('');
-        setCancelReason('');
+        closeCancelModal();
         fetchOrders();
         return;
       }
@@ -388,6 +463,14 @@ export default function OrdersScreen({
     return { bg: 'bg-zinc-50', border: 'border-zinc-100', badge: 'bg-zinc-100 text-zinc-700' };
   };
 
+  const getHistoryCategoryLabel = (event: OrderHistoryEvent) => {
+    if (event.tipo === 'STATUS') return 'Operacional';
+    if (event.tipo === 'REEMBOLSO') return 'Financeiro';
+    if (event.tipo === 'CANCELAMENTO') return 'Cancelamento';
+    if (event.tipo === 'CRIACAO') return 'Criacao';
+    return 'Auditoria';
+  };
+
   const getHistoryTitle = (event: OrderHistoryEvent) => {
     if (event.tipo === 'CRIACAO') return 'Pedido criado';
     if (event.tipo === 'STATUS') {
@@ -399,34 +482,37 @@ export default function OrdersScreen({
     return event.tipo;
   };
 
-  const getHistoryDetails = (event: OrderHistoryEvent) => {
-    const lines: string[] = [];
+  const getHistoryDetails = (event: OrderHistoryEvent): HistoryDetail[] => {
+    const details: HistoryDetail[] = [];
 
     if (event.tipo === 'CRIACAO') {
-      lines.push('Registro inicial do pedido.');
+      details.push({ label: 'Resumo', value: 'Registro inicial do pedido.' });
     }
 
     if (event.tipo === 'STATUS' && event.status_anterior && event.status_novo) {
-      lines.push(`${event.status_anterior} -> ${event.status_novo}`);
+      details.push({
+        label: 'Transicao',
+        value: `${event.status_anterior} -> ${event.status_novo}`,
+      });
     }
 
     if (event.valor && event.valor > 0) {
-      lines.push(`Valor: ${formatMoney(Number(event.valor))}`);
+      details.push({ label: 'Valor', value: formatMoney(Number(event.valor)) });
     }
 
     if (event.motivo) {
-      lines.push(`Motivo: ${event.motivo}`);
+      details.push({ label: 'Motivo', value: event.motivo });
     }
 
     if (event.estoque_reposto) {
-      lines.push('Estoque reposto.');
+      details.push({ label: 'Estoque', value: 'Itens repostos ao estoque.' });
     }
 
     if (event.usuario_id) {
-      lines.push(`Usuario: #${event.usuario_id}`);
+      details.push({ label: 'Usuario', value: `#${event.usuario_id}` });
     }
 
-    return lines;
+    return details;
   };
 
   const STATUSES_FINAIS = ['Entregue', 'Concluído', 'concluido', 'cancelado', 'Cancelado', cfg.statusConcluido];
@@ -544,13 +630,15 @@ export default function OrdersScreen({
             const isDelivery = (order as any).canal === 'delivery';
             const elapsed = Math.max(0, Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000));
             const refundMeta = getRefundMeta(orderWithRefund);
+            const orderReference = getOrderReference(order, isDelivery);
+            const channelMeta = getOrderChannelMeta(order, isDelivery, isLevar);
             return (
               <div key={order.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isDelivery ? 'border-orange-200' : 'border-zinc-100'}`}>
                 {/* Top stripe — laranja para delivery */}
                 <div className="h-1.5" style={{ background: isDelivery ? '#f97316' : sc.dot }} />
                 {/* Banner delivery */}
                 {isDelivery && (
-                  <div className="bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2">
+                  <div className="bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2 flex-wrap">
                     <span className="text-sm">🛵</span>
                     <span className="text-xs font-black text-orange-700 uppercase tracking-wider">Delivery</span>
                     {(order as any).cliente_nome && <span className="text-xs text-orange-600 font-semibold">— {(order as any).cliente_nome}</span>}
@@ -603,7 +691,7 @@ export default function OrdersScreen({
                           );
                         })()}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {/* Tipo badge */}
                           {isDelivery ? (
@@ -632,7 +720,7 @@ export default function OrdersScreen({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 mt-1">
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
                           <span className="text-xs font-bold text-zinc-500">{formatMoney(order.total_amount)}</span>
                           <span className="text-xs text-zinc-300">·</span>
                           <span className="text-xs text-zinc-400" title={new Date(order.created_at).toLocaleString('pt-BR')}>
@@ -642,13 +730,13 @@ export default function OrdersScreen({
                       </div>
                     </div>
                     {/* Direita: ações */}
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       {/* Avançar status */}
                       {next && (
                         <button onClick={() => updateStatus(order.id, next)}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95"
+                          className={primaryActionClassName}
                           style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.dot}22` }}>
-                          <ChevronRight size={14} /> {next}
+                          <ChevronRight size={14} /> Avancar para {next}
                         </button>
                       )}
                       {/* Imprimir comanda */}
@@ -672,8 +760,8 @@ export default function OrdersScreen({
                             if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
                           }
                         }}
-                        className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-colors" title="Imprimir Comanda (Cozinha)">
-                        <Printer size={16} />
+                        className={secondaryActionClassName} title="Imprimir Comanda (Cozinha)">
+                        <Printer size={15} /> Comanda
                       </button>
                       <button onClick={async () => {
                           try {
@@ -682,24 +770,56 @@ export default function OrdersScreen({
                             setSelectedReceipt(html);
                           } catch { setSelectedReceipt(order.receipt_text || 'Recibo não disponível'); }
                         }}
-                        className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-colors" title="Ver Recibo">
-                        <FileText size={16} />
+                        className={secondaryActionClassName} title="Ver Recibo">
+                        <FileText size={15} /> Recibo
                       </button>
                       <button
                         onClick={() => openHistoryModal(order)}
-                        className="p-2 hover:bg-blue-50 text-blue-500 rounded-lg transition-colors"
+                        className={secondaryActionClassName}
                         title="Ver histórico do pedido"
                       >
-                        <Clock size={16} />
+                        <Clock size={15} /> Historico
                       </button>
                       <button onClick={() => handleCancelClick(order)}
-                        className="p-2 hover:bg-amber-50 text-amber-500 rounded-lg transition-colors" title="Cancelar Pedido">
-                        <X size={16} />
+                        className={warningActionClassName} title="Cancelar Pedido">
+                        <X size={15} /> Cancelar
                       </button>
                       <button onClick={() => handleDeleteClick(order.id)}
-                        className="p-2 hover:bg-red-50 text-red-400 rounded-lg transition-colors" title="Excluir Administrativamente">
-                        <Trash2 size={16} />
+                        className={dangerActionClassName} title="Excluir Administrativamente">
+                        <Trash2 size={15} /> Excluir admin
                       </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Operacao</p>
+                      <p className="mt-1 text-sm font-bold" style={{ color: sc.color }}>
+                        {order.status}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Canal</p>
+                      <p className="mt-1 text-sm font-bold text-zinc-900">{channelMeta.label}</p>
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        {orderReference.label}: {orderReference.value}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        Aberto ha {getElapsedLabel(order.created_at)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Valor total</p>
+                      <p className="mt-1 text-sm font-bold text-zinc-900">{formatMoney(order.total_amount)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Reembolso</p>
+                      <p className="mt-1 text-sm font-bold" style={{ color: refundMeta ? refundMeta.tone.color : '#18181b' }}>
+                        {refundMeta ? formatMoney(refundMeta.refundedAmount) : 'Sem reembolso'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        {refundMeta ? refundMeta.label : 'Sem ajuste financeiro'}
+                      </p>
                     </div>
                   </div>
 
@@ -727,7 +847,7 @@ export default function OrdersScreen({
                   {(order.items || []).length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {(order.items || []).map((item: any, i: number) => (
-                        <span key={i} className="text-[11px] px-2 py-0.5 rounded-lg bg-zinc-50 text-zinc-600 border border-zinc-100">
+                        <span key={i} className="text-[11px] px-2 py-1 rounded-lg bg-zinc-50 text-zinc-600 border border-zinc-100">
                           {item.quantity}× {item.product_name}
                         </span>
                       ))}
@@ -743,7 +863,10 @@ export default function OrdersScreen({
                         borderColor: refundMeta.tone.border,
                       }}
                     >
-                      {refundMeta.label}: {formatMoney(refundMeta.refundedAmount)}
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em]">Financeiro</p>
+                      <p className="mt-1 font-semibold">
+                        {refundMeta.label}: {formatMoney(refundMeta.refundedAmount)}
+                      </p>
                       {orderWithRefund.reembolso_motivo ? ` • ${orderWithRefund.reembolso_motivo}` : ''}
                     </div>
                   )}
@@ -764,6 +887,28 @@ export default function OrdersScreen({
                       {orderWithRefund.reembolso_motivo ? ` • ${orderWithRefund.reembolso_motivo}` : ''}
                     </p>
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-zinc-50 text-zinc-700 border border-zinc-100">
+                      Total: {formatMoney(order.total_amount)}
+                    </span>
+                    {refundMeta && (
+                      <span
+                        className="text-[11px] font-semibold px-2 py-1 rounded-lg border"
+                        style={{
+                          background: refundMeta.tone.bg,
+                          color: refundMeta.tone.color,
+                          borderColor: refundMeta.tone.border,
+                        }}
+                      >
+                        Reembolsado: {formatMoney(refundMeta.refundedAmount)}
+                      </span>
+                    )}
+                    {order.cancelamento_motivo && (
+                      <span className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-100">
+                        Motivo do cancelamento: {order.cancelamento_motivo}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -802,7 +947,7 @@ export default function OrdersScreen({
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-black text-zinc-700">#{order.order_number}</span>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                      style={{ background: sc.bg, color: sc.color }}>{order.status}</span>
+                      style={{ background: sc.bg, color: sc.color }}>Operacao: {order.status}</span>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: isLevar ? '#fef3c7' : '#eff6ff', color: isLevar ? '#92400e' : '#1d4ed8' }}>
                       {isLevar ? '🛍️' : '🪑'}
@@ -835,7 +980,7 @@ export default function OrdersScreen({
                     </p>
                   )}
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-2 flex-wrap justify-end">
                       <button onClick={async () => {
                           // Busca cupom HTML padrão e abre janela de impressão
                           try {
@@ -845,8 +990,8 @@ export default function OrdersScreen({
                             if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
                           } catch { /* fallback: receipt_text */ setSelectedReceipt(order.receipt_text || ''); }
                         }}
-                        className="p-2 hover:bg-emerald-50 text-emerald-500 rounded-lg" title="Imprimir na tela">
-                        <Printer size={15} />
+                        className={secondaryActionClassName} title="Imprimir na tela">
+                        <Printer size={15} /> Imprimir
                       </button>
                   <button onClick={async () => {
                       try {
@@ -855,25 +1000,25 @@ export default function OrdersScreen({
                         setSelectedReceipt(html);
                       } catch { setSelectedReceipt(order.receipt_text || ''); }
                     }}
-                    className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg"><FileText size={15} /></button>
+                    className={secondaryActionClassName}><FileText size={15} /> Recibo</button>
                   <button
                     onClick={() => openHistoryModal(order)}
-                    className="p-2 hover:bg-blue-50 text-blue-500 rounded-lg"
+                    className={secondaryActionClassName}
                     title="Ver histórico do pedido"
                   >
-                    <Clock size={15} />
+                    <Clock size={15} /> Historico
                   </button>
                   {refundMeta?.isTotal !== true && (
                     <button
                       onClick={() => handleRefundClick(orderWithRefund)}
-                      className="px-2.5 py-2 hover:bg-orange-50 text-orange-600 rounded-lg text-[11px] font-bold"
+                      className={warningActionClassName}
                       title="Registrar Reembolso"
                     >
                       Reembolso
                     </button>
                   )}
                   <button onClick={() => handleDeleteClick(order.id)}
-                    className="p-2 hover:bg-red-50 text-red-400 rounded-lg" title="Excluir Administrativamente"><Trash2 size={15} /></button>
+                    className={dangerActionClassName} title="Excluir Administrativamente"><Trash2 size={15} /> Excluir admin</button>
                 </div>
               </div>
             );
@@ -973,6 +1118,9 @@ export default function OrdersScreen({
                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${tone.badge}`}>
                         {event.tipo}
                       </span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        {getHistoryCategoryLabel(event)}
+                      </span>
                       {event.synthetic && (
                         <span className="text-[10px] font-semibold text-zinc-400">
                           base
@@ -989,11 +1137,16 @@ export default function OrdersScreen({
                 </div>
 
                 {details.length > 0 && (
-                  <div className="mt-3 space-y-1">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {details.map((detail, index) => (
-                      <p key={`${event.id}-${index}`} className="text-xs text-zinc-600">
-                        {detail}
-                      </p>
+                      <div key={`${event.id}-${index}`} className="rounded-xl bg-white/70 px-3 py-2 border border-white/80">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
+                          {detail.label}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-700">
+                          {detail.value}
+                        </p>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1147,12 +1300,7 @@ export default function OrdersScreen({
             </Button>
             <Button
               type="button"
-              onClick={() => {
-                setShowCancelModal(false);
-                setOrderToCancel(null);
-                setCancelPassword('');
-                setCancelReason('');
-              }}
+              onClick={closeCancelModal}
               variant="secondary"
               className="flex-1"
             >
