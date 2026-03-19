@@ -1,0 +1,578 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Plus,
+  Minus,
+  Trash2,
+  CheckCircle2,
+  X,
+  Settings,
+  Printer,
+} from 'lucide-react';
+import { motion } from 'motion/react';
+import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
+import { Card, Button } from '../../components/ui/Card';
+
+// ── Cupom HTML padrão 80mm ────────────────────────────────────────────────────
+function gerarCupomHtml(opts: {
+  titulo: string; estabelecimento?: string; orderNumber: string; data: string;
+  itens: { qtd: number; nome: string; valor?: number }[];
+  totais?: { label: string; valor: number; destaque?: boolean }[];
+  pagamentos?: { metodo: string; valor: number; troco?: number }[];
+  rodape?: string;
+}): string {
+  const fmt = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+  const H = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const itensHtml = opts.itens.map(it => `
+    <div class="item-row">
+      <span class="item-nome">${it.qtd}x ${H(it.nome)}</span>
+      ${it.valor !== undefined ? `<span class="item-val">${fmt(it.valor)}</span>` : ''}
+    </div>`).join('');
+  const totaisHtml = (opts.totais||[]).map(t =>
+    `<div class="row${t.destaque?' destaque':''}"><span>${H(t.label)}</span><span>${fmt(t.valor)}</span></div>`
+  ).join('');
+  const pagHtml = (opts.pagamentos||[]).map(p => `
+    <div class="row"><span>${H(p.metodo)}</span><span>${fmt(p.valor)}</span></div>
+    ${p.troco && p.troco > 0 ? `
+    <div style="background:#fff7ed;border:2px solid #f97316;border-radius:6px;padding:5px 7px;margin:3px 0">
+      <div style="color:#c2410c;font-weight:bold">💰 LEVAR TROCO</div>
+      <div class="row destaque"><span>Troco a dar:</span><span>${fmt(p.troco)}</span></div>
+    </div>` : ''}
+  `).join('');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${H(opts.titulo)}</title>
+<style>
+  @page{margin:3mm;size:80mm auto;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.5;width:72mm;padding:2mm;color:#000;}
+  .center{text-align:center;} .bold{font-weight:bold;}
+  .sep{border-top:1px dashed #000;margin:4px 0;}
+  .row{display:flex;justify-content:space-between;padding:1px 0;}
+  .destaque{font-size:14px;font-weight:bold;margin-top:2px;}
+  .titulo{font-size:15px;font-weight:bold;}
+  .item-row{display:flex;justify-content:space-between;}
+  .item-nome{flex:1;word-break:break-word;padding-right:4px;}
+  .item-val{white-space:nowrap;}
+  .secao{font-weight:bold;font-size:11px;color:#555;letter-spacing:.5px;margin-top:4px;}
+  .rodape{text-align:center;font-size:10px;color:#777;margin-top:4px;}
+</style></head><body>
+<div class="center">
+  ${opts.estabelecimento ? `<div style="font-size:13px;font-weight:bold">${H(opts.estabelecimento.toUpperCase())}</div>` : ''}
+  <div class="titulo">${H(opts.titulo)}</div>
+  <div style="font-size:11px;color:#555">#${H(opts.orderNumber)} &nbsp;|&nbsp; ${H(opts.data)}</div>
+</div>
+<div class="sep"></div>
+<div class="secao">ITENS</div>
+${itensHtml}
+${opts.totais?.length ? `<div class="sep"></div>${totaisHtml}` : ''}
+${opts.pagamentos?.length ? `<div class="sep"></div><div class="secao">PAGAMENTO</div>${pagHtml}` : ''}
+<div class="sep"></div>
+<div class="rodape">${opts.rodape ? H(opts.rodape) : 'Obrigado pela preferência!'}</div>
+<div class="rodape">FlowPDV &bull; ${H(opts.data)}</div>
+</body></html>`;
+}
+
+export default function ComandaMesaModal({
+  mesa,
+  token,
+  taxasPagamento,
+  onClose,
+}: {
+  mesa: any;
+  token: string;
+  taxasPagamento?: { debito: number; credito: number; pix: number };
+  onClose: () => void;
+}) {
+const [itens, setItens] = useState<any[]>([]);
+  const [comanda, setComanda] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showPayment, setShowPayment] = useState(false);
+  const [payments, setPayments] = useState<{ method: string; amount_paid: number }[]>([]);
+  const [payMethod, setPayMethod] = useState('PIX');
+
+
+  const [payAmount, setPayAmount] = useState<number>(0);
+  const [finalizando, setFinalizando] = useState(false);
+
+  // ── Extras: Taxa de Serviço e Couvert ──────────────────────────────────────
+  const [usaTaxa, setUsaTaxa]           = useState(true);
+  const [percTaxa, setPercTaxa]         = useState(10);
+  const [usaCouvert, setUsaCouvert]     = useState(false);
+  const [couvertUn, setCouvertUn]       = useState(15);
+  const [couvertPessoas, setCouvertPessoas] = useState(1);
+  // ──────────────────────────────────────────────────────────────────────────
+
+  const subtotal = itens.reduce((a, i) => a + i.quantity * i.price_at_time, 0);
+  const valorTaxa    = usaTaxa    ? subtotal * (percTaxa / 100)      : 0;
+  const valorCouvert = usaCouvert ? couvertUn * couvertPessoas       : 0;
+  const total        = subtotal + valorTaxa + valorCouvert;
+
+  const totalPago = payments.reduce((a, p) => a + p.amount_paid, 0);
+  const troco     = Math.max(0, totalPago - total);
+  const restante  = Math.max(0, total - totalPago);
+
+  // ── Taxa da forma de pagamento selecionada ────────────────────────────────
+  const getTaxaCartao = (method: string): number => {
+    if (!taxasPagamento) return 0;
+    if (method === 'Débito')  return taxasPagamento.debito  || 0;
+    if (method === 'Crédito') return taxasPagamento.credito || 0;
+    if (method === 'PIX')     return taxasPagamento.pix     || 0;
+    return 0;
+  };
+  // Soma das taxas sobre cada pagamento já adicionado
+  const taxasJaAdicionadas = payments.reduce((acc, p) => {
+    const perc = getTaxaCartao(p.method);
+    return acc + (perc > 0 ? p.amount_paid * perc / 100 : 0);
+  }, 0);
+
+  // Taxa sobre o valor que está sendo digitado agora (preview)
+  const taxaCartaoAtual    = getTaxaCartao(payMethod);
+  const taxaPreview        = taxaCartaoAtual > 0 ? (payAmount || 0) * taxaCartaoAtual / 100 : 0;
+
+  // Total a pagar = subtotal + extras + taxas de todos os pagamentos já adicionados + taxa do atual em digitação
+  const totalComTaxas      = total + taxasJaAdicionadas + taxaPreview;
+  // Quanto o cliente já pagou (valor bruto + taxas já calculadas)
+  const totalPagoComTaxas  = payments.reduce((acc, p) => {
+    const perc = getTaxaCartao(p.method);
+    return acc + p.amount_paid + (perc > 0 ? p.amount_paid * perc / 100 : 0);
+  }, 0);
+  const restanteComTaxa    = Math.max(0, totalComTaxas - totalPagoComTaxas);
+  const trocoComTaxa       = Math.max(0, totalPagoComTaxas - totalComTaxas);
+
+  const fetchComanda = useCallback(async () => {
+    
+  try {
+      const res = await fetch(`/api/mesas/${mesa.id}/comanda`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setComanda(data.comanda);
+      setItens(data.itens || []);
+    } catch {} finally {
+      setLoading(false);
+    }
+  }, [mesa.id, token]);
+
+  useEffect(() => { fetchComanda(); }, [fetchComanda]);
+
+ const handleRemoveItem = async (itemId: number) => {
+    await fetch(`/api/mesas/comanda/item/${itemId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    fetchComanda();
+  };
+
+ const handleQtyChange = async (itemId: number, qty: number) => {
+    await fetch(`/api/mesas/comanda/item/${itemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ quantity: qty }),
+    });
+    fetchComanda();
+  };
+
+// Monta array de extras ativos para enviar ao servidor
+  const buildExtras = () => {
+    const ex: { name: string; value: number }[] = [];
+    if (usaTaxa && valorTaxa > 0)
+      ex.push({ name: `Taxa de Serviço (${percTaxa}%)`, value: valorTaxa });
+    if (usaCouvert && valorCouvert > 0)
+      ex.push({ name: `Couvert (${couvertPessoas} pessoa${couvertPessoas > 1 ? 's' : ''})`, value: valorCouvert });
+    return ex;
+  };
+
+  const handleFinalizar = async () => {
+    if (totalPago < total - 0.01) return;
+    setFinalizando(true);
+    try {
+      const res = await fetch(`/api/mesas/${mesa.id}/comanda/finalizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          payments,
+          observation: `Mesa ${mesa.numero}`,
+          extras: buildExtras(),
+        }),
+      });
+
+    const data = await res.json();
+      if (data.success) {
+        if (data.receipt) {
+          // data.receipt já é HTML gerado pelo servidor via gerarCupomHtml
+          const win = window.open('', '_blank');
+          if (win) {
+            win.document.write(data.receipt);
+            win.document.close();
+            win.focus();
+            setTimeout(() => win.print(), 400);
+          }
+        }
+        onClose();
+      } else {
+        alert(data.message || 'Erro ao finalizar');
+      }
+    } catch {
+      alert('Erro ao finalizar comanda');
+    } finally {
+      setFinalizando(false);
+    }
+  };
+
+const handlePrintComanda = () => {
+    const win = window.open('', '_blank');
+    if (!win) { alert('Permita popups para imprimir.'); return; }
+    const agora = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' });
+    const abertura = comanda?.created_at
+      ? new Date((comanda.created_at) + (comanda.created_at.includes('Z') ? '' : '-03:00'))
+          .toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' })
+      : '--:--';
+
+    const totais = [];
+    if (subtotal !== total) totais.push({ label: 'Subtotal', valor: subtotal });
+    if (usaTaxa && valorTaxa > 0) totais.push({ label: `Taxa Serviço (${percTaxa}%)`, valor: valorTaxa });
+    if (usaCouvert && valorCouvert > 0) totais.push({ label: `Couvert (${couvertPessoas}px)`, valor: valorCouvert });
+    totais.push({ label: 'TOTAL', valor: total, destaque: true });
+
+    const html = gerarCupomHtml({
+      titulo: `MESA ${mesa.numero}`,
+      orderNumber: `Aberta: ${abertura}`,
+      data: agora,
+      itens: itens.map(it => ({ qtd: it.quantity, nome: it.product_name, valor: it.quantity * it.price_at_time })),
+      totais,
+    });
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+      >
+        {/* Header */}
+        <div className={`p-6 flex items-center justify-between border-b border-zinc-100 ${
+          mesa.status === 'aberta' ? 'bg-emerald-50' : 'bg-zinc-50'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl ${
+              mesa.status === 'aberta' ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-200 text-zinc-600'
+            }`}>
+              {mesa.numero}
+            </div>
+            <div>
+              <h2 className="font-black text-zinc-900 text-lg">Mesa {mesa.numero}</h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`w-2 h-2 rounded-full ${
+                  mesa.status === 'aberta' ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'
+                }`} />
+                <span className={`text-xs font-bold ${
+                  mesa.status === 'aberta' ? 'text-emerald-600' : 'text-red-500'
+                }`}>
+                  {mesa.status === 'aberta' ? 'Aberta' : 'Fechada'}
+                </span>
+                {comanda?.created_at && (
+                  <span className="text-xs text-zinc-400">
+                    · desde {new Date((comanda?.created_at ?? '') + ((comanda?.created_at ?? '').includes('Z') ? '' : '-03:00')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-200 rounded-xl text-zinc-400">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Itens da comanda */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="w-7 h-7 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+            </div>
+          ) : itens.length === 0 ? (
+            <div className="text-center py-10 text-zinc-400">
+              <p className="font-medium">Comanda vazia</p>
+              <p className="text-xs mt-1">Adicione itens pelo PDV ou pelo cardápio</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {itens.map(item => (
+                <div key={item.id} className="flex items-center gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-zinc-900 truncate">{item.product_name}</p>
+                    <p className="text-xs text-zinc-400">R$ {item.price_at_time.toFixed(2)} un.</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-0.5">
+                    <button
+                      onClick={() => handleQtyChange(item.id, item.quantity - 1)}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-zinc-100 rounded-md transition-all text-zinc-600"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <span className="w-7 text-center font-bold text-sm">{item.quantity}</span>
+                    <button
+                      onClick={() => handleQtyChange(item.id, item.quantity + 1)}
+                      className="w-7 h-7 flex items-center justify-center hover:bg-zinc-100 rounded-md transition-all text-zinc-600"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                  <p className="w-20 text-right font-black text-sm text-zinc-900">
+                    R$ {(item.quantity * item.price_at_time).toFixed(2)}
+                  </p>
+                  <button
+                    onClick={() => handleRemoveItem(item.id)}
+                    className="text-zinc-300 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {itens.length > 0 && (
+          <div className="border-t border-zinc-200 p-5 space-y-4 bg-zinc-50">
+
+            {/* ── Cobranças Adicionais ──────────────────────────────── */}
+            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center gap-2">
+                <Settings size={13} className="text-zinc-400" />
+                <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Cobranças adicionais</span>
+              </div>
+
+              {/* Taxa de Serviço */}
+              <div className="px-4 py-3 flex items-center gap-3 border-b border-zinc-100">
+                <button
+                  onClick={() => setUsaTaxa(v => !v)}
+                  className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative ${usaTaxa ? 'bg-emerald-500' : 'bg-zinc-200'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${usaTaxa ? 'left-4' : 'left-0.5'}`} />
+                </button>
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-zinc-700">Taxa de Serviço / Garçom</p>
+                  <p className={`text-[10px] ${usaTaxa ? 'text-emerald-600 font-semibold' : 'text-zinc-400'}`}>
+                    {usaTaxa ? `+ R$ ${valorTaxa.toFixed(2)}` : 'Desativado'}
+                  </p>
+                </div>
+                {usaTaxa && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPercTaxa(v => Math.max(1, v - 1))}
+                      className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-xs font-bold"
+                    >−</button>
+                    <span className="w-10 text-center text-sm font-black text-zinc-800">{percTaxa}%</span>
+                    <button
+                      onClick={() => setPercTaxa(v => Math.min(30, v + 1))}
+                      className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-xs font-bold"
+                    >+</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Couvert */}
+              <div className="px-4 py-3 flex items-center gap-3">
+                <button
+                  onClick={() => setUsaCouvert(v => !v)}
+                  className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative ${usaCouvert ? 'bg-emerald-500' : 'bg-zinc-200'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${usaCouvert ? 'left-4' : 'left-0.5'}`} />
+                </button>
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-zinc-700">Couvert Artístico</p>
+                  <p className={`text-[10px] ${usaCouvert ? 'text-emerald-600 font-semibold' : 'text-zinc-400'}`}>
+                    {usaCouvert ? `R$ ${couvertUn.toFixed(2)} × ${couvertPessoas} pessoa${couvertPessoas > 1 ? 's' : ''} = R$ ${valorCouvert.toFixed(2)}` : 'Desativado'}
+                  </p>
+                </div>
+                {usaCouvert && (
+                  <div className="flex flex-col items-end gap-1.5">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-zinc-400 uppercase">Valor/px</span>
+                      <input
+                        type="number"
+                        value={couvertUn}
+                        onChange={e => setCouvertUn(Math.max(0, parseFloat(e.target.value) || 0))}
+                        className="w-16 text-right text-xs font-bold border border-zinc-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-zinc-900/10"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-zinc-400 uppercase">Pessoas</span>
+                      <button
+                        onClick={() => setCouvertPessoas(v => Math.max(1, v - 1))}
+                        className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-xs font-bold"
+                      >−</button>
+                      <span className="w-5 text-center text-sm font-black text-zinc-800">{couvertPessoas}</span>
+                      <button
+                        onClick={() => setCouvertPessoas(v => v + 1)}
+                        className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-xs font-bold"
+                      >+</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* ──────────────────────────────────────────────────────── */}
+
+            {/* Resumo de valores */}
+            <div className="space-y-1">
+              {(usaTaxa || usaCouvert) && (
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span>Subtotal</span>
+                  <span>R$ {subtotal.toFixed(2)}</span>
+                </div>
+              )}
+              {usaTaxa && valorTaxa > 0 && (
+                <div className="flex items-center justify-between text-xs text-zinc-500">
+                  <span>Taxa de Serviço ({percTaxa}%)</span>
+                  <span>R$ {valorTaxa.toFixed(2)}</span>
+                </div>
+              )}
+              {usaCouvert && valorCouvert > 0 && (
+                <div className="flex items-center justify-between text-xs text-zinc-500">
+                  <span>Couvert ({couvertPessoas} px)</span>
+                  <span>R$ {valorCouvert.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1">
+                <span className="font-semibold text-zinc-500">Total</span>
+                <span className="text-2xl font-black text-zinc-900">R$ {total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {!showPayment ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrintComanda}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-100 hover:bg-zinc-200 rounded-xl font-bold text-sm text-zinc-700 transition-all"
+                >
+                  <Printer size={15} />
+                  Imprimir
+                </button>
+                <button
+                  onClick={() => setShowPayment(true)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-bold text-sm transition-all"
+                >
+                  <CheckCircle2 size={15} />
+                  Fechar Conta
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Pagamento</p>
+
+                <div className="grid grid-cols-4 gap-1.5">
+                  {['Dinheiro', 'PIX', 'Débito', 'Crédito'].map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setPayMethod(m)}
+                      className={`py-2 rounded-lg text-[10px] font-bold border transition-all ${
+                        payMethod === m ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white border-zinc-200 text-zinc-600 hover:border-zinc-400'
+                      }`}
+                    >
+                      <span>{m}</span>
+                      {getTaxaCartao(m) > 0 && (
+                        <span className={`block text-[9px] font-bold mt-0.5 ${payMethod === m ? 'text-zinc-300' : 'text-amber-500'}`}>
+                          +{getTaxaCartao(m)}%
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="Valor"
+                    value={payAmount || ''}
+                    onChange={e => setPayAmount(parseFloat(e.target.value))}
+                    className="flex-1 px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                  />
+                  <button
+                    onClick={() => {
+                      if (payAmount > 0) {
+                        setPayments(prev => [...prev, { method: payMethod, amount_paid: payAmount }]);
+                        setPayAmount(0);
+                      }
+                    }}
+                    className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all"
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {payments.map((p, i) => {
+                  const perc = getTaxaCartao(p.method);
+                  const taxa = perc > 0 ? p.amount_paid * perc / 100 : 0;
+                  return (
+                    <div key={i} className="bg-white rounded-lg p-2 text-sm border border-zinc-100">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-zinc-700">{p.method}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">R$ {p.amount_paid.toFixed(2)}</span>
+                          <button onClick={() => setPayments(prev => prev.filter((_, j) => j !== i))} className="text-red-400">
+                            <X size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      {taxa > 0 && (
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-[10px] text-amber-600 font-bold">Taxa {p.method} ({perc}%)</span>
+                          <span className="text-[10px] text-amber-600 font-bold">+ R$ {taxa.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Preview taxa do método atual sendo digitado */}
+                {taxaPreview > 0 && (
+                  <div className="flex items-center justify-between text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    <span className="text-amber-700 font-bold">Taxa {payMethod} ({taxaCartaoAtual}%) s/ R$ {(payAmount||0).toFixed(2)}</span>
+                    <span className="text-amber-700 font-bold">+ R$ {taxaPreview.toFixed(2)}</span>
+                  </div>
+                )}
+                {/* Total consolidado */}
+                {(taxasJaAdicionadas + taxaPreview) > 0 && (
+                  <div className="flex items-center justify-between text-sm font-bold border-t border-zinc-100 pt-1">
+                    <span className="text-zinc-500">Total c/ taxas</span>
+                    <span className="text-zinc-900">R$ {totalComTaxas.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-bold">
+                  <span className={restanteComTaxa > 0 ? 'text-red-500' : 'text-zinc-400'}>
+                    Restante: R$ {restanteComTaxa.toFixed(2)}
+                  </span>
+                  {trocoComTaxa > 0 && (
+                    <span className="text-emerald-600">Troco: R$ {trocoComTaxa.toFixed(2)}</span>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => { setShowPayment(false); setPayments([]); setPayAmount(0); }}
+                    className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 rounded-xl font-bold text-sm transition-all"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    onClick={handleFinalizar}
+                    disabled={finalizando || restanteComTaxa > 0.01}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50"
+                  >
+                    {finalizando ? 'Finalizando...' : 'Confirmar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}

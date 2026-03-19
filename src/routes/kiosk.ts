@@ -1,0 +1,511 @@
+// src/routes/kiosk.ts — quiosque de ponto, KDS público e cardápio público
+import { Router } from 'express';
+import path from 'path';
+import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
+import { q1, qAll, qRun, qInsert } from '../db';
+import { publicRateLimit } from '../middleware';
+
+const TZ = 'America/Sao_Paulo';
+
+export function createKioskRouter() {
+  const router = Router();
+  const PIPELINE_KDS = ['Criado','Em Preparo','Pronto','Entregue'];
+
+  // ── Página HTML do quiosque de ponto ──────────────────────────────────────
+  router.get('/kiosk/ponto/:slug', (req, res) => {
+    const slug = req.params.slug;
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    res.setHeader('Cache-Control','no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma','no-cache');
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Bater Ponto — FlowPDV</title>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#09090b;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+.clock{font-size:clamp(48px,10vw,96px);font-weight:900;letter-spacing:-2px;font-variant-numeric:tabular-nums;line-height:1}
+.card{background:#18181b;border:1px solid #27272a;border-radius:24px;padding:32px;width:100%;max-width:420px;margin-top:28px;box-shadow:0 25px 60px rgba(0,0,0,.5)}
+.btn{width:100%;height:52px;border-radius:16px;border:none;font-size:15px;font-weight:700;cursor:pointer;transition:.15s;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
+.btn-primary{background:#fff;color:#09090b}.btn-primary:hover{background:#e4e4e7}
+.btn-ghost{background:transparent;color:#71717a;border:1px solid #27272a}.btn-ghost:hover{border-color:#52525b;color:#a1a1aa}
+.btn-green{background:#16a34a;color:#fff}.btn-green:hover{background:#15803d}
+.btn-red{background:#dc2626;color:#fff}.btn-red:hover{background:#b91c1c}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+input{width:100%;padding:14px 16px;background:#09090b;border:1px solid #27272a;border-radius:12px;color:#fff;font-size:15px;margin-bottom:10px;outline:none}
+input:focus{border-color:#52525b}
+label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;display:block;margin-bottom:6px}
+.status{text-align:center;padding:12px;border-radius:12px;font-size:14px;font-weight:700;margin-top:10px}
+.status-ok{background:#14532d;color:#86efac}
+.status-err{background:#450a0a;color:#fca5a5}
+.status-warn{background:#451a03;color:#fdba74}
+video,canvas{border-radius:16px;width:100%;max-height:240px;object-fit:cover}
+.tab{display:flex;gap:8px;margin-bottom:20px}
+.tab-btn{flex:1;padding:10px;border-radius:12px;border:1px solid #27272a;background:transparent;color:#71717a;font-size:13px;font-weight:700;cursor:pointer;transition:.15s}
+.tab-btn.active{background:#fff;color:#09090b;border-color:#fff}
+.espelho-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:10px}
+.espelho-dia{border-radius:8px;padding:6px 2px;text-align:center;font-size:10px;font-weight:700}
+.dia-trab{background:#14532d;color:#86efac}
+.dia-falta{background:#450a0a;color:#fca5a5}
+.dia-folga{background:#1e3a5f;color:#93c5fd}
+.dia-hoje{outline:2px solid #fbbf24}
+.dia-vazio{background:#18181b;color:#3f3f46}
+</style></head><body>
+<div class="clock" id="clock">00:00:00</div>
+<div class="card" id="main">
+  <div id="tela-login">
+    <p style="text-align:center;font-size:16px;font-weight:700;margin-bottom:20px">🕐 Quiosque de Ponto</p>
+    <label>Usuário</label>
+    <input id="inp-user" placeholder="seu.usuario" autocomplete="username"/>
+    <label>Senha</label>
+    <input id="inp-pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
+    <button class="btn btn-primary" onclick="login()">Entrar</button>
+    <div id="login-status" class="status" style="display:none"></div>
+  </div>
+
+  <div id="tela-func" style="display:none">
+    <p id="func-nome" style="text-align:center;font-size:18px;font-weight:900;margin-bottom:4px"></p>
+    <p id="func-cargo" style="text-align:center;font-size:12px;color:#71717a;margin-bottom:16px"></p>
+    <div class="tab">
+      <button class="tab-btn active" onclick="setAba('ponto')" id="tab-ponto">📸 Bater Ponto</button>
+      <button class="tab-btn" onclick="setAba('espelho')" id="tab-espelho">📅 Meu Espelho</button>
+    </div>
+
+    <div id="aba-ponto">
+      <div id="tipo-banner" style="display:none;border-radius:16px;padding:18px 12px;text-align:center;margin-bottom:16px;transition:.3s">
+        <div id="tipo-emoji" style="font-size:40px;line-height:1;margin-bottom:6px"></div>
+        <div id="tipo-label" style="font-size:22px;font-weight:900;letter-spacing:.05em"></div>
+        <div id="tipo-sub" style="font-size:12px;margin-top:4px;opacity:.75"></div>
+      </div>
+      <div id="cam-wrap" style="display:none;margin-bottom:12px">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay" style="display:none"></canvas>
+      </div>
+      <button class="btn btn-green" id="btn-reconhecer" onclick="confirmarERegistrar()" style="display:none">📸 Reconhecer Rosto e Bater Ponto</button>
+      <div id="wrap-cadastro" style="display:none">
+        <div style="background:#1c1917;border:1px solid #44403c;border-radius:16px;padding:16px;margin-bottom:10px;text-align:center">
+          <p style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:6px">⚠️ Rosto não cadastrado</p>
+          <p style="font-size:12px;color:#a1a1aa;margin-bottom:12px">Posicione seu rosto na câmera para cadastrar o reconhecimento facial.</p>
+          <button class="btn btn-primary" onclick="cadastrarRosto()" style="height:44px;font-size:13px">📷 Cadastrar Meu Rosto</button>
+        </div>
+      </div>
+      <div id="ponto-status" class="status" style="display:none"></div>
+    </div>
+
+    <div id="aba-espelho" style="display:none">
+      <p id="esp-resumo" style="text-align:center;font-size:12px;color:#a1a1aa;margin-bottom:12px"></p>
+      <div class="espelho-grid" id="esp-headers"></div>
+      <div class="espelho-grid" id="esp-grid"></div>
+    </div>
+
+    <button class="btn btn-ghost" onclick="sair()" style="margin-top:16px">← Sair</button>
+  </div>
+</div>
+
+<div id="modal-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:999;display:none;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#18181b;border:1px solid #27272a;border-radius:24px;padding:32px;width:100%;max-width:360px;text-align:center">
+    <div id="mc-emoji" style="font-size:56px;line-height:1;margin-bottom:12px"></div>
+    <div id="mc-tipo" style="font-size:26px;font-weight:900;margin-bottom:6px"></div>
+    <div id="mc-nome" style="font-size:14px;color:#a1a1aa;margin-bottom:4px"></div>
+    <div id="mc-hora" style="font-size:13px;color:#71717a;margin-bottom:24px"></div>
+    <p style="font-size:13px;color:#a1a1aa;margin-bottom:20px">Confirma o registro de ponto?</p>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" style="flex:1;height:48px" onclick="fecharModal()">✕ Cancelar</button>
+      <button class="btn btn-primary" id="mc-btn-confirm" style="flex:1;height:48px;font-size:15px" onclick="executarRegistro()">✓ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const slug='${slug}';
+let funcAtual=null;
+let modelsCarregados=false;
+let stream=null;
+function tick(){const n=new Date();document.getElementById('clock').textContent=n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+tick();setInterval(tick,1000);
+function showStatus(id,msg,tipo){const el=document.getElementById(id);el.textContent=msg;el.className='status status-'+(tipo||'ok');el.style.display='block';}
+function hideStatus(id){document.getElementById(id).style.display='none';}
+async function login(){
+  const user=document.getElementById('inp-user').value.trim();
+  const pass=document.getElementById('inp-pass').value;
+  if(!user||!pass){showStatus('login-status','Preencha usuário e senha','err');return;}
+  showStatus('login-status','Verificando...','warn');
+  try{
+    const r=await fetch('/public/ponto/'+slug+'/login-func',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+    const d=await r.json();
+    if(!r.ok){showStatus('login-status',d.error||'Erro de login','err');return;}
+    funcAtual=d.funcionario;
+    hideStatus('login-status');
+    document.getElementById('tela-login').style.display='none';
+    document.getElementById('tela-func').style.display='block';
+    document.getElementById('func-nome').textContent=funcAtual.nome;
+    document.getElementById('func-cargo').textContent=funcAtual.cargo;
+    if(funcAtual.face_descriptor&&funcAtual.face_descriptor.length>0){
+      document.getElementById('btn-reconhecer').style.display='flex';
+      document.getElementById('wrap-cadastro').style.display='none';
+    } else {
+      document.getElementById('btn-reconhecer').style.display='none';
+      document.getElementById('wrap-cadastro').style.display='block';
+    }
+    await carregarProximoTipo();
+    await carregarModels();
+  }catch(e){showStatus('login-status','Erro de conexão','err');}
+}
+let proximoTipoAtual = 'entrada';
+let metodoAtual = null;
+async function cadastrarRosto(){
+  if(!modelsCarregados){showStatus('ponto-status','⏳ Carregando IA facial...','warn');await carregarModels();if(!modelsCarregados){showStatus('ponto-status','❌ IA indisponível.','err');return;}hideStatus('ponto-status');}
+  showStatus('ponto-status','📷 Abrindo câmera para cadastro...','warn');
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}});
+    const video=document.getElementById('video');video.srcObject=stream;document.getElementById('cam-wrap').style.display='block';
+    await new Promise(r=>{video.onloadedmetadata=r;});await video.play();
+    for(let i=3;i>0;i--){showStatus('ponto-status','📷 Posicione o rosto... '+i+'s','warn');await new Promise(r=>setTimeout(r,1000));}
+    showStatus('ponto-status','🔄 Capturando rosto...','warn');
+    const opts=new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.4});let det=null;
+    for(let t=1;t<=5;t++){showStatus('ponto-status','🔄 Detectando... ('+t+'/5)','warn');await new Promise(r=>setTimeout(r,800));det=await faceapi.detectSingleFace(video,opts).withFaceLandmarks().withFaceDescriptor();if(det)break;}
+    pararCamera();
+    if(!det){showStatus('ponto-status','❌ Rosto não detectado. Tente novamente com boa iluminação.','err');return;}
+    const descriptor=Array.from(det.descriptor);
+    const r=await fetch('/public/ponto/'+slug+'/save-face',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({func_id:funcAtual.id,descriptor})});
+    const d=await r.json();
+    if(d.success){funcAtual.face_descriptor=descriptor;document.getElementById('wrap-cadastro').style.display='none';document.getElementById('btn-reconhecer').style.display='flex';showStatus('ponto-status','✅ Rosto cadastrado com sucesso!','ok');}
+    else showStatus('ponto-status','❌ Erro ao salvar: '+(d.error||'Tente novamente'),'err');
+  }catch(e){pararCamera();showStatus('ponto-status','❌ Erro câmera: '+e.message,'err');}
+}
+async function carregarProximoTipo(){
+  try{const r=await fetch('/public/ponto/'+slug+'/proximo-tipo/'+funcAtual.id);const d=await r.json();proximoTipoAtual=d.completo?'completo':d.tipo;atualizarBanner();const btn=document.getElementById('btn-reconhecer');if(btn)btn.disabled=d.completo;}catch{}
+}
+function atualizarBanner(){
+  const banner=document.getElementById('tipo-banner');const emoji=document.getElementById('tipo-emoji');const label=document.getElementById('tipo-label');const sub=document.getElementById('tipo-sub');
+  banner.style.display='block';
+  if(proximoTipoAtual==='completo'){banner.style.background='#14532d';banner.style.border='2px solid #16a34a';emoji.textContent='✅';label.textContent='PONTO COMPLETO';sub.textContent='Entrada e saída já registradas hoje';}
+  else if(proximoTipoAtual==='entrada'){banner.style.background='#052e16';banner.style.border='2px solid #16a34a';emoji.textContent='⬆️';label.textContent='REGISTRAR ENTRADA';label.style.color='#86efac';sub.textContent='Você ainda não bateu o ponto de entrada hoje';}
+  else{banner.style.background='#450a0a';banner.style.border='2px solid #dc2626';emoji.textContent='⬇️';label.textContent='REGISTRAR SAÍDA';label.style.color='#fca5a5';sub.textContent='Entrada já registrada — batendo saída agora';}
+}
+async function carregarModels(){
+  if(modelsCarregados)return;
+  const btn=document.getElementById('btn-reconhecer');if(btn){btn.textContent='⏳ Carregando IA facial...';btn.disabled=true;}
+  try{const CDN='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';await faceapi.nets.tinyFaceDetector.loadFromUri(CDN);await faceapi.nets.faceLandmark68Net.loadFromUri(CDN);await faceapi.nets.faceRecognitionNet.loadFromUri(CDN);modelsCarregados=true;if(btn){btn.textContent='📸 Reconhecer Rosto e Bater Ponto';btn.disabled=false;}}
+  catch(e){console.warn('face-api models não carregados:',e);if(btn){btn.textContent='❌ IA indisponível (use PIN)';btn.disabled=true;}}
+}
+async function iniciarReconhecimento(){
+  if(!modelsCarregados){showStatus('ponto-status','Modelos de IA ainda carregando, aguarde...','warn');return;}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}});
+    const video=document.getElementById('video');video.srcObject=stream;document.getElementById('cam-wrap').style.display='block';document.getElementById('btn-reconhecer').disabled=true;
+    await new Promise(r=>{video.onloadedmetadata=r;});await video.play();
+    for(let i=3;i>0;i--){document.getElementById('btn-reconhecer').textContent='📷 Posicione o rosto... '+i+'s';await new Promise(r=>setTimeout(r,1000));}
+    document.getElementById('btn-reconhecer').textContent='🔄 Analisando rosto...';
+    const opts=new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.4});let det=null;
+    for(let tentativa=1;tentativa<=5;tentativa++){document.getElementById('btn-reconhecer').textContent='🔄 Detectando... ('+tentativa+'/5)';await new Promise(r=>setTimeout(r,800));det=await faceapi.detectSingleFace(video,opts).withFaceLandmarks().withFaceDescriptor();if(det)break;}
+    pararCamera();
+    if(!det){showStatus('ponto-status','Rosto não detectado após 5 tentativas. Verifique a iluminação ou use PIN.','err');resetBtnFace();return;}
+    const salvo=new Float32Array(funcAtual.face_descriptor);const dist=faceapi.euclideanDistance(det.descriptor,salvo);
+    if(dist>0.55){showStatus('ponto-status','Rosto não reconhecido. Use PIN ou recadastre o rosto.','err');resetBtnFace();return;}
+    resetBtnFace();mostrarModalConfirmacao();
+  }catch(e){pararCamera();showStatus('ponto-status','Erro câmera: '+e.message+'. Verifique permissões e use PIN.','err');resetBtnFace();}
+}
+function pararCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}document.getElementById('cam-wrap').style.display='none';}
+function resetBtnFace(){const btn=document.getElementById('btn-reconhecer');btn.textContent='📸 Reconhecer Rosto e Bater Ponto';btn.disabled=false;}
+async function confirmarERegistrar(){
+  if(proximoTipoAtual==='completo')return;metodoAtual='face';
+  if(!modelsCarregados){showStatus('ponto-status','⏳ Carregando IA facial...','warn');await carregarModels();if(!modelsCarregados){showStatus('ponto-status','❌ IA indisponível. Contate o administrador.','err');metodoAtual=null;return;}hideStatus('ponto-status');}
+  await iniciarReconhecimento();
+}
+function mostrarModalConfirmacao(){
+  const isEntrada=proximoTipoAtual==='entrada';
+  document.getElementById('mc-emoji').textContent=isEntrada?'⬆️':'⬇️';
+  document.getElementById('mc-tipo').textContent=isEntrada?'ENTRADA':'SAÍDA';
+  document.getElementById('mc-tipo').style.color=isEntrada?'#86efac':'#fca5a5';
+  document.getElementById('mc-nome').textContent=funcAtual.nome+' — '+funcAtual.cargo;
+  const agora=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('mc-hora').textContent='Horário: '+agora;
+  const btnConfirm=document.getElementById('mc-btn-confirm');
+  btnConfirm.style.background=isEntrada?'#16a34a':'#dc2626';
+  btnConfirm.textContent=isEntrada?'⬆️ Confirmar ENTRADA':'⬇️ Confirmar SAÍDA';
+  document.getElementById('modal-confirm').style.display='flex';
+}
+function fecharModal(){document.getElementById('modal-confirm').style.display='none';metodoAtual=null;}
+async function executarRegistro(){fecharModal();await registrarPonto('face','');}
+async function registrarPonto(metodo,pin){
+  try{
+    const r=await fetch('/public/ponto/'+slug+'/registrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({func_id:funcAtual.id,pin:pin||'',metodo})});
+    const d=await r.json();
+    if(d.success){const tipoLabel=d.tipo==='entrada'?'ENTRADA ⬆️':'SAÍDA ⬇️';showStatus('ponto-status','✅ '+tipoLabel+' registrada às '+d.hora,'ok');await carregarProximoTipo();}
+    else showStatus('ponto-status',d.error||'Erro ao registrar','err');
+    resetBtnFace();
+  }catch(e){showStatus('ponto-status','Erro de conexão','err');resetBtnFace();}
+}
+function setAba(aba){
+  document.getElementById('aba-ponto').style.display=aba==='ponto'?'block':'none';
+  document.getElementById('aba-espelho').style.display=aba==='espelho'?'block':'none';
+  document.getElementById('tab-ponto').className='tab-btn'+(aba==='ponto'?' active':'');
+  document.getElementById('tab-espelho').className='tab-btn'+(aba==='espelho'?' active':'');
+  if(aba==='espelho')carregarEspelho();
+}
+async function carregarEspelho(){
+  const now=new Date();
+  try{
+    const r=await fetch('/public/ponto/'+slug+'/espelho/'+funcAtual.id+'?month='+(now.getMonth()+1)+'&year='+now.getFullYear());
+    const d=await r.json();const res=d.resumo;
+    document.getElementById('esp-resumo').textContent='Trabalhados: '+res.diasTrabalhados+' | Faltas: '+res.totalFaltas+' | Atraso: '+res.totalAtrasoMin+'min';
+    const heads=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    document.getElementById('esp-headers').innerHTML=heads.map(h=>'<div class="espelho-dia" style="color:#52525b">'+h+'</div>').join('');
+    const hoje=now.toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
+    const primeiro=d.dias[0];let grid='';
+    for(let i=0;i<primeiro.diaSemana;i++)grid+='<div></div>';
+    for(const dia of d.dias){
+      let cls='espelho-dia dia-vazio';
+      if(dia.status==='trabalhado')cls='espelho-dia dia-trab';
+      else if(dia.status==='falta')cls='espelho-dia dia-falta';
+      else if(dia.status==='folga'||dia.status==='atestado')cls='espelho-dia dia-folga';
+      if(dia.data===hoje)cls+=' dia-hoje';
+      const ent=dia.entrada?dia.entrada.slice(0,5):'';const sai=dia.saida?dia.saida.slice(0,5):'';
+      grid+='<div class="'+cls+'" title="'+dia.data+(ent?' E:'+ent:'')+(sai?' S:'+sai:'')+'" >'+dia.dia+'</div>';
+    }
+    document.getElementById('esp-grid').innerHTML=grid;
+  }catch(e){document.getElementById('esp-resumo').textContent='Erro ao carregar espelho';}
+}
+function sair(){
+  funcAtual=null;proximoTipoAtual='entrada';metodoAtual=null;
+  pararCamera();fecharModal();
+  document.getElementById('tela-func').style.display='none';
+  document.getElementById('tela-login').style.display='block';
+  document.getElementById('inp-user').value='';document.getElementById('inp-pass').value='';
+  document.getElementById('ponto-status').style.display='none';setAba('ponto');
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('tela-login').style.display!=='none')login();});
+</script></body></html>`);
+  });
+
+  // ── Rate limiters ─────────────────────────────────────────────────────────
+  const kioskRateLimit = rateLimit({ windowMs:60000, max:300, standardHeaders:true, legacyHeaders:false, message:{error:'Muitas requisições. Aguarde um momento.'} });
+  const loginKioskLimit = rateLimit({ windowMs:60000, max:30, standardHeaders:true, legacyHeaders:false, message:{error:'Muitas tentativas. Aguarde 1 minuto.'}, skipSuccessfulRequests:true });
+  const kdsAdvanceLimit = rateLimit({ windowMs:60000, max:120, message:{error:'Muitas requisições ao KDS. Aguarde.'} });
+  router.use('/public/ponto', kioskRateLimit);
+  router.use('/public/kds',   kioskRateLimit);
+
+  // ── API pública do quiosque ───────────────────────────────────────────────
+  router.post('/public/ponto/:slug/login-func', loginKioskLimit, async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username||!password) return res.status(400).json({ error:'Usuário e senha obrigatórios' });
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Estabelecimento não encontrado' });
+      const user = await q1('SELECT * FROM usuarios WHERE username=? AND cliente_id=? AND ativo=1', [username, tenant.id]);
+      if (!user) return res.status(401).json({ error:'Usuário não encontrado' });
+      let ok = false;
+      if (user.password?.startsWith('$2')) { try { ok = bcrypt.compareSync(password, user.password); } catch {} }
+      if (!ok) return res.status(401).json({ error:'Senha incorreta' });
+      const func = await q1("SELECT id,nome,cargo,foto_url,face_descriptor FROM funcionarios WHERE tenant_id=? AND nome=? AND status='ativo'", [tenant.id, user.nome]);
+      if (!func) return res.status(404).json({ error:'Funcionário não encontrado no RH' });
+      res.json({ funcionario:{ id:func.id, nome:func.nome, cargo:func.cargo, foto_url:func.foto_url||null, face_descriptor:func.face_descriptor?JSON.parse(func.face_descriptor):null } });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.post('/public/ponto/:slug/save-face', async (req, res) => {
+    try {
+      const { func_id, descriptor } = req.body;
+      if (!func_id||!descriptor||!Array.isArray(descriptor)) return res.status(400).json({ error:'Dados inválidos' });
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Não encontrado' });
+      await qRun('UPDATE funcionarios SET face_descriptor=? WHERE id=? AND tenant_id=?', [JSON.stringify(descriptor), func_id, tenant.id]);
+      res.json({ success:true });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.get('/public/ponto/:slug/proximo-tipo/:func_id', async (req, res) => {
+    try {
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Não encontrado' });
+      const data = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+      const hoje = await qAll('SELECT tipo FROM func_pontos WHERE funcionario_id=? AND tenant_id=? AND data=? ORDER BY id ASC', [req.params.func_id, tenant.id, data]);
+      const temEnt = hoje.some((p:any)=>p.tipo==='entrada');
+      const temSai = hoje.some((p:any)=>p.tipo==='saida');
+      res.json({ tipo: temEnt&&!temSai ? 'saida' : 'entrada', completo: temEnt&&temSai });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.get('/public/ponto/:slug/espelho/:func_id', async (req, res) => {
+    try {
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Não encontrado' });
+      const func = await q1('SELECT * FROM funcionarios WHERE id=? AND tenant_id=?', [req.params.func_id, tenant.id]);
+      if (!func) return res.status(404).json({ error:'Funcionário não encontrado' });
+      const mm = String(req.query.month||new Date().getMonth()+1).padStart(2,'0');
+      const yy = String(req.query.year||new Date().getFullYear());
+      const hoje = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+      const [pontos, eventos] = await Promise.all([
+        qAll(`SELECT * FROM func_pontos WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=? ORDER BY data,hora`, [func.id, tenant.id, mm, yy]),
+        qAll(`SELECT * FROM func_eventos WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=? ORDER BY data`, [func.id, tenant.id, mm, yy]),
+      ]);
+      const pbd: Record<string,any[]>={}, ebd: Record<string,any[]>={};
+      for (const p of pontos) { if(!pbd[p.data])pbd[p.data]=[]; pbd[p.data].push(p); }
+      for (const e of eventos) { if(!ebd[e.data])ebd[e.data]=[]; ebd[e.data].push(e); }
+      const diasNoMes = new Date(Number(yy),Number(mm),0).getDate();
+      const diasSemana = (func.dias_semana||'1,2,3,4,5').split(',').map(Number);
+      const tolerancia = func.tolerancia_minutos||10;
+      const cargaHoras = func.carga_horaria||8;
+      const horEnt = func.horario_entrada||'08:00';
+      let tFaltas=0,tAtrasos=0,dTrab=0,dFolga=0,dAtestado=0;
+      const dias: any[] = [];
+      for (let d=1;d<=diasNoMes;d++) {
+        const ds=`${yy}-${mm}-${String(d).padStart(2,'0')}`;
+        const diaSem=new Date(ds+'T12:00:00').getDay();
+        const isExp=diasSemana.includes(diaSem);
+        const evts=ebd[ds]||[], pts=pbd[ds]||[];
+        const ent=pts.find((p:any)=>p.tipo==='entrada'), sai=pts.find((p:any)=>p.tipo==='saida');
+        let status='sem_expediente', am=0;
+        if (ds>hoje||(func.data_admissao&&ds<func.data_admissao)) status='sem_expediente';
+        else if (evts.some((e:any)=>e.tipo==='folga')) { status='folga'; dFolga++; }
+        else if (evts.some((e:any)=>e.tipo==='atestado')) { status='atestado'; dAtestado++; }
+        else if (isExp) {
+          if (ent) {
+            status='trabalhado'; dTrab++;
+            const [eh,em2]=horEnt.split(':').map(Number);
+            const lim=eh*60+em2+tolerancia;
+            const [rh,rm]=ent.hora.split(':').map(Number);
+            const entM=rh*60+rm;
+            if (entM>lim) { am=entM-(eh*60+em2); tAtrasos+=am; }
+          } else { status='falta'; tFaltas++; }
+        }
+        dias.push({data:ds,dia:d,diaSemana:diaSem,isExpediente:isExp&&ds<=hoje,status,entrada:ent?.hora,saida:sai?.hora,atrasoMin:am,eventos:evts});
+      }
+      const vd=func.salario_base/(func.dias_trabalho_mes||26);
+      res.json({ dias, resumo:{diasTrabalhados:dTrab,totalFaltas:tFaltas,diasFolga:dFolga,diasAtestado:dAtestado,totalAtrasoMin:tAtrasos,descontoFaltas:tFaltas*vd,descontoAtrasos:(tAtrasos/60)*(vd/cargaHoras),totalDescontos:(tFaltas*vd)+((tAtrasos/60)*(vd/cargaHoras))} });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.get('/public/ponto/:slug', async (req, res) => {
+    try {
+      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Não encontrado' });
+      const funcs = await qAll("SELECT id,nome,cargo,pin,foto_url FROM funcionarios WHERE tenant_id=? AND status='ativo' ORDER BY nome", [tenant.id]);
+      res.json({ estabelecimento:tenant.nome_estabelecimento, funcionarios:funcs });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.post('/public/ponto/:slug/registrar', async (req, res) => {
+    try {
+      const { pin, func_id, metodo } = req.body;
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Não encontrado' });
+      const func = await q1("SELECT * FROM funcionarios WHERE id=? AND tenant_id=? AND status='ativo'", [func_id, tenant.id]);
+      if (!func) return res.status(404).json({ error:'Funcionário não encontrado' });
+      if (metodo !== 'face') {
+        if (func.pin && func.pin !== String(pin)) return res.status(401).json({ success:false, error:'PIN incorreto' });
+      }
+      const now = new Date();
+      const data = now.toLocaleDateString('en-CA', { timeZone: TZ });
+      const hora = now.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone: TZ });
+      const hoje = await qAll('SELECT tipo FROM func_pontos WHERE funcionario_id=? AND tenant_id=? AND data=? ORDER BY id ASC', [func.id, tenant.id, data]);
+      const temEnt = hoje.some((p:any)=>p.tipo==='entrada');
+      const temSai = hoje.some((p:any)=>p.tipo==='saida');
+      if (temEnt&&temSai) return res.status(409).json({ success:false, error:'Ponto completo para hoje.' });
+      const tipo = temEnt ? 'saida' : 'entrada';
+      if (tipo === 'entrada' && func.horario_entrada) {
+        const [hh,mm2] = func.horario_entrada.split(':').map(Number);
+        const agoraMin = now.getHours()*60+now.getMinutes();
+        const entMin = hh*60+mm2;
+        const minutosAntes = 10;
+        if (agoraMin < entMin - minutosAntes) {
+          const falta = entMin - minutosAntes - agoraMin;
+          return res.status(403).json({ success:false, error:`Muito cedo para bater ponto. Aguarde ${falta} minuto(s) (abertura às ${func.horario_entrada}).` });
+        }
+      }
+      await qRun('INSERT INTO func_pontos (tenant_id,funcionario_id,data,hora,tipo,ip) VALUES (?,?,?,?,?,?)', [tenant.id, func.id, data, hora, tipo, 'kiosk']);
+      res.json({ success:true, tipo, hora, nome:func.nome });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  // ── KDS público ───────────────────────────────────────────────────────────
+  router.get('/public/kds/:slug', async (req, res) => {
+    try {
+      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug:req.params.slug });
+      const allOrders = await qAll("SELECT * FROM pedidos WHERE tenant_id=? AND status NOT IN ('Entregue','cancelado','Cancelado','Concluído') ORDER BY created_at ASC", [tenant.id]);
+      // Deduplica pedidos de mesa (agrupa pelo label da mesa)
+      const seen = new Map<string,any>();
+      for (const o of allOrders) {
+        const key = (o.observation||'').startsWith('Mesa ') ? o.observation : String(o.id);
+        const ex = seen.get(key);
+        if (!ex||o.id>ex.id) seen.set(key,o);
+      }
+      const deduped = Array.from(seen.values()).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
+      const orders = [];
+      for (const o of deduped) {
+        const items = await qAll('SELECT i.quantity,i.type,i.price_at_time,p.name as product_name FROM itens_pedido i LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE i.order_id=? AND i.tenant_id=?', [o.id, tenant.id]);
+        orders.push({ ...o, items });
+      }
+      res.json({ estabelecimento:tenant.nome_estabelecimento, orders });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  // ── KDS SSE (keep-alive) ──────────────────────────────────────────────────
+  router.get('/public/kds/:slug/events', async (req, res) => {
+    const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+    if (!tenant) return res.status(404).end();
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), 30000);
+    req.on('close', () => clearInterval(ping));
+  });
+
+  router.patch('/public/kds/:slug/orders/:id/advance', kdsAdvanceLimit, async (req, res) => {
+    try {
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [req.params.slug, 'ativo']);
+      if (!tenant) return res.status(404).json({ error:'Não encontrado' });
+      const order = await q1('SELECT status FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, tenant.id]);
+      if (!order) return res.status(404).json({ error:'Pedido não encontrado' });
+      const idx = PIPELINE_KDS.indexOf(order.status);
+      const next = idx >= 0 && idx < PIPELINE_KDS.length - 1 ? PIPELINE_KDS[idx+1] : null;
+      if (!next) return res.json({ success:true, message:'Já no status final' });
+      await qRun('UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?', [next, req.params.id, tenant.id]);
+      res.json({ success:true, newStatus:next });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  // ── Cardápio público ──────────────────────────────────────────────────────
+  router.get('/public/cardapio/:slug', async (req, res) => {
+    try {
+      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
+      if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado' });
+      const prods = await qAll('SELECT id,name,price,category,photo_url,color FROM produtos WHERE tenant_id=? AND active=1 ORDER BY category ASC, name ASC', [tenant.id]);
+      const byCat: Record<string,any[]> = {};
+      for (const p of prods) { const c=p.category||'Geral'; if (!byCat[c]) byCat[c]=[]; byCat[c].push(p); }
+      res.json({ estabelecimento:tenant.nome_estabelecimento, categorias:Object.entries(byCat).map(([nome,itens])=>({nome,itens})) });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  // ── Mesa QR code ──────────────────────────────────────────────────────────
+  router.post('/public/mesa/:slug/:numero/pedir', async (req, res) => {
+    try {
+      const { slug, numero } = req.params;
+      const { itens } = req.body;
+      if (!itens||!itens.length) return res.status(400).json({ error:'Carrinho vazio' });
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
+      if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado' });
+      const mesa = await q1('SELECT * FROM mesas WHERE numero=? AND tenant_id=?', [numero, tenant.id]);
+      if (!mesa) return res.status(404).json({ error:'Mesa não encontrada' });
+      let comanda = await q1("SELECT * FROM comandas WHERE mesa_id=? AND status='aberta' AND tenant_id=? LIMIT 1", [mesa.id, tenant.id]);
+      if (!comanda) {
+        await qRun("UPDATE mesas SET status='aberta', opened_at=NOW() WHERE id=? AND tenant_id=?", [mesa.id, tenant.id]);
+        const cid = await qInsert("INSERT INTO comandas (mesa_id,tenant_id,status) VALUES (?,?,'aberta')", [mesa.id, tenant.id]);
+        comanda = await q1('SELECT * FROM comandas WHERE id=?', [cid]);
+      }
+      for (const item of itens) {
+        const qtd = Number(item.quantity)||1;
+        const ex = await q1('SELECT * FROM itens_comanda WHERE comanda_id=? AND product_id=? AND tenant_id=?', [comanda.id, item.product_id, tenant.id]);
+        if (ex) await qRun('UPDATE itens_comanda SET quantity=quantity+? WHERE id=? AND tenant_id=?', [qtd, ex.id, tenant.id]);
+        else await qInsert('INSERT INTO itens_comanda (comanda_id,product_id,product_name,quantity,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)', [comanda.id, item.product_id, item.name, qtd, item.price_at_time, tenant.id]);
+      }
+      res.json({ success:true });
+    } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  return router;
+}
