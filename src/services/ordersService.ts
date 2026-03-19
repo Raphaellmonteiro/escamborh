@@ -10,6 +10,7 @@ import {
 } from '../db';
 import { gerarCupomHtml } from '../routes/print';
 import type {
+  CancelOrderInput,
   CreateOrderInput,
   DeleteOrderInput,
   GetOrdersFilters,
@@ -86,6 +87,11 @@ type OrderRow = {
   created_at: string;
   tipo_retirada?: string | null;
   senha_pedido?: number | null;
+  cancelado_at?: string | null;
+  cancelamento_motivo?: string | null;
+  cancelado_por?: number | null;
+  estoque_reposto?: number | boolean | null;
+  estoque_reposto_at?: string | null;
 };
 
 type OrderItemRow = {
@@ -503,10 +509,14 @@ async function processStockDeduction(
 async function restoreStockFromRecordedMovements(
   client: PoolClient,
   orderId: number,
-  tenantId: TenantId
+  tenantId: TenantId,
+  entryContext: 'delete' | 'cancel' = 'delete'
 ) {
   const outgoingReason = buildStockMovementReason('saida', orderId);
-  const incomingReason = buildStockMovementReason('entrada', orderId);
+  const incomingReason =
+    entryContext === 'cancel'
+      ? `Cancelamento de pedido | pedido:${orderId}`
+      : buildStockMovementReason('entrada', orderId);
 
   const movementTotals = await txQAll<StockMovementSummaryRow>(
     client,
@@ -552,9 +562,15 @@ async function restoreStockFromRecordedMovements(
 async function restoreStockForOrder(
   client: PoolClient,
   orderId: number,
-  tenantId: TenantId
+  tenantId: TenantId,
+  entryContext: 'delete' | 'cancel' = 'delete'
 ) {
-  const restoredFromMovements = await restoreStockFromRecordedMovements(client, orderId, tenantId);
+  const restoredFromMovements = await restoreStockFromRecordedMovements(
+    client,
+    orderId,
+    tenantId,
+    entryContext
+  );
 
   if (restoredFromMovements) {
     return;
@@ -583,6 +599,41 @@ async function restoreStockForOrder(
       orderId
     );
   }
+}
+
+async function createOrderEvent(
+  client: PoolClient,
+  input: {
+    pedidoId: number;
+    tenantId: TenantId;
+    tipo: string;
+    statusAnterior?: string | null;
+    statusNovo?: string | null;
+    valor?: number;
+    motivo?: string | null;
+    estoqueReposto?: boolean;
+    payload?: Record<string, unknown>;
+    usuarioId?: number;
+  }
+) {
+  await txRun(
+    client,
+    `INSERT INTO pedido_eventos
+      (pedido_id,tenant_id,tipo,status_anterior,status_novo,valor,motivo,estoque_reposto,payload,usuario_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [
+      input.pedidoId,
+      input.tenantId,
+      input.tipo,
+      input.statusAnterior || null,
+      input.statusNovo || null,
+      Number(input.valor || 0),
+      input.motivo || null,
+      input.estoqueReposto ? 1 : 0,
+      input.payload ? JSON.stringify(input.payload) : null,
+      input.usuarioId || null,
+    ]
+  );
 }
 
 async function generateReceipt(
@@ -760,6 +811,103 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
   }
 }
 
+export async function cancelOrder(input: CancelOrderInput) {
+  ensureTenantId(input.tenantId);
+
+  const orderId = parseOrderId(input.orderId);
+  const subsenha = String(input.subsenha || '').trim();
+  const motivo = String(input.motivo || '').trim();
+  const shouldRestoreStock = Boolean(input.estoque_reposto);
+
+  if (motivo.length < 3) {
+    throw new AppError('Motivo do cancelamento Ã© obrigatÃ³rio', 400);
+  }
+
+  try {
+    await validateSecurityPassword({
+      tenantId: input.tenantId,
+      userId: input.userId,
+      password: subsenha,
+      type: 'admin',
+      requiredMessage: 'Subsenha obrigatÃ³ria',
+      invalidMessage: 'Subsenha invÃ¡lida',
+    });
+
+    return await withTx(async (client) => {
+      const order = await txQ1<OrderRow>(
+        client,
+        `SELECT *
+         FROM pedidos
+         WHERE id=? AND tenant_id=?
+         FOR UPDATE`,
+        [orderId, input.tenantId]
+      );
+
+      if (!order) {
+        throw new AppError('Pedido nÃ£o encontrado', 404);
+      }
+
+      if (order.status === 'Cancelado') {
+        throw new AppError('Pedido cancelado não pode ser alterado', 400);
+      } 
+
+      if (shouldRestoreStock) {
+        await restoreStockForOrder(client, orderId, input.tenantId, 'cancel');
+      }
+
+      await txRun(
+        client,
+        `UPDATE pedidos
+         SET status='Cancelado',
+             cancelado_at=NOW(),
+             cancelamento_motivo=?,
+             cancelado_por=?,
+             estoque_reposto=?,
+             estoque_reposto_at=CASE WHEN ?=1 THEN NOW() ELSE NULL END
+         WHERE id=? AND tenant_id=?`,
+        [
+          motivo,
+          input.userId || null,
+          shouldRestoreStock ? 1 : 0,
+          shouldRestoreStock ? 1 : 0,
+          orderId,
+          input.tenantId,
+        ]
+      );
+
+      await createOrderEvent(client, {
+        pedidoId: orderId,
+        tenantId: input.tenantId,
+        tipo: 'CANCELAMENTO',
+        statusAnterior: order.status,
+        statusNovo: 'Cancelado',
+        motivo,
+        estoqueReposto: shouldRestoreStock,
+        payload: {
+          origem: 'ordersService.cancelOrder',
+        },
+        usuarioId: input.userId,
+      });
+
+      const updatedOrder = await txQ1<OrderRow>(
+        client,
+        'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
+        [orderId, input.tenantId]
+      );
+
+      return updatedOrder;
+    });
+  } catch (error) {
+    logError('ordersService.cancelOrder', error, {
+      orderId,
+      userId: input.userId,
+      tenantId: input.tenantId,
+      estoque_reposto: shouldRestoreStock,
+    });
+    throw error;
+  }
+}
+
 export async function deleteOrder(input: DeleteOrderInput) {
   ensureTenantId(input.tenantId);
 
@@ -897,6 +1045,7 @@ export async function getOrders(filters: GetOrdersFilters) {
 
     return orders.map((order) => ({
       ...order,
+      estoque_reposto: Boolean(Number(order.estoque_reposto || 0)),
       items: (itemsByOrder.get(Number(order.id)) || []).map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),

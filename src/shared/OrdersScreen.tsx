@@ -28,6 +28,11 @@ export default function OrdersScreen({
   const [authPassword, setAuthPassword] = useState('');
   const [orderToDelete, setOrderToDelete] = useState<number | null>(null);
   const [deleteStep, setDeleteStep] = useState<'password' | 'confirm1' | 'confirm2'>('password');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelPassword, setCancelPassword] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelRestock, setCancelRestock] = useState(true);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     day: '', month: (new Date().getMonth() + 1).toString(), year: new Date().getFullYear().toString()
@@ -79,6 +84,14 @@ export default function OrdersScreen({
   const handleDeleteClick = (id: number) => {
     setOrderToDelete(id); setDeleteStep('password');
     setShowAuthModal(true); setAuthPassword('');
+  };
+
+  const handleCancelClick = (order: Order) => {
+    setOrderToCancel(order);
+    setCancelPassword('');
+    setCancelReason('');
+    setCancelRestock(order.status === 'Criado' || order.status === 'Pedido Recebido');
+    setShowCancelModal(true);
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -141,6 +154,47 @@ export default function OrdersScreen({
   }
 };
 
+  const submitCancelOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!orderToCancel) return;
+
+    if (!cancelReason.trim()) {
+      alert('Informe o motivo do cancelamento.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/orders/${orderToCancel.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          subsenha: cancelPassword,
+          motivo: cancelReason.trim(),
+          estoque_reposto: cancelRestock,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        setShowCancelModal(false);
+        setOrderToCancel(null);
+        setCancelPassword('');
+        setCancelReason('');
+        fetchOrders();
+        return;
+      }
+
+      alert(data?.error || 'Erro ao cancelar pedido.');
+    } catch {
+      alert('Erro de conexão ao cancelar pedido.');
+    }
+  };
+
   const PIPELINE = ['Criado', 'Em Preparo', 'Pronto', 'Entregue'];
   // Mapa de normalização delivery → pipeline padrão
   const STATUS_NORM_OS: Record<string,string> = {
@@ -159,6 +213,7 @@ export default function OrdersScreen({
     'Pronto para Entrega': { color: '#8b5cf6', bg: '#f5f3ff', dot: '#8b5cf6', emoji: '📦' },
     'Saiu para Entrega':   { color: '#f97316', bg: '#fff7ed', dot: '#f97316', emoji: '🛵' },
     'Entregue':        { color: '#71717a', bg: '#f9f9f9', dot: '#a1a1aa', emoji: '🎉' },
+    'Cancelado':       { color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', emoji: 'X' },
   };
 
   const getStatusCfg = (s: string) => STATUS_CONFIG[s] || STATUS_CONFIG['Criado'];
@@ -405,8 +460,12 @@ export default function OrdersScreen({
                         className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-colors" title="Ver Recibo">
                         <FileText size={16} />
                       </button>
+                      <button onClick={() => handleCancelClick(order)}
+                        className="p-2 hover:bg-amber-50 text-amber-500 rounded-lg transition-colors" title="Cancelar Pedido">
+                        <X size={16} />
+                      </button>
                       <button onClick={() => handleDeleteClick(order.id)}
-                        className="p-2 hover:bg-red-50 text-red-400 rounded-lg transition-colors" title="Excluir">
+                        className="p-2 hover:bg-red-50 text-red-400 rounded-lg transition-colors" title="Excluir Administrativamente">
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -498,6 +557,11 @@ export default function OrdersScreen({
                   <p className="text-xs text-zinc-400 mt-0.5 truncate">
                     {new Date(order.created_at).toLocaleString('pt-BR')} · R$ {order.total_amount.toFixed(2)}
                   </p>
+                  {order.cancelamento_motivo && (
+                    <p className="text-[11px] text-red-500 mt-1 truncate">
+                      Cancelado: {order.cancelamento_motivo}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-1">
                       <button onClick={async () => {
@@ -521,7 +585,7 @@ export default function OrdersScreen({
                     }}
                     className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg"><FileText size={15} /></button>
                   <button onClick={() => handleDeleteClick(order.id)}
-                    className="p-2 hover:bg-red-50 text-red-400 rounded-lg"><Trash2 size={15} /></button>
+                    className="p-2 hover:bg-red-50 text-red-400 rounded-lg" title="Excluir Administrativamente"><Trash2 size={15} /></button>
                 </div>
               </div>
             );
@@ -562,6 +626,85 @@ export default function OrdersScreen({
       </AnimatePresence>
 
 {/* Modal de Autenticação para Exclusão */}
+{/* Modal de Cancelamento */}
+<AnimatePresence>
+  {showCancelModal && orderToCancel && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[121] flex items-center justify-center p-6">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl"
+      >
+        <form onSubmit={submitCancelOrder} className="space-y-4">
+          <div>
+            <h3 className="text-xl font-bold text-zinc-900">Cancelar Pedido</h3>
+            <p className="text-sm text-zinc-500 mt-1">
+              O pedido permanecerÃ¡ no histÃ³rico e serÃ¡ marcado como cancelado.
+            </p>
+            <p className="text-xs font-semibold text-zinc-400 mt-2">
+              Pedido: #{orderToCancel.order_number}
+            </p>
+          </div>
+
+          <Input
+            label="Subsenha"
+            type="password"
+            value={cancelPassword}
+            onChange={(e: any) => setCancelPassword(e.target.value)}
+            autoFocus
+          />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Motivo</label>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              rows={3}
+              className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-all resize-none"
+              placeholder="Ex: cliente desistiu, item indisponÃ­vel, erro de lanÃ§amento"
+            />
+          </div>
+
+          <label className="flex items-start gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+            <input
+              type="checkbox"
+              checked={cancelRestock}
+              onChange={(e) => setCancelRestock(e.target.checked)}
+              className="mt-1 rounded border-zinc-300"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-zinc-700">Repor estoque</span>
+              <span className="block text-xs text-zinc-500">Use apenas se os itens realmente puderem voltar ao estoque.</span>
+            </span>
+          </label>
+
+          <div className="flex gap-3">
+            <Button type="submit" variant="danger" className="flex-1">
+              Confirmar Cancelamento
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setShowCancelModal(false);
+                setOrderToCancel(null);
+                setCancelPassword('');
+                setCancelReason('');
+              }}
+              variant="secondary"
+              className="flex-1"
+            >
+              Fechar
+            </Button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
+
+{/* Modal de Cancelamento */}
+{/* Modal de AutenticaÃ§Ã£o para ExclusÃ£o */}
 <AnimatePresence>
   {showAuthModal && (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-6">

@@ -43,6 +43,15 @@ export interface DeleteOrderInput {
   tenantId: number | string;
 }
 
+export interface CancelOrderInput {
+  orderId: number | string;
+  subsenha: string;
+  motivo: string;
+  estoque_reposto?: boolean;
+  userId?: number;
+  tenantId: number | string;
+}
+
 export interface UpdateOrderStatusInput {
   orderId: number | string;
   status: OrderStatus;

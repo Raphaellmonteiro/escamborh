@@ -55,6 +55,10 @@ export interface Order {
   items: OrderItem[];
   tipo_retirada?: string;
   senha_pedido?: string;
+  cancelado_at?: string | null;
+  cancelamento_motivo?: string | null;
+  estoque_reposto?: boolean;
+  estoque_reposto_at?: string | null;
 }
 
 // ── Dashboard ────────────────────────────────────────────────────

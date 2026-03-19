@@ -49,7 +49,17 @@ export async function runMigrations() {
         pagamento_tipo TEXT, pagamento_status TEXT DEFAULT 'pendente',
         taxa_entrega REAL DEFAULT 0, motoboy_id INTEGER,
         saiu_entrega_at TIMESTAMPTZ, entregue_at TIMESTAMPTZ,
-        pix_txid TEXT, delivery_cliente_id INTEGER
+        pix_txid TEXT, delivery_cliente_id INTEGER,
+        cancelado_at TIMESTAMPTZ,
+        cancelamento_motivo TEXT,
+        cancelado_por INTEGER,
+        estoque_reposto INTEGER DEFAULT 0,
+        estoque_reposto_at TIMESTAMPTZ,
+        reembolso_status TEXT DEFAULT 'nenhum',
+        valor_reembolsado REAL DEFAULT 0,
+        reembolsado_at TIMESTAMPTZ,
+        reembolso_motivo TEXT,
+        reembolsado_por INTEGER
       );
       CREATE TABLE IF NOT EXISTS itens_pedido (
         id SERIAL PRIMARY KEY,
@@ -159,6 +169,21 @@ export async function runMigrations() {
         tenant_id INTEGER NOT NULL, usuario_nome TEXT NOT NULL,
         cargo TEXT DEFAULT 'dono', acao TEXT NOT NULL, detalhes TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS pedido_eventos (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER NOT NULL,
+        tenant_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        status_anterior TEXT,
+        status_novo TEXT,
+        valor REAL DEFAULT 0,
+        motivo TEXT,
+        estoque_reposto INTEGER DEFAULT 0,
+        payload TEXT,
+        usuario_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY(pedido_id) REFERENCES pedidos(id)
       );
       CREATE TABLE IF NOT EXISTS ai_avisos (
         id SERIAL PRIMARY KEY,
@@ -379,11 +404,41 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelado_at TIMESTAMPTZ;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelamento_motivo TEXT;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelado_por INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS estoque_reposto INTEGER DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS estoque_reposto_at TIMESTAMPTZ;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolso_status TEXT DEFAULT 'nenhum';
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_reembolsado REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolsado_at TIMESTAMPTZ;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolso_motivo TEXT;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolsado_por INTEGER;
+      CREATE TABLE IF NOT EXISTS pedido_eventos (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER NOT NULL,
+        tenant_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        status_anterior TEXT,
+        status_novo TEXT,
+        valor REAL DEFAULT 0,
+        motivo TEXT,
+        estoque_reposto INTEGER DEFAULT 0,
+        payload TEXT,
+        usuario_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY(pedido_id) REFERENCES pedidos(id)
+      );
+    `);
+
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_pedidos_tenant_date      ON pedidos(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_pagamentos_tenant_date   ON pagamentos(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_despesas_tenant_date     ON despesas(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_estoque_mov_tenant_date  ON estoque_movimentacoes(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_system_logs_tenant_date  ON system_logs(tenant_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_pedido_eventos_pedido    ON pedido_eventos(pedido_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_pedido_eventos_tenant    ON pedido_eventos(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_itens_pedido_tenant      ON itens_pedido(tenant_id, order_id);
       CREATE INDEX IF NOT EXISTS idx_caixa_tenant_data        ON caixa(tenant_id, data);
       CREATE INDEX IF NOT EXISTS idx_produtos_barcode         ON produtos(codigo_barras, tenant_id);

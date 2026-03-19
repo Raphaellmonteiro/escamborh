@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import {
+  cancelOrder,
   createOrder,
   deleteOrder,
   getOrders,
@@ -64,6 +65,22 @@ export function createOrdersRouter() {
       const order = await updateOrderStatus({
         orderId: req.params.id,
         status: req.body?.status,
+        tenantId: req.tenantId,
+      });
+
+      res.json({ success: true, order });
+    })
+  );
+
+  router.post(
+    '/:id/cancel',
+    asyncHandler(async (req, res) => {
+      const order = await cancelOrder({
+        orderId: req.params.id,
+        subsenha: req.body?.subsenha,
+        motivo: req.body?.motivo,
+        estoque_reposto: req.body?.estoque_reposto,
+        userId: req.user?.id,
         tenantId: req.tenantId,
       });
 
