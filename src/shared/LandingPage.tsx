@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
+import { ACTIVE_SEGMENT_OPTIONS } from '../config/segmentos';
 
 const WA_NUMBER = '5500000000000'; // ← substitua pelo número real
 const WA_LINK   = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20FlowPDV`;
@@ -11,18 +12,11 @@ interface Differential { num: string; title: string; desc: string; }
 interface AIAlert { icon: string; text: string; }
 
 /* ─── dados ──────────────────────────────────────────────────────── */
-const SEGMENTS: Segment[] = [
-  { icon: '🍽️', label: 'Restaurante',       available: true  },
-  { icon: '🍔', label: 'Fast Food',           available: true  },
-  { icon: '🍺', label: 'Bar & Pub',           available: true  },
-  { icon: '🍷', label: 'Adega de Bebidas',    available: true  },
-  { icon: '✂️', label: 'Barbearia',           available: true  },
-  { icon: '💇', label: 'Salão de Beleza',     available: false },
-  { icon: '🛒', label: 'Mercadinho',          available: false },
-  { icon: '🥐', label: 'Padaria',             available: false },
-  { icon: '👗', label: 'Varejo de Roupas',    available: false },
-  { icon: '🏪', label: 'Comércio Geral',      available: true  },
-];
+const SEGMENTS: Segment[] = ACTIVE_SEGMENT_OPTIONS.map((segment) => ({
+  icon: segment.icon,
+  label: segment.label,
+  available: true,
+}));
 
 const FEATURES: Feature[] = [
   { icon: '🛒', name: 'PDV Completo',         span2: true,
@@ -196,7 +190,7 @@ export default function LandingPage({
             </motion.h1>
 
             <motion.p variants={fadeUp} style={{ fontSize: '1.05rem', color: '#94a3b8', lineHeight: 1.7, maxWidth: 520, marginBottom: '1.75rem', fontWeight: 300 }}>
-              O <strong style={{ color: '#f0f4ff', fontWeight: 500 }}>FlowPDV</strong> é o sistema de gestão completo para restaurantes, bares, barbearias e muito mais. <strong style={{ color: '#f0f4ff', fontWeight: 500 }}>Caixa, estoque, equipe e PDV</strong> — tudo em um lugar, direto no navegador.
+              O <strong style={{ color: '#f0f4ff', fontWeight: 500 }}>FlowPDV</strong> é o sistema de gestão para restaurantes, fast food, bares, pubs e adegas. <strong style={{ color: '#f0f4ff', fontWeight: 500 }}>Caixa, estoque, equipe e PDV</strong> — tudo em um lugar, direto no navegador.
             </motion.p>
 
             <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -291,7 +285,7 @@ export default function LandingPage({
                 <span style={{ background: 'linear-gradient(135deg,#3b82f6,#06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>seu negócio</span>
               </h2>
               <p style={{ fontSize: '1rem', color: '#64748b', maxWidth: 560, lineHeight: 1.7, fontWeight: 300, marginBottom: '2.5rem' }}>
-                Cada segmento tem telas, fluxos e terminologia próprios. Não é só trocar o nome — é um sistema diferente para cada tipo de estabelecimento.
+                Cada operação de alimentação e bebidas tem telas, fluxos e terminologia próprios. Não é só trocar o nome — o sistema respeita a rotina de cada casa.
               </p>
             </motion.div>
             <motion.div className="lp-seg-grid" variants={stagger} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>

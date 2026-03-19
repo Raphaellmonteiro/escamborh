@@ -6,7 +6,6 @@ import { createExpensesRouter } from '../expenses/expenses';
 import { createAdminRouter } from './admin';
 import { createAiRouter } from './ai';
 import { createAuthRouter } from './auth';
-import { createBarberRouter } from './barbearia';
 import { createDashboardRouter } from './dashboard';
 import { createDeliveryRouter } from './delivery';
 import { createEstoqueRouter } from './estoque';
@@ -95,6 +94,16 @@ function createPontosRouter() {
   return router;
 }
 
+function createDisabledSegmentRouter() {
+  const router = Router();
+
+  router.use((_req, res) => {
+    res.status(404).json({ error: 'Segmento indisponivel' });
+  });
+
+  return router;
+}
+
 export function createApiRouter() {
   const router = Router();
   const protectedRouter = Router();
@@ -134,7 +143,7 @@ export function createApiRouter() {
   protectedRouter.use('/usuarios', createUsuariosRouter());
   protectedRouter.use('/funcionarios', createRhRouter());
   protectedRouter.use('/funcionarios', createAcessoFuncRouter());
-  protectedRouter.use('/barber', createBarberRouter());
+  protectedRouter.use('/barber', createDisabledSegmentRouter());
   protectedRouter.use('/mesas', createMesasRouter());
   protectedRouter.use('/pontos', createPontosRouter());
 

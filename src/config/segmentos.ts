@@ -7,6 +7,36 @@ export interface TipoItem {
   usaMesas?: boolean;
 }
 
+export interface SegmentOption {
+  value: string;
+  label: string;
+  icon: string;
+}
+
+export const ACTIVE_SEGMENT_OPTIONS: SegmentOption[] = [
+  { value: 'Restaurante', label: 'Restaurante', icon: '🍽️' },
+  { value: 'Fast Food', label: 'Fast Food', icon: '🍔' },
+  { value: 'Bar', label: 'Bar & Pub', icon: '🍺' },
+  { value: 'Adega', label: 'Adega de Bebidas', icon: '🍷' },
+];
+
+const SEGMENT_ALIASES: Record<string, string> = {
+  Restaurante: 'Restaurante/Food',
+  'Restaurante/Food': 'Restaurante/Food',
+  'Fast Food': 'Fast Food',
+  Bar: 'Bar/Pub',
+  'Bar/Pub': 'Bar/Pub',
+  Adega: 'Adega',
+  Barbearia: 'Barbearia/Salão',
+  'Barbearia/Salão': 'Barbearia/Salão',
+  Comercio: 'Comércio Geral',
+  'Comercio Geral': 'Comércio Geral',
+  'Comércio Geral': 'Comércio Geral',
+};
+
+const DISABLED_SEGMENTS = new Set(['Barbearia/Salão', 'Comércio Geral']);
+const ACTIVE_SEGMENTS = new Set(['Restaurante/Food', 'Fast Food', 'Bar/Pub', 'Adega']);
+
 // Categorias que precisam de preparo (vão para KDS/cozinha)
 const PREP_CATEGORIES = ['Prato', 'Lanche', 'Pizza', 'Comida', 'Refeição', 'Porção', 'Dose', 'Petisco', 'Entrada', 'Sobremesa', 'Sushi', 'Japonês'];
 export function categoryNeedsPrep(category: string): boolean {
@@ -264,10 +294,27 @@ MAPA['Comercio Geral']   = MAPA['Comércio Geral']; // alias sem acento + espaç
 // ── getSegCfg ─────────────────────────────────────────────────────────────────
 // Retorna a config do segmento ou DEFAULT se não encontrado.
 export function getSegCfg(segmento: string): SegCfg {
-  return MAPA[segmento] ?? DEFAULT;
+  return MAPA[getOperationalSegment(segmento)] ?? DEFAULT;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+export function normalizeSegment(segmento: string): string {
+  return SEGMENT_ALIASES[segmento] ?? segmento;
+}
+
+export function isDisabledSegment(segmento: string): boolean {
+  return DISABLED_SEGMENTS.has(normalizeSegment(segmento));
+}
+
+export function isActiveSegment(segmento: string): boolean {
+  return ACTIVE_SEGMENTS.has(normalizeSegment(segmento));
+}
+
+export function getOperationalSegment(segmento: string): string {
+  const normalized = normalizeSegment(segmento);
+  return ACTIVE_SEGMENTS.has(normalized) ? normalized : 'Restaurante/Food';
+}
+
 export function isBarber(segmento: string): boolean {
   return segmento === 'Barbearia' || segmento === 'Barbearia/Salão';
 }

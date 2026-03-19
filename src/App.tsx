@@ -13,7 +13,7 @@ import {
 
 import type { Product, Caixa, Order } from './types';
 import NavItem from './components/ui/NavItem';
-import { getSegCfg } from './config/segmentos';
+import { getSegCfg, getOperationalSegment } from './config/segmentos';
 
 // ── Telas compartilhadas (todos os segmentos) ─────────────────────
 import LoginScreen           from './shared/LoginScreen';
@@ -47,7 +47,6 @@ import MesaPickerModal       from './segments/bar/MesaPickerModal';
 // ── Barbearia / Salão ─────────────────────────────────────────────
 import AgendamentosScreen    from './segments/barbearia/AgendamentosScreen';
 import ClientesBarberScreen  from './segments/barbearia/ClientesBarberScreen';
-import BookingPage           from './segments/barbearia/BookingPage';
 import { Button }            from './components/ui/Card';
 import { Input }             from './components/ui/Card';
 
@@ -299,6 +298,11 @@ export default function App() {
   else if (deliveryMatch) document.title = 'Cardápio Online — FlowPDV';
   else                    document.title = 'FlowPDV';
 
+  const segmentoOperacional = getOperationalSegment(estabelecimentoSegmento);
+  const segCfg = getSegCfg(segmentoOperacional);
+  const permiteMesas = segmentoOperacional === 'Restaurante/Food' || segmentoOperacional === 'Bar/Pub';
+  const permiteDelivery = permiteMesas;
+
   // ── Título dinâmico — notifica pedidos novos ─────────────────────────────
   // Intervalo fixo de 30s, independente de mudanças de aba.
   // activeTab NÃO entra nas dependências para não recriar o intervalo a cada troca de aba.
@@ -346,7 +350,7 @@ React.useEffect(() => {
   if (mesaMatch)    return <ClienteMesaScreen slug={mesaMatch[1]} mesa={mesaMatch[2]} />;
 
   // ── Site público de agendamento ──────────────────────────────────────────────
-  if (bookingSlug) return <BookingPage slug={bookingSlug} />;
+  if (bookingSlug) return <SegmentDisabledNotice />;
   if (kdsSlug)     return <KDSScreen slug={kdsSlug} />;
 
   const fetchCaixa = async () => {
@@ -378,7 +382,7 @@ const fetchPerfil = async () => {
       if (res.ok) {
         const data = await res.json();
         if (data.nome_estabelecimento) setEstabelecimentoNome(data.nome_estabelecimento);
-        if (data.segmento) setEstabelecimentoSegmento(data.segmento);
+        if (data.segmento) setEstabelecimentoSegmento(getOperationalSegment(data.segmento));
         setTaxasPagamento({
           debito:  data.taxa_debito  || 0,
           credito: data.taxa_credito || 0,
@@ -640,18 +644,18 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
 
      <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
-          {(() => { const sc = getSegCfg(estabelecimentoSegmento); return (<>
-            {podeVer('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={sc.labelSidebarPOS} />}
-            {(estabelecimentoSegmento === 'Restaurante/Food' || estabelecimentoSegmento === 'Bar/Pub') && podeVer('mesas') && (
+          {(() => { return (<> 
+            {podeVer('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
+            {permiteMesas && podeVer('mesas') && (
               <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon={<UtensilsCrossed size={20} />} label="Mesas" />
             )}
-            {estabelecimentoSegmento === 'Barbearia/Salão' && (<>
+            {segmentoOperacional === 'Barbearia/Salão' && (<>
               {podeVer('agendamentos')    && <NavItem active={activeTab === 'agendamentos'}    onClick={() => handleTabChange('agendamentos')}    icon={<CalendarDays size={20} />} label="Agendamentos" />}
               {podeVer('clientes_barber') && <NavItem active={activeTab === 'clientes_barber'} onClick={() => handleTabChange('clientes_barber')} icon={<Users2 size={20} />}       label="Clientes & Fidelidade" />}
             </>)}
-            {podeVer('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={sc.labelSidebarProdutos} />}
+            {podeVer('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={segCfg.labelSidebarProdutos} />}
             {podeVer('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon={<Archive size={20} />}  label="Estoque" />}
-            {podeVer('delivery') && (estabelecimentoSegmento === 'Restaurante/Food' || estabelecimentoSegmento === 'Bar/Pub') && (
+            {podeVer('delivery') && permiteDelivery && (
               <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon={<Bike size={20} />} label="Delivery" />
             )}
           </>); })()}
@@ -722,7 +726,7 @@ const handleAuth = async (e: React.FormEvent) => {
       </aside>
 
       {/* Botão flutuante — Histórico de Pedidos */}
-      {podeVer('orders') && estabelecimentoSegmento !== 'Barbearia/Salão' && (
+      {podeVer('orders') && segmentoOperacional !== 'Barbearia/Salão' && (
         <div
           style={{ position: 'fixed', left: floatPos.x, top: floatPos.y, zIndex: 999, cursor: floatDrag.current.dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
           onMouseDown={(e) => {
@@ -777,18 +781,18 @@ const handleAuth = async (e: React.FormEvent) => {
         )}
 
         <AnimatePresence mode="wait">
-          {activeTab === 'pos' && <POSScreen token={token} products={products} estabelecimentoSegmento={estabelecimentoSegmento} taxasPagamento={taxasPagamento} />}
-          {activeTab === 'orders'    && <OrdersScreen token={token} segmento={estabelecimentoSegmento} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
-          {activeTab === 'dashboard' && <DashboardScreen token={token} segmento={estabelecimentoSegmento} onGoToPOS={() => setActiveTab('pos')} />}
+          {activeTab === 'pos' && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
+          {activeTab === 'orders'    && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
+          {activeTab === 'dashboard' && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => setActiveTab('pos')} />}
           {activeTab === 'products'  && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
-          {activeTab === 'estoque'   && <EstoqueScreen token={token} segmento={estabelecimentoSegmento} />}
-          {activeTab === 'delivery'  && <DeliveryScreen token={token} slug={slugAtual} />}
-          {activeTab === 'mesas' && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
-          {activeTab === 'finance' && <FinanceScreen token={token} segmento={estabelecimentoSegmento} />}
+          {activeTab === 'estoque'   && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
+          {activeTab === 'delivery'  && permiteDelivery && <DeliveryScreen token={token} slug={slugAtual} />}
+          {activeTab === 'mesas' && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
+          {activeTab === 'finance' && <FinanceScreen token={token} segmento={segmentoOperacional} />}
           {activeTab === 'funcionarios' && <RHScreen token={token} />}
           {activeTab === 'logs'         && <SystemLogsScreen token={token} />}
-          {activeTab === 'agendamentos'     && <AgendamentosScreen token={token} products={products} />}
-          {activeTab === 'clientes_barber'  && <ClientesBarberScreen token={token} products={products} />}
+          {activeTab === 'agendamentos' && segmentoOperacional === 'Barbearia/Salão' && <AgendamentosScreen token={token} products={products} />}
+          {activeTab === 'clientes_barber' && segmentoOperacional === 'Barbearia/Salão' && <ClientesBarberScreen token={token} products={products} />}
           {activeTab === 'configuracoes' && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
         </AnimatePresence>
 
@@ -908,6 +912,28 @@ const handleAuth = async (e: React.FormEvent) => {
 const WA_NUMBER = '5500000000000'; // ← substitua pelo número real (DDI+DDD+número, só dígitos)
 const WA_LINK = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20FlowPDV`;
 // ─────────────────────────────────────────────
+
+function SegmentDisabledNotice() {
+  return (
+    <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white border border-zinc-200 rounded-3xl shadow-xl p-8 text-center">
+        <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-zinc-100 flex items-center justify-center text-3xl">
+          🍽️
+        </div>
+        <h1 className="text-2xl font-black text-zinc-900">Segmento indisponivel</h1>
+        <p className="mt-3 text-sm leading-6 text-zinc-500">
+          O agendamento online de barbearia foi desativado nesta fase de simplificacao do FlowPDV.
+        </p>
+        <a
+          href="/"
+          className="inline-flex items-center justify-center mt-6 px-5 py-3 rounded-2xl bg-zinc-900 text-white text-sm font-bold hover:bg-zinc-800 transition-colors"
+        >
+          Voltar ao inicio
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function QRMesasModal({ slug, token, onClose }: { slug: string; token: string | null; onClose: () => void }) {
   const [mesas, setMesas] = React.useState<{ numero: number }[]>([]);

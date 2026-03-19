@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2 } from 'lucide-react';
+import { ACTIVE_SEGMENT_OPTIONS } from '../../config/segmentos';
 
 // ── Segmentos disponíveis e em produção ───────────────────────────────────────
-const SEGMENTOS_ATIVOS = [
-  { value: 'Restaurante',    icon: '🍽️', label: 'Restaurante' },
-  { value: 'Fast Food',      icon: '🍔', label: 'Fast Food' },
-  { value: 'Bar',            icon: '🍺', label: 'Bar & Pub' },
-  { value: 'Adega',          icon: '🍷', label: 'Adega de Bebidas' },
-  { value: 'Barbearia',      icon: '✂️', label: 'Barbearia' },
-  { value: 'Comércio Geral', icon: '🏪', label: 'Comércio Geral' },
-];
+const SEGMENTOS_ATIVOS = ACTIVE_SEGMENT_OPTIONS;
 
 const SEGMENTOS_PRODUCAO = [
   { value: 'Salao',    icon: '💇', label: 'Salão de Beleza' },

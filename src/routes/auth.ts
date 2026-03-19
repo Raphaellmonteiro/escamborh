@@ -2,10 +2,13 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { ACTIVE_SEGMENT_OPTIONS } from '../config/segmentos';
 import { q1, qInsert } from '../db';
 import { JWT_SECRET, loginRateLimiter, authenticateToken } from '../middleware';
 import { isAppError } from '../utils/errors';
 import { validateSecurityPassword } from '../utils/securityPassword';
+
+const PUBLIC_SEGMENTS = new Set(ACTIVE_SEGMENT_OPTIONS.map((segment) => segment.value));
 
 export function createAuthRouter() {
   const router = Router();
@@ -109,6 +112,9 @@ export function createAuthRouter() {
               nome_responsavel, email, whatsapp, cidade, segmento } = req.body;
       if (!nome_estabelecimento || !documento_tipo || !documento_numero || !nome_responsavel || !email || !whatsapp || !cidade)
         return res.status(400).json({ success: false, message: 'Todos os campos obrigatórios devem ser preenchidos.' });
+
+      if (segmento && !PUBLIC_SEGMENTS.has(segmento))
+        return res.status(400).json({ success: false, message: 'Segmento indisponÃ­vel no momento.' });
 
       const id = await qInsert(
         'INSERT INTO solicitacoes (nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,segmento) VALUES (?,?,?,?,?,?,?,?,?)',
