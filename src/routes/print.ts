@@ -3,6 +3,10 @@ import { Router, Request } from 'express';
 import net from 'net';
 import { q1, qAll } from '../db';
 
+function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
+  return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
+}
+
 // ── Gerador de cupom HTML padrão 80mm ─────────────────────────────────────────
 export function gerarCupomHtml(opts: {
   titulo: string; estabelecimento?: string; orderNumber: string; data: string;
@@ -179,6 +183,7 @@ export function createPrintRouter() {
     try {
       const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
       if (!pedido) return res.status(404).send('');
+      if (isCanceledOrder(pedido)) return res.status(409).send('<h1>Pedido cancelado</h1>');
       const itens = await qAll(
         `SELECT p.name, ip.quantity FROM itens_pedido ip
          JOIN produtos p ON p.id=ip.product_id WHERE ip.order_id=? AND ip.tenant_id=?`,
@@ -201,6 +206,7 @@ export function createPrintRouter() {
       const cfg = JSON.parse(row.printer_config);
       const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
       if (!pedido) return res.status(404).json({ success: false, message: 'Pedido não encontrado' });
+      if (isCanceledOrder(pedido)) return res.status(409).json({ success: false, message: 'Pedido cancelado nao pode gerar comanda' });
       const itens = await qAll(
         `SELECT p.name, ip.quantity FROM itens_pedido ip
          JOIN produtos p ON p.id=ip.product_id WHERE ip.order_id=? AND ip.tenant_id=?`,

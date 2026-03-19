@@ -16,6 +16,8 @@ interface Stats {
   week: number;
   month: number;
   totalExpenses: number;
+  totalRefunded?: number;
+  netRevenue?: number;
   totalRepassesPagos: number;
   productSales: { name: string; quantity: number; total: number }[];
   ticketMedio: number;
@@ -103,8 +105,11 @@ export default function DashboardScreen({
     </div>
   );
 
-  const lucro = (stats?.filteredTotal || 0) - (stats?.totalExpenses || 0) - (stats?.totalRepassesPagos || 0);
-  const margem = stats?.filteredTotal ? (lucro / stats.filteredTotal) * 100 : 0;
+  const receitaOperacional = stats?.filteredTotal || 0;
+  const totalRefunded = stats?.totalRefunded || 0;
+  const receitaLiquida = stats?.netRevenue ?? (receitaOperacional - totalRefunded);
+  const lucro = receitaLiquida - (stats?.totalExpenses || 0) - (stats?.totalRepassesPagos || 0);
+  const margem = receitaLiquida ? (lucro / receitaLiquida) * 100 : 0;
   const totalPagamentos = cashReport ? (cashReport.cash + cashReport.pix + cashReport.debit + cashReport.credit) : 0;
 
   const periodoLabel =
@@ -172,19 +177,19 @@ export default function DashboardScreen({
         {/* ── KPIs principais ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
-            label="Faturamento"
-            value={fmtShort(stats?.filteredTotal || 0)}
+            label="Receita Operacional"
+            value={fmtShort(receitaOperacional)}
             sub={`${stats?.totalPedidos || 0} pedidos`}
             icon={<DollarSign size={20} />}
             color="emerald"
             trend={null}
           />
           <KpiCard
-            label="Lucro Líquido"
-            value={fmtShort(lucro)}
-            sub={`${margem.toFixed(1)}% de margem`}
-            icon={lucro >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-            color={lucro >= 0 ? 'emerald' : 'red'}
+            label="Receita Líquida"
+            value={fmtShort(receitaLiquida)}
+            sub={totalRefunded > 0 ? `${fmtShort(totalRefunded)} reembolsados` : 'sem reembolsos'}
+            icon={receitaLiquida >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+            color={receitaLiquida >= 0 ? 'emerald' : 'red'}
             trend={null}
           />
           <KpiCard
@@ -197,7 +202,7 @@ export default function DashboardScreen({
           />
           <KpiCard
             label="Ticket Médio"
-            value={fmtShort(stats?.ticketMedio || (stats?.totalPedidos ? (stats.filteredTotal / stats.totalPedidos) : 0))}
+            value={fmtShort(stats?.ticketMedio || (stats?.totalPedidos ? (receitaOperacional / stats.totalPedidos) : 0))}
             sub="por pedido"
             icon={<ShoppingBag size={20} />}
             color="blue"
@@ -294,7 +299,11 @@ export default function DashboardScreen({
           <div className="bg-white rounded-2xl border border-zinc-200 p-5">
             <h2 className="text-sm font-black text-zinc-800 uppercase tracking-wider mb-4">Resultado do Período</h2>
             <div className="space-y-2">
-              <DreRow label="Receita Bruta" value={stats?.filteredTotal || 0} type="positive" />
+              <DreRow label="Receita Operacional" value={receitaOperacional} type="positive" />
+              {totalRefunded > 0 && (
+                <DreRow label="(-) Reembolsos" value={-totalRefunded} type="negative" />
+              )}
+              <DreRow label="Receita Líquida" value={receitaLiquida} type="positive" />
               <DreRow label="(-) Despesas" value={-(stats?.totalExpenses || 0)} type="negative" />
               {(stats?.totalRepassesPagos || 0) > 0 && (
                 <DreRow label="(-) Repasses" value={-(stats?.totalRepassesPagos || 0)} type="negative" />

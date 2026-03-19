@@ -4,40 +4,118 @@ import { q1, qAll, qRun, qInsert } from '../db';
 
 const TZ = 'America/Sao_Paulo';
 
+function buildPeriodFilter(req: Request, column = 'created_at') {
+  const { day, month, year, range } = req.query;
+  const dateExpr = `(${column} AT TIME ZONE '${TZ}')`;
+  const params: any[] = [req.tenantId];
+
+  if (range === 'today') {
+    return {
+      clause: `WHERE tenant_id=? AND ${dateExpr}::date = (NOW() AT TIME ZONE '${TZ}')::date`,
+      params,
+    };
+  }
+
+  if (range === 'week') {
+    return {
+      clause: `WHERE tenant_id=? AND ${dateExpr}::date >= (NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days'`,
+      params,
+    };
+  }
+
+  if (range === 'month') {
+    return {
+      clause: `WHERE tenant_id=? AND TO_CHAR(${dateExpr},'MM')=TO_CHAR(NOW() AT TIME ZONE '${TZ}','MM') AND TO_CHAR(${dateExpr},'YYYY')=TO_CHAR(NOW() AT TIME ZONE '${TZ}','YYYY')`,
+      params,
+    };
+  }
+
+  if (range === 'all') {
+    return {
+      clause: `WHERE tenant_id=?`,
+      params,
+    };
+  }
+
+  if (day && month && year) {
+    params.push(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`);
+    return {
+      clause: `WHERE tenant_id=? AND ${dateExpr}::date = ?`,
+      params,
+    };
+  }
+
+  if (month && year) {
+    params.push(String(month).padStart(2,'0'), String(year));
+    return {
+      clause: `WHERE tenant_id=? AND TO_CHAR(${dateExpr},'MM')=? AND TO_CHAR(${dateExpr},'YYYY')=?`,
+      params,
+    };
+  }
+
+  if (year) {
+    params.push(String(year));
+    return {
+      clause: `WHERE tenant_id=? AND TO_CHAR(${dateExpr},'YYYY')=?`,
+      params,
+    };
+  }
+
+  return {
+    clause: `WHERE tenant_id=? AND ${dateExpr}::date = (NOW() AT TIME ZONE '${TZ}')::date`,
+    params,
+  };
+}
+
 export function createDashboardRouter() {
   const router = Router();
 
   router.get('/stats', async (req: Request, res) => {
     try {
-      const { day, month, year } = req.query;
+      const ordersFilter = buildPeriodFilter(req, 'created_at');
+      const refundsFilter = buildPeriodFilter(req, 'reembolsado_at');
+      const expensesFilter = buildPeriodFilter(req, 'created_at');
+      const activeOrdersClause = `${ordersFilter.clause} AND status != 'Cancelado'`;
 
-      let dateFilter = `WHERE tenant_id=? AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`;
-      const params: any[] = [req.tenantId];
-      if (day && month && year) {
-        dateFilter = `WHERE tenant_id=? AND (created_at AT TIME ZONE '${TZ}')::date = ?`;
-        params.push(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`);
-      } else if (month && year) {
-        dateFilter = `WHERE tenant_id=? AND TO_CHAR(created_at AT TIME ZONE '${TZ}','MM')=? AND TO_CHAR(created_at AT TIME ZONE '${TZ}','YYYY')=?`;
-        params.push(String(month).padStart(2,'0'), String(year));
-      } else if (year) {
-        dateFilter = `WHERE tenant_id=? AND TO_CHAR(created_at AT TIME ZONE '${TZ}','YYYY')=?`;
-        params.push(String(year));
-      }
-
-      const [today, week, monthTotal, filteredTotal, totalExpenses] = await Promise.all([
+      const [today, week, monthTotal, filteredTotal, refundedTotal, totalExpenses] = await Promise.all([
         q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos WHERE tenant_id=? AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date AND status != 'Cancelado'`, [req.tenantId]),
         q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos WHERE tenant_id=? AND (created_at AT TIME ZONE '${TZ}')::date >= (NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days' AND status != 'Cancelado'`, [req.tenantId]),
         q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos WHERE tenant_id=? AND TO_CHAR(created_at AT TIME ZONE '${TZ}','MM')=TO_CHAR(NOW() AT TIME ZONE '${TZ}','MM') AND TO_CHAR(created_at AT TIME ZONE '${TZ}','YYYY')=TO_CHAR(NOW() AT TIME ZONE '${TZ}','YYYY') AND status != 'Cancelado'`, [req.tenantId]),
-        q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos ${dateFilter} AND status != 'Cancelado'`, params),
-        q1(`SELECT COALESCE(SUM(amount),0) as v FROM despesas ${dateFilter}`, params)
+        q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos ${activeOrdersClause}`, ordersFilter.params),
+        q1(
+          `SELECT COALESCE(SUM(valor_reembolsado),0) as total
+           FROM pedidos
+           ${refundsFilter.clause}
+             AND COALESCE(reembolso_status,'nenhum') != 'nenhum'
+             AND COALESCE(valor_reembolsado,0) > 0`,
+          refundsFilter.params
+        ),
+        q1(`SELECT COALESCE(SUM(amount),0) as v FROM despesas ${expensesFilter.clause}`, expensesFilter.params)
       ]);
+
+      const totalPedidos = Number(filteredTotal?.pedidos || 0);
+      const receitaOperacional = Number(filteredTotal?.faturamento || 0);
+      const totalRefunded = Number(refundedTotal?.total || 0);
+      const netRevenue = receitaOperacional - totalRefunded;
+      const totalExpensesValue = Number(totalExpenses?.v || 0);
 
       res.json({
         hoje: { pedidos: Number(today?.pedidos || 0), faturamento: Number(today?.faturamento || 0) },
         semana: { pedidos: Number(week?.pedidos || 0), faturamento: Number(week?.faturamento || 0) },
         mes: { pedidos: Number(monthTotal?.pedidos || 0), faturamento: Number(monthTotal?.faturamento || 0) },
-        totalFiltrado: { pedidos: Number(filteredTotal?.pedidos || 0), faturamento: Number(filteredTotal?.faturamento || 0) },
-        despesas: Number(totalExpenses?.v || 0)
+        totalFiltrado: { pedidos: totalPedidos, faturamento: receitaOperacional },
+        despesas: totalExpensesValue,
+        today: Number(today?.faturamento || 0),
+        week: Number(week?.faturamento || 0),
+        month: Number(monthTotal?.faturamento || 0),
+        filteredTotal: receitaOperacional,
+        totalPedidos,
+        ticketMedio: totalPedidos > 0 ? receitaOperacional / totalPedidos : 0,
+        totalExpenses: totalExpensesValue,
+        totalRefunded,
+        netRevenue,
+        totalRepassesPagos: 0,
+        productSales: []
       });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

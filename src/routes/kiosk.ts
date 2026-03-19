@@ -8,6 +8,20 @@ import { publicRateLimit } from '../middleware';
 
 const TZ = 'America/Sao_Paulo';
 
+function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
+  return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
+}
+
+function buildActiveKdsOrderClause(alias?: string) {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}cancelado_at IS NULL AND COALESCE(${prefix}status,'') NOT IN ('Entregue','cancelado','Cancelado','ConcluÃ­do','Concluido','concluido')`;
+}
+
+function buildOperationalKdsOrderClause(alias?: string) {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'entregue' AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado' AND LOWER(COALESCE(${prefix}status,'')) NOT LIKE 'conclu%'`;
+}
+
 export function createKioskRouter() {
   const router = Router();
   const PIPELINE_KDS = ['Criado','Em Preparo','Pronto','Entregue'];
@@ -425,7 +439,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     try {
       const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
       if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug:req.params.slug });
-      const allOrders = await qAll("SELECT * FROM pedidos WHERE tenant_id=? AND status NOT IN ('Entregue','cancelado','Cancelado','Concluído') ORDER BY created_at ASC", [tenant.id]);
+      const allOrders = await qAll(`SELECT * FROM pedidos WHERE tenant_id=? AND ${buildOperationalKdsOrderClause()} ORDER BY created_at ASC`, [tenant.id]);
       // Deduplica pedidos de mesa (agrupa pelo label da mesa)
       const seen = new Map<string,any>();
       for (const o of allOrders) {
@@ -459,8 +473,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     try {
       const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [req.params.slug, 'ativo']);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
-      const order = await q1('SELECT status FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, tenant.id]);
+      const order = await q1('SELECT status, cancelado_at FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, tenant.id]);
       if (!order) return res.status(404).json({ error:'Pedido não encontrado' });
+      if (isCanceledOrder(order)) return res.status(400).json({ error:'Pedido cancelado nao pode voltar ao KDS' });
       const idx = PIPELINE_KDS.indexOf(order.status);
       const next = idx >= 0 && idx < PIPELINE_KDS.length - 1 ? PIPELINE_KDS[idx+1] : null;
       if (!next) return res.json({ success:true, message:'Já no status final' });

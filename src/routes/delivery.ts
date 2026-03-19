@@ -4,6 +4,15 @@ import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '
 
 const TZ = 'America/Sao_Paulo';
 
+function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
+  return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
+}
+
+function buildNotCanceledOrderClause(alias?: string) {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado'`;
+}
+
 export function createDeliveryRouter() {
   const router = Router();
 
@@ -64,6 +73,10 @@ router.get('/pedidos', async (req: Request, res) => {
 
   router.patch('/pedidos/:id/status', async (req: Request, res) => {
     try {
+      const order = await q1('SELECT status, cancelado_at FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
+      if (!order) return res.status(404).json({ error: 'Pedido nao encontrado' });
+      if (isCanceledOrder(order)) return res.status(400).json({ error: 'Pedido cancelado nao pode voltar ao fluxo operacional' });
+
       const { status, motoboy_id } = req.body;
       const updates: string[] = ['status=?'];
       const params: any[] = [status];
@@ -78,6 +91,10 @@ router.get('/pedidos', async (req: Request, res) => {
 
   router.patch('/pedidos/:id/pagamento', async (req: Request, res) => {
     try {
+      const order = await q1('SELECT status, cancelado_at FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
+      if (!order) return res.status(404).json({ error: 'Pedido nao encontrado' });
+      if (isCanceledOrder(order)) return res.status(400).json({ error: 'Pedido cancelado nao pode ter pagamento alterado aqui' });
+
       await qRun('UPDATE pedidos SET pagamento_status=? WHERE id=? AND tenant_id=?', [req.body.pagamento_status, req.params.id, req.tenantId]);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -129,12 +146,13 @@ router.get('/pedidos', async (req: Request, res) => {
 router.get('/dashboard', async (req: Request, res) => {
     try {
       // Usamos a data do banco (Postgres) para evitar diferença de fuso horário com o Node.js
+      const notCanceledOrderClause = buildNotCanceledOrderClause();
       const [pedidosHoje, emPreparo, emRota, ticketMedio, topMotoboy] = await Promise.all([
-        q1(`SELECT COUNT(*) as n, COALESCE(SUM(total_amount),0) as fat FROM pedidos WHERE tenant_id=? AND canal='delivery' AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`, [req.tenantId]),
-        q1(`SELECT COUNT(*) as n FROM pedidos WHERE tenant_id=? AND canal='delivery' AND status IN ('Criado','Pedido Recebido','Em Preparo')`, [req.tenantId]),
-        q1(`SELECT COUNT(*) as n FROM pedidos WHERE tenant_id=? AND canal='delivery' AND status='Saiu para Entrega'`, [req.tenantId]),
-        q1(`SELECT COALESCE(AVG(total_amount),0) as v FROM pedidos WHERE tenant_id=? AND canal='delivery' AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`, [req.tenantId]),
-        q1(`SELECT m.nome, COUNT(p.id) as entregas FROM delivery_motoboys m JOIN pedidos p ON p.motoboy_id=m.id AND p.tenant_id=m.tenant_id WHERE m.tenant_id=? AND (p.entregue_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date GROUP BY m.id ORDER BY entregas DESC LIMIT 1`, [req.tenantId]),
+        q1(`SELECT COUNT(*) as n, COALESCE(SUM(total_amount),0) as fat FROM pedidos WHERE tenant_id=? AND canal='delivery' AND ${notCanceledOrderClause} AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`, [req.tenantId]),
+        q1(`SELECT COUNT(*) as n FROM pedidos WHERE tenant_id=? AND canal='delivery' AND ${notCanceledOrderClause} AND status IN ('Criado','Pedido Recebido','Em Preparo')`, [req.tenantId]),
+        q1(`SELECT COUNT(*) as n FROM pedidos WHERE tenant_id=? AND canal='delivery' AND ${notCanceledOrderClause} AND status='Saiu para Entrega'`, [req.tenantId]),
+        q1(`SELECT COALESCE(AVG(total_amount),0) as v FROM pedidos WHERE tenant_id=? AND canal='delivery' AND ${notCanceledOrderClause} AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`, [req.tenantId]),
+        q1(`SELECT m.nome, COUNT(p.id) as entregas FROM delivery_motoboys m JOIN pedidos p ON p.motoboy_id=m.id AND p.tenant_id=m.tenant_id WHERE m.tenant_id=? AND p.cancelado_at IS NULL AND LOWER(COALESCE(p.status,'')) <> 'cancelado' AND (p.entregue_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date GROUP BY m.id ORDER BY entregas DESC LIMIT 1`, [req.tenantId]),
       ]);
 
       // Conversão obrigatória para Number porque o Postgres retorna SUM/COUNT como String
@@ -153,10 +171,11 @@ router.get('/clientes', async (req: Request, res) => {
     try {
       const { search } = req.query;
       // Adicionamos as subqueries para puxar o Total Gasto (ignorando cancelados) e o Último Pedido
+      const notCanceledOrderClause = buildNotCanceledOrderClause('p');
       let q = `
         SELECT c.*,
           (SELECT COUNT(*) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id) as total_pedidos,
-          (SELECT COALESCE(SUM(total_amount), 0) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id AND p.status != 'Cancelado') as total_gasto,
+          (SELECT COALESCE(SUM(total_amount), 0) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id AND ${notCanceledOrderClause}) as total_gasto,
           (SELECT MAX(created_at) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id) as ultimo_pedido
         FROM delivery_clientes c
         WHERE c.tenant_id=?
@@ -266,26 +285,32 @@ router.get('/clientes', async (req: Request, res) => {
 
       const baseFilter = `tenant_id=? AND canal='delivery' AND ${dateCond}`;
       const baseFilterP = `p.tenant_id=? AND p.canal='delivery' AND ${dateCondP}`;
+      const notCanceledCondition = buildNotCanceledOrderClause();
+      const operationalFilter = `${baseFilter} AND ${notCanceledCondition}`;
+      const operationalFilterP = `${baseFilterP} AND ${buildNotCanceledOrderClause('p')}`;
+      const canceledCondition = `LOWER(COALESCE(status,'')) = 'cancelado' OR cancelado_at IS NOT NULL`;
+      const deliveredOperationalCondition = `status='Entregue' AND ${notCanceledCondition}`;
 
       const [stats, porDia, porHora, topProdutos, porPagamento] = await Promise.all([
         q1(
-          `SELECT COUNT(*) as total_pedidos, COALESCE(SUM(total_amount),0) as faturamento_total,
-                  COALESCE(AVG(total_amount),0) as ticket_medio,
-                  COUNT(DISTINCT delivery_cliente_id) as clientes_unicos,
-                  SUM(CASE WHEN status='Entregue' THEN 1 ELSE 0 END) as entregues,
-                  SUM(CASE WHEN status='Cancelado' THEN 1 ELSE 0 END) as cancelados
+          `SELECT SUM(CASE WHEN ${notCanceledCondition} THEN 1 ELSE 0 END) as total_pedidos,
+                  COALESCE(SUM(CASE WHEN ${notCanceledCondition} THEN total_amount ELSE 0 END),0) as faturamento_total,
+                  COALESCE(AVG(CASE WHEN ${notCanceledCondition} THEN total_amount END),0) as ticket_medio,
+                  COUNT(DISTINCT CASE WHEN ${notCanceledCondition} THEN delivery_cliente_id END) as clientes_unicos,
+                  SUM(CASE WHEN ${deliveredOperationalCondition} THEN 1 ELSE 0 END) as entregues,
+                  SUM(CASE WHEN ${canceledCondition} THEN 1 ELSE 0 END) as cancelados
            FROM pedidos WHERE ${baseFilter}`,
           [req.tenantId]
         ),
         qAll(
           `SELECT TO_CHAR((created_at AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') as dia,
                   COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento
-           FROM pedidos WHERE ${baseFilter} GROUP BY 1 ORDER BY 1 ASC`,
+           FROM pedidos WHERE ${operationalFilter} GROUP BY 1 ORDER BY 1 ASC`,
           [req.tenantId]
         ),
         qAll(
           `SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE '${TZ}') as hora, COUNT(*) as pedidos
-           FROM pedidos WHERE ${baseFilter} GROUP BY 1 ORDER BY 1 ASC`,
+           FROM pedidos WHERE ${operationalFilter} GROUP BY 1 ORDER BY 1 ASC`,
           [req.tenantId]
         ),
         qAll(
@@ -293,13 +318,13 @@ router.get('/clientes', async (req: Request, res) => {
            FROM itens_pedido ip
            JOIN produtos pr ON pr.id=ip.product_id
            JOIN pedidos p ON p.id=ip.order_id
-           WHERE ${baseFilterP}
+           WHERE ${operationalFilterP}
            GROUP BY pr.id, pr.name ORDER BY qtd DESC LIMIT 10`,
           [req.tenantId]
         ),
         qAll(
           `SELECT pagamento_tipo, COUNT(*) as qtd, COALESCE(SUM(total_amount),0) as total
-           FROM pedidos WHERE ${baseFilter} AND pagamento_tipo IS NOT NULL
+           FROM pedidos WHERE ${operationalFilter} AND pagamento_tipo IS NOT NULL
            GROUP BY 1`,
           [req.tenantId]
         ),

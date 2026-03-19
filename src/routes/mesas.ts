@@ -5,7 +5,17 @@ import { gerarCupomHtml } from './print';
 
 const TZ = 'America/Sao_Paulo';
 
+function buildActiveKdsOrderClause(alias?: string) {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}cancelado_at IS NULL AND COALESCE(${prefix}status,'') NOT IN ('Entregue','cancelado','Cancelado','ConcluÃ­do','Concluido','concluido')`;
+}
+
 // ── Helper: baixa/estorno de estoque por produto ──────────────────────────────
+function buildOperationalKdsOrderClause(alias?: string) {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'entregue' AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado' AND LOWER(COALESCE(${prefix}status,'')) NOT LIKE 'conclu%'`;
+}
+
 async function ajustarEstoque(tenantId: number, productId: number, qtd: number, motivo: string) {
   try {
     const prod = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [productId, tenantId]);
@@ -42,7 +52,7 @@ async function syncKdsItem(tenantId: number, mesaId: string|number, productId: n
     const mesa = await q1('SELECT numero FROM mesas WHERE id=? AND tenant_id=?', [mesaId, tenantId]);
     if (!mesa) return;
     const mesaLabel = `Mesa ${mesa.numero}`;
-    let kdsOrder = await q1("SELECT * FROM pedidos WHERE tenant_id=? AND observation=? AND status NOT IN ('Entregue','Cancelado','Concluído','cancelado') ORDER BY id DESC LIMIT 1", [tenantId, mesaLabel]);
+    let kdsOrder = await q1(`SELECT * FROM pedidos WHERE tenant_id=? AND observation=? AND ${buildOperationalKdsOrderClause()} ORDER BY id DESC LIMIT 1`, [tenantId, mesaLabel]);
     if (!kdsOrder && mode==='remove') return;
     if (!kdsOrder) {
       // CORREÇÃO: Data baseada no fuso de SP para o order_number do KDS
@@ -248,7 +258,7 @@ export function createMesasRouter() {
         for (let i=0;i<payments.length;i++) await txRun(client, "INSERT INTO pagamentos (order_id,method,amount_paid,change_given,tenant_id) VALUES (?,?,?,?,?)", [pid,payments[i].method,payments[i].amount_paid,i===payments.length-1?troco:0,req.tenantId]);
         await txRun(client, "UPDATE comandas SET status='fechada', closed_at=NOW() WHERE id=? AND tenant_id=?", [comanda.id,req.tenantId]);
         await txRun(client, "UPDATE mesas SET status='fechada', opened_at=NULL WHERE id=? AND tenant_id=?", [req.params.id,req.tenantId]);
-        await txRun(client, "UPDATE pedidos SET status='Entregue' WHERE tenant_id=? AND observation=? AND status NOT IN ('Entregue','Cancelado','Concluído','cancelado')", [req.tenantId,`Mesa ${mesa.numero}`]);
+        await txRun(client, `UPDATE pedidos SET status='Entregue' WHERE tenant_id=? AND observation=? AND ${buildOperationalKdsOrderClause()}`, [req.tenantId,`Mesa ${mesa.numero}`]);
       });
       res.json({ success:true, orderNumber:on, change:troco, receipt:receiptHtml });
     } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }

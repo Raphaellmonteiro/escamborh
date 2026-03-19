@@ -110,8 +110,6 @@ function TabLista({ token }: { token: string }) {
     { key:'pos',            label:'Balcão/Vendas' },
     { key:'orders',         label:'Pedidos' },
     { key:'mesas',          label:'Mesas/Comandas' },
-    { key:'agendamentos',   label:'Agendamentos' },
-    { key:'clientes_barber',label:'Clientes' },
     { key:'products',       label:'Cardápio' },
     { key:'estoque',        label:'Estoque' },
     { key:'nfse',           label:'Nota Fiscal' },
@@ -123,12 +121,12 @@ function TabLista({ token }: { token: string }) {
 
   const CARGO_PRESETS: Record<string, string[]> = {
     dono:      [], // null = tudo
-    gerente:   ['pos','orders','mesas','agendamentos','clientes_barber','products','estoque','nfse','dashboard','finance','funcionarios'],
-    atendente: ['pos','orders','mesas','agendamentos','clientes_barber'],
+    gerente:   ['pos','orders','mesas','products','estoque','nfse','dashboard','finance','funcionarios'],
+    atendente: ['pos','orders','mesas'],
   };
 
   const eF = { nome:'', cargo:'', salario_base:'', horario_entrada:'08:00', horario_saida:'17:00', carga_horaria:'8', dias_semana:'1,2,3,4,5', tolerancia_minutos:'10', dias_trabalho_mes:'26', data_admissao:'', telefone:'', cpf:'', pin:'' };
-  const eAcesso = { login:'', senha:'', cargo_sistema:'atendente' as 'dono'|'gerente'|'atendente', permissoes: ['pos','orders','mesas','agendamentos','clientes_barber'] as string[], criar_acesso: false };
+  const eAcesso = { login:'', senha:'', cargo_sistema:'atendente' as 'dono'|'gerente'|'atendente', permissoes: ['pos','orders','mesas'] as string[], criar_acesso: false };
   const [form, setForm] = useState(eF);
   const [formAcesso, setFormAcesso] = useState(eAcesso);
   const [usuariosExistentes, setUsuariosExistentes] = useState<any[]>([]);

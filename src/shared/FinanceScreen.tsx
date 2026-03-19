@@ -12,6 +12,12 @@ interface Caixa {
   total_vendas_dinheiro?: number; total_esperado?: number;
   valor_contado?: number; diferenca?: number;
 }
+interface FinancialStats {
+  filteredTotal?: number;
+  totalRefunded?: number;
+  netRevenue?: number;
+  totalPedidos?: number;
+}
 
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 
@@ -32,6 +38,7 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
   const [tab, setTab] = useState<'despesas' | 'caixa'>('despesas');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [caixaHistory, setCaixaHistory] = useState<Caixa[]>([]);
+  const [financialStats, setFinancialStats] = useState<FinancialStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [catFilter, setCatFilter]     = useState('Todas');
@@ -52,6 +59,10 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
     else if (tab === 'caixa') fetchCaixa();
   }, [tab]);
 
+  useEffect(() => {
+    fetchFinancialStats();
+  }, [dateFilter, token]);
+
   const fetchExpenses = async () => {
     setLoading(true);
     try {
@@ -66,6 +77,24 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
       const r = await fetch('/api/caixa/historico', { headers: { Authorization: `Bearer ${token}` } });
       setCaixaHistory(await r.json());
     } catch {} finally { setLoading(false); }
+  };
+
+  const fetchFinancialStats = async () => {
+    try {
+      const query =
+        dateFilter === 'hoje' ? '?range=today' :
+        dateFilter === 'semana' ? '?range=week' :
+        dateFilter === 'mes' ? '?range=month' :
+        '?range=all';
+
+      const r = await fetch(`/api/dashboard/stats${query}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (r.ok) {
+        setFinancialStats(await r.json());
+      }
+    } catch {}
   };
 
   const handleAdd = async () => {
@@ -117,6 +146,9 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
   const expFiltered = filterByDate(expenses) as Expense[];
   const filtered = catFilter === 'Todas' ? expFiltered : expFiltered.filter(e => e.category === catFilter);
   const totalDespesas = expFiltered.reduce((a, e) => a + e.amount, 0);
+  const receitaOperacional = Number(financialStats?.filteredTotal || 0);
+  const totalReembolsado = Number(financialStats?.totalRefunded || 0);
+  const receitaLiquida = Number(financialStats?.netRevenue ?? (receitaOperacional - totalReembolsado));
   const byCat = CATEGORIAS.map(cat => ({
     cat,
     total: expFiltered.filter(e => e.category === cat).reduce((a, e) => a + e.amount, 0),
@@ -174,6 +206,24 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
         </div>
 
         {/* ── ABA DESPESAS ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+            <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Receita Operacional</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">{fmt(receitaOperacional)}</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">{financialStats?.totalPedidos || 0} pedidos no período</p>
+          </div>
+          <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+            <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Reembolsos</p>
+            <p className="text-2xl font-black text-amber-600 mt-1">{fmt(totalReembolsado)}</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">Total reembolsado no período</p>
+          </div>
+          <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+            <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Receita Líquida</p>
+            <p className="text-2xl font-black text-zinc-900 mt-1">{fmt(receitaLiquida)}</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">Receita operacional menos reembolsos</p>
+          </div>
+        </div>
+
         {tab === 'despesas' && (
           <div className="space-y-4">
 
