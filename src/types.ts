@@ -191,5 +191,3 @@ export interface ItemComanda {
   created_at: string;
   tenant_id: number;
 }
-
-// ── Barbearia / Salão ────────────────────────────────────────────

@@ -32,7 +32,7 @@ const STEPS = [
   { key: 'Entregue',            label: 'Entregue',         emoji: '✅', desc: 'Pedido entregue. Bom apetite!' },
 ];
 
-// Aliases legacy
+// Compatibiliza nomes de status antigos
 const ALIAS: Record<string, string> = {
   'Pedido Recebido': 'Criado',
 };

@@ -456,7 +456,6 @@ function DreRow({ label, value, type }: { label: string; value: number; type: 'p
   );
 }
 
-// Mantém exports antigos para compatibilidade
 export function StatCard({ label, value, icon, color, highlight = false }: any) {
   return (
     <div className={`bg-white border border-zinc-200 p-5 rounded-2xl flex items-center gap-4 ${highlight ? 'ring-2 ring-emerald-400' : ''}`}>

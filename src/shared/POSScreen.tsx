@@ -30,7 +30,6 @@ export default function POSScreen({
 }) {
   const cfg = getSegCfg(estabelecimentoSegmento);
 
-  // ─── Estado original (INALTERADO) ─────────────────────────────────────────
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [observation, setObservation]                     = useState('');
   const [payments, setPayments]                           = useState<{ method: PaymentMethod; amount_paid: number }[]>([]);
@@ -121,7 +120,6 @@ export default function POSScreen({
   const change           = Math.max(0, totalPagoComTaxas - totalComTaxas);
   // ─────────────────────────────────────────────────────────────────────────
 
-  // ─── Handlers originais (INALTERADOS) ────────────────────────────────────
   const addToCartDirect = (product: Product) => {
     const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
     setCart(prev => {
@@ -357,9 +355,6 @@ export default function POSScreen({
       </AnimatePresence>
 
       {/* ═══════════════════════════════════════════════════════════════
-          MODAIS BARBEARIA (INALTERADOS)
-      ═══════════════════════════════════════════════════════════════ */}
-      {/* ═══════════════════════════════════════════════════════════════
           PAINEL DIREITO — Pedido + Pagamento
       ═══════════════════════════════════════════════════════════════ */}
       <div className="w-full lg:w-[340px] bg-white border-l border-zinc-200 flex flex-col shrink-0 overflow-hidden">
@@ -551,9 +546,6 @@ export default function POSScreen({
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════
-          MODAL: Tipo de Item (INALTERADO)
-      ═══════════════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {pendingProduct && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
@@ -583,7 +575,6 @@ export default function POSScreen({
         )}
       </AnimatePresence>
 
-      {/* Mesa Picker (INALTERADO) */}
       {showMesaPicker && pendingMesaProduct && (
         <MesaPickerModal product={pendingMesaProduct} token={token}
           onClose={() => { setShowMesaPicker(false); setPendingMesaProduct(null); }}
@@ -598,9 +589,6 @@ export default function POSScreen({
         )}
       </AnimatePresence>
 
-      {/* ═══════════════════════════════════════════════════════════════
-          MODAIS FINALIZAÇÃO (INALTERADOS)
-      ═══════════════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {showTipoRetirada && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">

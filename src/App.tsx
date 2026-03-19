@@ -1,6 +1,5 @@
 /**
- * App.tsx — Roteador principal FlowPDV
- * Cada segmento de negócio tem seus arquivos em src/segments/<nome>/
+ * App.tsx - Roteador principal do FlowPDV.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -898,11 +897,9 @@ const handleAuth = async (e: React.FormEvent) => {
 
 // --- SUB-COMPONENTES DE UI ---
 
-// ─────────────────────────────────────────────
-// CONSTANTE GLOBAL — Número WhatsApp do consultor
-const WA_NUMBER = '5500000000000'; // ← substitua pelo número real (DDI+DDD+número, só dígitos)
+// Constante global para contato comercial
+const WA_NUMBER = '5500000000000';
 const WA_LINK = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20FlowPDV`;
-// ─────────────────────────────────────────────
 
 function SegmentDisabledNotice() {
   return (
@@ -911,9 +908,9 @@ function SegmentDisabledNotice() {
         <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-zinc-100 flex items-center justify-center text-3xl">
           🍽️
         </div>
-        <h1 className="text-2xl font-black text-zinc-900">Segmento indisponivel</h1>
+        <h1 className="text-2xl font-black text-zinc-900">Agendamento indisponivel</h1>
         <p className="mt-3 text-sm leading-6 text-zinc-500">
-          O agendamento online de barbearia foi desativado nesta fase de simplificacao do FlowPDV.
+          Esta pagina publica de agendamento nao esta disponivel nesta versao do FlowPDV.
         </p>
         <a
           href="/"

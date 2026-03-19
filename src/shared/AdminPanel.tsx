@@ -1150,6 +1150,4 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
       </AnimatePresence>
     </div>
   );
-}// ============================================================================
-//  App.tsx — PATCH BARBEARIA/SALÃO
-//  Agendamentos + Clientes + Fidelidade + Assinaturas
+}

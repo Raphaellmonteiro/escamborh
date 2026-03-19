@@ -1,4 +1,4 @@
-// src/db.ts — compatibilidade com o legado + migrações
+// src/db.ts - reexport e migrações
 import { pool } from './db/pool';
 
 export * from './db/index';
