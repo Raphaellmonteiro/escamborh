@@ -20,6 +20,20 @@ type OrderWithRefund = Order & {
   reembolso_motivo?: string | null;
 };
 
+type OrderHistoryEvent = {
+  id: number | string;
+  tipo: string;
+  status_anterior?: string | null;
+  status_novo?: string | null;
+  valor?: number | null;
+  motivo?: string | null;
+  estoque_reposto?: boolean;
+  payload?: Record<string, unknown> | null;
+  usuario_id?: number | null;
+  created_at: string;
+  synthetic?: boolean;
+};
+
 export default function OrdersScreen({
   token, segmento: _segmento, displaySlug, onShowQR,
 }: {
@@ -46,6 +60,11 @@ export default function OrdersScreen({
   const [refundAmount, setRefundAmount] = useState('');
   const [orderToRefund, setOrderToRefund] = useState<OrderWithRefund | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
+  const [historyEvents, setHistoryEvents] = useState<OrderHistoryEvent[]>([]);
   const [filters, setFilters] = useState({
     day: '', month: (new Date().getMonth() + 1).toString(), year: new Date().getFullYear().toString()
   });
@@ -85,6 +104,8 @@ export default function OrdersScreen({
   }, [activeTab, fetchOrders]);
 
   const formatMoney = (value: number) => `R$ ${value.toFixed(2)}`;
+  const formatDateTime = (value?: string | null) =>
+    value ? new Date(value).toLocaleString('pt-BR') : '';
 
   const getRefundMeta = (order: OrderWithRefund) => {
     const refundedAmount = Number(order.valor_reembolsado || 0);
@@ -110,6 +131,41 @@ export default function OrdersScreen({
     setRefundPassword('');
     setRefundReason('');
     setRefundAmount('');
+  };
+
+  const closeHistoryModal = () => {
+    setShowHistoryModal(false);
+    setHistoryOrder(null);
+    setHistoryEvents([]);
+    setHistoryError('');
+    setHistoryLoading(false);
+  };
+
+  const openHistoryModal = async (order: Order) => {
+    setHistoryOrder(order);
+    setHistoryEvents([]);
+    setHistoryError('');
+    setHistoryLoading(true);
+    setShowHistoryModal(true);
+
+    try {
+      const res = await fetch(`/api/orders/${order.id}/history`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setHistoryError(data?.error || 'Nao foi possivel carregar o historico do pedido.');
+        return;
+      }
+
+      setHistoryEvents(Array.isArray(data) ? data : []);
+    } catch {
+      setHistoryError('Erro de conexao ao carregar o historico do pedido.');
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const updateStatus = async (id: number, status: string) => {
@@ -315,6 +371,63 @@ export default function OrdersScreen({
   };
 
   const getStatusCfg = (s: string) => STATUS_CONFIG[s] || STATUS_CONFIG['Criado'];
+
+  const getHistoryTone = (event: OrderHistoryEvent) => {
+    if (event.tipo === 'CANCELAMENTO') {
+      return { bg: 'bg-red-50', border: 'border-red-100', badge: 'bg-red-100 text-red-700' };
+    }
+
+    if (event.tipo === 'REEMBOLSO') {
+      return { bg: 'bg-orange-50', border: 'border-orange-100', badge: 'bg-orange-100 text-orange-700' };
+    }
+
+    if (event.tipo === 'STATUS') {
+      return { bg: 'bg-blue-50', border: 'border-blue-100', badge: 'bg-blue-100 text-blue-700' };
+    }
+
+    return { bg: 'bg-zinc-50', border: 'border-zinc-100', badge: 'bg-zinc-100 text-zinc-700' };
+  };
+
+  const getHistoryTitle = (event: OrderHistoryEvent) => {
+    if (event.tipo === 'CRIACAO') return 'Pedido criado';
+    if (event.tipo === 'STATUS') {
+      const nextStatusLabel = event.status_novo || 'Status atualizado';
+      return `Status alterado para ${nextStatusLabel}`;
+    }
+    if (event.tipo === 'CANCELAMENTO') return 'Pedido cancelado';
+    if (event.tipo === 'REEMBOLSO') return 'Reembolso registrado';
+    return event.tipo;
+  };
+
+  const getHistoryDetails = (event: OrderHistoryEvent) => {
+    const lines: string[] = [];
+
+    if (event.tipo === 'CRIACAO') {
+      lines.push('Registro inicial do pedido.');
+    }
+
+    if (event.tipo === 'STATUS' && event.status_anterior && event.status_novo) {
+      lines.push(`${event.status_anterior} -> ${event.status_novo}`);
+    }
+
+    if (event.valor && event.valor > 0) {
+      lines.push(`Valor: ${formatMoney(Number(event.valor))}`);
+    }
+
+    if (event.motivo) {
+      lines.push(`Motivo: ${event.motivo}`);
+    }
+
+    if (event.estoque_reposto) {
+      lines.push('Estoque reposto.');
+    }
+
+    if (event.usuario_id) {
+      lines.push(`Usuario: #${event.usuario_id}`);
+    }
+
+    return lines;
+  };
 
   const STATUSES_FINAIS = ['Entregue', 'Concluído', 'concluido', 'cancelado', 'Cancelado', cfg.statusConcluido];
   const activeOrders = orders.filter(o => !STATUSES_FINAIS.includes(o.status));
@@ -572,6 +685,13 @@ export default function OrdersScreen({
                         className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-colors" title="Ver Recibo">
                         <FileText size={16} />
                       </button>
+                      <button
+                        onClick={() => openHistoryModal(order)}
+                        className="p-2 hover:bg-blue-50 text-blue-500 rounded-lg transition-colors"
+                        title="Ver histórico do pedido"
+                      >
+                        <Clock size={16} />
+                      </button>
                       <button onClick={() => handleCancelClick(order)}
                         className="p-2 hover:bg-amber-50 text-amber-500 rounded-lg transition-colors" title="Cancelar Pedido">
                         <X size={16} />
@@ -736,6 +856,13 @@ export default function OrdersScreen({
                       } catch { setSelectedReceipt(order.receipt_text || ''); }
                     }}
                     className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg"><FileText size={15} /></button>
+                  <button
+                    onClick={() => openHistoryModal(order)}
+                    className="p-2 hover:bg-blue-50 text-blue-500 rounded-lg"
+                    title="Ver histórico do pedido"
+                  >
+                    <Clock size={15} />
+                  </button>
                   {refundMeta?.isTotal !== true && (
                     <button
                       onClick={() => handleRefundClick(orderWithRefund)}
@@ -785,6 +912,105 @@ export default function OrdersScreen({
           </div>
         )}
       </AnimatePresence>
+
+<AnimatePresence>
+  {showHistoryModal && historyOrder && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[112] flex items-center justify-center p-6">
+      <motion.div
+        initial={{ scale: 0.94, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.94, opacity: 0 }}
+        className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]"
+      >
+        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-zinc-100">
+          <div>
+            <h3 className="text-xl font-bold text-zinc-900">Historico do Pedido</h3>
+            <p className="text-sm text-zinc-500 mt-1">
+              Pedido #{historyOrder.order_number} • {formatMoney(historyOrder.total_amount)}
+            </p>
+          </div>
+          <button
+            onClick={closeHistoryModal}
+            className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+          {historyLoading && (
+            <div className="text-center py-16 text-zinc-400">
+              <Clock size={28} className="mx-auto mb-3 opacity-50" />
+              <p>Carregando historico...</p>
+            </div>
+          )}
+
+          {!historyLoading && historyError && (
+            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {historyError}
+            </div>
+          )}
+
+          {!historyLoading && !historyError && historyEvents.length === 0 && (
+            <div className="text-center py-16 text-zinc-400">
+              <Clock size={28} className="mx-auto mb-3 opacity-50" />
+              <p>Nenhum evento encontrado para este pedido.</p>
+            </div>
+          )}
+
+          {!historyLoading && !historyError && historyEvents.map((event) => {
+            const tone = getHistoryTone(event);
+            const details = getHistoryDetails(event);
+
+            return (
+              <div
+                key={String(event.id)}
+                className={`rounded-2xl border px-4 py-3 ${tone.bg} ${tone.border}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${tone.badge}`}>
+                        {event.tipo}
+                      </span>
+                      {event.synthetic && (
+                        <span className="text-[10px] font-semibold text-zinc-400">
+                          base
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-zinc-900 mt-2">
+                      {getHistoryTitle(event)}
+                    </p>
+                  </div>
+                  <span className="text-[11px] text-zinc-400 whitespace-nowrap">
+                    {formatDateTime(event.created_at)}
+                  </span>
+                </div>
+
+                {details.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {details.map((detail, index) => (
+                      <p key={`${event.id}-${index}`} className="text-xs text-zinc-600">
+                        {detail}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-6 py-4 border-t border-zinc-100">
+          <Button onClick={closeHistoryModal} className="w-full">
+            Fechar
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
 
 {/* Modal de Autenticação para Exclusão */}
 <AnimatePresence>

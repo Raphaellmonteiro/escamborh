@@ -13,7 +13,9 @@ import type {
   CancelOrderInput,
   CreateOrderInput,
   DeleteOrderInput,
+  GetOrderHistoryInput,
   GetOrdersFilters,
+  OrderHistoryEvent,
   OrderItemInput,
   PaymentInput,
   RefundOrderInput,
@@ -136,6 +138,19 @@ type StockMovementSummaryRow = {
 type PaymentRow = {
   amount_paid: number | string | null;
   change_given: number | string | null;
+};
+
+type OrderHistoryEventRow = {
+  id: number;
+  tipo: string;
+  status_anterior?: string | null;
+  status_novo?: string | null;
+  valor?: number | string | null;
+  motivo?: string | null;
+  estoque_reposto?: number | boolean | null;
+  payload?: string | Record<string, unknown> | null;
+  usuario_id?: number | null;
+  created_at: string;
 };
 
 const MONEY_TOLERANCE_CENTS = 1;
@@ -655,6 +670,35 @@ async function createOrderEvent(
   );
 }
 
+function parseEventPayload(
+  payload: OrderHistoryEventRow['payload']
+): Record<string, unknown> | null {
+  if (!payload) return null;
+  if (typeof payload === 'object') return payload;
+
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+function mapOrderHistoryEvent(row: OrderHistoryEventRow): OrderHistoryEvent {
+  return {
+    id: row.id,
+    tipo: row.tipo,
+    status_anterior: row.status_anterior || null,
+    status_novo: row.status_novo || null,
+    valor: row.valor === null || row.valor === undefined ? null : Number(row.valor),
+    motivo: row.motivo || null,
+    estoque_reposto: Boolean(Number(row.estoque_reposto || 0)),
+    payload: parseEventPayload(row.payload),
+    usuario_id: row.usuario_id || null,
+    created_at: row.created_at,
+    synthetic: false,
+  };
+}
+
 async function generateReceipt(
   client: PoolClient,
   {
@@ -806,6 +850,19 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
       await insertOrderItems(client, orderId, input.items, tenantId);
       await processStockDeduction(client, input.items, tenantId, orderId);
       await savePayments(client, orderId, input.payments, tenantId);
+      await createOrderEvent(client, {
+        pedidoId: orderId,
+        tenantId,
+        tipo: 'CRIACAO',
+        statusNovo: input.status,
+        valor: input.total_amount,
+        payload: {
+          origem: 'ordersService.createOrder',
+          itens: input.items.length,
+          pagamentos: input.payments.length,
+          tipo_retirada: input.tipo_retirada,
+        },
+      });
 
       const receipt = await generateReceipt(client, {
         items: input.items,
@@ -1128,8 +1185,74 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
   }
 
   try {
-    const order = await q1<OrderRow>(
-      'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
+    return await withTx(async (client) => {
+      const order = await txQ1<OrderRow>(
+        client,
+        `SELECT *
+         FROM pedidos
+         WHERE id=? AND tenant_id=?
+         FOR UPDATE`,
+        [orderId, input.tenantId]
+      );
+
+      if (!order) {
+        throw new AppError('Pedido não encontrado', 404);
+      }
+
+      if (isCanceledStatus(order.status) || order.cancelado_at) {
+        throw new AppError('Pedido cancelado nao pode ter status alterado', 400);
+      }
+
+      if (order.status === status) {
+        return order;
+      }
+
+      await txRun(
+        client,
+        'UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?',
+        [status, orderId, input.tenantId]
+      );
+
+      await createOrderEvent(client, {
+        pedidoId: orderId,
+        tenantId: input.tenantId,
+        tipo: 'STATUS',
+        statusAnterior: order.status,
+        statusNovo: status,
+        payload: {
+          origem: 'ordersService.updateOrderStatus',
+        },
+        usuarioId: input.userId,
+      });
+
+      const updatedOrder = await txQ1<OrderRow>(
+        client,
+        'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
+        [orderId, input.tenantId]
+      );
+
+      return updatedOrder;
+    });
+  } catch (error) {
+    logError('ordersService.updateOrderStatus', error, {
+      orderId,
+      status,
+      tenantId: input.tenantId,
+    });
+    throw error;
+  }
+}
+
+export async function getOrderHistory(input: GetOrderHistoryInput) {
+  ensureTenantId(input.tenantId);
+
+  const orderId = parseOrderId(input.orderId);
+
+  try {
+    const order = await q1<Pick<OrderRow, 'id' | 'created_at' | 'status' | 'total_amount'>>(
+      `SELECT id, created_at, status, total_amount
+       FROM pedidos
+       WHERE id=? AND tenant_id=?`,
       [orderId, input.tenantId]
     );
 
@@ -1137,25 +1260,38 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
       throw new AppError('Pedido não encontrado', 404);
     }
 
-    if (isCanceledStatus(order.status) || order.cancelado_at) {
-      throw new AppError('Pedido cancelado nao pode ter status alterado', 400);
-    }
-
-    await qAll(
-      'UPDATE pedidos SET status=? WHERE id=? AND tenant_id=? RETURNING *',
-      [status, orderId, input.tenantId]
-    );
-
-    const updatedOrder = await q1<OrderRow>(
-      'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
+    const rows = await qAll<OrderHistoryEventRow>(
+      `SELECT id, tipo, status_anterior, status_novo, valor, motivo, estoque_reposto, payload, usuario_id, created_at
+       FROM pedido_eventos
+       WHERE pedido_id=? AND tenant_id=?
+       ORDER BY created_at ASC, id ASC`,
       [orderId, input.tenantId]
     );
 
-    return updatedOrder;
+    const events = rows.map(mapOrderHistoryEvent);
+
+    if (!events.some((event) => event.tipo === 'CRIACAO')) {
+      events.unshift({
+        id: `synthetic-created-${orderId}`,
+        tipo: 'CRIACAO',
+        status_anterior: null,
+        status_novo: null,
+        valor: Number(order.total_amount || 0),
+        motivo: null,
+        estoque_reposto: false,
+        payload: {
+          origem: 'ordersService.getOrderHistory',
+        },
+        usuario_id: null,
+        created_at: order.created_at,
+        synthetic: true,
+      });
+    }
+
+    return events;
   } catch (error) {
-    logError('ordersService.updateOrderStatus', error, {
+    logError('ordersService.getOrderHistory', error, {
       orderId,
-      status,
       tenantId: input.tenantId,
     });
     throw error;

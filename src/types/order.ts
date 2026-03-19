@@ -64,6 +64,7 @@ export interface RefundOrderInput {
 export interface UpdateOrderStatusInput {
   orderId: number | string;
   status: OrderStatus;
+  userId?: number;
   tenantId: number | string;
 }
 
@@ -76,4 +77,23 @@ export interface GetOrdersFilters {
   month?: string;
   year?: string;
   limit?: number | string;
+}
+
+export interface GetOrderHistoryInput {
+  orderId: number | string;
+  tenantId: number | string;
+}
+
+export interface OrderHistoryEvent {
+  id: number | string;
+  tipo: string;
+  status_anterior?: string | null;
+  status_novo?: string | null;
+  valor?: number | null;
+  motivo?: string | null;
+  estoque_reposto?: boolean;
+  payload?: Record<string, unknown> | null;
+  usuario_id?: number | null;
+  created_at: string;
+  synthetic?: boolean;
 }

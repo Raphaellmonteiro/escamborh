@@ -3,6 +3,7 @@ import {
   cancelOrder,
   createOrder,
   deleteOrder,
+  getOrderHistory,
   getOrders,
   refundOrder,
   updateOrderStatus,
@@ -66,10 +67,23 @@ export function createOrdersRouter() {
       const order = await updateOrderStatus({
         orderId: req.params.id,
         status: req.body?.status,
+        userId: req.user?.id,
         tenantId: req.tenantId,
       });
 
       res.json({ success: true, order });
+    })
+  );
+
+  router.get(
+    '/:id/history',
+    asyncHandler(async (req, res) => {
+      const events = await getOrderHistory({
+        orderId: req.params.id,
+        tenantId: req.tenantId,
+      });
+
+      res.json(events);
     })
   );
 
