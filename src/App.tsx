@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, ShoppingCart, Package, LogOut, Archive,
-  CalendarDays, Users2, Settings, Monitor, UtensilsCrossed,
+  Settings, Monitor, UtensilsCrossed,
   DollarSign, Clock, History, BarChart2, FileText, Users, Lock, Bell, Bike,
 } from 'lucide-react';
 
@@ -44,9 +44,6 @@ import ClienteMesaScreen    from './segments/restaurante/ClienteMesaScreen';
 import MesasScreen           from './segments/bar/MesasScreen';
 import MesaPickerModal       from './segments/bar/MesaPickerModal';
 
-// ── Barbearia / Salão ─────────────────────────────────────────────
-import AgendamentosScreen    from './segments/barbearia/AgendamentosScreen';
-import ClientesBarberScreen  from './segments/barbearia/ClientesBarberScreen';
 import { Button }            from './components/ui/Card';
 import { Input }             from './components/ui/Card';
 
@@ -59,7 +56,7 @@ import { useFlowAI }         from './hooks/useFlowAI';
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [estabelecimentoSegmento, setEstabelecimentoSegmento] = useState('Restaurante/Food');
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'finance' | 'estoque' | 'agendamentos' | 'clientes_barber' | 'configuracoes' | 'logs' | 'delivery'>('pos')
+  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery'>('pos')
   const [floatPos, setFloatPos]   = React.useState(() => {
     const saved = localStorage.getItem('orders_float_pos');
     return saved ? JSON.parse(saved) : { x: window.innerWidth - 80, y: window.innerHeight - 120 };
@@ -649,10 +646,6 @@ const handleAuth = async (e: React.FormEvent) => {
             {permiteMesas && podeVer('mesas') && (
               <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon={<UtensilsCrossed size={20} />} label="Mesas" />
             )}
-            {segmentoOperacional === 'Barbearia/Salão' && (<>
-              {podeVer('agendamentos')    && <NavItem active={activeTab === 'agendamentos'}    onClick={() => handleTabChange('agendamentos')}    icon={<CalendarDays size={20} />} label="Agendamentos" />}
-              {podeVer('clientes_barber') && <NavItem active={activeTab === 'clientes_barber'} onClick={() => handleTabChange('clientes_barber')} icon={<Users2 size={20} />}       label="Clientes & Fidelidade" />}
-            </>)}
             {podeVer('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={segCfg.labelSidebarProdutos} />}
             {podeVer('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon={<Archive size={20} />}  label="Estoque" />}
             {podeVer('delivery') && permiteDelivery && (
@@ -726,7 +719,7 @@ const handleAuth = async (e: React.FormEvent) => {
       </aside>
 
       {/* Botão flutuante — Histórico de Pedidos */}
-      {podeVer('orders') && segmentoOperacional !== 'Barbearia/Salão' && (
+      {podeVer('orders') && (
         <div
           style={{ position: 'fixed', left: floatPos.x, top: floatPos.y, zIndex: 999, cursor: floatDrag.current.dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
           onMouseDown={(e) => {
@@ -791,8 +784,6 @@ const handleAuth = async (e: React.FormEvent) => {
           {activeTab === 'finance' && <FinanceScreen token={token} segmento={segmentoOperacional} />}
           {activeTab === 'funcionarios' && <RHScreen token={token} />}
           {activeTab === 'logs'         && <SystemLogsScreen token={token} />}
-          {activeTab === 'agendamentos' && segmentoOperacional === 'Barbearia/Salão' && <AgendamentosScreen token={token} products={products} />}
-          {activeTab === 'clientes_barber' && segmentoOperacional === 'Barbearia/Salão' && <ClientesBarberScreen token={token} products={products} />}
           {activeTab === 'configuracoes' && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
         </AnimatePresence>
 

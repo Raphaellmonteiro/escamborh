@@ -15,10 +15,6 @@ async function avisoJaHoje(tenantId: number, chave: string): Promise<boolean> {
 async function gerarAvisosAutomaticos(tenantId: number): Promise<number> {
   const avisos: any[] = [];
   try {
-    const tenant = await q1('SELECT segmento FROM clientes WHERE id=?', [tenantId]);
-    const segmento = tenant?.segmento || 'Restaurante/Food';
-    const isBarbearia = segmento === 'Barbearia/Salão';
-
     // U1 — Produtos sem venda há 7+ dias
     const parados = await qAll(
       `SELECT name FROM produtos WHERE tenant_id=? AND active=1
@@ -90,14 +86,6 @@ async function gerarAvisosAutomaticos(tenantId: number): Promise<number> {
     );
     if (esCrit.length > 0 && !await avisoJaHoje(tenantId, 'estoque critico'))
       avisos.push({ tipo:'atencao', prioridade:3, chave:'estoque critico', titulo:`⚠️ ${esCrit.length} insumo(s) no limite mínimo`, mensagem:`"${esCrit.map((i:any)=>i.nome).join('", "')}" . Reponha o estoque antes de acabar.`, acao:'Ver estoque', acao_rota:'/estoque' });
-
-    // Barbearia: agendamentos do dia
-    if (isBarbearia) {
-      const hoje = new Date().toISOString().split('T')[0];
-      const agds = await q1(`SELECT COUNT(*) AS total FROM agendamentos WHERE tenant_id=? AND data=? AND status='agendado'`, [tenantId, hoje]);
-      if (Number(agds?.total || 0) > 0 && !await avisoJaHoje(tenantId, 'agendamentos hoje'))
-        avisos.push({ tipo:'info', prioridade:1, chave:'agendamentos hoje', titulo:`📅 ${agds.total} agendamento(s) hoje`, mensagem:`Você tem ${agds.total} cliente(s) agendado(s) hoje.`, acao:'Ver agenda', acao_rota:'/barbearia' });
-    }
 
     if (avisos.length > 0) {
       for (const a of avisos) {

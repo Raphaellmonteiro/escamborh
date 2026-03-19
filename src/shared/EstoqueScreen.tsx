@@ -23,13 +23,10 @@ type Ordem  = 'nome' | 'status' | 'quantidade' | 'custo';
 type Filtro = 'todos' | 'ok' | 'baixo' | 'esgotado';
 
 export default function EstoqueScreen({ token, segmento }: { token: string; segmento: string }) {
-  const isBarber    = segmento === 'Barbearia/Salão';
-  const labelItem   = isBarber ? 'Insumo/Produto' : 'Ingrediente';
-  const labelNovo   = isBarber ? 'Novo Insumo'    : 'Novo Ingrediente';
-  const tituloTela  = isBarber ? 'Estoque da Barbearia' : 'Controle de Estoque';
-  const unidades    = isBarber
-    ? ['unidade', 'frasco', 'litro', 'ml', 'kit', 'caixa', 'kg', 'g']
-    : ['kg', 'g', 'unidade', 'litro', 'ml', 'pacote', 'caixa', 'saco', 'bandeja'];
+  const labelItem   = 'Ingrediente';
+  const labelNovo   = 'Novo Ingrediente';
+  const tituloTela  = 'Controle de Estoque';
+  const unidades    = ['kg', 'g', 'unidade', 'litro', 'ml', 'pacote', 'caixa', 'saco', 'bandeja'];
 
   // ── state principal ──────────────────────────────────────────
   const [tab, setTab]                         = useState<Tab>('ingredientes');
@@ -267,11 +264,6 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     if (n.includes('alho')) return '🧄';
     if (n.includes('cerveja') || n.includes('bebida')) return '🍺';
     if (n.includes('refrigerante') || n.includes('coca') || n.includes('suco')) return '🥤';
-    if (n.includes('shampoo')) return '🧴';
-    if (n.includes('lâmina') || n.includes('lamina') || n.includes('navalha')) return '🪒';
-    if (n.includes('toalha')) return '🧻';
-    if (n.includes('luva')) return '🧤';
-    if (n.includes('gel') || n.includes('pomada') || n.includes('creme')) return '✨';
     return '📦';
   };
 
@@ -287,7 +279,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
           <div>
             <h2 className="text-2xl font-black text-zinc-900">{tituloTela}</h2>
             <p className="text-sm text-zinc-400 mt-0.5">
-              {ingredientes.length} {isBarber ? 'insumos' : 'ingredientes'}
+              {ingredientes.length} ingredientes
               {totalEsgotados > 0 && <span className="ml-2 text-red-600 font-bold">· {totalEsgotados} esgotado(s)</span>}
               {totalBaixos    > 0 && <span className="ml-1 text-amber-600 font-bold">· {totalBaixos} baixo(s)</span>}
             </p>
@@ -296,7 +288,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
             {/* Tabs */}
             <div className="flex bg-zinc-100 p-1 rounded-xl gap-0.5">
               {([
-                { key: 'ingredientes',  label: isBarber ? 'Insumos' : 'Ingredientes', icon: <Package size={14}/> },
+                { key: 'ingredientes',  label: 'Ingredientes', icon: <Package size={14}/> },
                 { key: 'movimentacoes', label: 'Movimentações', icon: <History size={14}/> },
                 { key: 'relatorio',     label: 'Relatório', icon: <BarChart2 size={14}/> },
                 { key: 'ficha',         label: 'Ficha Técnica', icon: <BookOpen size={14}/> },

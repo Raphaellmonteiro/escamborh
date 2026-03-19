@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product } from '../../types';
+import type { Agendamento, BarberCliente } from './types';
 import { Card, Button } from '../../components/ui/Card';
 
 export default function AgendamentosScreen({ token, products }: { token: string; products: Product[] }) {
@@ -602,5 +603,4 @@ export default function AgendamentosScreen({ token, products }: { token: string;
     </motion.div>
   );
 }
-
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ShoppingCart, Plus, Minus, Trash2, CheckCircle2, ShoppingBag,
-  X, Search, Check, Printer, Barcode, ScanLine,
+  X, Search, Printer, Barcode, ScanLine,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, OrderItem, PaymentMethod } from '../types';
@@ -32,18 +32,6 @@ export default function POSScreen({
 
   // ─── Estado original (INALTERADO) ─────────────────────────────────────────
   const [cart, setCart] = useState<OrderItem[]>([]);
-  const [showFuncPicker, setShowFuncPicker]               = useState(false);
-  const [pendingFuncProduct, setPendingFuncProduct]       = useState<Product | null>(null);
-  const [funcionariosPOS, setFuncionariosPOS]             = useState<any[]>([]);
-  const [pendingFuncionario, setPendingFuncionario]       = useState<any | null>(null);
-  const [showClientePicker, setShowClientePicker]         = useState(false);
-  const [clientesPOS, setClientesPOS]                     = useState<any[]>([]);
-  const [clienteSelecionado, setClienteSelecionado]       = useState<any | null>(null);
-  const [clienteSearch, setClienteSearch]                 = useState('');
-  const [coberturaAtual, setCoberturaAtual]               = useState<any | null>(null);
-  const [showProdutoVendedorPicker, setShowProdutoVendedorPicker] = useState(false);
-  const [produtoVendedorComissao, setProdutoVendedorComissao]     = useState<string>('');
-  const [produtosComEstoque, setProdutosComEstoque]       = useState<number[]>([]);
   const [observation, setObservation]                     = useState('');
   const [payments, setPayments]                           = useState<{ method: PaymentMethod; amount_paid: number }[]>([]);
   const [currentPaymentMethod, setCurrentPaymentMethod]  = useState<PaymentMethod>('Dinheiro');
@@ -65,17 +53,6 @@ export default function POSScreen({
   const [barcodeToast, setBarcodeToast]         = useState<string | null>(null);
   const searchRef    = useRef<HTMLInputElement>(null);
   const barcodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (estabelecimentoSegmento === 'Barbearia/Salão') {
-      fetch('/api/barber/funcionarios', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(d => setFuncionariosPOS(Array.isArray(d) ? d : [])).catch(() => {});
-      fetch('/api/barber/clientes', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(d => setClientesPOS(Array.isArray(d) ? d : [])).catch(() => {});
-      fetch('/api/barber/produtos-com-estoque', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(d => setProdutosComEstoque(d.ids || [])).catch(() => {});
-    }
-  }, [estabelecimentoSegmento]);
 
   // ─── Derivados ────────────────────────────────────────────────────────────
   const total     = useMemo(() => cart.reduce((a, i) => a + i.price_at_time * i.quantity, 0), [cart]);
@@ -155,14 +132,6 @@ export default function POSScreen({
   };
 
   const handleProductClick = (product: Product) => {
-    const isProdutoFisico = (product.category as string) === 'PRODUTO FISICO';
-    if (estabelecimentoSegmento === 'Barbearia/Salão' && funcionariosPOS.length > 0) {
-      setPendingFuncProduct(product);
-      if (isProdutoFisico) {
-        setPendingFuncionario(null); setShowFuncPicker(false); setProdutoVendedorComissao(''); setShowProdutoVendedorPicker(true);
-      } else { setShowFuncPicker(true); }
-      return;
-    }
     if (cfg.usaTipoItem && cfg.tiposItem.length > 1) {
       setPendingProduct(product);
     } else {
@@ -173,49 +142,6 @@ export default function POSScreen({
         return [...prev, { product_id: product.id, product_name: product.name, quantity: 1, type: tipo, price_at_time: product.price }];
       });
     }
-  };
-
-  const addToCartWithFuncionario = (funcionario: any | null) => {
-    setPendingFuncionario(funcionario); setShowFuncPicker(false); setClienteSearch(''); setShowClientePicker(true);
-  };
-
-  const finalizarProdutoFisico = (funcionario: any | null, comissaoPerc: number) => {
-    if (!pendingFuncProduct) return;
-    const product = pendingFuncProduct;
-    setPendingFuncProduct(null); setShowProdutoVendedorPicker(false); setProdutoVendedorComissao('');
-    const nomeFinal = product.name + (funcionario ? ` 📦 ${funcionario.nome}` : '');
-    const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
-    const fKey = (funcionario?.id || 0) * 100000 + product.id;
-    setCart(prev => {
-      const ex = prev.find(i => (i as any)._fKey === fKey && i.product_id === product.id);
-      if (ex) return prev.map(i => (i as any)._fKey === fKey && i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { product_id: product.id, product_name: nomeFinal, quantity: 1, type: tipo, price_at_time: product.price, _barberItem: true, _fKey: fKey, _funcionarioId: funcionario?.id || null, _clienteId: null, _clienteNome: null, _cobertura: null, _originalPrice: product.price, _isProdutoFisico: true, _comissaoProduto: comissaoPerc } as any];
-    });
-  };
-
-  const finalizarAddToCart = async (cliente: any | null) => {
-    if (!pendingFuncProduct) return;
-    const product = pendingFuncProduct; const funcionario = pendingFuncionario;
-    setPendingFuncProduct(null); setPendingFuncionario(null); setShowClientePicker(false); setClienteSearch('');
-    if (cliente) setClienteSelecionado(cliente);
-    const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
-    const fKey = (funcionario?.id || 0) * 100000 + (cliente?.id || 0);
-    let cobertura: any = null;
-    if (cliente && (product.category as string) !== 'PRODUTO FISICO') {
-      try {
-        const res = await fetch(`/api/barber/assinaturas/check?cliente_id=${cliente.id}&produto_id=${product.id}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) cobertura = await res.json();
-      } catch(e) {}
-    }
-    const coberto = cobertura?.coberto === true;
-    const preco = coberto ? 0 : product.price;
-    const nomeFinal = product.name + (funcionario ? ` (✂️ ${funcionario.nome})` : '') + (coberto ? ' ✅ Plano' : '');
-    setCart(prev => {
-      const ex = prev.find(i => (i as any)._fKey === fKey && i.product_id === product.id);
-      if (ex) return prev.map(i => (i as any)._fKey === fKey && i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { product_id: product.id, product_name: nomeFinal, quantity: 1, type: tipo, price_at_time: preco, _barberItem: true, _fKey: fKey, _funcionarioId: funcionario?.id || null, _clienteId: cliente?.id || null, _clienteNome: cliente?.nome || null, _cobertura: cobertura || null, _originalPrice: product.price } as any];
-    });
-    if (coberto && cobertura) { setCoberturaAtual(cobertura); setTimeout(() => setCoberturaAtual(null), 4000); }
   };
 
   const addToCartWithType = (tipo: TipoItem) => {
@@ -272,20 +198,13 @@ export default function POSScreen({
       taxa_total: taxasAcumuladas, // auxiliar: permite o servidor separar produto de taxa
       tipo_retirada: tipo,
       payments: payments.map((p, i) => ({ ...p, change_given: i === payments.length - 1 ? change : 0 })),
-      barber_items: (cart as any[]).filter(i => i._barberItem === true).map(i => ({
-        product_id: i.product_id, product_name: i.product_name, price: i.price_at_time,
-        original_price: (i as any)._originalPrice ?? i.price_at_time, quantity: i.quantity,
-        funcionario_id: i._funcionarioId || null, cliente_id: i._clienteId || null,
-        cliente_nome: i._clienteNome || null, is_produto_fisico: (i as any)._isProdutoFisico || false,
-        comissao_produto: (i as any)._comissaoProduto ?? 0,
-      })),
     };
     try {
       const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(orderData) });
       const data = await res.json();
       if (data.success) {
         setShowSuccess({ number: data.orderNumber, receipt: data.receipt, senha: data.senhaPedido || 0, tipo, orderId: data.orderId });
-        setCart([]); setPayments([]); setObservation(''); setCurrentAmount(0); setClienteSelecionado(null); setTipoRetirada('local');
+        setCart([]); setPayments([]); setObservation(''); setCurrentAmount(0); setTipoRetirada('local');
       } else { alert('Erro ao finalizar pedido: ' + (data.error || 'Erro desconhecido')); }
     } catch { alert('Erro ao finalizar pedido'); }
     finally { setIsFinalizing(false); }
@@ -413,11 +332,6 @@ export default function POSScreen({
                           <Barcode size={8} />{(product as any).codigo_barras}
                         </span>
                       )}
-                      {produtosComEstoque.includes(product.id) && (
-                        <span className="inline-flex items-center gap-1 mb-1.5 px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-[9px] font-black text-emerald-700">
-                          📦 baixa estoque
-                        </span>
-                      )}
                       <p className="text-base font-black text-amber-500">
                         R$ {product.price.toFixed(2)}
                       </p>
@@ -434,17 +348,6 @@ export default function POSScreen({
           TOASTS
       ═══════════════════════════════════════════════════════════════ */}
       <AnimatePresence>
-        {coberturaAtual && (
-          <motion.div initial={{ y: -60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -60, opacity: 0 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-2xl shadow-2xl z-[200] font-semibold text-sm whitespace-nowrap flex items-center gap-2">
-            <Check size={16} />
-            ✅ Coberto pelo plano <strong>{coberturaAtual.plano_nome}</strong>
-            {coberturaAtual.tipo_plano === 'pacote' && coberturaAtual.restante != null && <span className="ml-1 bg-white/20 px-2 py-0.5 rounded-lg text-xs">{coberturaAtual.restante - 1} restantes</span>}
-            {coberturaAtual.tipo_plano === 'ilimitado' && <span className="ml-1 bg-white/20 px-2 py-0.5 rounded-lg text-xs">Ilimitado</span>}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
         {barcodeToast && (
           <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
             className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-zinc-900 text-white px-6 py-3 rounded-2xl shadow-2xl z-[200] font-semibold text-sm whitespace-nowrap">
@@ -456,104 +359,6 @@ export default function POSScreen({
       {/* ═══════════════════════════════════════════════════════════════
           MODAIS BARBEARIA (INALTERADOS)
       ═══════════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showProdutoVendedorPicker && pendingFuncProduct && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.88, opacity: 0 }}
-              className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center justify-between mb-5">
-                <div><h3 className="text-xl font-black text-zinc-900">Quem vendeu?</h3><p className="text-sm text-zinc-400 mt-0.5">📦 {pendingFuncProduct.name} · <span className="font-bold text-zinc-700">R$ {pendingFuncProduct.price.toFixed(2)}</span></p></div>
-                <button onClick={() => { setShowProdutoVendedorPicker(false); setPendingFuncProduct(null); }} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={20} /></button>
-              </div>
-              <div className="mb-4 bg-zinc-50 border border-zinc-200 rounded-2xl p-4">
-                <p className="text-xs font-black text-zinc-500 uppercase tracking-wide mb-1">Comissão sobre esta venda</p>
-                <p className="text-xs text-zinc-400">O percentual é definido no cadastro de cada funcionário.</p>
-              </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {funcionariosPOS.map(f => {
-                  const corMap: Record<string, string> = { zinc:'bg-zinc-500',red:'bg-red-500',orange:'bg-orange-500',yellow:'bg-yellow-500',green:'bg-green-500',blue:'bg-blue-500',purple:'bg-purple-500',pink:'bg-pink-500' };
-                  const perc = f.comissao_produto || 0;
-                  const val  = pendingFuncProduct ? (pendingFuncProduct.price * perc / 100) : 0;
-                  return (
-                    <button key={f.id} onClick={() => finalizarProdutoFisico(f, perc)} className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-zinc-100 hover:border-zinc-900 hover:bg-zinc-50 transition-all text-left">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 ${corMap[f.cor] || 'bg-zinc-500'}`}>{f.nome[0]}</div>
-                      <div className="flex-1"><p className="font-black text-zinc-900 text-sm">{f.nome}</p><p className="text-xs text-zinc-400">{f.cargo}</p></div>
-                      {perc > 0 ? <span className="text-xs font-black text-green-700 bg-green-50 px-2 py-1 rounded-lg">{perc}% · +R$ {val.toFixed(2)}</span> : <span className="text-xs text-zinc-400 bg-zinc-50 px-2 py-1 rounded-lg">sem comissão</span>}
-                    </button>
-                  );
-                })}
-                <button onClick={() => finalizarProdutoFisico(null, 0)} className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-zinc-200 hover:border-zinc-400 hover:bg-zinc-50 transition-all text-zinc-400 text-sm">
-                  <div className="w-9 h-9 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">🏠</div>Dono / Sem comissão
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showFuncPicker && pendingFuncProduct && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.88, opacity: 0 }} className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center justify-between mb-5">
-                <div><h3 className="text-xl font-black text-zinc-900">Quem vai atender?</h3><p className="text-sm text-zinc-400 mt-0.5">{pendingFuncProduct.name} · <span className="font-bold text-zinc-700">R$ {pendingFuncProduct.price.toFixed(2)}</span></p></div>
-                <button onClick={() => { setShowFuncPicker(false); setPendingFuncProduct(null); }} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={20} /></button>
-              </div>
-              <div className="space-y-2">
-                {funcionariosPOS.map(f => {
-                  const corMap: Record<string, string> = { zinc:'bg-zinc-500',red:'bg-red-500',orange:'bg-orange-500',yellow:'bg-yellow-500',green:'bg-green-500',blue:'bg-blue-500',purple:'bg-purple-500',pink:'bg-pink-500' };
-                  return (
-                    <button key={f.id} onClick={() => addToCartWithFuncionario(f)} className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-zinc-100 hover:border-zinc-900 hover:bg-zinc-50 transition-all text-left">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0 ${corMap[f.cor] || 'bg-zinc-500'}`}>{f.nome[0]}</div>
-                      <div><p className="font-black text-zinc-900 text-sm">{f.nome}</p><p className="text-xs text-zinc-400">{f.cargo}</p></div>
-                    </button>
-                  );
-                })}
-                <button onClick={() => addToCartWithFuncionario(null)} className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-zinc-200 hover:border-zinc-400 hover:bg-zinc-50 transition-all text-zinc-400 text-sm">
-                  <div className="w-9 h-9 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 font-bold">?</div>Qualquer funcionário
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showClientePicker && pendingFuncProduct && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.88, opacity: 0 }} className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-black text-zinc-900">Para qual cliente?</h3>
-                  <p className="text-sm text-zinc-400 mt-0.5">{pendingFuncProduct.name}{pendingFuncionario && pendingFuncProduct.category !== 'PRODUTO FISICO' && <span className="ml-1 text-zinc-600 font-semibold">· ✂️ {pendingFuncionario.nome}</span>}</p>
-                </div>
-                <button onClick={() => { setShowClientePicker(false); setPendingFuncProduct(null); setPendingFuncionario(null); }} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={20} /></button>
-              </div>
-              <div className="relative mb-3">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                <input autoFocus type="text" placeholder="Buscar cliente..." value={clienteSearch} onChange={e => setClienteSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-900" />
-              </div>
-              <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {clientesPOS.filter(c => !clienteSearch || c.nome.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.telefone || '').includes(clienteSearch)).slice(0, 8).map(c => (
-                  <button key={c.id} onClick={() => finalizarAddToCart(c)} className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-zinc-100 hover:border-zinc-900 hover:bg-zinc-50 transition-all text-left">
-                    <div className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center text-white font-black text-sm shrink-0">{c.nome[0]}</div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5"><p className="font-black text-zinc-900 text-sm truncate">{c.nome}</p>{c.assinatura_nome && <span className="text-[9px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded-full shrink-0">✅ {c.assinatura_nome}</span>}</div>
-                      {c.telefone && <p className="text-xs text-zinc-400">{c.telefone}</p>}
-                    </div>
-                  </button>
-                ))}
-                {clientesPOS.filter(c => !clienteSearch || c.nome.toLowerCase().includes(clienteSearch.toLowerCase())).length === 0 && <p className="text-xs text-zinc-400 text-center py-3">Nenhum cliente encontrado</p>}
-              </div>
-              <button onClick={() => finalizarAddToCart(null)} className="w-full mt-3 p-3 rounded-2xl border-2 border-dashed border-zinc-200 hover:border-zinc-400 text-zinc-400 text-sm hover:bg-zinc-50 transition-all">
-                {pendingFuncProduct?.category === 'PRODUTO FISICO' ? 'Adicionar sem vincular cliente' : 'Continuar sem vincular cliente'}
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* ═══════════════════════════════════════════════════════════════
           PAINEL DIREITO — Pedido + Pagamento
       ═══════════════════════════════════════════════════════════════ */}
@@ -690,17 +495,6 @@ export default function POSScreen({
               onChange={(e: any) => setObservation(e.target.value)}
             />
           </div>
-
-          {/* Cliente vinculado */}
-          {clienteSelecionado && (
-            <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-zinc-900 rounded-full flex items-center justify-center text-white text-[10px] font-black">{clienteSelecionado.nome[0]}</div>
-                <p className="text-xs font-black text-zinc-900">{clienteSelecionado.nome}</p>
-              </div>
-              <button onClick={() => setClienteSelecionado(null)} className="text-zinc-300 hover:text-red-500 transition-colors"><X size={13} /></button>
-            </div>
-          )}
 
           {/* Total + Botão */}
           <div className="pt-1 space-y-3">
@@ -929,7 +723,6 @@ export default function POSScreen({
                     setPayments([]);
                     setObservation('');
                     setCurrentAmount(0);
-                    setClienteSelecionado(null);
                     setConfirmLimpar(false);
                   }}
                   className="flex-1 py-2.5 rounded-xl text-sm font-black bg-red-600 hover:bg-red-700 text-white transition-all"

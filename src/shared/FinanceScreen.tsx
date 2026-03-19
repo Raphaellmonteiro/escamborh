@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Trash2, DollarSign, TrendingDown, TrendingUp,
   X, Filter, Calendar, AlertCircle, CheckCircle2,
-  Banknote, CreditCard, ChevronDown,
+  Banknote, ChevronDown,
 } from 'lucide-react';
 
 interface Expense { id: number; description: string; amount: number; category: string; created_at: string; }
@@ -28,9 +28,8 @@ const CAT_COLORS: Record<string, string> = {
   'Outros': 'bg-zinc-100 text-zinc-700',
 };
 
-export default function FinanceScreen({ token, segmento }: { token: string; segmento: string }) {
-  const isBarber = segmento === 'Barbearia/Salão';
-  const [tab, setTab] = useState<'despesas' | 'caixa' | 'repasse'>('despesas');
+export default function FinanceScreen({ token, segmento: _segmento }: { token: string; segmento: string }) {
+  const [tab, setTab] = useState<'despesas' | 'caixa'>('despesas');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [caixaHistory, setCaixaHistory] = useState<Caixa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +126,6 @@ export default function FinanceScreen({ token, segmento }: { token: string; segm
   const TABS = [
     { key: 'despesas', label: 'Despesas' },
     { key: 'caixa', label: 'Histórico de Caixa' },
-    ...(isBarber ? [{ key: 'repasse', label: 'Repasse' }] : []),
   ];
 
   return (
@@ -298,14 +296,6 @@ export default function FinanceScreen({ token, segmento }: { token: string; segm
                 );
               })
             )}
-          </div>
-        )}
-
-        {/* ── ABA REPASSE ───────────────────────────────────────────────── */}
-        {tab === 'repasse' && (
-          <div className="flex flex-col items-center justify-center py-16 bg-white border border-dashed border-zinc-200 rounded-2xl">
-            <CreditCard size={40} className="text-zinc-200 mb-3" />
-            <p className="text-zinc-400 font-medium">Módulo de repasse em desenvolvimento</p>
           </div>
         )}
 

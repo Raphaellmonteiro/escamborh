@@ -14,14 +14,14 @@ import { getSegCfg } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
 
 export default function OrdersScreen({
-  token, segmento, displaySlug, onShowQR,
+  token, segmento: _segmento, displaySlug, onShowQR,
 }: {
   token: string;
   segmento?: string;
   displaySlug?: string | null;
   onShowQR?: () => void;
 }) {
-  const cfg = getSegCfg(segmento);
+  const cfg = getSegCfg(_segmento);
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<'active' | 'receipts'>('active');
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -183,7 +183,7 @@ export default function OrdersScreen({
         <div className="flex items-center gap-2 flex-wrap">
 
           {/* Tela Cliente — só para restaurante/bar com slug */}
-          {displaySlug && segmento !== 'Barbearia/Salão' && (
+          {displaySlug && (
             <a
               href={`/display/${displaySlug}`}
               target="_blank"
@@ -195,7 +195,7 @@ export default function OrdersScreen({
           )}
 
           {/* QR das Mesas */}
-          {onShowQR && segmento !== 'Barbearia/Salão' && (
+          {onShowQR && (
             <button
               onClick={onShowQR}
               className="flex items-center gap-2 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-700 transition-all"
@@ -205,7 +205,7 @@ export default function OrdersScreen({
           )}
 
           {/* Tela da Cozinha (KDS) */}
-          {kdsSlug && segmento !== 'Barbearia/Salão' && (
+          {kdsSlug && (
             <button
               onClick={() => window.open(`/kds/${kdsSlug}`, '_blank', 'noopener')}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all"
