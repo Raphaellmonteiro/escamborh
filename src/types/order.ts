@@ -52,6 +52,15 @@ export interface CancelOrderInput {
   tenantId: number | string;
 }
 
+export interface RefundOrderInput {
+  orderId: number | string;
+  subsenha: string;
+  motivo: string;
+  valor: number | string;
+  userId?: number;
+  tenantId: number | string;
+}
+
 export interface UpdateOrderStatusInput {
   orderId: number | string;
   status: OrderStatus;

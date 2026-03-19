@@ -13,6 +13,13 @@ import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, Das
 import { getSegCfg } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
 
+type OrderWithRefund = Order & {
+  reembolso_status?: string | null;
+  valor_reembolsado?: number | null;
+  reembolsado_at?: string | null;
+  reembolso_motivo?: string | null;
+};
+
 export default function OrdersScreen({
   token, segmento: _segmento, displaySlug, onShowQR,
 }: {
@@ -33,6 +40,11 @@ export default function OrdersScreen({
   const [cancelReason, setCancelReason] = useState('');
   const [cancelRestock, setCancelRestock] = useState(true);
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundPassword, setRefundPassword] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundAmount, setRefundAmount] = useState('');
+  const [orderToRefund, setOrderToRefund] = useState<OrderWithRefund | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     day: '', month: (new Date().getMonth() + 1).toString(), year: new Date().getFullYear().toString()
@@ -72,12 +84,45 @@ export default function OrdersScreen({
     return () => clearInterval(id);
   }, [activeTab, fetchOrders]);
 
+  const formatMoney = (value: number) => `R$ ${value.toFixed(2)}`;
+
+  const getRefundMeta = (order: OrderWithRefund) => {
+    const refundedAmount = Number(order.valor_reembolsado || 0);
+    const refundStatus = String(order.reembolso_status || '').trim().toLowerCase();
+
+    if (refundStatus !== 'parcial' && refundStatus !== 'total') {
+      return null;
+    }
+
+    return {
+      refundedAmount,
+      isTotal: refundStatus === 'total',
+      label: refundStatus === 'total' ? 'Reembolso total' : 'Reembolso parcial',
+      tone: refundStatus === 'total'
+        ? { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' }
+        : { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+    };
+  };
+
+  const closeRefundModal = () => {
+    setShowRefundModal(false);
+    setOrderToRefund(null);
+    setRefundPassword('');
+    setRefundReason('');
+    setRefundAmount('');
+  };
+
   const updateStatus = async (id: number, status: string) => {
-    await fetch(`/api/orders/${id}/status`, {
+    const res = await fetch(`/api/orders/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ status })
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || 'Erro ao atualizar status do pedido.');
+      return;
+    }
     fetchOrders();
   };
 
@@ -92,6 +137,14 @@ export default function OrdersScreen({
     setCancelReason('');
     setCancelRestock(order.status === 'Criado' || order.status === 'Pedido Recebido');
     setShowCancelModal(true);
+  };
+
+  const handleRefundClick = (order: OrderWithRefund) => {
+    setOrderToRefund(order);
+    setRefundPassword('');
+    setRefundReason('');
+    setRefundAmount('');
+    setShowRefundModal(true);
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -192,6 +245,51 @@ export default function OrdersScreen({
       alert(data?.error || 'Erro ao cancelar pedido.');
     } catch {
       alert('Erro de conexão ao cancelar pedido.');
+    }
+  };
+
+  const submitRefundOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!orderToRefund) return;
+
+    const parsedAmount = Number(refundAmount.replace(',', '.'));
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      alert('Informe um valor de reembolso valido.');
+      return;
+    }
+
+    if (!refundReason.trim()) {
+      alert('Informe o motivo do reembolso.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/orders/${orderToRefund.id}/refund`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          subsenha: refundPassword,
+          motivo: refundReason.trim(),
+          valor: parsedAmount,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok) {
+        closeRefundModal();
+        fetchOrders();
+        return;
+      }
+
+      alert(data?.error || 'Erro ao registrar reembolso.');
+    } catch {
+      alert('Erro de conexão ao registrar reembolso.');
     }
   };
 
@@ -325,12 +423,14 @@ export default function OrdersScreen({
             </div>
           )}
           {activeOrders.map(order => {
+            const orderWithRefund = order as OrderWithRefund;
             const sc = getStatusCfg(order.status);
             const next = nextStatus(order.status);
             const pipeIdx = PIPELINE.indexOf(normalizeStatus(order.status));
             const isLevar = (order as any).tipo_retirada === 'levar';
             const isDelivery = (order as any).canal === 'delivery';
             const elapsed = Math.max(0, Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000));
+            const refundMeta = getRefundMeta(orderWithRefund);
             return (
               <div key={order.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isDelivery ? 'border-orange-200' : 'border-zinc-100'}`}>
                 {/* Top stripe — laranja para delivery */}
@@ -406,9 +506,21 @@ export default function OrdersScreen({
                             style={{ background: sc.bg, color: sc.color }}>
                             {sc.emoji} {order.status}
                           </span>
+                          {refundMeta && (
+                            <span
+                              className="text-[10px] font-black px-2 py-0.5 rounded-full border"
+                              style={{
+                                background: refundMeta.tone.bg,
+                                color: refundMeta.tone.color,
+                                borderColor: refundMeta.tone.border,
+                              }}
+                            >
+                              {refundMeta.label}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1">
-                          <span className="text-xs font-bold text-zinc-500">R$ {order.total_amount.toFixed(2)}</span>
+                          <span className="text-xs font-bold text-zinc-500">{formatMoney(order.total_amount)}</span>
                           <span className="text-xs text-zinc-300">·</span>
                           <span className="text-xs text-zinc-400" title={new Date(order.created_at).toLocaleString('pt-BR')}>
                             {elapsed === 0 ? 'agora' : `${elapsed}min atrás`}
@@ -502,6 +614,20 @@ export default function OrdersScreen({
                     </div>
                   )}
 
+                  {refundMeta && (
+                    <div
+                      className="mt-2 text-xs rounded-xl px-3 py-2 border"
+                      style={{
+                        background: refundMeta.tone.bg,
+                        color: refundMeta.tone.color,
+                        borderColor: refundMeta.tone.border,
+                      }}
+                    >
+                      {refundMeta.label}: {formatMoney(refundMeta.refundedAmount)}
+                      {orderWithRefund.reembolso_motivo ? ` • ${orderWithRefund.reembolso_motivo}` : ''}
+                    </div>
+                  )}
+
                   {order.observation && (
                     <div className={`mt-2 text-xs rounded-xl px-3 py-2 border ${isDelivery ? 'bg-orange-50 border-orange-100 text-orange-900' : 'bg-zinc-50 border-zinc-100 text-zinc-500 italic'}`}>
                       {isDelivery
@@ -511,6 +637,12 @@ export default function OrdersScreen({
                         : <span>📝 {order.observation}</span>
                       }
                     </div>
+                  )}
+                  {false && refundMeta && (
+                    <p className="text-[11px] mt-1 truncate" style={{ color: refundMeta.tone.color }}>
+                      {refundMeta.label}: {formatMoney(refundMeta.refundedAmount)}
+                      {orderWithRefund.reembolso_motivo ? ` • ${orderWithRefund.reembolso_motivo}` : ''}
+                    </p>
                   )}
                 </div>
               </div>
@@ -529,8 +661,10 @@ export default function OrdersScreen({
             </div>
           )}
           {orders.map(order => {
+            const orderWithRefund = order as OrderWithRefund;
             const sc = getStatusCfg(order.status);
             const isLevar = (order as any).tipo_retirada === 'levar';
+            const refundMeta = getRefundMeta(orderWithRefund);
             return (
               <div key={order.id} className="bg-white rounded-xl border border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-black text-sm"
@@ -554,12 +688,30 @@ export default function OrdersScreen({
                       {isLevar ? '🛍️' : '🪑'}
                     </span>
                   </div>
+                  {refundMeta && (
+                    <span
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
+                      style={{
+                        background: refundMeta.tone.bg,
+                        color: refundMeta.tone.color,
+                        borderColor: refundMeta.tone.border,
+                      }}
+                    >
+                      {refundMeta.label}
+                    </span>
+                  )}
                   <p className="text-xs text-zinc-400 mt-0.5 truncate">
                     {new Date(order.created_at).toLocaleString('pt-BR')} · R$ {order.total_amount.toFixed(2)}
                   </p>
                   {order.cancelamento_motivo && (
                     <p className="text-[11px] text-red-500 mt-1 truncate">
                       Cancelado: {order.cancelamento_motivo}
+                    </p>
+                  )}
+                  {refundMeta && (
+                    <p className="text-[11px] mt-1 truncate" style={{ color: refundMeta.tone.color }}>
+                      {refundMeta.label}: {formatMoney(refundMeta.refundedAmount)}
+                      {orderWithRefund.reembolso_motivo ? ` • ${orderWithRefund.reembolso_motivo}` : ''}
                     </p>
                   )}
                 </div>
@@ -584,6 +736,15 @@ export default function OrdersScreen({
                       } catch { setSelectedReceipt(order.receipt_text || ''); }
                     }}
                     className="p-2 hover:bg-zinc-100 text-zinc-400 rounded-lg"><FileText size={15} /></button>
+                  {refundMeta?.isTotal !== true && (
+                    <button
+                      onClick={() => handleRefundClick(orderWithRefund)}
+                      className="px-2.5 py-2 hover:bg-orange-50 text-orange-600 rounded-lg text-[11px] font-bold"
+                      title="Registrar Reembolso"
+                    >
+                      Reembolso
+                    </button>
+                  )}
                   <button onClick={() => handleDeleteClick(order.id)}
                     className="p-2 hover:bg-red-50 text-red-400 rounded-lg" title="Excluir Administrativamente"><Trash2 size={15} /></button>
                 </div>
@@ -626,6 +787,81 @@ export default function OrdersScreen({
       </AnimatePresence>
 
 {/* Modal de Autenticação para Exclusão */}
+<AnimatePresence>
+  {showRefundModal && orderToRefund && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[115] flex items-center justify-center p-6">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl"
+      >
+        <form onSubmit={submitRefundOrder} className="space-y-4">
+          <div>
+            <h3 className="text-xl font-bold text-zinc-900">Registrar Reembolso</h3>
+            <p className="text-sm text-zinc-500 mt-1">
+              O reembolso fica separado do status operacional do pedido.
+            </p>
+            <p className="text-xs font-semibold text-zinc-400 mt-2">
+              Pedido: #{orderToRefund.order_number}
+            </p>
+            <p className="text-xs text-zinc-500 mt-1">
+              Total do pedido: {formatMoney(orderToRefund.total_amount)}
+            </p>
+            {Number(orderToRefund.valor_reembolsado || 0) > 0 && (
+              <p className="text-xs text-orange-600 mt-1">
+                Ja reembolsado: {formatMoney(Number(orderToRefund.valor_reembolsado || 0))}
+              </p>
+            )}
+          </div>
+
+          <Input
+            label="Subsenha"
+            type="password"
+            value={refundPassword}
+            onChange={(e: any) => setRefundPassword(e.target.value)}
+            autoFocus
+          />
+
+          <Input
+            label="Valor"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={refundAmount}
+            onChange={(e: any) => setRefundAmount(e.target.value)}
+          />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Motivo</label>
+            <textarea
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              rows={3}
+              className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 transition-all resize-none"
+              placeholder="Ex: cobranca indevida, item devolvido, ajuste financeiro"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <Button type="submit" className="flex-1">
+              Confirmar Reembolso
+            </Button>
+            <Button
+              type="button"
+              onClick={closeRefundModal}
+              variant="secondary"
+              className="flex-1"
+            >
+              Fechar
+            </Button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
+
 {/* Modal de Cancelamento */}
 <AnimatePresence>
   {showCancelModal && orderToCancel && (

@@ -16,6 +16,7 @@ import type {
   GetOrdersFilters,
   OrderItemInput,
   PaymentInput,
+  RefundOrderInput,
   UpdateOrderStatusInput,
 } from '../types/order';
 import { AppError } from '../utils/errors';
@@ -92,6 +93,11 @@ type OrderRow = {
   cancelado_por?: number | null;
   estoque_reposto?: number | boolean | null;
   estoque_reposto_at?: string | null;
+  reembolso_status?: string | null;
+  valor_reembolsado?: number | null;
+  reembolsado_at?: string | null;
+  reembolso_motivo?: string | null;
+  reembolsado_por?: number | null;
 };
 
 type OrderItemRow = {
@@ -127,7 +133,16 @@ type StockMovementSummaryRow = {
   quantity: number | string;
 };
 
+type PaymentRow = {
+  amount_paid: number | string | null;
+  change_given: number | string | null;
+};
+
 const MONEY_TOLERANCE_CENTS = 1;
+
+function isCanceledStatus(status?: string | null) {
+  return String(status || '').trim().toLowerCase() === 'cancelado';
+}
 
 function ensureTenantId(tenantId: TenantId) {
   if (tenantId === null || tenantId === undefined || tenantId === '') {
@@ -204,6 +219,10 @@ function normalizePayment(payment: PaymentInput, index: number): NormalizedPayme
 
 function toMoneyCents(value: number) {
   return Math.round((value + Number.EPSILON) * 100);
+}
+
+function centsToMoney(cents: number) {
+  return cents / 100;
 }
 
 function ensureFinancialConsistency(input: {
@@ -847,7 +866,7 @@ export async function cancelOrder(input: CancelOrderInput) {
         throw new AppError('Pedido nÃ£o encontrado', 404);
       }
 
-      if (order.status === 'Cancelado') {
+      if (isCanceledStatus(order.status)) {
         throw new AppError('Pedido cancelado não pode ser alterado', 400);
       } 
 
@@ -953,6 +972,143 @@ export async function deleteOrder(input: DeleteOrderInput) {
   }
 }
 
+export async function refundOrder(input: RefundOrderInput) {
+  ensureTenantId(input.tenantId);
+
+  const orderId = parseOrderId(input.orderId);
+  const subsenha = String(input.subsenha || '').trim();
+  const motivo = String(input.motivo || '').trim();
+  const refundValue = Number(input.valor);
+
+  if (motivo.length < 3) {
+    throw new AppError('Motivo do reembolso e obrigatorio', 400);
+  }
+
+  if (!Number.isFinite(refundValue) || refundValue <= 0) {
+    throw new AppError('Valor do reembolso invalido', 400);
+  }
+
+  try {
+    await validateSecurityPassword({
+      tenantId: input.tenantId,
+      userId: input.userId,
+      password: subsenha,
+      type: 'admin',
+      requiredMessage: 'Subsenha obrigatoria',
+      invalidMessage: 'Subsenha invalida',
+    });
+
+    return await withTx(async (client) => {
+      const order = await txQ1<OrderRow>(
+        client,
+        `SELECT *
+         FROM pedidos
+         WHERE id=? AND tenant_id=?
+         FOR UPDATE`,
+        [orderId, input.tenantId]
+      );
+
+      if (!order) {
+        throw new AppError('Pedido nao encontrado', 404);
+      }
+
+      const payments = await txQAll<PaymentRow>(
+        client,
+        `SELECT amount_paid, change_given
+         FROM pagamentos
+         WHERE order_id=? AND tenant_id=?
+         FOR UPDATE`,
+        [orderId, input.tenantId]
+      );
+
+      if (payments.length === 0) {
+        throw new AppError('Pedido sem pagamentos para reembolso', 400);
+      }
+
+      const totalPaidCents = payments.reduce(
+        (sum, payment) =>
+          sum +
+          toMoneyCents(Number(payment.amount_paid || 0) - Number(payment.change_given || 0)),
+        0
+      );
+
+      if (totalPaidCents <= 0) {
+        throw new AppError('Pedido sem valor pago disponivel para reembolso', 400);
+      }
+
+      const alreadyRefundedCents = toMoneyCents(Number(order.valor_reembolsado || 0));
+      const refundValueCents = toMoneyCents(refundValue);
+      const availableRefundCents = Math.max(totalPaidCents - alreadyRefundedCents, 0);
+
+      if (availableRefundCents <= 0) {
+        throw new AppError('Pedido ja foi totalmente reembolsado', 400);
+      }
+
+      if (refundValueCents - availableRefundCents > MONEY_TOLERANCE_CENTS) {
+        throw new AppError('Reembolso nao pode exceder o valor pago', 400);
+      }
+
+      const nextRefundedCents = alreadyRefundedCents + refundValueCents;
+      const isTotalRefund = totalPaidCents - nextRefundedCents <= MONEY_TOLERANCE_CENTS;
+      const persistedRefundedCents = isTotalRefund ? totalPaidCents : nextRefundedCents;
+      const refundStatus = isTotalRefund ? 'total' : 'parcial';
+
+      await txRun(
+        client,
+        `UPDATE pedidos
+         SET reembolso_status=?,
+             valor_reembolsado=?,
+             reembolsado_at=NOW(),
+             reembolso_motivo=?,
+             reembolsado_por=?
+         WHERE id=? AND tenant_id=?`,
+        [
+          refundStatus,
+          centsToMoney(persistedRefundedCents),
+          motivo,
+          input.userId || null,
+          orderId,
+          input.tenantId,
+        ]
+      );
+
+      await createOrderEvent(client, {
+        pedidoId: orderId,
+        tenantId: input.tenantId,
+        tipo: 'REEMBOLSO',
+        statusAnterior: order.status,
+        statusNovo: order.status,
+        valor: centsToMoney(refundValueCents),
+        motivo,
+        payload: {
+          origem: 'ordersService.refundOrder',
+          reembolso_status: refundStatus,
+          valor_pago: centsToMoney(totalPaidCents),
+          valor_reembolsado_anterior: centsToMoney(alreadyRefundedCents),
+          valor_reembolsado_atual: centsToMoney(persistedRefundedCents),
+        },
+        usuarioId: input.userId,
+      });
+
+      const updatedOrder = await txQ1<OrderRow>(
+        client,
+        'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
+        [orderId, input.tenantId]
+      );
+
+      return updatedOrder;
+    });
+  } catch (error) {
+    logError('ordersService.refundOrder', error, {
+      orderId,
+      userId: input.userId,
+      tenantId: input.tenantId,
+      valor: refundValue,
+    });
+    throw error;
+  }
+}
+
 export async function updateOrderStatus(input: UpdateOrderStatusInput) {
   ensureTenantId(input.tenantId);
 
@@ -967,6 +1123,10 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
     throw new AppError('Status inválido', 400);
   }
 
+  if (isCanceledStatus(status)) {
+    throw new AppError('Use o fluxo de cancelamento para cancelar pedidos', 400);
+  }
+
   try {
     const order = await q1<OrderRow>(
       'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
@@ -975,6 +1135,10 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
 
     if (!order) {
       throw new AppError('Pedido não encontrado', 404);
+    }
+
+    if (isCanceledStatus(order.status) || order.cancelado_at) {
+      throw new AppError('Pedido cancelado nao pode ter status alterado', 400);
     }
 
     await qAll(

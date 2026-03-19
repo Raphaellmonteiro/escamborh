@@ -4,6 +4,7 @@ import {
   createOrder,
   deleteOrder,
   getOrders,
+  refundOrder,
   updateOrderStatus,
 } from '../services/ordersService';
 
@@ -80,6 +81,22 @@ export function createOrdersRouter() {
         subsenha: req.body?.subsenha,
         motivo: req.body?.motivo,
         estoque_reposto: req.body?.estoque_reposto,
+        userId: req.user?.id,
+        tenantId: req.tenantId,
+      });
+
+      res.json({ success: true, order });
+    })
+  );
+
+  router.post(
+    '/:id/refund',
+    asyncHandler(async (req, res) => {
+      const order = await refundOrder({
+        orderId: req.params.id,
+        subsenha: req.body?.subsenha,
+        motivo: req.body?.motivo,
+        valor: req.body?.valor,
         userId: req.user?.id,
         tenantId: req.tenantId,
       });
