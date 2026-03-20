@@ -642,14 +642,14 @@ const handleAuth = async (e: React.FormEvent) => {
      <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
           {(() => { return (<> 
             {podeVer('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
+            {podeVer('delivery') && permiteDelivery && (
+              <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon={<Bike size={20} />} label="Delivery" />
+            )}
             {permiteMesas && podeVer('mesas') && (
               <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon={<UtensilsCrossed size={20} />} label="Mesas" />
             )}
             {podeVer('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={segCfg.labelSidebarProdutos} />}
             {podeVer('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon={<Archive size={20} />}  label="Estoque" />}
-            {podeVer('delivery') && permiteDelivery && (
-              <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon={<Bike size={20} />} label="Delivery" />
-            )}
           </>); })()}
           {podeVer('nfse') && (
             <a href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer"

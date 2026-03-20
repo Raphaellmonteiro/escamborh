@@ -41,12 +41,13 @@ type HistoryDetail = {
 };
 
 export default function OrdersScreen({
-  token, segmento: _segmento, displaySlug, onShowQR,
+  token, segmento: _segmento, displaySlug, onShowQR, channelFilter = 'all',
 }: {
   token: string;
   segmento?: string;
   displaySlug?: string | null;
   onShowQR?: () => void;
+  channelFilter?: 'all' | 'non_delivery';
 }) {
   const cfg = getSegCfg(_segmento);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -81,6 +82,11 @@ export default function OrdersScreen({
     catch { return ''; }
   }, [token]);
 
+  const isDeliveryOrder = React.useCallback(
+    (order: Order) => (order as any).canal === 'delivery',
+    []
+  );
+
   // useCallback garante referência estável — sem isso fetchOrders é recriada
   // a cada render e o useEffect abaixo dispararia em loop infinito
   const fetchOrders = React.useCallback(async () => {
@@ -96,9 +102,14 @@ export default function OrdersScreen({
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
       const data = await res.json();
-      if (Array.isArray(data)) setOrders(data);
+      if (Array.isArray(data)) {
+        const filteredOrders = channelFilter === 'non_delivery'
+          ? data.filter((order) => !isDeliveryOrder(order))
+          : data;
+        setOrders(filteredOrders);
+      }
     } catch {}
-  }, [token, activeTab, filters]);
+  }, [token, activeTab, filters, channelFilter, isDeliveryOrder]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 

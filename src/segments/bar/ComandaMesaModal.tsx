@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus,
   Minus,
@@ -11,9 +11,9 @@ import {
 import { motion } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
 import { Card, Button } from '../../components/ui/Card';
-import { openPrintPreview } from '../../utils/print';
+import { openPrintPreview, openPrintPreviewFromUrl } from '../../utils/print';
 
-// ── Cupom HTML padrão 80mm ────────────────────────────────────────────────────
+// â”€â”€ Cupom HTML padrÃ£o 80mm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function ComandaMesaModal({
   mesa,
   token,
@@ -36,50 +36,86 @@ const [itens, setItens] = useState<any[]>([]);
   const [payAmount, setPayAmount] = useState<number>(0);
   const [finalizando, setFinalizando] = useState(false);
 
-  // ── Extras: Taxa de Serviço e Couvert ──────────────────────────────────────
+  // â”€â”€ Extras: Taxa de ServiÃ§o e Couvert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [usaTaxa, setUsaTaxa]           = useState(true);
   const [percTaxa, setPercTaxa]         = useState(10);
   const [usaCouvert, setUsaCouvert]     = useState(false);
   const [couvertUn, setCouvertUn]       = useState(15);
   const [couvertPessoas, setCouvertPessoas] = useState(1);
-  // ──────────────────────────────────────────────────────────────────────────
+  const lastSavedExtrasRef = useRef('');
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  const subtotal = itens.reduce((a, i) => a + i.quantity * i.price_at_time, 0);
-  const valorTaxa    = usaTaxa    ? subtotal * (percTaxa / 100)      : 0;
-  const valorCouvert = usaCouvert ? couvertUn * couvertPessoas       : 0;
-  const total        = subtotal + valorTaxa + valorCouvert;
+  const subtotal = Number(
+    comanda?.subtotal ??
+      itens.reduce((acc, item) => acc + Number(item.quantity || 0) * Number(item.price_at_time || 0), 0)
+  );
+  const valorTaxa = Number(comanda?.valor_taxa_servico || 0);
+  const valorCouvert = Number(comanda?.valor_couvert || 0);
+  const total = Number(comanda?.total_com_extras ?? subtotal + valorTaxa + valorCouvert);
 
   const totalPago = payments.reduce((a, p) => a + p.amount_paid, 0);
-  const troco     = Math.max(0, totalPago - total);
-  const restante  = Math.max(0, total - totalPago);
+  const troco = Math.max(0, totalPago - total);
+  const restante = Math.max(0, total - totalPago);
 
-  // ── Taxa da forma de pagamento selecionada ────────────────────────────────
+  // â”€â”€ Taxa da forma de pagamento selecionada â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const getTaxaCartao = (method: string): number => {
-    if (!taxasPagamento) return 0;
-    if (method === 'Débito')  return taxasPagamento.debito  || 0;
-    if (method === 'Crédito') return taxasPagamento.credito || 0;
+    return 0;
+    if (method === 'DÃ©bito')  return taxasPagamento.debito  || 0;
+    if (method === 'CrÃ©dito') return taxasPagamento.credito || 0;
     if (method === 'PIX')     return taxasPagamento.pix     || 0;
     return 0;
   };
-  // Soma das taxas sobre cada pagamento já adicionado
+  // Soma das taxas sobre cada pagamento jÃ¡ adicionado
   const taxasJaAdicionadas = payments.reduce((acc, p) => {
     const perc = getTaxaCartao(p.method);
     return acc + (perc > 0 ? p.amount_paid * perc / 100 : 0);
   }, 0);
 
-  // Taxa sobre o valor que está sendo digitado agora (preview)
+  // Taxa sobre o valor que estÃ¡ sendo digitado agora (preview)
   const taxaCartaoAtual    = getTaxaCartao(payMethod);
   const taxaPreview        = taxaCartaoAtual > 0 ? (payAmount || 0) * taxaCartaoAtual / 100 : 0;
 
-  // Total a pagar = subtotal + extras + taxas de todos os pagamentos já adicionados + taxa do atual em digitação
+  // Total a pagar = subtotal + extras + taxas de todos os pagamentos jÃ¡ adicionados + taxa do atual em digitaÃ§Ã£o
   const totalComTaxas      = total + taxasJaAdicionadas + taxaPreview;
-  // Quanto o cliente já pagou (valor bruto + taxas já calculadas)
+  // Quanto o cliente jÃ¡ pagou (valor bruto + taxas jÃ¡ calculadas)
   const totalPagoComTaxas  = payments.reduce((acc, p) => {
     const perc = getTaxaCartao(p.method);
     return acc + p.amount_paid + (perc > 0 ? p.amount_paid * perc / 100 : 0);
   }, 0);
   const restanteComTaxa    = Math.max(0, totalComTaxas - totalPagoComTaxas);
   const trocoComTaxa       = Math.max(0, totalPagoComTaxas - totalComTaxas);
+
+  const buildExtrasPayload = useCallback(() => ({
+    taxa_servico_ativa: usaTaxa,
+    taxa_servico_percentual: percTaxa,
+    couvert_ativo: usaCouvert,
+    couvert_valor_unitario: couvertUn,
+    couvert_quantidade_pessoas: couvertPessoas,
+  }), [usaTaxa, percTaxa, usaCouvert, couvertUn, couvertPessoas]);
+
+  const persistExtras = useCallback(async (force = false) => {
+    if (!comanda?.id) return true;
+
+    const payload = buildExtrasPayload();
+    const serialized = JSON.stringify(payload);
+    if (!force && serialized === lastSavedExtrasRef.current) return true;
+
+    try {
+      const res = await fetch(`/api/mesas/${mesa.id}/comanda/extras`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: serialized,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return false;
+      if (data?.comanda) setComanda(data.comanda);
+      if (Array.isArray(data?.itens)) setItens(data.itens);
+      lastSavedExtrasRef.current = serialized;
+      return true;
+    } catch {
+      return false;
+    }
+  }, [buildExtrasPayload, comanda?.id, mesa.id, token]);
 
   const fetchComanda = useCallback(async () => {
     
@@ -96,6 +132,42 @@ const [itens, setItens] = useState<any[]>([]);
   }, [mesa.id, token]);
 
   useEffect(() => { fetchComanda(); }, [fetchComanda]);
+
+  useEffect(() => {
+    if (!comanda) return;
+
+    const nextState = {
+      taxa_servico_ativa: Boolean(Number(comanda.taxa_servico_ativa ?? 1)),
+      taxa_servico_percentual: Math.max(0, Number(comanda.taxa_servico_percentual ?? 10)),
+      couvert_ativo: Boolean(Number(comanda.couvert_ativo ?? 0)),
+      couvert_valor_unitario: Math.max(0, Number(comanda.couvert_valor_unitario ?? 15)),
+      couvert_quantidade_pessoas: Math.max(1, Number(comanda.couvert_quantidade_pessoas ?? 1)),
+    };
+
+    lastSavedExtrasRef.current = JSON.stringify(nextState);
+    setUsaTaxa(nextState.taxa_servico_ativa);
+    setPercTaxa(nextState.taxa_servico_percentual);
+    setUsaCouvert(nextState.couvert_ativo);
+    setCouvertUn(nextState.couvert_valor_unitario);
+    setCouvertPessoas(nextState.couvert_quantidade_pessoas);
+  }, [
+    comanda?.id,
+    comanda?.taxa_servico_ativa,
+    comanda?.taxa_servico_percentual,
+    comanda?.couvert_ativo,
+    comanda?.couvert_valor_unitario,
+    comanda?.couvert_quantidade_pessoas,
+  ]);
+
+  useEffect(() => {
+    if (!comanda?.id) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void persistExtras();
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [comanda?.id, persistExtras]);
 
  const handleRemoveItem = async (itemId: number) => {
     await fetch(`/api/mesas/comanda/item/${itemId}`, {
@@ -118,7 +190,7 @@ const [itens, setItens] = useState<any[]>([]);
   const buildExtras = () => {
     const ex: { name: string; value: number }[] = [];
     if (usaTaxa && valorTaxa > 0)
-      ex.push({ name: `Taxa de Serviço (${percTaxa}%)`, value: valorTaxa });
+      ex.push({ name: `Taxa de ServiÃ§o (${percTaxa}%)`, value: valorTaxa });
     if (usaCouvert && valorCouvert > 0)
       ex.push({ name: `Couvert (${couvertPessoas} pessoa${couvertPessoas > 1 ? 's' : ''})`, value: valorCouvert });
     return ex;
@@ -128,13 +200,15 @@ const [itens, setItens] = useState<any[]>([]);
     if (totalPago < total - 0.01) return;
     setFinalizando(true);
     try {
+      await persistExtras(true);
+
       const res = await fetch(`/api/mesas/${mesa.id}/comanda/finalizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           payments,
           observation: `Mesa ${mesa.numero}`,
-          extras: buildExtras(),
+          extras: buildExtrasPayload(),
         }),
       });
 
@@ -154,12 +228,8 @@ const [itens, setItens] = useState<any[]>([]);
 
 const handlePrintComanda = async () => {
     try {
-      const res = await fetch(`/api/mesas/${mesa.id}/comanda-html`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Falha ao gerar impressao');
-      const html = await res.text();
-      if (!openPrintPreview(html)) {
+      const win = await openPrintPreviewFromUrl(`/api/mesas/${mesa.id}/comanda-html`, token);
+      if (!win) {
         alert('Permita popups para imprimir.');
       }
     } catch {
@@ -198,7 +268,7 @@ const handlePrintComanda = async () => {
                 </span>
                 {comanda?.created_at && (
                   <span className="text-xs text-zinc-400">
-                    · desde {new Date((comanda?.created_at ?? '') + ((comanda?.created_at ?? '').includes('Z') ? '' : '-03:00')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                    Â· desde {new Date((comanda?.created_at ?? '') + ((comanda?.created_at ?? '').includes('Z') ? '' : '-03:00')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
                   </span>
                 )}
               </div>
@@ -218,7 +288,7 @@ const handlePrintComanda = async () => {
           ) : itens.length === 0 ? (
             <div className="text-center py-10 text-zinc-400">
               <p className="font-medium">Comanda vazia</p>
-              <p className="text-xs mt-1">Adicione itens pelo PDV ou pelo cardápio</p>
+              <p className="text-xs mt-1">Adicione itens pelo PDV ou pelo cardÃ¡pio</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -262,14 +332,14 @@ const handlePrintComanda = async () => {
         {itens.length > 0 && (
           <div className="border-t border-zinc-200 p-5 space-y-4 bg-zinc-50">
 
-            {/* ── Cobranças Adicionais ──────────────────────────────── */}
+            {/* â”€â”€ CobranÃ§as Adicionais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
               <div className="px-4 py-2.5 border-b border-zinc-100 flex items-center gap-2">
                 <Settings size={13} className="text-zinc-400" />
-                <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Cobranças adicionais</span>
+                <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">CobranÃ§as adicionais</span>
               </div>
 
-              {/* Taxa de Serviço */}
+              {/* Taxa de ServiÃ§o */}
               <div className="px-4 py-3 flex items-center gap-3 border-b border-zinc-100">
                 <button
                   onClick={() => setUsaTaxa(v => !v)}
@@ -278,7 +348,7 @@ const handlePrintComanda = async () => {
                   <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${usaTaxa ? 'left-4' : 'left-0.5'}`} />
                 </button>
                 <div className="flex-1">
-                  <p className="text-xs font-bold text-zinc-700">Taxa de Serviço / Garçom</p>
+                  <p className="text-xs font-bold text-zinc-700">Taxa de ServiÃ§o / GarÃ§om</p>
                   <p className={`text-[10px] ${usaTaxa ? 'text-emerald-600 font-semibold' : 'text-zinc-400'}`}>
                     {usaTaxa ? `+ R$ ${valorTaxa.toFixed(2)}` : 'Desativado'}
                   </p>
@@ -288,7 +358,7 @@ const handlePrintComanda = async () => {
                     <button
                       onClick={() => setPercTaxa(v => Math.max(1, v - 1))}
                       className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-xs font-bold"
-                    >−</button>
+                    >âˆ’</button>
                     <span className="w-10 text-center text-sm font-black text-zinc-800">{percTaxa}%</span>
                     <button
                       onClick={() => setPercTaxa(v => Math.min(30, v + 1))}
@@ -307,9 +377,9 @@ const handlePrintComanda = async () => {
                   <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${usaCouvert ? 'left-4' : 'left-0.5'}`} />
                 </button>
                 <div className="flex-1">
-                  <p className="text-xs font-bold text-zinc-700">Couvert Artístico</p>
+                  <p className="text-xs font-bold text-zinc-700">Couvert ArtÃ­stico</p>
                   <p className={`text-[10px] ${usaCouvert ? 'text-emerald-600 font-semibold' : 'text-zinc-400'}`}>
-                    {usaCouvert ? `R$ ${couvertUn.toFixed(2)} × ${couvertPessoas} pessoa${couvertPessoas > 1 ? 's' : ''} = R$ ${valorCouvert.toFixed(2)}` : 'Desativado'}
+                    {usaCouvert ? `R$ ${couvertUn.toFixed(2)} Ã— ${couvertPessoas} pessoa${couvertPessoas > 1 ? 's' : ''} = R$ ${valorCouvert.toFixed(2)}` : 'Desativado'}
                   </p>
                 </div>
                 {usaCouvert && (
@@ -328,7 +398,7 @@ const handlePrintComanda = async () => {
                       <button
                         onClick={() => setCouvertPessoas(v => Math.max(1, v - 1))}
                         className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-xs font-bold"
-                      >−</button>
+                      >âˆ’</button>
                       <span className="w-5 text-center text-sm font-black text-zinc-800">{couvertPessoas}</span>
                       <button
                         onClick={() => setCouvertPessoas(v => v + 1)}
@@ -339,7 +409,7 @@ const handlePrintComanda = async () => {
                 )}
               </div>
             </div>
-            {/* ──────────────────────────────────────────────────────── */}
+            {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 
             {/* Resumo de valores */}
             <div className="space-y-1">
@@ -351,7 +421,7 @@ const handlePrintComanda = async () => {
               )}
               {usaTaxa && valorTaxa > 0 && (
                 <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <span>Taxa de Serviço ({percTaxa}%)</span>
+                  <span>Taxa de ServiÃ§o ({percTaxa}%)</span>
                   <span>R$ {valorTaxa.toFixed(2)}</span>
                 </div>
               )}
@@ -389,7 +459,7 @@ const handlePrintComanda = async () => {
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Pagamento</p>
 
                 <div className="grid grid-cols-4 gap-1.5">
-                  {['Dinheiro', 'PIX', 'Débito', 'Crédito'].map(m => (
+                  {['Dinheiro', 'PIX', 'DÃ©bito', 'CrÃ©dito'].map(m => (
                     <button
                       key={m}
                       onClick={() => setPayMethod(m)}
@@ -452,7 +522,7 @@ const handlePrintComanda = async () => {
                   );
                 })}
 
-                {/* Preview taxa do método atual sendo digitado */}
+                {/* Preview taxa do mÃ©todo atual sendo digitado */}
                 {taxaPreview > 0 && (
                   <div className="flex items-center justify-between text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                     <span className="text-amber-700 font-bold">Taxa {payMethod} ({taxaCartaoAtual}%) s/ R$ {(payAmount||0).toFixed(2)}</span>

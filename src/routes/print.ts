@@ -2,17 +2,22 @@
 import { Router, Request } from 'express';
 import net from 'net';
 import { q1, qAll } from '../db';
+import { buildMesaFinanceSnapshot, buildMesaReceiptTotals } from '../utils/mesaFinance';
+import { getProfilePaperColumns, getProfilePaperWidthMm } from '../utils/printProfiles';
 import { gerarCupomHtml } from '../utils/printTemplates';
 
 function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
   return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
 }
 
-function getOrderChannel(order: { canal?: string | null }) {
+function getOrderChannel(order: { canal?: string | null; tipo_retirada?: string | null; observation?: string | null }) {
   const canal = String(order.canal || '').trim().toLowerCase();
+  const tipoRetirada = String(order.tipo_retirada || '').trim().toLowerCase();
+  const observation = String(order.observation || '');
 
   if (canal === 'delivery') return 'delivery' as const;
   if (canal === 'mesa') return 'mesa' as const;
+  if (tipoRetirada === 'mesa' || /mesa\s+\d+/i.test(observation)) return 'mesa' as const;
   if (canal === 'balcao') return 'balcao' as const;
 
   return 'generic' as const;
@@ -26,12 +31,132 @@ function buildKitchenMetadata(order: { canal?: string | null; cliente_nome?: str
     metadata.push({ label: 'Cliente', value: order.cliente_nome });
   }
 
-  if (channel === 'mesa') {
+  if (channel === 'mesa' || /mesa\s+\d+/i.test(String(order.observation || ''))) {
     const mesaMatch = String(order.observation || '').match(/mesa\s+(\d+)/i);
     if (mesaMatch) metadata.push({ label: 'Mesa', value: mesaMatch[1] });
   }
 
   return metadata;
+}
+
+function formatPrintDateTime(value?: string | null) {
+  const rawValue = String(value || '').trim();
+  const date = rawValue ? new Date(rawValue) : new Date();
+
+  return date.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+type ProofOrderEvent = {
+  tipo?: string | null;
+  valor?: number | string | null;
+  motivo?: string | null;
+  estoque_reposto?: number | boolean | null;
+  created_at?: string | null;
+  payload?: string | Record<string, unknown> | null;
+};
+
+function parseEventPayload(payload: ProofOrderEvent['payload']) {
+  if (!payload) return null;
+  if (typeof payload === 'object') return payload as Record<string, unknown>;
+
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+function buildProofHtml(input: {
+  order: any;
+  items: any[];
+  payments: any[];
+  clientName?: string | null;
+  proofType: 'cancelamento' | 'reembolso';
+  event?: ProofOrderEvent | null;
+  paperWidthMm: 58 | 80;
+}) {
+  const { order, items, payments, clientName, proofType, event, paperWidthMm } = input;
+  const eventPayload = parseEventPayload(event?.payload);
+  const refundStatus = String(
+    (eventPayload && eventPayload.reembolso_status) || order.reembolso_status || ''
+  )
+    .trim()
+    .toLowerCase();
+  const refundedValue =
+    proofType === 'reembolso'
+      ? Number(event?.valor ?? order.valor_reembolsado ?? 0)
+      : 0;
+  const proofDate = formatPrintDateTime(event?.created_at || order.updated_at || order.created_at);
+  const title =
+    proofType === 'cancelamento'
+      ? 'Comprovante de cancelamento'
+      : 'Comprovante de reembolso';
+  const metadata =
+    proofType === 'cancelamento'
+      ? [
+          { label: 'Operacao', value: 'Cancelamento' },
+          { label: 'Status', value: 'Cancelado' },
+          {
+            label: 'Estoque',
+            value: Number(event?.estoque_reposto || order.estoque_reposto || 0) ? 'Reposto' : 'Sem reposicao',
+          },
+        ]
+      : [
+          { label: 'Operacao', value: 'Reembolso' },
+          {
+            label: 'Status',
+            value: refundStatus === 'total' ? 'Reembolso total' : 'Reembolso parcial',
+          },
+          { label: 'Financeiro', value: refundedValue > 0 ? `R$ ${refundedValue.toFixed(2)}` : 'Sem valor' },
+        ];
+  const totals =
+    proofType === 'cancelamento'
+      ? [{ label: 'Total original', valor: Number(order.total_amount || 0), destaque: true }]
+      : [
+          { label: 'Total original', valor: Number(order.total_amount || 0) },
+          {
+            label: refundStatus === 'total' ? 'Total reembolsado' : 'Valor deste reembolso',
+            valor: refundedValue,
+            destaque: true,
+          },
+        ];
+
+  return gerarCupomHtml({
+    titulo: title,
+    estabelecimento: clientName || undefined,
+    orderNumber: order.order_number,
+    data: proofDate,
+    variant: 'proof',
+    canal: getOrderChannel(order),
+    metadata,
+    paperWidthMm,
+    itens: items.map((item: any) => ({
+      qtd: Number(item.quantity || 0),
+      nome: item.name,
+      valor: Number(item.price_at_time || 0) * Number(item.quantity || 0),
+    })),
+    totais: totals,
+    pagamentos: payments.length
+      ? payments.map((payment: any) => ({
+          metodo: payment.method,
+          valor: Number(payment.amount_paid || 0),
+          troco: Number(payment.change_given || 0) > 0 ? Number(payment.change_given || 0) : undefined,
+        }))
+      : undefined,
+    observacao:
+      String(event?.motivo || '').trim() ||
+      (proofType === 'cancelamento'
+        ? String(order.cancelamento_motivo || '').trim()
+        : String(order.reembolso_motivo || '').trim()) ||
+      undefined,
+  });
 }
 
 function buildEscPos(dados: string, largura = 48): Buffer {
@@ -92,7 +217,7 @@ export function createPrintRouter() {
         return res.send(pedido.receipt_text);
       }
 
-      const cliente = await q1('SELECT nome_estabelecimento FROM clientes WHERE id=?', [req.tenantId]);
+      const cliente = await q1('SELECT nome_estabelecimento, printer_config FROM clientes WHERE id=?', [req.tenantId]);
       const itens = await qAll(
         `SELECT p.name, ip.quantity, ip.price_at_time
          FROM itens_pedido ip
@@ -114,6 +239,25 @@ export function createPrintRouter() {
       });
       const isDelivery = pedido.canal === 'delivery';
       const isMesa = pedido.canal === 'mesa' || /^\[Fechado\]\s*Mesa\s+\d+/i.test(String(pedido.observation || ''));
+      const mesaSnapshot = isMesa
+        ? buildMesaFinanceSnapshot(
+            pedido,
+            Number(
+              pedido.subtotal ||
+                itens.reduce(
+                  (acc: number, item: any) =>
+                    acc + Number(item.price_at_time || 0) * Number(item.quantity || 0),
+                  0
+                )
+            ),
+            {
+              valor_taxa_servico: pedido.valor_taxa_servico,
+              valor_couvert: pedido.valor_couvert,
+              total_extras: pedido.total_extras,
+              total_amount: pedido.total_amount,
+            }
+          )
+        : null;
 
       const html = gerarCupomHtml({
         titulo: isDelivery ? 'Pedido delivery' : isMesa ? 'Fechamento de mesa' : 'Recibo',
@@ -122,6 +266,7 @@ export function createPrintRouter() {
         data: now,
         variant: 'receipt',
         canal: isDelivery ? 'delivery' : isMesa ? 'mesa' : 'balcao',
+        paperWidthMm: getProfilePaperWidthMm(cliente?.printer_config, 'caixa'),
         metadata: [
           { label: 'Status', value: String(pedido.status || 'Concluido') },
           ...(isMesa ? [{ label: 'Operacao', value: 'Atendimento em mesa' }] : []),
@@ -131,7 +276,9 @@ export function createPrintRouter() {
           nome: item.name,
           valor: item.price_at_time * item.quantity,
         })),
-        totais: [{ label: 'Total', valor: pedido.total_amount, destaque: true }],
+        totais: isMesa
+          ? buildMesaReceiptTotals(mesaSnapshot!)
+          : [{ label: 'Total', valor: pedido.total_amount, destaque: true }],
         pagamentos: pagamentos.length > 0
           ? pagamentos.map((payment: any) => ({
               metodo: payment.method,
@@ -161,17 +308,72 @@ export function createPrintRouter() {
     }
   });
 
+  router.get('/comprovante-html/:pedidoId', async (req: Request, res) => {
+    try {
+      const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
+      if (!pedido) return res.status(404).send('<h1>Pedido nao encontrado</h1>');
+
+      const requestedType = String(req.query.tipo || '').trim().toLowerCase();
+      const proofType =
+        requestedType === 'cancelamento' || requestedType === 'reembolso'
+          ? (requestedType as 'cancelamento' | 'reembolso')
+          : isCanceledOrder(pedido)
+            ? 'cancelamento'
+            : String(pedido.reembolso_status || '').trim().toLowerCase() === 'parcial' ||
+                String(pedido.reembolso_status || '').trim().toLowerCase() === 'total'
+              ? 'reembolso'
+              : null;
+
+      if (!proofType) {
+        return res.status(404).send('<h1>Nenhum comprovante disponivel</h1>');
+      }
+
+      const cliente = await q1('SELECT nome_estabelecimento, printer_config FROM clientes WHERE id=?', [req.tenantId]);
+      const itens = await qAll(
+        `SELECT p.name, ip.quantity, ip.price_at_time
+         FROM itens_pedido ip
+         JOIN produtos p ON p.id=ip.product_id
+         WHERE ip.order_id=? AND ip.tenant_id=?`,
+        [req.params.pedidoId, req.tenantId]
+      );
+      const pagamentos = await qAll('SELECT * FROM pagamentos WHERE order_id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
+      const eventType = proofType === 'cancelamento' ? 'CANCELAMENTO' : 'REEMBOLSO';
+      const latestEvent = await q1(
+        `SELECT tipo, valor, motivo, estoque_reposto, payload, created_at
+         FROM pedido_eventos
+         WHERE pedido_id=? AND tenant_id=? AND tipo=?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
+        [req.params.pedidoId, req.tenantId, eventType]
+      );
+
+      res.send(
+        buildProofHtml({
+          order: pedido,
+          items: itens,
+          payments: pagamentos,
+          clientName: cliente?.nome_estabelecimento,
+          proofType,
+          event: latestEvent,
+          paperWidthMm: getProfilePaperWidthMm(cliente?.printer_config, 'caixa'),
+        })
+      );
+    } catch (e: any) {
+      res.status(500).send(e.message);
+    }
+  });
+
   router.post('/recibo/:pedidoId', async (req: Request, res) => {
     try {
       const row = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
       if (!row?.printer_config) return res.json({ success: false, message: 'Impressora nao configurada' });
 
-      const cfg = JSON.parse(row.printer_config);
       const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
       if (!pedido) return res.status(404).json({ success: false, message: 'Pedido nao encontrado' });
 
       const texto = pedido.receipt_text || `Pedido #${pedido.order_number}\nTotal: R$ ${pedido.total_amount.toFixed(2)}`;
-      const dados = buildEscPos(texto, cfg.largura_papel || 48);
+      const cfg = JSON.parse(row.printer_config);
+      const dados = buildEscPos(texto, getProfilePaperColumns(cfg, 'caixa'));
       await enviarParaImpressora(dados, cfg.ip, cfg.porta);
 
       res.json({ success: true });
@@ -185,6 +387,7 @@ export function createPrintRouter() {
       const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
       if (!pedido) return res.status(404).send('');
       if (isCanceledOrder(pedido)) return res.status(409).send('<h1>Pedido cancelado</h1>');
+      const cliente = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
 
       const itens = await qAll(
         `SELECT p.name, ip.quantity
@@ -209,6 +412,7 @@ export function createPrintRouter() {
           data: now,
           variant: 'kitchen-ticket',
           canal: getOrderChannel(pedido),
+          paperWidthMm: getProfilePaperWidthMm(cliente?.printer_config, 'cozinha'),
           metadata: buildKitchenMetadata(pedido),
           itens: itens.map((item: any) => ({ qtd: item.quantity, nome: item.name })),
           observacao: pedido.observation || undefined,
@@ -224,7 +428,6 @@ export function createPrintRouter() {
       const row = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
       if (!row?.printer_config) return res.json({ success: false, message: 'Impressora nao configurada' });
 
-      const cfg = JSON.parse(row.printer_config);
       const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
       if (!pedido) return res.status(404).json({ success: false, message: 'Pedido nao encontrado' });
       if (isCanceledOrder(pedido)) return res.status(409).json({ success: false, message: 'Pedido cancelado nao pode gerar comanda' });
@@ -240,7 +443,8 @@ export function createPrintRouter() {
         `COMANDA #${pedido.order_number}\n` +
         itens.map((item: any) => `${item.quantity}x ${item.name}`).join('\n') +
         (pedido.observation ? `\nObs: ${pedido.observation}` : '');
-      const dados = buildEscPos(texto, cfg.largura_papel || 48);
+      const cfg = JSON.parse(row.printer_config);
+      const dados = buildEscPos(texto, getProfilePaperColumns(cfg, 'cozinha'));
       await enviarParaImpressora(dados, cfg.ip, cfg.porta);
 
       res.json({ success: true });
@@ -257,7 +461,10 @@ export function createPrintRouter() {
       const cfg = JSON.parse(row.printer_config);
       if (!cfg.ip) return res.json({ success: false, message: 'IP nao configurado' });
 
-      const dados = buildEscPos(`TESTE DE IMPRESSAO\nFlowPDV funcionando!\n${new Date().toLocaleString('pt-BR')}`, cfg.largura_papel || 48);
+      const dados = buildEscPos(
+        `TESTE DE IMPRESSAO\nFlowPDV funcionando!\n${new Date().toLocaleString('pt-BR')}`,
+        getProfilePaperColumns(cfg, 'caixa')
+      );
       await enviarParaImpressora(dados, cfg.ip, cfg.porta || 9100);
 
       res.json({ success: true });

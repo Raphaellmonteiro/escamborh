@@ -27,7 +27,7 @@ type SchemaCapabilities = {
   ingredientPublicId: boolean;
 };
 
-type PendingInventoryRawRow = {
+type PendingInventoryProductRow = {
   product_id: number | string;
   product_public_id?: string | null;
   product_name: string;
@@ -36,14 +36,15 @@ type PendingInventoryRawRow = {
   product_barcode?: string | null;
   total_order_usages?: number | string | null;
   last_order_at?: string | null;
-  barcode_match_count?: number | string | null;
+};
+
+type PendingInventoryIngredientRow = {
   ingredient_id?: number | string | null;
   ingredient_public_id?: string | null;
   ingredient_name?: string | null;
   ingredient_barcode?: string | null;
   ingredient_unit?: string | null;
   ingredient_stock?: number | string | null;
-  ingredient_barcode_unique?: number | boolean | null;
 };
 
 export type ProductInventoryResolutionMode =
@@ -86,7 +87,7 @@ export type PendingInventoryManualAction =
   | 'create_missing_ingredient_recipe';
 
 export type PendingInventoryReportItem = {
-  resolutionMode: 'unresolved';
+  resolutionMode: ProductInventoryResolutionMode;
   usesLegacyNameFallback: boolean;
   productId: number;
   productPublicId?: string | null;
@@ -216,6 +217,10 @@ function normalizeText(value: unknown) {
     .trim();
 }
 
+function normalizeExactName(value: unknown) {
+  return String(value || '').trim().toLocaleLowerCase('pt-BR');
+}
+
 function inferPreparedProduct(productName: string, productCategory?: string | null) {
   const text = `${normalizeText(productName)} ${normalizeText(productCategory)}`;
   return PREPARED_PRODUCT_KEYWORDS.some((keyword) => text.includes(keyword));
@@ -336,77 +341,126 @@ function classifyPendingInventoryItem(item: PendingInventoryReportItem) {
   };
 }
 
-function mapPendingInventoryRows(rows: PendingInventoryRawRow[]) {
-  const grouped = new Map<number, PendingInventoryReportItem>();
+function buildPendingInventoryIngredientCandidate(
+  row: PendingInventoryIngredientRow,
+  barcodeCounts: Map<string, number>
+) {
+  const normalizedBarcode = normalizeBarcode(row.ingredient_barcode);
 
-  for (const row of rows) {
-    const productId = Number(row.product_id);
-    const existing = grouped.get(productId);
+  return {
+    ingredientId: Number(row.ingredient_id),
+    ingredientPublicId: row.ingredient_public_id || null,
+    ingredientName: row.ingredient_name || '',
+    ingredientBarcode: row.ingredient_barcode || null,
+    ingredientUnit: row.ingredient_unit || null,
+    ingredientStock: Number(row.ingredient_stock || 0),
+    ingredientBarcodeUnique: normalizedBarcode
+      ? (barcodeCounts.get(normalizedBarcode) || 0) === 1
+      : false,
+  } satisfies PendingInventoryIngredientCandidate;
+}
 
-    if (!existing) {
-      grouped.set(productId, {
-        resolutionMode:
-          Number(row.barcode_match_count || 0) > 0 ? 'unresolved' : 'unresolved',
-        usesLegacyNameFallback: false,
-        productId,
-        productPublicId: row.product_public_id || null,
-        productName: row.product_name,
-        productActive: Boolean(Number(row.product_active || 0)),
-        productCategory: row.product_category || null,
-        productBarcode: row.product_barcode || null,
-        totalOrderUsages: Number(row.total_order_usages || 0),
-        lastOrderAt: row.last_order_at || null,
-        exactNameMatchCount: 0,
-        ambiguousNameMatch: false,
-        ingredientId: null,
-        ingredientPublicId: null,
-        ingredientName: null,
-        ingredientBarcode: null,
-        ingredientUnit: null,
-        ingredientStock: 0,
-        candidateIngredients: [],
-        classification: 'unmatched_manual_review',
-        isPreparedProduct: inferPreparedProduct(row.product_name, row.product_category),
-        safeFixAction: null,
-        safeFixLabel: null,
-        safeFixReason: null,
-        manualFixAction: null,
-        manualFixLabel: null,
-        manualFixReason: null,
-        suggestedFix: '',
-      });
-    }
+function summarizePendingInventoryItems(items: PendingInventoryReportItem[]) {
+  return {
+    totalPendingProducts: items.length,
+    activePendingProducts: items.filter((item) => item.productActive).length,
+    inactivePendingProducts: items.filter((item) => !item.productActive).length,
+    legacyFallbackProducts: items.filter((item) => item.usesLegacyNameFallback).length,
+    ambiguousPendingProducts: items.filter((item) => item.ambiguousNameMatch).length,
+    singleMatchPendingProducts: items.filter((item) => item.exactNameMatchCount === 1).length,
+    unmatchedPendingProducts: items.filter((item) => item.exactNameMatchCount === 0).length,
+    safeBarcodeCandidates: items.filter(
+      (item) => item.safeFixAction === 'align_product_barcode'
+    ).length,
+    safeRecipeCandidates: items.filter(
+      (item) => item.safeFixAction === 'create_explicit_recipe'
+    ).length,
+    safeFixCandidates: items.filter((item) => Boolean(item.safeFixAction)).length,
+    manualPhaseOneCandidates: items.filter((item) => Boolean(item.manualFixAction)).length,
+  } satisfies PendingInventoryAuditReport['summary'];
+}
 
-    const item = grouped.get(productId)!;
+function mapPendingInventoryRows(input: {
+  products: PendingInventoryProductRow[];
+  ingredients: PendingInventoryIngredientRow[];
+}) {
+  const barcodeCounts = new Map<string, number>();
+  const ingredientsByExactName = new Map<string, PendingInventoryIngredientCandidate[]>();
+  const ingredientsByBarcode = new Map<string, PendingInventoryIngredientCandidate[]>();
 
-    if (row.ingredient_id !== null && row.ingredient_id !== undefined) {
-      item.candidateIngredients.push({
-        ingredientId: Number(row.ingredient_id),
-        ingredientPublicId: row.ingredient_public_id || null,
-        ingredientName: row.ingredient_name || '',
-        ingredientBarcode: row.ingredient_barcode || null,
-        ingredientUnit: row.ingredient_unit || null,
-        ingredientStock: Number(row.ingredient_stock || 0),
-        ingredientBarcodeUnique: Boolean(Number(row.ingredient_barcode_unique || 0)),
-      });
+  for (const ingredient of input.ingredients) {
+    const normalizedBarcode = normalizeBarcode(ingredient.ingredient_barcode);
+    if (normalizedBarcode) {
+      barcodeCounts.set(normalizedBarcode, (barcodeCounts.get(normalizedBarcode) || 0) + 1);
     }
   }
 
-  const items = [...grouped.values()].map((item) => {
-    item.exactNameMatchCount = item.candidateIngredients.length;
-    item.ambiguousNameMatch = item.exactNameMatchCount > 1;
-    item.usesLegacyNameFallback = false;
-    item.resolutionMode = 'unresolved';
-
-    const primaryCandidate = item.candidateIngredients[0];
-    if (primaryCandidate) {
-      item.ingredientId = primaryCandidate.ingredientId;
-      item.ingredientPublicId = primaryCandidate.ingredientPublicId || null;
-      item.ingredientName = primaryCandidate.ingredientName;
-      item.ingredientBarcode = primaryCandidate.ingredientBarcode || null;
-      item.ingredientUnit = primaryCandidate.ingredientUnit || null;
-      item.ingredientStock = primaryCandidate.ingredientStock;
+  for (const ingredient of input.ingredients) {
+    if (ingredient.ingredient_id === null || ingredient.ingredient_id === undefined) {
+      continue;
     }
+
+    const candidate = buildPendingInventoryIngredientCandidate(ingredient, barcodeCounts);
+    const exactNameKey = normalizeExactName(candidate.ingredientName);
+    const normalizedBarcode = normalizeBarcode(candidate.ingredientBarcode);
+
+    if (exactNameKey) {
+      const exactNameCandidates = ingredientsByExactName.get(exactNameKey) || [];
+      exactNameCandidates.push(candidate);
+      ingredientsByExactName.set(exactNameKey, exactNameCandidates);
+    }
+
+    if (normalizedBarcode) {
+      const barcodeCandidates = ingredientsByBarcode.get(normalizedBarcode) || [];
+      barcodeCandidates.push(candidate);
+      ingredientsByBarcode.set(normalizedBarcode, barcodeCandidates);
+    }
+  }
+
+  const items = input.products.flatMap((row) => {
+    const productBarcode = normalizeBarcode(row.product_barcode);
+    const barcodeMatches = productBarcode ? ingredientsByBarcode.get(productBarcode) || [] : [];
+
+    if (barcodeMatches.length > 0) {
+      return [];
+    }
+
+    const exactNameKey = normalizeExactName(row.product_name);
+    const candidateIngredients = [...(ingredientsByExactName.get(exactNameKey) || [])].sort(
+      (a, b) => a.ingredientId - b.ingredientId
+    );
+    const primaryCandidate = candidateIngredients[0];
+
+    const item: PendingInventoryReportItem = {
+      resolutionMode: 'unresolved',
+      usesLegacyNameFallback: false,
+      productId: Number(row.product_id),
+      productPublicId: row.product_public_id || null,
+      productName: row.product_name,
+      productActive: Boolean(Number(row.product_active || 0)),
+      productCategory: row.product_category || null,
+      productBarcode: row.product_barcode || null,
+      totalOrderUsages: Number(row.total_order_usages || 0),
+      lastOrderAt: row.last_order_at || null,
+      exactNameMatchCount: candidateIngredients.length,
+      ambiguousNameMatch: candidateIngredients.length > 1,
+      ingredientId: primaryCandidate?.ingredientId || null,
+      ingredientPublicId: primaryCandidate?.ingredientPublicId || null,
+      ingredientName: primaryCandidate?.ingredientName || null,
+      ingredientBarcode: primaryCandidate?.ingredientBarcode || null,
+      ingredientUnit: primaryCandidate?.ingredientUnit || null,
+      ingredientStock: primaryCandidate?.ingredientStock || 0,
+      candidateIngredients,
+      classification: 'unmatched_manual_review',
+      isPreparedProduct: inferPreparedProduct(row.product_name, row.product_category),
+      safeFixAction: null,
+      safeFixLabel: null,
+      safeFixReason: null,
+      manualFixAction: null,
+      manualFixLabel: null,
+      manualFixReason: null,
+      suggestedFix: '',
+    };
 
     const classification = classifyPendingInventoryItem(item);
     item.classification = classification.classification;
@@ -417,9 +471,8 @@ function mapPendingInventoryRows(rows: PendingInventoryRawRow[]) {
     item.manualFixLabel = classification.manualFixLabel;
     item.manualFixReason = classification.manualFixReason;
     item.suggestedFix = classification.suggestedFix;
-    item.isPreparedProduct = inferPreparedProduct(item.productName, item.productCategory);
 
-    return item;
+    return [item];
   });
 
   items.sort((a, b) => {
@@ -558,116 +611,66 @@ export async function auditPendingInventoryProducts(input: {
     ? 'i.public_id AS ingredient_public_id,'
     : 'NULL::text AS ingredient_public_id,';
 
-  const rows = await txQAll<PendingInventoryRawRow>(
+  const products = await txQAll<PendingInventoryProductRow>(
     input.client,
-    `WITH candidate_products AS (
+    `SELECT
+       p.id AS product_id,
+       ${productPublicIdSelect}
+       p.name AS product_name,
+       p.active AS product_active,
+       p.category AS product_category,
+       p.codigo_barras AS product_barcode,
+       COALESCE(sales.total_order_usages, 0) AS total_order_usages,
+       sales.last_order_at
+     FROM produtos p
+     LEFT JOIN LATERAL (
        SELECT
-         p.tenant_id,
-         p.id AS product_id,
-         ${productPublicIdSelect}
-         p.name AS product_name,
-         p.active AS product_active,
-         p.category AS product_category,
-         p.codigo_barras AS product_barcode,
-         COALESCE(sales.total_order_usages, 0) AS total_order_usages,
-         sales.last_order_at
-       FROM produtos p
-       LEFT JOIN LATERAL (
-         SELECT
-           COUNT(DISTINCT ip.order_id)::int AS total_order_usages,
-           MAX(pe.created_at) AS last_order_at
-         FROM itens_pedido ip
-         JOIN pedidos pe
-           ON pe.id = ip.order_id
-          AND pe.tenant_id = ip.tenant_id
-         WHERE ip.product_id = p.id
-           AND ip.tenant_id = p.tenant_id
-       ) sales ON TRUE
-       WHERE p.tenant_id=?
-         AND NOT EXISTS (
-           SELECT 1
-           FROM produto_ingrediente pi
-           WHERE pi.product_id = p.id
-             AND pi.tenant_id = p.tenant_id
-         )
-         ${activeFilter}
-     ),
-     barcode_resolution AS (
-       SELECT
-         c.product_id,
-         COUNT(i.id)::int AS barcode_match_count
-       FROM candidate_products c
-       LEFT JOIN ingredientes i
-         ON i.tenant_id = c.tenant_id
-        AND COALESCE(UPPER(REGEXP_REPLACE(BTRIM(c.product_barcode), '\\s+', '', 'g')), '') <> ''
-        AND UPPER(REGEXP_REPLACE(BTRIM(i.codigo_barras), '\\s+', '', 'g')) =
-            UPPER(REGEXP_REPLACE(BTRIM(c.product_barcode), '\\s+', '', 'g'))
-       GROUP BY c.product_id
-     )
-     SELECT
-       c.product_id,
-       c.product_public_id,
-       c.product_name,
-       c.product_active,
-       c.product_category,
-       c.product_barcode,
-       c.total_order_usages,
-       c.last_order_at,
-       COALESCE(b.barcode_match_count, 0) AS barcode_match_count,
+         COUNT(DISTINCT ip.order_id)::int AS total_order_usages,
+         MAX(pe.created_at) AS last_order_at
+       FROM itens_pedido ip
+       JOIN pedidos pe
+         ON pe.id = ip.order_id
+        AND pe.tenant_id = ip.tenant_id
+       WHERE ip.product_id = p.id
+         AND ip.tenant_id = p.tenant_id
+     ) sales ON TRUE
+     WHERE p.tenant_id=?
+       AND NOT EXISTS (
+         SELECT 1
+         FROM produto_ingrediente pi
+         WHERE pi.product_id = p.id
+           AND pi.tenant_id = p.tenant_id
+       )
+       ${activeFilter}
+     ORDER BY
+       CASE WHEN p.active=1 THEN 0 ELSE 1 END,
+       COALESCE(sales.total_order_usages, 0) DESC,
+       p.name ASC`,
+    [input.tenantId]
+  );
+
+  const ingredients = await txQAll<PendingInventoryIngredientRow>(
+    input.client,
+    `SELECT
        i.id AS ingredient_id,
        ${ingredientPublicIdSelect}
        i.nome AS ingredient_name,
        i.codigo_barras AS ingredient_barcode,
        i.unidade AS ingredient_unit,
-       COALESCE(i.estoque_atual, 0) AS ingredient_stock,
-       CASE
-         WHEN COALESCE(UPPER(REGEXP_REPLACE(BTRIM(i.codigo_barras), '\\s+', '', 'g')), '') = '' THEN 0
-         WHEN EXISTS (
-           SELECT 1
-           FROM ingredientes i2
-           WHERE i2.tenant_id = i.tenant_id
-             AND i2.id <> i.id
-             AND UPPER(REGEXP_REPLACE(BTRIM(i2.codigo_barras), '\\s+', '', 'g')) =
-                 UPPER(REGEXP_REPLACE(BTRIM(i.codigo_barras), '\\s+', '', 'g'))
-         ) THEN 0
-         ELSE 1
-       END AS ingredient_barcode_unique
-     FROM candidate_products c
-     JOIN barcode_resolution b
-       ON b.product_id = c.product_id
-     LEFT JOIN ingredientes i
-       ON i.tenant_id = c.tenant_id
-      AND LOWER(BTRIM(i.nome)) = LOWER(BTRIM(c.product_name))
-     WHERE COALESCE(b.barcode_match_count, 0) = 0
+       COALESCE(i.estoque_atual, 0) AS ingredient_stock
+     FROM ingredientes i
+     WHERE i.tenant_id=?
      ORDER BY
-       CASE WHEN c.product_active=1 THEN 0 ELSE 1 END,
-       c.total_order_usages DESC,
-       c.product_name ASC,
+       i.nome ASC,
        i.id ASC`,
     [input.tenantId]
   );
 
-  const items = mapPendingInventoryRows(rows);
+  const items = mapPendingInventoryRows({ products, ingredients });
 
   return {
     generatedAt: new Date().toISOString(),
-    summary: {
-      totalPendingProducts: items.length,
-      activePendingProducts: items.filter((item) => item.productActive).length,
-      inactivePendingProducts: items.filter((item) => !item.productActive).length,
-      legacyFallbackProducts: items.filter((item) => item.usesLegacyNameFallback).length,
-      ambiguousPendingProducts: items.filter((item) => item.ambiguousNameMatch).length,
-      singleMatchPendingProducts: items.filter((item) => item.exactNameMatchCount === 1).length,
-      unmatchedPendingProducts: items.filter((item) => item.exactNameMatchCount === 0).length,
-      safeBarcodeCandidates: items.filter(
-        (item) => item.safeFixAction === 'align_product_barcode'
-      ).length,
-      safeRecipeCandidates: items.filter(
-        (item) => item.safeFixAction === 'create_explicit_recipe'
-      ).length,
-      safeFixCandidates: items.filter((item) => Boolean(item.safeFixAction)).length,
-      manualPhaseOneCandidates: items.filter((item) => Boolean(item.manualFixAction)).length,
-    },
+    summary: summarizePendingInventoryItems(items),
     items,
   } satisfies PendingInventoryAuditReport;
 }

@@ -13,8 +13,31 @@ import type {
 import { Card, Button, Input } from '../components/ui/Card';
 
 // ─── helpers ────────────────────────────────────────────────────
-const fmt  = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
-const fmtN = (v: number, u: string) => `${v % 1 === 0 ? v : v.toFixed(2)} ${u}`;
+const toNumber = (value: unknown, fallback = 0) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+  if (typeof value === 'string') {
+    const normalized = value.trim().replace(',', '.');
+    if (!normalized) return fallback;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+};
+
+const toOptionalNumber = (value: unknown) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string' && !value.trim()) return undefined;
+
+  const parsed = toNumber(value, Number.NaN);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const fmt  = (v: unknown) => `R$ ${toNumber(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+const fmtN = (v: unknown, u?: string | null) => {
+  const n = toNumber(v);
+  const unit = typeof u === 'string' && u.trim() ? u.trim() : 'unidade';
+  return `${Number.isInteger(n) ? n : n.toFixed(2)} ${unit}`;
+};
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -103,7 +126,42 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     setLoading(true);
     try {
       const r = await fetch(`/api/estoque/relatorio/consumo?inicio=${periodoInicio}&fim=${periodoFim}`, { headers: hdrs });
-      setRelatorio(await r.json());
+      const data = await r.json();
+      const consumoBruto = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.consumo)
+          ? data.consumo
+          : [];
+
+      const consumo = consumoBruto
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+        .map((item) => {
+          const totalSaida = toNumber(item.total_saida ?? item.total_consumido);
+          const custoUnitario = toNumber(item.custo_unitario);
+          return {
+            id: toNumber(item.id),
+            nome: typeof item.nome === 'string' ? item.nome : 'Item sem nome',
+            unidade: typeof item.unidade === 'string' && item.unidade.trim() ? item.unidade : 'unidade',
+            custo_unitario: custoUnitario,
+            fornecedor: typeof item.fornecedor === 'string' ? item.fornecedor : undefined,
+            total_saida: totalSaida,
+            total_entrada: toNumber(item.total_entrada),
+            custo_total: toNumber(item.custo_total, custoUnitario * totalSaida),
+            qtd_saidas: toNumber(item.qtd_saidas),
+          };
+        });
+
+      setRelatorio({
+        consumo,
+        custo_total_periodo: toNumber(
+          Array.isArray(data) ? undefined : data?.custo_total_periodo,
+          consumo.reduce((total, item) => total + item.custo_total, 0)
+        ),
+        periodo: {
+          inicio: typeof data?.periodo?.inicio === 'string' ? data.periodo.inicio : periodoInicio,
+          fim: typeof data?.periodo?.fim === 'string' ? data.periodo.fim : periodoFim,
+        },
+      });
     } catch {} finally { setLoading(false); }
   };
 
@@ -118,7 +176,24 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const fetchFicha = async (pid: number) => {
     try {
       const r = await fetch(`/api/estoque/ficha-tecnica/${pid}`, { headers: hdrs });
-      setFichaItens(await r.json());
+      const data = await r.json();
+      setFichaItens(
+        Array.isArray(data)
+          ? data
+              .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+              .map((item): FichaTecnicaItem => ({
+                id: toNumber(item.id),
+                product_id: toNumber(item.product_id),
+                ingrediente_id: toNumber(item.ingrediente_id),
+                nome: typeof item.nome === 'string' ? item.nome : typeof item.ingrediente_nome === 'string' ? item.ingrediente_nome : '',
+                ingrediente_nome: typeof item.ingrediente_nome === 'string' ? item.ingrediente_nome : undefined,
+                unidade: typeof item.unidade === 'string' && item.unidade.trim() ? item.unidade : 'unidade',
+                quantidade_usada: toNumber(item.quantidade_usada),
+                estoque_atual: toNumber(item.estoque_atual ?? item.estoque),
+                custo_unitario: toOptionalNumber(item.custo_unitario ?? item.custo ?? item.valor_unitario),
+              }))
+          : []
+      );
     } catch {}
   };
 
@@ -320,17 +395,48 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   }, [ingredientes, busca, filtroStatus, ordem, ordemAsc]);
 
   const safePadronizacaoItems = useMemo(
-    () => padronizacao?.items.filter(item => Boolean(item.safeFixAction) && item.productActive) || [],
+    () => (Array.isArray(padronizacao?.items) ? padronizacao.items : []).filter(
+      item => Boolean(item.safeFixAction) && item.productActive
+    ),
     [padronizacao]
   );
 
   const manualPadronizacaoItems = useMemo(
-    () => padronizacao?.items.filter(item => Boolean(item.manualFixAction) && item.productActive) || [],
+    () => (Array.isArray(padronizacao?.items) ? padronizacao.items : []).filter(
+      item => Boolean(item.manualFixAction) && item.productActive
+    ),
     [padronizacao]
   );
 
+  const padronizacaoItems = useMemo(
+    () => Array.isArray(padronizacao?.items) ? padronizacao.items : [],
+    [padronizacao]
+  );
+
+  const padronizacaoSummary = useMemo(() => ({
+    totalPendingProducts: padronizacaoItems.length,
+    activePendingProducts: padronizacaoItems.filter(item => item.productActive).length,
+    inactivePendingProducts: padronizacaoItems.filter(item => !item.productActive).length,
+    legacyFallbackProducts: padronizacaoItems.filter(item => item.usesLegacyNameFallback).length,
+    ambiguousPendingProducts: padronizacaoItems.filter(item => item.ambiguousNameMatch).length,
+    singleMatchPendingProducts: padronizacaoItems.filter(item => item.exactNameMatchCount === 1).length,
+    unmatchedPendingProducts: padronizacaoItems.filter(item => item.exactNameMatchCount === 0).length,
+    safeBarcodeCandidates: padronizacaoItems.filter(item => item.safeFixAction === 'align_product_barcode').length,
+    safeRecipeCandidates: padronizacaoItems.filter(item => item.safeFixAction === 'create_explicit_recipe').length,
+    safeFixCandidates: padronizacaoItems.filter(item => Boolean(item.safeFixAction)).length,
+    manualPhaseOneCandidates: padronizacaoItems.filter(item => Boolean(item.manualFixAction)).length,
+  }), [padronizacaoItems]);
+
+  const relatorioConsumo = useMemo(
+    () => Array.isArray(relatorio?.consumo) ? relatorio.consumo : [],
+    [relatorio]
+  );
+
   // ── custo do produto selecionado na ficha ────────────────────
-  const custoProduto = fichaItens.reduce((s, i) => s + (i.custo_unitario || 0) * i.quantidade_usada, 0);
+  const custoProduto = fichaItens.reduce(
+    (s, i) => s + toNumber(i.custo_unitario) * toNumber(i.quantidade_usada),
+    0
+  );
 
   // ── badges de status ─────────────────────────────────────────
   const totalEsgotados = ingredientes.filter(i => i.status === 'esgotado').length;
@@ -339,8 +445,14 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const getStatusCls = (s?: string) =>
     s === 'esgotado' ? 'bg-red-50 border-red-300' : s === 'baixo' ? 'bg-amber-50 border-amber-300' : 'bg-white border-zinc-200';
 
-  const ingredienteEmoji = (nome: string) => {
-    const n = nome.toLowerCase();
+  const getFichaItemNome = (item: FichaTecnicaItem) => {
+    const nome = item?.nome ?? item?.ingrediente_nome ?? '';
+    return typeof nome === 'string' && nome.trim() ? nome.trim() : 'Ingrediente sem nome';
+  };
+
+  const ingredienteEmoji = (nome?: string | null) => {
+    const n = (nome ?? '').toLowerCase();
+    if (!n) return 'ðŸ“¦';
     if (n.includes('carne') || n.includes('boi') || n.includes('frango') || n.includes('bacon')) return '🥩';
     if (n.includes('pão') || n.includes('pao') || n.includes('brioche')) return '🍞';
     if (n.includes('queijo')) return '🧀';
@@ -667,15 +779,15 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Itens Movimentados</p>
-                    <p className="text-2xl font-black text-zinc-900">{relatorio.consumo.filter(c => c.total_saida > 0 || c.total_entrada > 0).length}</p>
+                    <p className="text-2xl font-black text-zinc-900">{relatorioConsumo.filter(c => c.total_saida > 0 || c.total_entrada > 0).length}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Maior Consumo</p>
                     <p className="text-sm font-black text-zinc-900 truncate">
                       {relatorio.consumo[0]?.nome || '—'}
                     </p>
-                    {relatorio.consumo[0] && (
-                      <p className="text-xs text-zinc-400">{fmtN(relatorio.consumo[0].total_saida, relatorio.consumo[0].unidade)} consumido</p>
+                    {relatorioConsumo[0] && (
+                      <p className="text-xs text-zinc-400">{fmtN(relatorioConsumo[0].total_saida, relatorioConsumo[0].unidade)} consumido</p>
                     )}
                   </div>
                 </div>
@@ -694,7 +806,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-50">
-                      {relatorio.consumo.map(r => (
+                      {relatorioConsumo.map(r => (
                         <tr key={r.id} className={`hover:bg-zinc-50 transition-colors ${r.total_saida === 0 && r.total_entrada === 0 ? 'opacity-40' : ''}`}>
                           <td className="px-5 py-3 text-sm font-bold text-zinc-900">
                             {ingredienteEmoji(r.nome)} {r.nome}
@@ -768,31 +880,31 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4">
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Pendencias totais</p>
-                    <p className="text-2xl font-black text-zinc-900">{padronizacao.summary.totalPendingProducts}</p>
+                    <p className="text-2xl font-black text-zinc-900">{padronizacaoSummary.totalPendingProducts}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
-                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Usam fallback hoje</p>
-                    <p className="text-2xl font-black text-amber-600">{padronizacao.summary.legacyFallbackProducts}</p>
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Sem match</p>
+                    <p className="text-2xl font-black text-amber-600">{padronizacaoSummary.unmatchedPendingProducts}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Casos ambiguos</p>
-                    <p className="text-2xl font-black text-red-600">{padronizacao.summary.ambiguousPendingProducts}</p>
+                    <p className="text-2xl font-black text-red-600">{padronizacaoSummary.ambiguousPendingProducts}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Casos com 1 match</p>
-                    <p className="text-2xl font-black text-emerald-600">{padronizacao.summary.singleMatchPendingProducts}</p>
+                    <p className="text-2xl font-black text-emerald-600">{padronizacaoSummary.singleMatchPendingProducts}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Seguros via ficha</p>
-                    <p className="text-2xl font-black text-sky-600">{padronizacao.summary.safeRecipeCandidates}</p>
+                    <p className="text-2xl font-black text-sky-600">{padronizacaoSummary.safeRecipeCandidates}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Seguros via barcode</p>
-                    <p className="text-2xl font-black text-violet-600">{padronizacao.summary.safeBarcodeCandidates}</p>
+                    <p className="text-2xl font-black text-violet-600">{padronizacaoSummary.safeBarcodeCandidates}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
                     <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Fase manual segura</p>
-                    <p className="text-2xl font-black text-amber-600">{padronizacao.summary.manualPhaseOneCandidates}</p>
+                    <p className="text-2xl font-black text-amber-600">{padronizacaoSummary.manualPhaseOneCandidates}</p>
                   </div>
                 </div>
 
@@ -814,7 +926,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   </div>
                 </div>
 
-                {padronizacao.items.length === 0 ? (
+                {padronizacaoItems.length === 0 ? (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
                     <p className="text-lg font-black text-emerald-800">Nenhum produto pendente de padronizacao foi encontrado.</p>
                     <p className="text-sm text-emerald-700 mt-2">Com ficha tecnica ou barcode cobrindo tudo, a futura remocao do fallback fica bem mais segura.</p>
@@ -837,7 +949,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-50">
-                          {padronizacao.items.map(item => (
+                          {padronizacaoItems.map(item => (
                             <tr key={item.productId} className="align-top hover:bg-zinc-50 transition-colors">
                               <td className="px-5 py-4">
                                 <p className="text-sm font-black text-zinc-900">{item.productName}</p>
@@ -1002,12 +1114,17 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-50">
-                    {fichaItens.map(fi => (
-                      <tr key={fi.id} className="hover:bg-zinc-50">
-                        <td className="px-5 py-3 text-sm font-bold text-zinc-900">{ingredienteEmoji(fi.nome)} {fi.nome}</td>
-                        <td className="px-5 py-3 text-sm text-zinc-700">{fmtN(fi.quantidade_usada, fi.unidade)}</td>
-                        <td className={`px-5 py-3 text-sm font-bold ${fi.estoque_atual <= 0 ? 'text-red-600' : 'text-zinc-700'}`}>
-                          {fmtN(fi.estoque_atual, fi.unidade)}
+                    {fichaItens.map((fi, index) => {
+                      if (!fi) return null;
+                      const nomeFicha = getFichaItemNome(fi);
+                      const quantidadeUsada = toNumber(fi.quantidade_usada);
+                      const estoqueAtual = toNumber(fi.estoque_atual);
+                      return (
+                      <tr key={fi.id ?? `${fi.ingrediente_id}-${index}`} className="hover:bg-zinc-50">
+                        <td className="px-5 py-3 text-sm font-bold text-zinc-900">{ingredienteEmoji(nomeFicha)} {nomeFicha}</td>
+                        <td className="px-5 py-3 text-sm text-zinc-700">{fmtN(quantidadeUsada, fi.unidade)}</td>
+                        <td className={`px-5 py-3 text-sm font-bold ${estoqueAtual <= 0 ? 'text-red-600' : 'text-zinc-700'}`}>
+                          {fmtN(estoqueAtual, fi.unidade)}
                         </td>
                         <td className="px-5 py-3 text-xs text-zinc-500">{fi.custo_unitario ? fmt(fi.custo_unitario) : '—'}</td>
                         <td className="px-5 py-3 text-sm font-black text-zinc-900">
@@ -1020,7 +1137,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>

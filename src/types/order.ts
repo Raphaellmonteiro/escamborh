@@ -71,6 +71,8 @@ export interface UpdateOrderStatusInput {
 export interface GetOrdersFilters {
   tenantId: number | string;
   status?: string;
+  canal?: string;
+  excludeCanal?: string;
   from?: string;
   to?: string;
   day?: string;

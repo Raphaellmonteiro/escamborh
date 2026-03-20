@@ -9,6 +9,7 @@ import {
   Zap, Globe, Bell, BellOff, Map,
 } from 'lucide-react';
 import { openPrintPreview } from '../utils/print';
+import OrdersScreen from './OrdersScreen';
 
 // ─── Sound utils (inline — sem dep externa) ───────────────────────────────────
 function playNewOrderSound() {
@@ -150,7 +151,7 @@ const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function DeliveryScreen({ token, slug }: { token: string; slug?: string }) {
-  const [tab, setTab] = useState<'painel'|'clientes'|'motoboys'|'relatorio'|'config'>('painel');
+  const [tab, setTab] = useState<'orders'|'painel'|'clientes'|'motoboys'|'relatorio'|'config'>('orders');
 
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full overflow-y-auto bg-zinc-50">
@@ -171,6 +172,7 @@ export default function DeliveryScreen({ token, slug }: { token: string; slug?: 
         {/* Tabs */}
         <div className="flex bg-white border border-zinc-200 rounded-xl p-1 gap-0.5 w-fit flex-wrap">
           {([
+            { key:'orders',    label:'Pedidos Balcao', icon:<Package size={14}/> },
             { key:'painel',    label:'Painel',         icon:<Package size={14}/> },
             { key:'clientes',  label:'Clientes',        icon:<Users size={14}/> },
             { key:'motoboys',  label:'Motoboys',        icon:<Truck size={14}/> },
@@ -184,6 +186,7 @@ export default function DeliveryScreen({ token, slug }: { token: string; slug?: 
           ))}
         </div>
 
+        {tab === 'orders'    && <OrdersScreen token={token} channelFilter="non_delivery" />}
         {tab === 'painel'    && <TabPainel   token={token} />}
         {tab === 'clientes'  && <TabClientes token={token} />}
         {tab === 'motoboys'  && <TabMotoboys token={token} />}

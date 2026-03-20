@@ -151,9 +151,12 @@ router.get('/pedidos', async (req: Request, res) => {
 
   router.patch('/pedidos/:id/status', async (req: Request, res) => {
     try {
-      const order = await q1('SELECT status, cancelado_at FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
+      const order = await q1('SELECT status, cancelado_at, canal FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       if (!order) return res.status(404).json({ error: 'Pedido nao encontrado' });
       if (isCanceledOrder(order)) return res.status(400).json({ error: 'Pedido cancelado nao pode voltar ao fluxo operacional' });
+      if (String(order.canal || '').trim().toLowerCase() !== 'delivery') {
+        return res.status(400).json({ error: 'Este fluxo aceita apenas pedidos de delivery' });
+      }
 
       const { status, motoboy_id } = req.body;
       const updates: string[] = ['status=?'];

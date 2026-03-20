@@ -330,6 +330,17 @@ export async function runMigrations() {
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolsado_at TIMESTAMPTZ;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolso_motivo TEXT;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolsado_por INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mesa_id INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comanda_id INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS subtotal REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS taxa_servico_ativa INTEGER DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS taxa_servico_percentual REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_taxa_servico REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS couvert_ativo INTEGER DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS couvert_valor_unitario REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS couvert_quantidade_pessoas INTEGER DEFAULT 1;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_couvert REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS total_extras REAL DEFAULT 0;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS public_id TEXT;
       ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
       CREATE TABLE IF NOT EXISTS pedido_eventos (
@@ -351,9 +362,21 @@ export async function runMigrations() {
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS observacoes TEXT;
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS primeira_compra_at TIMESTAMPTZ;
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS ultima_compra_at TIMESTAMPTZ;
+      ALTER TABLE comandas ADD COLUMN IF NOT EXISTS taxa_servico_ativa INTEGER DEFAULT 1;
+      ALTER TABLE comandas ADD COLUMN IF NOT EXISTS taxa_servico_percentual REAL DEFAULT 10;
+      ALTER TABLE comandas ADD COLUMN IF NOT EXISTS couvert_ativo INTEGER DEFAULT 0;
+      ALTER TABLE comandas ADD COLUMN IF NOT EXISTS couvert_valor_unitario REAL DEFAULT 15;
+      ALTER TABLE comandas ADD COLUMN IF NOT EXISTS couvert_quantidade_pessoas INTEGER DEFAULT 1;
     `);
 
     await client.query(`
+      UPDATE comandas
+      SET taxa_servico_ativa = COALESCE(taxa_servico_ativa, 1),
+          taxa_servico_percentual = COALESCE(taxa_servico_percentual, 10),
+          couvert_ativo = COALESCE(couvert_ativo, 0),
+          couvert_valor_unitario = COALESCE(couvert_valor_unitario, 15),
+          couvert_quantidade_pessoas = GREATEST(1, COALESCE(couvert_quantidade_pessoas, 1));
+
       UPDATE produtos
       SET public_id = CONCAT('prd_', SUBSTRING(MD5(CONCAT(tenant_id::text, '-', id::text, '-produto')), 1, 24))
       WHERE public_id IS NULL OR BTRIM(public_id) = '';

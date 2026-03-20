@@ -1,8 +1,8 @@
 // ================================================================
-// types.ts — Tipos globais do FlowPDV
+// types.ts â€” Tipos globais do FlowPDV
 // ================================================================
 
-// ── Produto / Catálogo ───────────────────────────────────────────
+// â”€â”€ Produto / CatÃ¡logo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Product {
   id: number;
   public_id?: string | null;
@@ -28,9 +28,9 @@ export interface Category {
   tenant_id: number;
 }
 
-// ── Carrinho / Pedido ────────────────────────────────────────────
-export type OrderType   = 'Mesa' | 'Balcão' | 'Delivery' | string;
-export type PaymentMethod = 'Dinheiro' | 'PIX' | 'Débito' | 'Crédito' | string;
+// â”€â”€ Carrinho / Pedido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export type OrderType   = 'Mesa' | 'BalcÃ£o' | 'Delivery' | string;
+export type PaymentMethod = 'Dinheiro' | 'PIX' | 'DÃ©bito' | 'CrÃ©dito' | string;
 
 export interface OrderItem {
   id?: number;
@@ -49,6 +49,7 @@ export interface Order {
   id: number;
   order_number: string;
   status: string;
+  canal?: string | null;
   total_amount: number;
   observation?: string;
   receipt_text?: string;
@@ -60,9 +61,20 @@ export interface Order {
   cancelamento_motivo?: string | null;
   estoque_reposto?: boolean;
   estoque_reposto_at?: string | null;
+  mesa_id?: number | null;
+  comanda_id?: number | null;
+  subtotal?: number;
+  taxa_servico_ativa?: number;
+  taxa_servico_percentual?: number;
+  valor_taxa_servico?: number;
+  couvert_ativo?: number;
+  couvert_valor_unitario?: number;
+  couvert_quantidade_pessoas?: number;
+  valor_couvert?: number;
+  total_extras?: number;
 }
 
-// ── Dashboard ────────────────────────────────────────────────────
+// â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface DashboardStats {
   today: number;
   week: number;
@@ -82,7 +94,7 @@ export interface CashReport {
   total: number;
 }
 
-// ── Financeiro ───────────────────────────────────────────────────
+// â”€â”€ Financeiro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Expense {
   id: number;
   description: string;
@@ -91,7 +103,7 @@ export interface Expense {
   created_at: string;
 }
 
-// ── Caixa ────────────────────────────────────────────────────────
+// â”€â”€ Caixa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Caixa {
   id: number;
   data: string;
@@ -103,7 +115,7 @@ export interface Caixa {
   closed_at?: string | null;
 }
 
-// ── Estoque ──────────────────────────────────────────────────────
+// â”€â”€ Estoque â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Ingrediente {
   id: number;
   public_id?: string | null;
@@ -137,7 +149,8 @@ export interface FichaTecnicaItem {
   id: number;
   product_id: number;
   ingrediente_id: number;
-  nome: string;
+  nome?: string | null;
+  ingrediente_nome?: string | null;
   unidade: string;
   quantidade_usada: number;
   estoque_atual: number;
@@ -162,7 +175,7 @@ export interface RelatorioConsumo {
   periodo: { inicio: string; fim: string };
 }
 
-// ── Mesas (Bar / Restaurante) ────────────────────────────────────
+// â”€â”€ Mesas (Bar / Restaurante) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type PendingInventoryClassification =
   | 'safe_barcode_alignment'
   | 'safe_recipe_explicit'
@@ -176,6 +189,11 @@ export type PendingInventorySafeAction =
 export type PendingInventoryManualAction =
   | 'create_missing_ingredient_recipe';
 
+export type ProductInventoryResolutionMode =
+  | 'recipe'
+  | 'barcode_exact'
+  | 'unresolved';
+
 export interface PendingInventoryIngredientCandidate {
   ingredientId: number;
   ingredientPublicId?: string | null;
@@ -187,7 +205,7 @@ export interface PendingInventoryIngredientCandidate {
 }
 
 export interface LegacyFallbackPendingProduct {
-  resolutionMode: 'unresolved';
+  resolutionMode: ProductInventoryResolutionMode;
   usesLegacyNameFallback: boolean;
   productId: number;
   productPublicId?: string | null;
@@ -199,9 +217,9 @@ export interface LegacyFallbackPendingProduct {
   lastOrderAt?: string | null;
   exactNameMatchCount: number;
   ambiguousNameMatch: boolean;
-  ingredientId: number;
+  ingredientId?: number | null;
   ingredientPublicId?: string | null;
-  ingredientName: string;
+  ingredientName?: string | null;
   ingredientBarcode?: string | null;
   ingredientUnit?: string | null;
   ingredientStock: number;
@@ -243,7 +261,11 @@ export interface Mesa {
   opened_at: string | null;
   comanda_id: number | null;
   total_itens: number;
+  subtotal_valor?: number;
   total_valor: number;
+  valor_taxa_servico?: number;
+  valor_couvert?: number;
+  total_extras?: number;
 }
 
 export interface Comanda {
@@ -252,6 +274,16 @@ export interface Comanda {
   status: 'aberta' | 'fechada';
   created_at: string;
   closed_at: string | null;
+  taxa_servico_ativa?: number;
+  taxa_servico_percentual?: number;
+  couvert_ativo?: number;
+  couvert_valor_unitario?: number;
+  couvert_quantidade_pessoas?: number;
+  subtotal?: number;
+  valor_taxa_servico?: number;
+  valor_couvert?: number;
+  total_extras?: number;
+  total_com_extras?: number;
   itens: ItemComanda[];
 }
 

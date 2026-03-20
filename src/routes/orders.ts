@@ -49,6 +49,8 @@ export function createOrdersRouter() {
       const orders = await getOrders({
         tenantId: req.tenantId,
         status: getStringQueryValue(req.query.status),
+        canal: getStringQueryValue(req.query.canal),
+        excludeCanal: getStringQueryValue(req.query.excludeCanal),
         from: getStringQueryValue(req.query.from),
         to: getStringQueryValue(req.query.to),
         day: getStringQueryValue(req.query.day),

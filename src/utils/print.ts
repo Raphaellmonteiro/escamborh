@@ -31,3 +31,24 @@ export function openPrintPreview(html: string, features = 'width=420,height=700'
 
   return win;
 }
+
+export async function fetchPrintableHtml(url: string, token?: string) {
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Falha ao gerar impressao (${res.status})`);
+  }
+
+  return res.text();
+}
+
+export async function openPrintPreviewFromUrl(
+  url: string,
+  token?: string,
+  features = 'width=420,height=700'
+) {
+  const html = await fetchPrintableHtml(url, token);
+  return openPrintPreview(html, features);
+}

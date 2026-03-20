@@ -214,28 +214,61 @@ router.get('/', async (req: Request, res) => {
   router.get('/relatorio/consumo', async (req: Request, res) => {
     try {
       const { inicio, fim } = req.query;
-      res.json(await qAll(
-        `SELECT i.nome, i.unidade,
-           COALESCE(SUM(CASE WHEN m.tipo='saida' THEN m.quantidade ELSE 0 END),0) as total_consumido,
+      const inicioPeriodo = String(inicio || '1900-01-01');
+      const fimPeriodo = String(fim || '2100-12-31');
+      const rows = await qAll(
+        `SELECT i.id, i.nome, i.unidade, i.custo_unitario, i.fornecedor,
+           COALESCE(SUM(CASE WHEN m.tipo='saida' THEN m.quantidade ELSE 0 END),0) as total_saida,
            COALESCE(SUM(CASE WHEN m.tipo='entrada' THEN m.quantidade ELSE 0 END),0) as total_entrada,
-           i.estoque_atual, i.estoque_minimo
+           COALESCE(SUM(CASE WHEN m.tipo='saida' THEN 1 ELSE 0 END),0) as qtd_saidas
          FROM ingredientes i
          LEFT JOIN estoque_movimentacoes m ON m.ingrediente_id=i.id AND m.tenant_id=i.tenant_id
            AND (m.created_at AT TIME ZONE '${TZ}')::date BETWEEN ? AND ?
-         WHERE i.tenant_id=? GROUP BY i.id, i.nome, i.unidade, i.estoque_atual, i.estoque_minimo ORDER BY total_consumido DESC`,
-        [inicio||'1900-01-01', fim||'2100-12-31', req.tenantId]
-      ));
+         WHERE i.tenant_id=?
+         GROUP BY i.id, i.nome, i.unidade, i.custo_unitario, i.fornecedor
+         ORDER BY total_saida DESC`,
+        [inicioPeriodo, fimPeriodo, req.tenantId]
+      );
+
+      const consumo = rows.map((row: any) => {
+        const custoUnitario = Number(row.custo_unitario || 0);
+        const totalSaida = Number(row.total_saida || 0);
+        return {
+          id: Number(row.id || 0),
+          nome: row.nome || '',
+          unidade: row.unidade || 'unidade',
+          custo_unitario: custoUnitario,
+          fornecedor: row.fornecedor || undefined,
+          total_saida: totalSaida,
+          total_entrada: Number(row.total_entrada || 0),
+          custo_total: custoUnitario * totalSaida,
+          qtd_saidas: Number(row.qtd_saidas || 0),
+        };
+      });
+
+      res.json({
+        consumo,
+        custo_total_periodo: consumo.reduce((total, item) => total + item.custo_total, 0),
+        periodo: { inicio: inicioPeriodo, fim: fimPeriodo },
+      });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   router.get('/ficha-tecnica/:product_id', async (req: Request, res) => {
     try {
-      res.json(await qAll(
-        `SELECT pi.*, i.nome as ingrediente_nome, i.unidade
+      const rows = await qAll(
+        `SELECT pi.*, i.nome as ingrediente_nome, i.unidade, i.estoque_atual, i.custo_unitario
          FROM produto_ingrediente pi JOIN ingredientes i ON i.id=pi.ingrediente_id
          WHERE pi.product_id=? AND pi.tenant_id=?`,
         [req.params.product_id, req.tenantId]
-      ));
+      );
+
+      res.json(rows.map((row: any) => ({
+        ...row,
+        quantidade_usada: Number(row.quantidade_usada || 0),
+        estoque_atual: Number(row.estoque_atual || 0),
+        custo_unitario: row.custo_unitario == null ? null : Number(row.custo_unitario),
+      })));
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 

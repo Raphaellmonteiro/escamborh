@@ -23,6 +23,7 @@ import type {
 } from '../types/order';
 import { AppError } from '../utils/errors';
 import { logError } from '../utils/logger';
+import { getProfilePaperWidthMm } from '../utils/printProfiles';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { requireProductInventoryTargets } from './stockIdentification';
 
@@ -85,6 +86,7 @@ type OrderRow = {
   id: number;
   order_number: string;
   status: string;
+  canal?: string | null;
   total_amount: number;
   observation?: string | null;
   receipt_text?: string | null;
@@ -691,9 +693,9 @@ async function generateReceipt(
     minute: '2-digit',
   });
 
-  const clientRow = await txQ1<{ nome_estabelecimento: string }>(
+  const clientRow = await txQ1<{ nome_estabelecimento: string; printer_config?: string | null }>(
     client,
-    'SELECT nome_estabelecimento FROM clientes WHERE id=?',
+    'SELECT nome_estabelecimento, printer_config FROM clientes WHERE id=?',
     [tenantId]
   );
 
@@ -722,6 +724,7 @@ async function generateReceipt(
     data: now,
     variant: 'receipt',
     canal: 'balcao',
+    paperWidthMm: getProfilePaperWidthMm(clientRow?.printer_config, 'caixa'),
     metadata: [{ label: 'Operacao', value: 'Venda de balcao' }],
     itens: items.map((item) => ({
       qtd: item.quantity,
@@ -753,6 +756,16 @@ function buildOrderFilters(filters: GetOrdersFilters) {
   if (filters.status) {
     clauses.push('status=?');
     params.push(filters.status);
+  }
+
+  if (filters.canal) {
+    clauses.push('canal=?');
+    params.push(filters.canal);
+  }
+
+  if (filters.excludeCanal) {
+    clauses.push("COALESCE(canal, '')<>?");
+    params.push(filters.excludeCanal);
   }
 
   if (filters.from) {
@@ -1171,6 +1184,13 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
 
       if (order.status === status) {
         return order;
+      }
+
+      if (String(order.canal || '').trim().toLowerCase() === 'delivery') {
+        throw new AppError(
+          'Pedido de delivery nao pode ser avancado por aqui. Use a aba Delivery para continuar o fluxo e definir o motoboy.',
+          400
+        );
       }
 
       await txRun(

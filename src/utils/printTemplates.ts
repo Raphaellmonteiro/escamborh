@@ -44,6 +44,7 @@ export type PrintDocumentOptions = {
   pagamento_status?: string;
   taxa_entrega?: number;
   motoboy_nome?: string;
+  paperWidthMm?: 58 | 80;
 };
 
 function escapeHtml(value: string) {
@@ -125,6 +126,11 @@ function buildCustomerBlock(opts: PrintDocumentOptions) {
 export function gerarCupomHtml(opts: PrintDocumentOptions): string {
   const variant = opts.variant || 'receipt';
   const channel = opts.canal || 'generic';
+  const paperWidthMm = opts.paperWidthMm === 58 ? 58 : 80;
+  const bodyWidthMm = paperWidthMm === 58 ? 50 : 72;
+  const baseFontSizePx = paperWidthMm === 58 ? 10 : 11;
+  const titleFontSizePx = paperWidthMm === 58 ? 16 : 18;
+  const brandFontSizePx = paperWidthMm === 58 ? 12 : 13;
   const metadata: PrintMeta[] = [
     { label: 'Documento', value: buildVariantLabel(variant) },
     { label: 'Canal', value: buildChannelLabel(channel) },
@@ -205,14 +211,14 @@ export function gerarCupomHtml(opts: PrintDocumentOptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(opts.titulo)}</title>
   <style>
-    @page { margin: 4mm; size: 80mm auto; }
+    @page { margin: 4mm; size: ${paperWidthMm}mm auto; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 72mm;
+      width: ${bodyWidthMm}mm;
       padding: 1.5mm;
       color: #111827;
       font-family: "Segoe UI", Arial, sans-serif;
-      font-size: 11px;
+      font-size: ${baseFontSizePx}px;
       line-height: 1.35;
       background: #fff;
     }
@@ -228,13 +234,13 @@ export function gerarCupomHtml(opts: PrintDocumentOptions): string {
       margin-bottom: 8px;
     }
     .brand {
-      font-size: 13px;
+      font-size: ${brandFontSizePx}px;
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
     .title {
-      font-size: 18px;
+      font-size: ${titleFontSizePx}px;
       font-weight: 900;
       margin-top: 4px;
       text-transform: uppercase;
