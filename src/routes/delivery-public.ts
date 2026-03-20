@@ -43,6 +43,17 @@ type DeliveryConfig = {
   desconto_primeiro_cliente_min_pedido?: number;
 };
 
+type DeliveryAddressRecord = {
+  id: number;
+  label?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  referencia?: string | null;
+  principal?: number;
+};
+
 type CheckoutSummary = {
   modelo_entrega: 'bairro_fixo';
   bairro_entrega: string | null;
@@ -204,6 +215,47 @@ async function resolveDeliveryCustomerId(tenantId: number, clienteToken?: unknow
   return null;
 }
 
+async function resolveSavedDeliveryAddress(params: {
+  tenantId: number;
+  clienteId: number | null;
+  enderecoId?: unknown;
+}) {
+  if (params.enderecoId === undefined || params.enderecoId === null || String(params.enderecoId).trim() === '') {
+    return null;
+  }
+
+  const enderecoId = Number(params.enderecoId);
+  if (!Number.isInteger(enderecoId) || enderecoId <= 0) {
+    throw new AppError('Endereco invalido', 400, 'DELIVERY_ENDERECO_INVALIDO');
+  }
+
+  if (!params.clienteId) {
+    throw new AppError('Endereco salvo requer cliente autenticado', 401, 'DELIVERY_CLIENTE_NAO_AUTENTICADO');
+  }
+
+  const endereco = await q1(
+    `SELECT id, label, logradouro, numero, complemento, bairro, referencia, principal
+     FROM delivery_enderecos
+     WHERE id=? AND tenant_id=? AND cliente_id=?`,
+    [enderecoId, params.tenantId, params.clienteId]
+  );
+
+  if (!endereco) {
+    throw new AppError('Endereco invalido para este cliente', 400, 'DELIVERY_ENDERECO_INVALIDO');
+  }
+
+  return endereco as DeliveryAddressRecord;
+}
+
+function formatSavedDeliveryAddress(endereco: DeliveryAddressRecord) {
+  return [
+    [endereco.logradouro, endereco.numero].filter(Boolean).join(', '),
+    endereco.complemento ? `Compl: ${endereco.complemento}` : '',
+    endereco.bairro ? `Bairro: ${endereco.bairro}` : '',
+    endereco.referencia ? `Ref: ${endereco.referencia}` : '',
+  ].filter(Boolean).join(' - ');
+}
+
 async function validateDeliveryItems(tenantId: number, items: any[]) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new AppError('Pedido sem itens', 400);
@@ -244,7 +296,7 @@ async function validateDeliveryItems(tenantId: number, items: any[]) {
 async function resolveDeliveryFee(params: {
   tenantId: number;
   clienteId: number | null;
-  enderecoId?: unknown;
+  endereco?: DeliveryAddressRecord | null;
   bairro?: unknown;
   config: DeliveryConfig;
   canalPedido?: OrderChannel;
@@ -266,25 +318,15 @@ async function resolveDeliveryFee(params: {
     };
   }
 
-  if (zonas.length === 0 || !params.enderecoId) {
+  if (zonas.length === 0 || !params.endereco) {
     return { taxa: defaultFee, zona: null as DeliveryZone | null, bairro: null as string | null };
   }
 
-  const endereco = params.clienteId
-    ? await q1(
-        'SELECT bairro FROM delivery_enderecos WHERE id=? AND tenant_id=? AND cliente_id=?',
-        [params.enderecoId, params.tenantId, params.clienteId]
-      )
-    : await q1(
-        'SELECT bairro FROM delivery_enderecos WHERE id=? AND tenant_id=?',
-        [params.enderecoId, params.tenantId]
-      );
-
-  const zona = findDeliveryZone(zonas, endereco?.bairro);
+  const zona = findDeliveryZone(zonas, params.endereco.bairro);
   return {
     taxa: zona ? Number(zona.taxa || 0) : defaultFee,
     zona,
-    bairro: String(endereco?.bairro || '').trim() || null,
+    bairro: String(params.endereco.bairro || '').trim() || null,
   };
 }
 
@@ -414,12 +456,17 @@ async function buildCheckoutSummary(params: {
   canalPedido?: OrderChannel;
 }) {
   const clienteId = await resolveDeliveryCustomerId(params.tenantId, params.clienteToken);
+  const enderecoSalvo = await resolveSavedDeliveryAddress({
+    tenantId: params.tenantId,
+    clienteId,
+    enderecoId: params.enderecoId,
+  });
   const { subtotal, itensValidados } = await validateDeliveryItems(params.tenantId, params.items);
   const pagamentoTipo = String(params.pagamentoTipo || 'pix').trim().toLowerCase();
   const fee = await resolveDeliveryFee({
     tenantId: params.tenantId,
     clienteId,
-    enderecoId: params.enderecoId,
+    endereco: enderecoSalvo,
     bairro: params.bairro,
     config: params.config,
     canalPedido: params.canalPedido,
@@ -615,6 +662,7 @@ export function createDeliveryPublicRouter() {
           pix_nome: dcfg.pix_nome,
           pix_cidade: dcfg.pix_cidade,
           pix_payload_estatico: dcfg.pix_payload_estatico,
+          whatsapp: dcfg.whatsapp || tenant.whatsapp,
           desconto_pix: dcfg.desconto_pix,
         },
       });
@@ -813,6 +861,11 @@ export function createDeliveryPublicRouter() {
       const canalPedido: OrderChannel = String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
       const tipoRetirada = canalPedido === 'retirada' ? 'levar' : 'local';
       const clienteId = await resolveDeliveryCustomerId(tenant.id, clienteToken);
+      const enderecoSalvo = await resolveSavedDeliveryAddress({
+        tenantId: tenant.id,
+        clienteId,
+        enderecoId: endereco_id,
+      });
       const checkoutSummary = await buildCheckoutSummary({
         tenantId: tenant.id,
         config: dcfg,
@@ -830,6 +883,18 @@ export function createDeliveryPublicRouter() {
           success: false,
           error: checkoutSummary.cupom_invalido || 'Cupom invalido ou expirado',
         });
+      }
+
+      const enderecoFinal = canalPedido === 'retirada'
+        ? null
+        : (
+            enderecoSalvo
+              ? formatSavedDeliveryAddress(enderecoSalvo)
+              : String(endereco || '').trim()
+          );
+
+      if (canalPedido === 'delivery' && !enderecoFinal) {
+        throw new AppError('Endereco de entrega obrigatorio', 400, 'DELIVERY_ENDERECO_OBRIGATORIO');
       }
 
       const itensValidados = checkoutSummary.itensValidados;
@@ -870,7 +935,7 @@ export function createDeliveryPublicRouter() {
         const orderId = await txInsert(
           client,
           `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,delivery_checkout_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, canalPedido === 'retirada' ? null : (endereco || null), pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', 'Criado', clienteId, JSON.stringify(checkoutSnapshot)]
+          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, enderecoFinal, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', 'Criado', clienteId, JSON.stringify(checkoutSnapshot)]
         );
 
           for (const item of itensValidados) {
@@ -914,13 +979,13 @@ export function createDeliveryPublicRouter() {
       }));
       const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao' };
       const mapsUrl = canalPedido === 'delivery'
-        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco || '')}`
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoFinal || '')}`
         : null;
       const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const data = new Date().toLocaleDateString('pt-BR');
       const msg = canalPedido === 'retirada'
         ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`
-        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${endereco || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
+        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;
 
       res.json({
@@ -936,6 +1001,7 @@ export function createDeliveryPublicRouter() {
           pix_nome: dcfg.pix_nome,
           pix_cidade: dcfg.pix_cidade,
           pix_payload_estatico: dcfg.pix_payload_estatico,
+          whatsapp: dcfg.whatsapp || tenant.whatsapp,
           desconto_pix: dcfg.desconto_pix,
         },
         resumo_checkout: {

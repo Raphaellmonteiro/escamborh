@@ -31,6 +31,7 @@ interface Config {
   pix_chave?: string;
   pix_nome?: string;
   pix_cidade?: string;
+  pix_payload_estatico?: string;
   whatsapp?: string;
   horario_abertura?: string;
   horario_fechamento?: string;
@@ -83,6 +84,17 @@ interface ClienteAuth { id: number; nome: string; telefone: string; email?: stri
 interface PedidoHist { id: number; order_number: string; status: string; total_amount: number; created_at: string; resumo_itens: string; itens_raw?: string; }
 type Tela = 'cardapio'|'cart'|'checkout'|'confirmado'|'conta'|'identificar'|'historico'|'enderecos'|'novo_endereco'|'editar_perfil';
 type TipoAtendimento = 'entrega'|'retirada';
+type PedidoConfirmado = {
+  orderNumber: string;
+  waLink: string | null;
+  total: number;
+  orderId: number;
+  pagamento_tipo: string;
+  mapsUrl?: string;
+  itens?: any[];
+  config_pix?: Partial<Config>;
+  canal?: 'delivery'|'retirada';
+};
 
 const fmt = (v: number) => `R$ ${(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')}`;
 const STATUS_COR: Record<string,string> = { 'Criado':'bg-blue-100 text-blue-700 border border-blue-200','Pedido Recebido':'bg-blue-100 text-blue-700 border border-blue-200','Em Preparo':'bg-amber-100 text-amber-700 border border-amber-200','Pronto':'bg-purple-100 text-purple-700 border border-purple-200','Pronto para Entrega':'bg-purple-100 text-purple-700 border border-purple-200','Saiu para Entrega':'bg-orange-100 text-orange-700 border border-orange-200','Entregue':'bg-emerald-100 text-emerald-700 border border-emerald-200','Concluído':'bg-emerald-100 text-emerald-700 border border-emerald-200','Cancelado':'bg-red-100 text-red-700 border border-red-200' };
@@ -399,7 +411,7 @@ export default function DeliveryCardapio() {
   const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento | null>(null);
   const [search, setSearch] = useState('');
   const [catAtiva, setCatAtiva] = useState('');
-  const [pedidoOk, setPedidoOk] = useState<{orderNumber:string;waLink:string|null;total:number;orderId:number;pagamento_tipo:string;mapsUrl?:string;itens?:any[];canal?:'delivery'|'retirada'}|null>(null);
+  const [pedidoOk, setPedidoOk] = useState<PedidoConfirmado|null>(null);
   const [abaCardapio, setAbaCardapio] = useState<'todos'|'favoritos'>('todos');
   const [produtoModal, setProdutoModal] = useState<Produto|null>(null); // modal de opções
   const catRefs = useRef<Record<string, HTMLDivElement|null>>({});
@@ -464,7 +476,7 @@ export default function DeliveryCardapio() {
     return cats;
   }, [categorias, search, abaCardapio, cliente?.favoritos]);
 
-  const onPedidoOk = (d:{orderNumber:string;waLink:string|null;total:number;orderId:number;pagamento_tipo:string;mapsUrl?:string;itens?:any[];canal?:'delivery'|'retirada'}) => { setCart([]); setPedidoOk(d); setTela('confirmado'); };
+  const onPedidoOk = (d: PedidoConfirmado) => { setCart([]); setPedidoOk(d); setTela('confirmado'); };
 
   if (loading||authLoad) return (
     <div className="min-h-screen bg-white flex items-center justify-center">
@@ -1658,8 +1670,8 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
   const [copiado, setCopiado] = useState(false);
   const [pixPayload, setPixPayload] = useState('');
 
-  // CORREÇÃO: Utiliza o config_pix que acabamos de receber e aceita QR Code Estático
-  const pxConf = pedidoOk.config_pix || config as any;
+  // Mescla o payload do pedido com a config carregada para nao perder campos opcionais como whatsapp.
+  const pxConf = { ...config, ...(pedidoOk.config_pix || {}) } as Config;
   const temPix = pxConf.pix_chave || pxConf.pix_payload_estatico;
 
   useEffect(() => {
