@@ -11,65 +11,9 @@ import {
 import { motion } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
 import { Card, Button } from '../../components/ui/Card';
+import { openPrintPreview } from '../../utils/print';
 
 // ── Cupom HTML padrão 80mm ────────────────────────────────────────────────────
-function gerarCupomHtml(opts: {
-  titulo: string; estabelecimento?: string; orderNumber: string; data: string;
-  itens: { qtd: number; nome: string; valor?: number }[];
-  totais?: { label: string; valor: number; destaque?: boolean }[];
-  pagamentos?: { metodo: string; valor: number; troco?: number }[];
-  rodape?: string;
-}): string {
-  const fmt = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
-  const H = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const itensHtml = opts.itens.map(it => `
-    <div class="item-row">
-      <span class="item-nome">${it.qtd}x ${H(it.nome)}</span>
-      ${it.valor !== undefined ? `<span class="item-val">${fmt(it.valor)}</span>` : ''}
-    </div>`).join('');
-  const totaisHtml = (opts.totais||[]).map(t =>
-    `<div class="row${t.destaque?' destaque':''}"><span>${H(t.label)}</span><span>${fmt(t.valor)}</span></div>`
-  ).join('');
-  const pagHtml = (opts.pagamentos||[]).map(p => `
-    <div class="row"><span>${H(p.metodo)}</span><span>${fmt(p.valor)}</span></div>
-    ${p.troco && p.troco > 0 ? `
-    <div style="background:#fff7ed;border:2px solid #f97316;border-radius:6px;padding:5px 7px;margin:3px 0">
-      <div style="color:#c2410c;font-weight:bold">💰 LEVAR TROCO</div>
-      <div class="row destaque"><span>Troco a dar:</span><span>${fmt(p.troco)}</span></div>
-    </div>` : ''}
-  `).join('');
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${H(opts.titulo)}</title>
-<style>
-  @page{margin:3mm;size:80mm auto;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.5;width:72mm;padding:2mm;color:#000;}
-  .center{text-align:center;} .bold{font-weight:bold;}
-  .sep{border-top:1px dashed #000;margin:4px 0;}
-  .row{display:flex;justify-content:space-between;padding:1px 0;}
-  .destaque{font-size:14px;font-weight:bold;margin-top:2px;}
-  .titulo{font-size:15px;font-weight:bold;}
-  .item-row{display:flex;justify-content:space-between;}
-  .item-nome{flex:1;word-break:break-word;padding-right:4px;}
-  .item-val{white-space:nowrap;}
-  .secao{font-weight:bold;font-size:11px;color:#555;letter-spacing:.5px;margin-top:4px;}
-  .rodape{text-align:center;font-size:10px;color:#777;margin-top:4px;}
-</style></head><body>
-<div class="center">
-  ${opts.estabelecimento ? `<div style="font-size:13px;font-weight:bold">${H(opts.estabelecimento.toUpperCase())}</div>` : ''}
-  <div class="titulo">${H(opts.titulo)}</div>
-  <div style="font-size:11px;color:#555">#${H(opts.orderNumber)} &nbsp;|&nbsp; ${H(opts.data)}</div>
-</div>
-<div class="sep"></div>
-<div class="secao">ITENS</div>
-${itensHtml}
-${opts.totais?.length ? `<div class="sep"></div>${totaisHtml}` : ''}
-${opts.pagamentos?.length ? `<div class="sep"></div><div class="secao">PAGAMENTO</div>${pagHtml}` : ''}
-<div class="sep"></div>
-<div class="rodape">${opts.rodape ? H(opts.rodape) : 'Obrigado pela preferência!'}</div>
-<div class="rodape">FlowPDV &bull; ${H(opts.data)}</div>
-</body></html>`;
-}
-
 export default function ComandaMesaModal({
   mesa,
   token,
@@ -196,16 +140,7 @@ const [itens, setItens] = useState<any[]>([]);
 
     const data = await res.json();
       if (data.success) {
-        if (data.receipt) {
-          // data.receipt já é HTML gerado pelo servidor via gerarCupomHtml
-          const win = window.open('', '_blank');
-          if (win) {
-            win.document.write(data.receipt);
-            win.document.close();
-            win.focus();
-            setTimeout(() => win.print(), 400);
-          }
-        }
+        if (data.receipt) openPrintPreview(data.receipt);
         onClose();
       } else {
         alert(data.message || 'Erro ao finalizar');
@@ -217,32 +152,19 @@ const [itens, setItens] = useState<any[]>([]);
     }
   };
 
-const handlePrintComanda = () => {
-    const win = window.open('', '_blank');
-    if (!win) { alert('Permita popups para imprimir.'); return; }
-    const agora = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' });
-    const abertura = comanda?.created_at
-      ? new Date((comanda.created_at) + (comanda.created_at.includes('Z') ? '' : '-03:00'))
-          .toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' })
-      : '--:--';
-
-    const totais = [];
-    if (subtotal !== total) totais.push({ label: 'Subtotal', valor: subtotal });
-    if (usaTaxa && valorTaxa > 0) totais.push({ label: `Taxa Serviço (${percTaxa}%)`, valor: valorTaxa });
-    if (usaCouvert && valorCouvert > 0) totais.push({ label: `Couvert (${couvertPessoas}px)`, valor: valorCouvert });
-    totais.push({ label: 'TOTAL', valor: total, destaque: true });
-
-    const html = gerarCupomHtml({
-      titulo: `MESA ${mesa.numero}`,
-      orderNumber: `Aberta: ${abertura}`,
-      data: agora,
-      itens: itens.map(it => ({ qtd: it.quantity, nome: it.product_name, valor: it.quantity * it.price_at_time })),
-      totais,
-    });
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+const handlePrintComanda = async () => {
+    try {
+      const res = await fetch(`/api/mesas/${mesa.id}/comanda-html`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Falha ao gerar impressao');
+      const html = await res.text();
+      if (!openPrintPreview(html)) {
+        alert('Permita popups para imprimir.');
+      }
+    } catch {
+      alert('Erro ao gerar impressao da comanda.');
+    }
   };
   
   return (

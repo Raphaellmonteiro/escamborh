@@ -9,6 +9,8 @@ import { getSegCfg, categoryNeedsPrep } from '../config/segmentos';
 import type { TipoItem } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
 import MesaPickerModal from '../segments/bar/MesaPickerModal';
+import { normalizeBarcode } from '../utils/barcode';
+import { openPrintPreview } from '../utils/print';
 
 // ── Constantes de estilo ──────────────────────────────────────────────────────
 const PAY_METHODS: PaymentMethod[] = ['Dinheiro', 'PIX', 'Débito', 'Crédito'];
@@ -168,9 +170,13 @@ export default function POSScreen({
       if (el?.tagName === 'TEXTAREA') return;
       if (el?.tagName === 'INPUT' && el !== searchRef.current) return;
       if (e.key === 'Enter' && barcodeBuffer.length >= 4) {
-        const code = barcodeBuffer; setBarcodeBuffer('');
+        const code = normalizeBarcode(barcodeBuffer); setBarcodeBuffer('');
         if (barcodeTimer.current) clearTimeout(barcodeTimer.current);
-        const found = (Array.isArray(products) ? products : []).find(p => p.active && (p as any).codigo_barras === code);
+        const found = code
+          ? (Array.isArray(products) ? products : []).find(
+              p => p.active && normalizeBarcode((p as any).codigo_barras) === code
+            )
+          : null;
         if (found) { addToCartDirect(found); setBarcodeToast(`✓ ${found.name} adicionado`); setSearchTerm(''); }
         else { setBarcodeToast(`⚠ Código "${code}" não cadastrado`); }
         setTimeout(() => setBarcodeToast(null), 2500); return;
@@ -641,11 +647,9 @@ export default function POSScreen({
                     try {
                       const r = await fetch(`/api/print/cupom-html/${showSuccess.orderId}`, { headers: { Authorization: `Bearer ${token}` } });
                       const html = await r.text();
-                      const w = window.open('', '_blank', 'width=420,height=700');
-                      if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
+                      openPrintPreview(html);
                     } catch {
-                      const w = window.open('', '_blank', 'width=420,height=700');
-                      if (w) { w.document.write(showSuccess.receipt); w.document.close(); }
+                      openPrintPreview(showSuccess.receipt);
                     }
                   }}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-zinc-100 text-zinc-800 hover:bg-zinc-200 transition-colors"

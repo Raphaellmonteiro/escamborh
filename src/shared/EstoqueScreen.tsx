@@ -3,12 +3,12 @@ import {
   Plus, Minus, Trash2, FileText, Lock, AlertCircle,
   History, ArrowUpCircle, ArrowDownCircle, Search,
   BarChart2, ChevronDown, ChevronUp, X, Package,
-  TrendingDown, DollarSign, Filter, BookOpen,
+  TrendingDown, DollarSign, Filter, BookOpen, Link2, RefreshCw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type {
   Ingrediente, MovimentacaoEstoque, FichaTecnicaItem,
-  RelatorioConsumo, Product,
+  RelatorioConsumo, Product, LegacyFallbackAuditReport,
 } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
 
@@ -18,7 +18,7 @@ const fmtN = (v: number, u: string) => `${v % 1 === 0 ? v : v.toFixed(2)} ${u}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
-type Tab    = 'ingredientes' | 'movimentacoes' | 'relatorio' | 'ficha';
+type Tab    = 'ingredientes' | 'movimentacoes' | 'relatorio' | 'ficha' | 'padronizacao';
 type Ordem  = 'nome' | 'status' | 'quantidade' | 'custo';
 type Filtro = 'todos' | 'ok' | 'baixo' | 'esgotado';
 
@@ -33,10 +33,12 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const [ingredientes, setIngredientes]       = useState<Ingrediente[]>([]);
   const [movimentacoes, setMovimentacoes]     = useState<MovimentacaoEstoque[]>([]);
   const [relatorio, setRelatorio]             = useState<RelatorioConsumo | null>(null);
+  const [padronizacao, setPadronizacao]       = useState<LegacyFallbackAuditReport | null>(null);
   const [produtos, setProdutos]               = useState<Product[]>([]);
   const [fichaProduto, setFichaProduto]       = useState<number | ''>('');
   const [fichaItens, setFichaItens]           = useState<FichaTecnicaItem[]>([]);
   const [loading, setLoading]                 = useState(false);
+  const [padronizacaoFixingKey, setPadronizacaoFixingKey] = useState<string | null>(null);
 
   // ── filtros / busca ──────────────────────────────────────────
   const [busca, setBusca]                     = useState('');
@@ -70,6 +72,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   useEffect(() => { fetchIngredientes(); fetchProdutos(); }, []);
   useEffect(() => { if (tab === 'movimentacoes') fetchMovimentacoes(); }, [tab, periodoInicio, periodoFim]);
   useEffect(() => { if (tab === 'relatorio') fetchRelatorio(); }, [tab, periodoInicio, periodoFim]);
+  useEffect(() => { if (tab === 'padronizacao') fetchPadronizacao(); }, [tab]);
   useEffect(() => { if (tab === 'ficha' && fichaProduto) fetchFicha(fichaProduto as number); }, [fichaProduto]);
 
   const fetchIngredientes = async () => {
@@ -104,11 +107,79 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     } catch {} finally { setLoading(false); }
   };
 
+  const fetchPadronizacao = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/estoque/padronizacao/produtos-pendentes', { headers: hdrs });
+      setPadronizacao(await r.json());
+    } catch {} finally { setLoading(false); }
+  };
+
   const fetchFicha = async (pid: number) => {
     try {
       const r = await fetch(`/api/estoque/ficha-tecnica/${pid}`, { headers: hdrs });
       setFichaItens(await r.json());
     } catch {}
+  };
+
+  const handleApplyPadronizacaoFixes = async (productIds?: number[]) => {
+    const requestKey = productIds?.length ? `item:${productIds.join(',')}` : 'bulk';
+    setPadronizacaoFixingKey(requestKey);
+    try {
+      const r = await fetch('/api/estoque/padronizacao/corrigir-seguros', {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({
+          only_active: true,
+          product_ids: productIds?.length ? productIds : undefined,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.success === false) {
+        alert(data.error || 'Nao foi possivel aplicar as correcoes seguras.');
+        return;
+      }
+
+      setPadronizacao(data.report);
+      await Promise.all([fetchProdutos(), fetchIngredientes()]);
+      alert(
+        `Fase 1 aplicada: ${data.appliedCount} correcao(oes) segura(s) (${data.recipeFixes} ficha(s), ${data.barcodeFixes} barcode(s)).`
+      );
+    } catch {
+      alert('Erro de conexao ao aplicar as correcoes seguras.');
+    } finally {
+      setPadronizacaoFixingKey(null);
+    }
+  };
+
+  const handleApplyPadronizacaoManualPhase = async (productIds?: number[]) => {
+    const requestKey = productIds?.length ? `manual:item:${productIds.join(',')}` : 'manual:bulk';
+    setPadronizacaoFixingKey(requestKey);
+    try {
+      const r = await fetch('/api/estoque/padronizacao/corrigir-manuais-fase-1', {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({
+          only_active: true,
+          product_ids: productIds?.length ? productIds : undefined,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.success === false) {
+        alert(data.error || 'Nao foi possivel aplicar a fase manual segura.');
+        return;
+      }
+
+      setPadronizacao(data.report);
+      await Promise.all([fetchProdutos(), fetchIngredientes()]);
+      alert(
+        `Fase manual segura aplicada: ${data.appliedCount} correcao(oes) (${data.createdIngredients} ingrediente(s), ${data.createdRecipes} ficha(s)).`
+      );
+    } catch {
+      alert('Erro de conexao ao aplicar a fase manual segura.');
+    } finally {
+      setPadronizacaoFixingKey(null);
+    }
   };
 
   const fetchHistoricoItem = async (ing: Ingrediente) => {
@@ -129,7 +200,11 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     try {
       const r = await fetch(url, { method, headers: jHdrs, body: JSON.stringify(editing) });
       const d = await r.json();
-      if (r.ok && d.success !== false) { setEditing(null); fetchIngredientes(); }
+      if (r.ok && d.success !== false) {
+        setEditing(null);
+        fetchIngredientes();
+        if (tab === 'padronizacao') fetchPadronizacao();
+      }
       else alert(d.message || d.error || 'Erro ao salvar.');
     } catch { alert('Erro de conexão.'); }
   };
@@ -160,7 +235,12 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         method: 'POST', headers: jHdrs,
         body: JSON.stringify({ ingrediente_id: Number(fichaForm.ingrediente_id), quantidade_usada: parseFloat(fichaForm.quantidade_usada) })
       });
-      if (r.ok) { setShowAddFicha(false); setFichaForm({ ingrediente_id: '', quantidade_usada: '' }); fetchFicha(fichaProduto as number); }
+      if (r.ok) {
+        setShowAddFicha(false);
+        setFichaForm({ ingrediente_id: '', quantidade_usada: '' });
+        fetchFicha(fichaProduto as number);
+        if (tab === 'padronizacao') fetchPadronizacao();
+      }
     } catch {}
   };
 
@@ -168,6 +248,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     if (!fichaProduto || !confirm('Remover este ingrediente da ficha técnica?')) return;
     await fetch(`/api/estoque/ficha-tecnica/${fichaProduto}/${ingrediente_id}`, { method: 'DELETE', headers: hdrs });
     fetchFicha(fichaProduto as number);
+    if (tab === 'padronizacao') fetchPadronizacao();
   };
 
   // ── exclusão ─────────────────────────────────────────────────
@@ -210,7 +291,10 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         return;
       }
 
-      fetchIngredientes(); setShowAuthModal(false); setItemToDelete(null);
+      fetchIngredientes();
+      if (tab === 'padronizacao') fetchPadronizacao();
+      setShowAuthModal(false);
+      setItemToDelete(null);
     } catch { alert('Erro ao excluir.'); }
   };
 
@@ -234,6 +318,16 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     });
     return list;
   }, [ingredientes, busca, filtroStatus, ordem, ordemAsc]);
+
+  const safePadronizacaoItems = useMemo(
+    () => padronizacao?.items.filter(item => Boolean(item.safeFixAction) && item.productActive) || [],
+    [padronizacao]
+  );
+
+  const manualPadronizacaoItems = useMemo(
+    () => padronizacao?.items.filter(item => Boolean(item.manualFixAction) && item.productActive) || [],
+    [padronizacao]
+  );
 
   // ── custo do produto selecionado na ficha ────────────────────
   const custoProduto = fichaItens.reduce((s, i) => s + (i.custo_unitario || 0) * i.quantidade_usada, 0);
@@ -291,6 +385,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                 { key: 'ingredientes',  label: 'Ingredientes', icon: <Package size={14}/> },
                 { key: 'movimentacoes', label: 'Movimentações', icon: <History size={14}/> },
                 { key: 'relatorio',     label: 'Relatório', icon: <BarChart2 size={14}/> },
+                { key: 'padronizacao',  label: 'Padronizacao', icon: <Link2 size={14}/> },
                 { key: 'ficha',         label: 'Ficha Técnica', icon: <BookOpen size={14}/> },
               ] as { key: Tab; label: string; icon: React.ReactNode }[]).map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)}
@@ -622,6 +717,228 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     </tbody>
                   </table>
                 </div>
+              </>
+            ) : null}
+          </div>
+        )}
+
+        {/* ═══ ABA: PADRONIZACAO ═══ */}
+        {tab === 'padronizacao' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-zinc-200 rounded-2xl p-4">
+              <div>
+                <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Auditoria de padronizacao de estoque</p>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Lista os produtos sem vinculo explicito por ficha tecnica ou barcode e separa os casos seguros dos que ainda precisam de revisao manual.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={fetchPadronizacao}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-xs font-bold hover:bg-zinc-800 transition-all"
+                >
+                  <RefreshCw size={14}/>
+                  Atualizar auditoria
+                </button>
+                <button
+                  onClick={() => handleApplyPadronizacaoFixes()}
+                  disabled={safePadronizacaoItems.length === 0 || padronizacaoFixingKey !== null}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Link2 size={14}/>
+                  {padronizacaoFixingKey === 'bulk' ? 'Aplicando fase 1...' : `Corrigir ${safePadronizacaoItems.length} caso(s) seguro(s)`}
+                </button>
+                <button
+                  onClick={() => handleApplyPadronizacaoManualPhase()}
+                  disabled={manualPadronizacaoItems.length === 0 || padronizacaoFixingKey !== null}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <BookOpen size={14}/>
+                  {padronizacaoFixingKey === 'manual:bulk'
+                    ? 'Aplicando fase manual...'
+                    : `Aplicar fase manual segura (${manualPadronizacaoItems.length})`}
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-700 rounded-full animate-spin"/></div>
+            ) : padronizacao ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4">
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Pendencias totais</p>
+                    <p className="text-2xl font-black text-zinc-900">{padronizacao.summary.totalPendingProducts}</p>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Usam fallback hoje</p>
+                    <p className="text-2xl font-black text-amber-600">{padronizacao.summary.legacyFallbackProducts}</p>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Casos ambiguos</p>
+                    <p className="text-2xl font-black text-red-600">{padronizacao.summary.ambiguousPendingProducts}</p>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Casos com 1 match</p>
+                    <p className="text-2xl font-black text-emerald-600">{padronizacao.summary.singleMatchPendingProducts}</p>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Seguros via ficha</p>
+                    <p className="text-2xl font-black text-sky-600">{padronizacao.summary.safeRecipeCandidates}</p>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Seguros via barcode</p>
+                    <p className="text-2xl font-black text-violet-600">{padronizacao.summary.safeBarcodeCandidates}</p>
+                  </div>
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Fase manual segura</p>
+                    <p className="text-2xl font-black text-amber-600">{padronizacao.summary.manualPhaseOneCandidates}</p>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-900 text-white rounded-2xl p-5">
+                  <p className="text-xs font-black uppercase tracking-wider text-zinc-300">Como corrigir com seguranca</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <p className="text-sm font-black">Produto preparado</p>
+                      <p className="text-xs text-zinc-300 mt-1">Na fase 1, materializamos o vinculo atual em ficha tecnica 1:1 para sair do fallback sem mudar a baixa de estoque.</p>
+                    </div>
+                    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <p className="text-sm font-black">Item 1:1</p>
+                      <p className="text-xs text-zinc-300 mt-1">Quando houver match unico e barcode confiavel no ingrediente, usamos alinhamento de barcode como primeira correcao.</p>
+                    </div>
+                    <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                      <p className="text-sm font-black">Casos manuais</p>
+                      <p className="text-xs text-zinc-300 mt-1">Nos sem match seguros, criamos ingrediente dedicado e ficha 1:1. Ambiguidades continuam pendentes ate a revisao final.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {padronizacao.items.length === 0 ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
+                    <p className="text-lg font-black text-emerald-800">Nenhum produto pendente de padronizacao foi encontrado.</p>
+                    <p className="text-sm text-emerald-700 mt-2">Com ficha tecnica ou barcode cobrindo tudo, a futura remocao do fallback fica bem mais segura.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-3 border-b border-zinc-100 bg-zinc-50 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-black text-zinc-600 uppercase tracking-wider">Produtos pendentes de migracao</p>
+                      <p className="text-[11px] text-zinc-500">
+                        Atualizado em {new Date(padronizacao.generatedAt).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left min-w-[1240px]">
+                        <thead className="border-b border-zinc-100">
+                          <tr>
+                            {['Produto', 'Ingrediente atual', 'Classificacao', 'Uso', 'Correcao sugerida'].map(h => (
+                              <th key={h} className="px-5 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-wider">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-50">
+                          {padronizacao.items.map(item => (
+                            <tr key={item.productId} className="align-top hover:bg-zinc-50 transition-colors">
+                              <td className="px-5 py-4">
+                                <p className="text-sm font-black text-zinc-900">{item.productName}</p>
+                                <p className="text-[11px] text-zinc-500 mt-1">
+                                  {item.productPublicId || 'sem public_id'} • {item.productActive ? 'ativo' : 'inativo'}
+                                </p>
+                                <p className="text-[11px] text-zinc-400 mt-1">
+                                  {item.productCategory || 'Sem categoria'} • {item.productBarcode ? `barcode ${item.productBarcode}` : 'sem codigo de barras'}
+                                </p>
+                              </td>
+                              <td className="px-5 py-4">
+                                {item.candidateIngredients.length === 0 ? (
+                                  <>
+                                    <p className="text-sm font-black text-zinc-900">Nenhum match exato</p>
+                                    <p className="text-[11px] text-zinc-400 mt-1">O fallback por nome nao cobre este produto hoje.</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-sm font-black text-zinc-900">{item.ingredientName}</p>
+                                    <p className="text-[11px] text-zinc-500 mt-1">
+                                      {item.ingredientPublicId || 'sem public_id'} • {item.ingredientUnit || 'unidade'}
+                                    </p>
+                                    <p className="text-[11px] text-zinc-400 mt-1">
+                                      Estoque atual: {fmtN(item.ingredientStock, item.ingredientUnit || 'unidade')}
+                                    </p>
+                                    {item.candidateIngredients.length > 1 && (
+                                      <p className="text-[11px] text-red-500 mt-2">
+                                        Outros matches: {item.candidateIngredients.slice(1).map(candidate => candidate.ingredientName).join(', ')}
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                              <td className="px-5 py-4">
+                                <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                  item.classification === 'safe_barcode_alignment'
+                                    ? 'bg-violet-100 text-violet-700'
+                                    : item.classification === 'safe_recipe_explicit'
+                                      ? 'bg-sky-100 text-sky-700'
+                                      : item.classification === 'ambiguous_exact_name'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-zinc-100 text-zinc-700'
+                                }`}>
+                                  {item.classification === 'safe_barcode_alignment'
+                                    ? '1:1 via barcode'
+                                    : item.classification === 'safe_recipe_explicit'
+                                      ? item.isPreparedProduct ? 'preparado via ficha' : 'match unico seguro'
+                                      : item.classification === 'ambiguous_exact_name'
+                                        ? `${item.exactNameMatchCount} matches por nome`
+                                        : 'sem match'}
+                                </span>
+                                <p className="text-[11px] text-zinc-500 mt-2">
+                                  Resolucao atual: <span className="font-bold">{item.resolutionMode}</span>
+                                </p>
+                                {item.safeFixReason && (
+                                  <p className="text-[11px] text-zinc-400 mt-2">{item.safeFixReason}</p>
+                                )}
+                                {item.manualFixReason && (
+                                  <p className="text-[11px] text-amber-700 mt-2">{item.manualFixReason}</p>
+                                )}
+                              </td>
+                              <td className="px-5 py-4">
+                                <p className="text-sm font-black text-zinc-900">{item.totalOrderUsages} pedido(s)</p>
+                                <p className="text-[11px] text-zinc-500 mt-1">
+                                  {item.lastOrderAt ? `Ultimo uso: ${new Date(item.lastOrderAt).toLocaleString('pt-BR')}` : 'Sem uso registrado'}
+                                </p>
+                              </td>
+                              <td className="px-5 py-4">
+                                <p className="text-xs text-zinc-600 leading-5">{item.suggestedFix}</p>
+                                {item.safeFixAction && item.productActive && (
+                                  <button
+                                    onClick={() => handleApplyPadronizacaoFixes([item.productId])}
+                                    disabled={padronizacaoFixingKey !== null}
+                                    className="mt-3 inline-flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-[11px] font-bold hover:bg-zinc-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <Link2 size={12}/>
+                                    {padronizacaoFixingKey === `item:${item.productId}`
+                                      ? 'Aplicando...'
+                                      : item.safeFixLabel || 'Aplicar correcao segura'}
+                                  </button>
+                                )}
+                                {item.manualFixAction && item.productActive && (
+                                  <button
+                                    onClick={() => handleApplyPadronizacaoManualPhase([item.productId])}
+                                    disabled={padronizacaoFixingKey !== null}
+                                    className="mt-3 inline-flex items-center gap-2 px-3 py-2 bg-amber-600 text-white rounded-xl text-[11px] font-bold hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <BookOpen size={12}/>
+                                    {padronizacaoFixingKey === `manual:item:${item.productId}`
+                                      ? 'Aplicando fase manual...'
+                                      : item.manualFixLabel || 'Aplicar fase manual segura'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             ) : null}
           </div>

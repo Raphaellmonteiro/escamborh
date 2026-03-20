@@ -6,6 +6,7 @@ import {
   Printer,
 } from 'lucide-react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
+import { openPrintPreview } from '../../utils/print';
 
 // ── Função utilitária de cupom HTML padrão 80mm ───────────────────────────────
 function gerarCupomHtml(opts: {

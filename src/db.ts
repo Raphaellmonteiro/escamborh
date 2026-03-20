@@ -243,6 +243,10 @@ export async function runMigrations() {
         favoritos TEXT DEFAULT '[]',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         ultimo_acesso TIMESTAMPTZ,
+        origem_cadastro TEXT DEFAULT 'delivery_online',
+        observacoes TEXT,
+        primeira_compra_at TIMESTAMPTZ,
+        ultima_compra_at TIMESTAMPTZ,
         UNIQUE(tenant_id, telefone)
       );
       CREATE TABLE IF NOT EXISTS delivery_enderecos (
@@ -326,6 +330,8 @@ export async function runMigrations() {
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolsado_at TIMESTAMPTZ;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolso_motivo TEXT;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS reembolsado_por INTEGER;
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS public_id TEXT;
+      ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
       CREATE TABLE IF NOT EXISTS pedido_eventos (
         id SERIAL PRIMARY KEY,
         pedido_id INTEGER NOT NULL,
@@ -341,6 +347,30 @@ export async function runMigrations() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         FOREIGN KEY(pedido_id) REFERENCES pedidos(id)
       );
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS origem_cadastro TEXT DEFAULT 'delivery_online';
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS observacoes TEXT;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS primeira_compra_at TIMESTAMPTZ;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS ultima_compra_at TIMESTAMPTZ;
+    `);
+
+    await client.query(`
+      UPDATE produtos
+      SET public_id = CONCAT('prd_', SUBSTRING(MD5(CONCAT(tenant_id::text, '-', id::text, '-produto')), 1, 24))
+      WHERE public_id IS NULL OR BTRIM(public_id) = '';
+
+      UPDATE ingredientes
+      SET public_id = CONCAT('ing_', SUBSTRING(MD5(CONCAT(tenant_id::text, '-', id::text, '-ingrediente')), 1, 24))
+      WHERE public_id IS NULL OR BTRIM(public_id) = '';
+
+      UPDATE produtos
+      SET codigo_barras = UPPER(REGEXP_REPLACE(BTRIM(codigo_barras), '\\s+', '', 'g'))
+      WHERE codigo_barras IS NOT NULL
+        AND codigo_barras <> UPPER(REGEXP_REPLACE(BTRIM(codigo_barras), '\\s+', '', 'g'));
+
+      UPDATE ingredientes
+      SET codigo_barras = UPPER(REGEXP_REPLACE(BTRIM(codigo_barras), '\\s+', '', 'g'))
+      WHERE codigo_barras IS NOT NULL
+        AND codigo_barras <> UPPER(REGEXP_REPLACE(BTRIM(codigo_barras), '\\s+', '', 'g'));
     `);
 
     await client.query(`
@@ -355,9 +385,47 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_caixa_tenant_data        ON caixa(tenant_id, data);
       CREATE INDEX IF NOT EXISTS idx_produtos_barcode         ON produtos(codigo_barras, tenant_id);
       CREATE INDEX IF NOT EXISTS idx_ing_barcode              ON ingredientes(codigo_barras, tenant_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_produtos_public_id ON produtos(public_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ingredientes_public_id ON ingredientes(public_id);
       CREATE INDEX IF NOT EXISTS idx_prod_grupos              ON produto_grupos_opcao(produto_id, tenant_id);
       CREATE INDEX IF NOT EXISTS idx_prod_opcao_itens         ON produto_opcao_itens(grupo_id, tenant_id);
       CREATE INDEX IF NOT EXISTS idx_delivery_motoboys_tenant ON delivery_motoboys(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_delivery_clientes_recencia ON delivery_clientes(tenant_id, ultima_compra_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_pedidos_delivery_cliente ON pedidos(tenant_id, delivery_cliente_id, created_at DESC);
+    `);
+
+    await client.query(`
+      UPDATE delivery_clientes
+      SET origem_cadastro = 'delivery_online'
+      WHERE origem_cadastro IS NULL OR BTRIM(origem_cadastro) = ''
+    `);
+
+    await client.query(`
+      UPDATE delivery_clientes dc
+      SET primeira_compra_at = stats.primeira_compra_at,
+          ultima_compra_at = stats.ultima_compra_at
+      FROM (
+        SELECT
+          delivery_cliente_id AS cliente_id,
+          tenant_id,
+          MIN(created_at) FILTER (
+            WHERE cancelado_at IS NULL
+              AND LOWER(COALESCE(status, '')) <> 'cancelado'
+          ) AS primeira_compra_at,
+          MAX(created_at) FILTER (
+            WHERE cancelado_at IS NULL
+              AND LOWER(COALESCE(status, '')) <> 'cancelado'
+          ) AS ultima_compra_at
+        FROM pedidos
+        WHERE delivery_cliente_id IS NOT NULL
+        GROUP BY delivery_cliente_id, tenant_id
+      ) stats
+      WHERE dc.id = stats.cliente_id
+        AND dc.tenant_id = stats.tenant_id
+        AND (
+          dc.primeira_compra_at IS DISTINCT FROM stats.primeira_compra_at
+          OR dc.ultima_compra_at IS DISTINCT FROM stats.ultima_compra_at
+        )
     `);
 
     await client.query(`

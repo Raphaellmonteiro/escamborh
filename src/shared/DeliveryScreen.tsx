@@ -8,6 +8,7 @@ import {
   Printer, Navigation, MessageCircle, BarChart2, Tag, Plus, Trash2,
   Zap, Globe, Bell, BellOff, Map,
 } from 'lucide-react';
+import { openPrintPreview } from '../utils/print';
 
 // ─── Sound utils (inline — sem dep externa) ───────────────────────────────────
 function playNewOrderSound() {
@@ -57,6 +58,31 @@ interface Cupom {
   valor: number; min_pedido: number; limite_uso: number|null;
   uso_atual: number; ativo: number; validade: string|null; created_at: string;
 }
+interface DeliveryCustomer {
+  id: number;
+  nome: string;
+  telefone: string;
+  email?: string | null;
+  observacoes?: string | null;
+  origem_cadastro?: string | null;
+  primeira_compra_at?: string | null;
+  ultima_compra_at?: string | null;
+  ultimo_pedido?: string | null;
+  dias_sem_comprar?: number | null;
+  status_atividade?: string | null;
+  cliente_recorrente?: boolean;
+  total_pedidos?: number;
+  total_pedidos_validos?: number;
+  total_gasto?: number;
+  sem_historico?: boolean;
+}
+interface CustomerOrderHistory {
+  id: number;
+  order_number: string;
+  created_at: string;
+  total_amount: number;
+  resumo_itens?: string | null;
+}
 
 // ─── Config de status ─────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode; next?: string }> = {
@@ -77,6 +103,50 @@ const PAGS: Record<string, { label: string; icon: React.ReactNode }> = {
 
 const fmt      = (v: number) => `R$ ${(v||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 const fmtHour  = (d?: string) => d ? new Date(d.includes('T')?d:d.replace(' ','T')).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+const CUSTOMER_ACTIVITY_CFG: Record<string, { label: string; tone: string; helper: string }> = {
+  ativo:      { label: 'Ativo',      tone: 'bg-emerald-50 text-emerald-700 border-emerald-200', helper: 'Comprou recentemente' },
+  em_risco:   { label: 'Em risco',   tone: 'bg-amber-50 text-amber-700 border-amber-200',       helper: 'Vale acompanhar' },
+  inativo:    { label: 'Inativo',    tone: 'bg-rose-50 text-rose-700 border-rose-200',          helper: 'Bom candidato a reativacao' },
+  sem_compra: { label: 'Sem compra', tone: 'bg-zinc-100 text-zinc-600 border-zinc-200',         helper: 'Ainda sem historico valido' },
+};
+const CUSTOMER_ORIGIN_LABELS: Record<string, string> = {
+  delivery_online: 'Cardapio online',
+  pedido_manual: 'Pedido manual',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram',
+  telefone: 'Telefone',
+  balcao: 'Balcao',
+};
+const parseDateValue = (d?: string | null) => {
+  if (!d) return null;
+  const value = String(d);
+  const date = new Date(value.includes('T') ? value : value.replace(' ', 'T'));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+const fmtDate = (d?: string | null) => {
+  const value = parseDateValue(d);
+  return value ? value.toLocaleDateString('pt-BR') : '—';
+};
+const getCustomerActivityMeta = (status?: string | null) =>
+  CUSTOMER_ACTIVITY_CFG[String(status || '').trim()] || CUSTOMER_ACTIVITY_CFG.sem_compra;
+const getCustomerOriginLabel = (origem?: string | null) => {
+  const normalized = String(origem || '').trim().toLowerCase();
+  if (!normalized) return 'Nao informado';
+  if (CUSTOMER_ORIGIN_LABELS[normalized]) return CUSTOMER_ORIGIN_LABELS[normalized];
+  return normalized
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+const getDaysWithoutPurchaseLabel = (dias?: number | null) => {
+  if (dias === null || dias === undefined) return 'Sem historico';
+  if (dias <= 0) return 'Comprou hoje';
+  if (dias === 1) return '1 dia sem comprar';
+  return `${dias} dias sem comprar`;
+};
+const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
+  customer.ultima_compra_at || customer.ultimo_pedido ? getDaysWithoutPurchaseLabel(customer.dias_sem_comprar) : 'Sem compras registradas';
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function DeliveryScreen({ token, slug }: { token: string; slug?: string }) {
@@ -218,8 +288,7 @@ function TabPainel({ token }: { token: string }) {
     try {
       const r = await fetch(`/api/print/cupom-html/${pedidoId}`, { headers: hdrs });
       const html = await r.text();
-      const w = window.open('', '_blank', 'width=420,height=700,toolbar=0,menubar=0,location=0');
-      if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
+      openPrintPreview(html, 'width=420,height=700,toolbar=0,menubar=0,location=0');
     } catch { alert('Erro ao reimprimir'); }
   };
 
@@ -591,11 +660,11 @@ function DCard({ label, value, color, icon }: { label:string; value:string; colo
 // ABA CLIENTES
 // ═══════════════════════════════════════════════════════════════════════════════
 function TabClientes({ token }: { token: string }) {
-  const [clientes, setClientes]   = useState<any[]>([]);
+  const [clientes, setClientes]   = useState<DeliveryCustomer[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
-  const [selected, setSelected]   = useState<any|null>(null);
-  const [pedidos, setPedidos]     = useState<any[]>([]);
+  const [selected, setSelected]   = useState<DeliveryCustomer|null>(null);
+  const [pedidos, setPedidos]     = useState<CustomerOrderHistory[]>([]);
   const hdrs = { Authorization: `Bearer ${token}` };
 
   const fetchClientes = useCallback(async () => {
@@ -603,82 +672,162 @@ function TabClientes({ token }: { token: string }) {
     try {
       const q = search ? `?search=${encodeURIComponent(search)}` : '';
       const res = await fetch(`/api/delivery/clientes${q}`, { headers: hdrs });
-      if (res.ok) { const d = await res.json(); setClientes(Array.isArray(d)?d:[]); }
+      if (res.ok) {
+        const d = await res.json();
+        setClientes(Array.isArray(d) ? d : []);
+      }
     } catch {}
     setLoading(false);
   }, [token, search]);
 
   const fetchPedidos = async (id: number) => {
+    setPedidos([]);
     try {
       const res = await fetch(`/api/delivery/clientes/${id}/pedidos`, { headers: hdrs });
-      if (res.ok) setPedidos(await res.json());
+      if (res.ok) {
+        const d = await res.json();
+        setPedidos(Array.isArray(d) ? d : []);
+      }
     } catch {}
   };
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
+  const ativos = clientes.filter((c) => c.status_atividade === 'ativo').length;
+  const emRisco = clientes.filter((c) => c.status_atividade === 'em_risco').length;
+  const inativos = clientes.filter((c) => c.status_atividade === 'inativo').length;
+  const semCompra = clientes.filter((c) => c.status_atividade === 'sem_compra').length;
+  const recorrentes = clientes.filter((c) => c.cliente_recorrente).length;
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
           <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&fetchClientes()}
-            placeholder="Buscar por nome ou telefone..."
+            placeholder="Buscar por nome, telefone ou observacoes..."
             className="w-full pl-9 pr-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
         </div>
         <button onClick={fetchClientes} className="px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors">Buscar</button>
       </div>
 
+      {!loading && (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <DCard label="Ativos" value={String(ativos)} color="emerald" icon={<CheckCircle2 size={16}/>}/>
+          <DCard label="Em risco" value={String(emRisco)} color="amber" icon={<AlertCircle size={16}/>}/>
+          <DCard label="Inativos" value={String(inativos)} color="orange" icon={<Clock size={16}/>}/>
+          <DCard label="Sem compra" value={String(semCompra)} color="zinc" icon={<Package size={16}/>}/>
+          <DCard label="Recorrentes" value={String(recorrentes)} color="blue" icon={<TrendingUp size={16}/>}/>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>
       ) : (
         <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-zinc-50 border-b border-zinc-100">
-              <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Cliente</th>
-              <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Telefone</th>
-              <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Pedidos</th>
-              <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Total gasto</th>
-              <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Último pedido</th>
-              <th className="px-4 py-3"/>
-            </tr></thead>
-            <tbody className="divide-y divide-zinc-50">
-              {clientes.map(c => (
-                <tr key={c.id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-bold text-zinc-800">{c.nome}</td>
-                  <td className="px-4 py-3 text-zinc-500">{c.telefone}</td>
-                  <td className="px-4 py-3 text-zinc-700 font-bold text-right">{c.total_pedidos||0}</td>
-                  <td className="px-4 py-3 font-bold text-emerald-700 text-right">{fmt(c.total_gasto||0)}</td>
-                  <td className="px-4 py-3 text-zinc-400 text-xs">{c.ultimo_pedido?new Date(c.ultimo_pedido).toLocaleDateString('pt-BR'):'—'}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => { setSelected(c); fetchPedidos(c.id); }}
-                      className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-lg text-xs font-bold text-zinc-600 transition-all">
-                      Ver histórico
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[980px]">
+              <thead><tr className="bg-zinc-50 border-b border-zinc-100">
+                <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Cliente</th>
+                <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Telefone</th>
+                <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Relacionamento</th>
+                <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Pedidos</th>
+                <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Total gasto</th>
+                <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Ultima compra</th>
+                <th className="px-4 py-3"/>
+              </tr></thead>
+              <tbody className="divide-y divide-zinc-50">
+                {clientes.map(c => (
+                  <tr key={c.id} className="hover:bg-zinc-50">
+                    <td className="px-4 py-3">
+                      <p className="font-bold text-zinc-800">{c.nome}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-100">
+                          {getCustomerOriginLabel(c.origem_cadastro)}
+                        </span>
+                        {c.cliente_recorrente && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-violet-50 text-violet-700 border border-violet-100">
+                            Recorrente
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-zinc-600 font-mono text-xs">{c.telefone || '—'}</p>
+                      {c.observacoes && (
+                        <p className="text-[11px] text-zinc-400 mt-1 max-w-[220px] truncate" title={c.observacoes}>
+                          {c.observacoes}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const status = getCustomerActivityMeta(c.status_atividade);
+                        return (
+                          <>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black border ${status.tone}`}>
+                              {status.label}
+                            </span>
+                            <p className="text-[11px] text-zinc-500 mt-1">{getDaysWithoutPurchaseLabel(c.dias_sem_comprar)}</p>
+                          </>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-700 font-bold text-right">{c.total_pedidos||0}</td>
+                    <td className="px-4 py-3 font-bold text-emerald-700 text-right">{fmt(c.total_gasto||0)}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-zinc-600 text-xs font-semibold">{fmtDate(c.ultima_compra_at || c.ultimo_pedido)}</p>
+                      <p className="text-[11px] text-zinc-400 mt-1">{getCustomerPurchaseSummary(c)}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => { setSelected(c); fetchPedidos(c.id); }}
+                        className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-lg text-xs font-bold text-zinc-600 transition-all">
+                        Ver historico
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {clientes.length===0 && <p className="text-center text-zinc-400 py-12 text-sm">Nenhum cliente encontrado</p>}
         </div>
       )}
 
-      {/* Modal histórico do cliente */}
       <AnimatePresence>
         {selected && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={()=>setSelected(null)}>
             <motion.div onClick={e=>e.stopPropagation()}
               initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}}
-              className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl max-h-[80vh] overflow-y-auto">
+              className="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-black text-zinc-900">{selected.nome}</h3>
-                  <p className="text-sm text-zinc-400">{selected.telefone}</p>
+                  <p className="text-sm text-zinc-400 font-mono">{selected.telefone}</p>
                 </div>
                 <button onClick={()=>setSelected(null)} className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-400">✕</button>
               </div>
-              <div className="grid grid-cols-2 gap-3 mb-5">
+
+              <div className="flex flex-wrap gap-2 mb-4">
+                {(() => {
+                  const status = getCustomerActivityMeta(selected.status_atividade);
+                  return (
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black border ${status.tone}`}>
+                      {status.label}
+                    </span>
+                  );
+                })()}
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-100">
+                  {getCustomerOriginLabel(selected.origem_cadastro)}
+                </span>
+                {selected.cliente_recorrente && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-violet-50 text-violet-700 border border-violet-100">
+                    Cliente recorrente
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
                 <div className="bg-zinc-50 rounded-xl p-3 text-center">
                   <p className="text-xl font-black text-zinc-900">{selected.total_pedidos||0}</p>
                   <p className="text-xs text-zinc-400 mt-0.5">Pedidos</p>
@@ -687,15 +836,55 @@ function TabClientes({ token }: { token: string }) {
                   <p className="text-xl font-black text-emerald-700">{fmt(selected.total_gasto||0)}</p>
                   <p className="text-xs text-zinc-400 mt-0.5">Total gasto</p>
                 </div>
+                <div className="bg-blue-50 rounded-xl p-3 text-center">
+                  <p className="text-sm font-black text-blue-700">{fmtDate(selected.ultima_compra_at || selected.ultimo_pedido)}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Ultima compra</p>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-3 text-center">
+                  <p className="text-sm font-black text-amber-700">{getDaysWithoutPurchaseLabel(selected.dias_sem_comprar)}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Recencia</p>
+                </div>
               </div>
-              <p className="text-xs font-black text-zinc-400 uppercase tracking-wider mb-3">Histórico de pedidos</p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
+                <div className="bg-zinc-50 rounded-xl p-4 space-y-2">
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Leitura operacional</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-xs text-zinc-500">Status</span>
+                    <span className="text-sm font-bold text-zinc-800 text-right">{getCustomerActivityMeta(selected.status_atividade).helper}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-xs text-zinc-500">Primeira compra</span>
+                    <span className="text-sm font-bold text-zinc-800 text-right">{fmtDate(selected.primeira_compra_at)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-xs text-zinc-500">Origem</span>
+                    <span className="text-sm font-bold text-zinc-800 text-right">{getCustomerOriginLabel(selected.origem_cadastro)}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-xs text-zinc-500">Perfil</span>
+                    <span className="text-sm font-bold text-zinc-800 text-right">{selected.cliente_recorrente ? 'Recorrente' : 'Pontual'}</span>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-50 rounded-xl p-4">
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-2">Observacoes</p>
+                  {selected.observacoes ? (
+                    <p className="text-sm text-zinc-700 whitespace-pre-wrap break-words">{selected.observacoes}</p>
+                  ) : (
+                    <p className="text-sm text-zinc-400">Nenhuma observacao cadastrada.</p>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs font-black text-zinc-400 uppercase tracking-wider mb-3">Historico de pedidos</p>
               <div className="space-y-2">
-                {pedidos.map((p:any) => (
+                {pedidos.map((p) => (
                   <div key={p.id} className="flex items-center gap-3 p-3 bg-zinc-50 rounded-xl">
                     <div className="flex-1">
                       <p className="text-sm font-bold text-zinc-800">#{p.order_number}</p>
                       <p className="text-xs text-zinc-400">{p.resumo_itens||'—'}</p>
-                      <p className="text-[10px] text-zinc-300 mt-0.5">{new Date(p.created_at).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-[10px] text-zinc-300 mt-0.5">{fmtDate(p.created_at)}</p>
                     </div>
                     <span className="font-black text-sm text-zinc-700">{fmt(p.total_amount)}</span>
                   </div>

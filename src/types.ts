@@ -5,6 +5,7 @@
 // ── Produto / Catálogo ───────────────────────────────────────────
 export interface Product {
   id: number;
+  public_id?: string | null;
   name: string;
   price: number;
   category: string;
@@ -105,6 +106,7 @@ export interface Caixa {
 // ── Estoque ──────────────────────────────────────────────────────
 export interface Ingrediente {
   id: number;
+  public_id?: string | null;
   nome: string;
   unidade: string;
   estoque_atual: number;
@@ -161,6 +163,78 @@ export interface RelatorioConsumo {
 }
 
 // ── Mesas (Bar / Restaurante) ────────────────────────────────────
+export type PendingInventoryClassification =
+  | 'safe_barcode_alignment'
+  | 'safe_recipe_explicit'
+  | 'ambiguous_exact_name'
+  | 'unmatched_manual_review';
+
+export type PendingInventorySafeAction =
+  | 'align_product_barcode'
+  | 'create_explicit_recipe';
+
+export type PendingInventoryManualAction =
+  | 'create_missing_ingredient_recipe';
+
+export interface PendingInventoryIngredientCandidate {
+  ingredientId: number;
+  ingredientPublicId?: string | null;
+  ingredientName: string;
+  ingredientBarcode?: string | null;
+  ingredientUnit?: string | null;
+  ingredientStock: number;
+  ingredientBarcodeUnique: boolean;
+}
+
+export interface LegacyFallbackPendingProduct {
+  resolutionMode: 'unresolved';
+  usesLegacyNameFallback: boolean;
+  productId: number;
+  productPublicId?: string | null;
+  productName: string;
+  productActive: boolean;
+  productCategory?: string | null;
+  productBarcode?: string | null;
+  totalOrderUsages: number;
+  lastOrderAt?: string | null;
+  exactNameMatchCount: number;
+  ambiguousNameMatch: boolean;
+  ingredientId: number;
+  ingredientPublicId?: string | null;
+  ingredientName: string;
+  ingredientBarcode?: string | null;
+  ingredientUnit?: string | null;
+  ingredientStock: number;
+  candidateIngredients: PendingInventoryIngredientCandidate[];
+  classification: PendingInventoryClassification;
+  isPreparedProduct: boolean;
+  safeFixAction?: PendingInventorySafeAction | null;
+  safeFixLabel?: string | null;
+  safeFixReason?: string | null;
+  manualFixAction?: PendingInventoryManualAction | null;
+  manualFixLabel?: string | null;
+  manualFixReason?: string | null;
+  suggestedFix: string;
+}
+
+export interface LegacyFallbackAuditReport {
+  generatedAt: string;
+  summary: {
+    totalPendingProducts: number;
+    activePendingProducts: number;
+    inactivePendingProducts: number;
+    legacyFallbackProducts: number;
+    ambiguousPendingProducts: number;
+    singleMatchPendingProducts: number;
+    unmatchedPendingProducts: number;
+    safeBarcodeCandidates: number;
+    safeRecipeCandidates: number;
+    safeFixCandidates: number;
+    manualPhaseOneCandidates: number;
+  };
+  items: LegacyFallbackPendingProduct[];
+}
+
 export interface Mesa {
   id: number;
   numero: number;

@@ -1,12 +1,42 @@
 // src/routes/estoque.ts
 import { Router, Request, Response, NextFunction } from 'express';
-import { q1, qAll, qRun, qInsert } from '../db';
+import { pool, q1, qAll, qRun, qInsert, withTx } from '../db';
+import {
+  auditLegacyNameFallbackProducts,
+  applyManualPendingInventoryFixes,
+  applySafePendingInventoryFixes,
+} from '../services/stockIdentification';
 import { validateSecurityPassword } from '../utils/securityPassword';
+import { normalizeBarcode } from '../utils/barcode';
+import { generatePublicId } from '../utils/publicIds';
 
 const TZ = 'America/Sao_Paulo';
 
 export function createEstoqueRouter() {
   const router = Router();
+
+  async function ensureBarcodeAvailable(
+    tenantId: number,
+    barcode: string | null,
+    currentId?: number
+  ) {
+    if (!barcode) return;
+
+    const existing = await q1<{ id: number }>(
+      `SELECT id
+       FROM ingredientes
+       WHERE tenant_id=?
+         AND id <> COALESCE(?, 0)
+         AND codigo_barras IS NOT NULL
+         AND UPPER(REGEXP_REPLACE(codigo_barras, '\\s+', '', 'g'))=?
+       LIMIT 1`,
+      [tenantId, currentId ?? null, barcode]
+    );
+
+    if (existing) {
+      throw new Error('Já existe um item de estoque com este código de barras.');
+    }
+  }
 
 router.get('/', async (req: Request, res) => {
     try {
@@ -26,28 +56,97 @@ router.get('/', async (req: Request, res) => {
         estoque_minimo: Number(r.estoque_minimo || 0),
         custo_unitario: Number(r.custo_unitario || 0)
       })));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+  });
+
+  router.get('/padronizacao/produtos-pendentes', async (req: Request, res) => {
+    try {
+      const onlyActive = String(req.query.active || '').trim() === '1';
+      const report = await auditLegacyNameFallbackProducts({
+        client: pool,
+        tenantId: req.tenantId,
+        onlyActive,
+      });
+
+      res.json(report);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.post('/padronizacao/corrigir-seguros', async (req: Request, res) => {
+    try {
+      const onlyActive = req.body?.only_active !== false;
+      const productIds = Array.isArray(req.body?.product_ids)
+        ? req.body.product_ids.map((value: unknown) => Number(value))
+        : undefined;
+
+      const result = await withTx((client) =>
+        applySafePendingInventoryFixes({
+          client,
+          tenantId: req.tenantId,
+          onlyActive,
+          productIds,
+        })
+      );
+
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.post('/padronizacao/corrigir-manuais-fase-1', async (req: Request, res) => {
+    try {
+      const onlyActive = req.body?.only_active !== false;
+      const productIds = Array.isArray(req.body?.product_ids)
+        ? req.body.product_ids.map((value: unknown) => Number(value))
+        : undefined;
+
+      const result = await withTx((client) =>
+        applyManualPendingInventoryFixes({
+          client,
+          tenantId: req.tenantId,
+          onlyActive,
+          productIds,
+        })
+      );
+
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   router.post('/', async (req: Request, res) => {
     try {
       const { nome, unidade, estoque_atual, estoque_minimo, custo_unitario, fornecedor, codigo_barras } = req.body;
       if (!nome?.trim() || !unidade?.trim()) return res.status(400).json({ error: 'Nome e unidade obrigatórios' });
+      const normalizedBarcode = normalizeBarcode(codigo_barras);
+      await ensureBarcodeAvailable(req.tenantId, normalizedBarcode);
       const id = await qInsert(
-        'INSERT INTO ingredientes (nome,unidade,estoque_atual,estoque_minimo,custo_unitario,fornecedor,codigo_barras,tenant_id) VALUES (?,?,?,?,?,?,?,?)',
-        [nome.trim(), unidade.trim(), estoque_atual||0, estoque_minimo||0, custo_unitario||0, fornecedor||null, codigo_barras||null, req.tenantId]
+        'INSERT INTO ingredientes (public_id,nome,unidade,estoque_atual,estoque_minimo,custo_unitario,fornecedor,codigo_barras,tenant_id) VALUES (?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('ing'), nome.trim(), unidade.trim(), estoque_atual||0, estoque_minimo||0, custo_unitario||0, fornecedor||null, normalizedBarcode, req.tenantId]
       );
       res.json({ id, success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
   });
 
   router.put('/:id', async (req: Request, res) => {
     try {
       const { nome, unidade, estoque_minimo, custo_unitario, fornecedor, codigo_barras } = req.body;
+      const current = await q1<{ codigo_barras?: string | null }>(
+        'SELECT codigo_barras FROM ingredientes WHERE id=? AND tenant_id=?',
+        [req.params.id, req.tenantId]
+      );
+      const normalizedBarcode = normalizeBarcode(codigo_barras);
+      if (normalizedBarcode !== normalizeBarcode(current?.codigo_barras)) {
+        await ensureBarcodeAvailable(req.tenantId, normalizedBarcode, Number(req.params.id));
+      }
       await qRun('UPDATE ingredientes SET nome=?,unidade=?,estoque_minimo=?,custo_unitario=?,fornecedor=?,codigo_barras=? WHERE id=? AND tenant_id=?',
-        [nome, unidade, estoque_minimo||0, custo_unitario||0, fornecedor||null, codigo_barras||null, req.params.id, req.tenantId]);
+        [nome, unidade, estoque_minimo||0, custo_unitario||0, fornecedor||null, normalizedBarcode, req.params.id, req.tenantId]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
   });
 
   router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {

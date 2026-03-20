@@ -8,7 +8,7 @@ import {
   txRun,
   txInsert,
 } from '../db';
-import { gerarCupomHtml } from '../routes/print';
+import { gerarCupomHtml } from '../utils/printTemplates';
 import type {
   CancelOrderInput,
   CreateOrderInput,
@@ -24,6 +24,7 @@ import type {
 import { AppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 import { validateSecurityPassword } from '../utils/securityPassword';
+import { requireProductInventoryTargets } from './stockIdentification';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -117,17 +118,8 @@ type ProductRow = {
   codigo_barras?: string | null;
 };
 
-type IngredientRow = {
-  id: number;
-};
-
 type IngredientStockRow = {
   estoque_atual: number | string | null;
-};
-
-type ProductIngredientRow = {
-  ingrediente_id: number;
-  quantidade_usada: number;
 };
 
 type StockMovementSummaryRow = {
@@ -470,49 +462,20 @@ async function adjustStockForItem(
 
   const movementLabel = buildStockMovementReason(direction, orderId);
 
-  if (product.codigo_barras) {
-    const ingredient = await txQ1<IngredientRow>(
-      client,
-      `SELECT id
-       FROM ingredientes
-       WHERE tenant_id=? AND (codigo_barras=? OR LOWER(nome)=LOWER(?))
-       LIMIT 1`,
-      [tenantId, product.codigo_barras, product.name]
-    );
-
-    if (ingredient) {
-      const movedQuantity = await applyIngredientStockChange(
-        client,
-        ingredient.id,
-        tenantId,
-        Number(item.quantity),
-        direction
-      );
-
-      if (movedQuantity > 0) {
-        await txRun(
-          client,
-          `INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id)
-           VALUES (?,?,?,?,?)`,
-          [ingredient.id, direction, movedQuantity, movementLabel, tenantId]
-        );
-      }
-
-      return;
-    }
-  }
-
-  const links = await txQAll<ProductIngredientRow>(
+  const resolution = await requireProductInventoryTargets({
     client,
-    'SELECT ingrediente_id, quantidade_usada FROM produto_ingrediente WHERE product_id=? AND tenant_id=?',
-    [item.product_id, tenantId]
-  );
+    tenantId,
+    productId: item.product_id,
+    context: 'ordersService.adjustStockForItem',
+    orderId,
+    direction,
+  });
 
-  for (const link of links) {
-    const requestedQuantity = Number(link.quantidade_usada) * Number(item.quantity);
+  for (const target of resolution?.targets || []) {
+    const requestedQuantity = Number(target.quantityMultiplier) * Number(item.quantity);
     const movedQuantity = await applyIngredientStockChange(
       client,
-      Number(link.ingrediente_id),
+      Number(target.ingredientId),
       tenantId,
       requestedQuantity,
       direction
@@ -523,7 +486,7 @@ async function adjustStockForItem(
         client,
         `INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id)
          VALUES (?,?,?,?,?)`,
-        [link.ingrediente_id, direction, movedQuantity, movementLabel, tenantId]
+        [target.ingredientId, direction, movedQuantity, movementLabel, tenantId]
       );
     }
   }
@@ -757,6 +720,9 @@ async function generateReceipt(
     estabelecimento: clientRow?.nome_estabelecimento || 'FlowPDV',
     orderNumber,
     data: now,
+    variant: 'receipt',
+    canal: 'balcao',
+    metadata: [{ label: 'Operacao', value: 'Venda de balcao' }],
     itens: items.map((item) => ({
       qtd: item.quantity,
       nome: productMap[item.product_id] || 'Produto',
@@ -768,7 +734,7 @@ async function generateReceipt(
       valor: payment.amount_paid,
       troco: payment.change_given > 0 ? payment.change_given : undefined,
     })),
-    rodape: observation ? `Obs: ${observation}` : undefined,
+    observacao: observation || undefined,
   });
 
   await txRun(

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun } from '../db';
 import { loginRateLimiter, authenticateAdmin, ADMIN_SECRET } from '../middleware';
+import { generatePublicId } from '../utils/publicIds';
 
 export function createAdminRouter() {
   const router = Router();
@@ -51,7 +52,7 @@ export function createAdminRouter() {
            ON CONFLICT(username) DO UPDATE SET password=EXCLUDED.password,cargo='dono',nome=EXCLUDED.nome,cliente_id=EXCLUDED.cliente_id,ativo=1`,
           [usuario, hash, sol.nome_responsavel, cid]
         );
-        await txRun(client, "INSERT INTO produtos (name,price,category,active,tenant_id) VALUES ('Produto Exemplo',10.00,'Geral',1,?)", [cid]);
+        await txRun(client, "INSERT INTO produtos (public_id,name,price,category,active,tenant_id) VALUES (?, 'Produto Exemplo',10.00,'Geral',1,?)", [generatePublicId('prd'), cid]);
         return cid;
       });
       res.json({ success: true, usuario, senha, vencimento: venc.toISOString(), segmento: segmentoFinal });

@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../types';
 import { getSegCfg } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
+import { openPrintPreview, ensurePrintableHtmlDocument, isPrintableHtmlDocument } from '../utils/print';
 
 type OrderWithRefund = Order & {
   reembolso_status?: string | null;
@@ -750,14 +751,12 @@ export default function OrdersScreen({
                               // Fallback: browser print
                               const rh = await fetch(`/api/print/comanda-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
                               const html = await rh.text();
-                              const w = window.open('', '_blank', 'width=420,height=600');
-                              if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
+                              openPrintPreview(html, 'width=420,height=600');
                             }
                           } catch {
                             const rh = await fetch(`/api/print/comanda-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
                             const html = await rh.text();
-                            const w = window.open('', '_blank', 'width=420,height=600');
-                            if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
+                            openPrintPreview(html, 'width=420,height=600');
                           }
                         }}
                         className={secondaryActionClassName} title="Imprimir Comanda (Cozinha)">
@@ -986,8 +985,7 @@ export default function OrdersScreen({
                           try {
                             const r = await fetch(`/api/print/cupom-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
                             const html = await r.text();
-                            const w = window.open('', '_blank', 'width=420,height=700');
-                            if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); }
+                            openPrintPreview(html);
                           } catch { /* fallback: receipt_text */ setSelectedReceipt(order.receipt_text || ''); }
                         }}
                         className={secondaryActionClassName} title="Imprimir na tela">
@@ -1038,18 +1036,14 @@ export default function OrdersScreen({
               </div>
               <div className="flex-1 overflow-auto rounded-2xl border border-zinc-200 mb-5 bg-white" style={{minHeight: 220}}>
                 <iframe
-                  srcDoc={selectedReceipt.startsWith('<!DOCTYPE') || selectedReceipt.startsWith('<html') ? selectedReceipt : `<html><body><pre style="font-family:monospace;font-size:12px;padding:16px">${selectedReceipt}</pre></body></html>`}
+                  srcDoc={ensurePrintableHtmlDocument(selectedReceipt)}
                   style={{ width: '100%', minHeight: 280, border: 'none', borderRadius: 12 }}
                   title="Recibo"
                 />
               </div>
               <div className="flex gap-3">
                 <Button onClick={() => {
-                  const win = window.open('', '_blank', 'width=420,height=700');
-                  if (!win) return;
-                  if (selectedReceipt.startsWith('<!DOCTYPE') || selectedReceipt.startsWith('<html')) win.document.write(selectedReceipt);
-                  else win.document.write(`<html><body><pre style="font-family:monospace;font-size:12px;padding:16px">${selectedReceipt}</pre><script>window.print()<\/script></body></html>`);
-                  win.document.close();
+                  openPrintPreview(isPrintableHtmlDocument(selectedReceipt) ? selectedReceipt : ensurePrintableHtmlDocument(selectedReceipt));
                 }} variant="secondary" className="flex-1 flex items-center gap-2 justify-center"><Printer size={15}/> Imprimir</Button>
                 <Button onClick={() => setSelectedReceipt(null)} className="flex-1">Fechar</Button>
               </div>

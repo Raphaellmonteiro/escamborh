@@ -112,6 +112,7 @@ export function createApiRouter() {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
+    res.write('event: connected\ndata: {}\n\n');
 
     const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), 30000);
     req.on('close', () => clearInterval(ping));

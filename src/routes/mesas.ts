@@ -1,7 +1,11 @@
 // src/routes/mesas.ts — mesas, comandas e sincronização KDS
 import { Router, Request } from 'express';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
-import { gerarCupomHtml } from './print';
+import { pool } from '../db/pool';
+import { requireProductInventoryTargets } from '../services/stockIdentification';
+import { isAppError } from '../utils/errors';
+import { logError } from '../utils/logger';
+import { gerarCupomHtml } from '../utils/printTemplates';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -16,29 +20,35 @@ function buildOperationalKdsOrderClause(alias?: string) {
   return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'entregue' AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado' AND LOWER(COALESCE(${prefix}status,'')) NOT LIKE 'conclu%'`;
 }
 
+function handleMesasRouteError(res: any, error: unknown, context: string, meta: Record<string, unknown> = {}) {
+  logError(context, error, meta);
+
+  if (isAppError(error)) {
+    return res.status(error.statusCode).json({ success: false, error: error.message, code: error.code });
+  }
+
+  const message = error instanceof Error ? error.message : 'Erro interno no servidor';
+  return res.status(500).json({ success: false, error: message });
+}
+
 async function ajustarEstoque(tenantId: number, productId: number, qtd: number, motivo: string) {
-  try {
-    const prod = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [productId, tenantId]);
-    if (!prod) return;
-    const tipo = qtd > 0 ? 'saida' : 'entrada';
-    const abs  = Math.abs(qtd);
-    if (prod.codigo_barras) {
-      const ing = await q1('SELECT * FROM ingredientes WHERE tenant_id=? AND (codigo_barras=? OR LOWER(nome)=LOWER(?)) LIMIT 1', [tenantId, prod.codigo_barras, prod.name]);
-      if (ing) {
-        if (tipo === 'saida') await qRun('UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [abs, ing.id, tenantId]);
-        else await qRun('UPDATE ingredientes SET estoque_atual=estoque_atual+? WHERE id=? AND tenant_id=?', [abs, ing.id, tenantId]);
-        await qRun('INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,?,?,?,?)', [ing.id, tipo, abs, motivo, tenantId]);
-        return;
-      }
-    }
-    const vinculos = await qAll('SELECT * FROM produto_ingrediente WHERE product_id=? AND tenant_id=?', [productId, tenantId]);
-    for (const v of vinculos) {
-      const total = v.quantidade_usada * abs;
-      if (tipo === 'saida') await qRun('UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [total, v.ingrediente_id, tenantId]);
-      else await qRun('UPDATE ingredientes SET estoque_atual=estoque_atual+? WHERE id=? AND tenant_id=?', [total, v.ingrediente_id, tenantId]);
-      await qRun('INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,?,?,?,?)', [v.ingrediente_id, tipo, total, motivo, tenantId]);
-    }
-  } catch (e) { console.error('ajustarEstoque:', e); }
+  const prod = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [productId, tenantId]);
+  if (!prod) return;
+  const tipo = qtd > 0 ? 'saida' : 'entrada';
+  const abs  = Math.abs(qtd);
+  const resolution = await requireProductInventoryTargets({
+    client: pool,
+    tenantId,
+    productId,
+    context: 'mesas.ajustarEstoque',
+    direction: tipo,
+  });
+  for (const target of resolution.targets) {
+    const total = Number(target.quantityMultiplier) * abs;
+    if (tipo === 'saida') await qRun('UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [total, target.ingredientId, tenantId]);
+    else await qRun('UPDATE ingredientes SET estoque_atual=estoque_atual+? WHERE id=? AND tenant_id=?', [total, target.ingredientId, tenantId]);
+    await qRun('INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,?,?,?,?)', [target.ingredientId, tipo, total, motivo, tenantId]);
+  }
 }
 
 // ── Sincroniza item entre comanda e pedido KDS ────────────────────────────────
@@ -136,7 +146,12 @@ export function createMesasRouter() {
         await syncKdsItem(req.tenantId, String(item.mesa_id), item.product_id, -(Number(item.quantity)), item.price_at_time, 'remove');
       }
       res.json({ success:true });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) {
+      return handleMesasRouteError(res, e, 'mesas.deleteComandaItem', {
+        tenantId: req.tenantId,
+        itemId: req.params.itemId,
+      });
+    }
   });
 
   router.put('/comanda/item/:itemId', async (req: Request, res) => {
@@ -158,7 +173,12 @@ export function createMesasRouter() {
         if (cmd&&diff!==0) await syncKdsItem(req.tenantId, String(cmd.mesa_id), itemAtual.product_id, diff, itemAtual.price_at_time, diff>0?'add':'remove');
       }
       res.json({ success:true });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) {
+      return handleMesasRouteError(res, e, 'mesas.updateComandaItem', {
+        tenantId: req.tenantId,
+        itemId: req.params.itemId,
+      });
+    }
   });
 
   router.put('/:id/abrir', async (req: Request, res) => {
@@ -202,6 +222,63 @@ export function createMesasRouter() {
     } catch (e: any) { res.status(500).json({ error:e.message }); }
   });
 
+  router.get('/:id/comanda-html', async (req: Request, res) => {
+    try {
+      const mesa = await q1('SELECT id, numero, status FROM mesas WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
+      if (!mesa) return res.status(404).send('<h1>Mesa nao encontrada</h1>');
+
+      const comanda = await q1(
+        "SELECT * FROM comandas WHERE mesa_id=? AND status='aberta' AND tenant_id=? ORDER BY created_at DESC LIMIT 1",
+        [req.params.id, req.tenantId]
+      );
+      if (!comanda) return res.status(404).send('<h1>Nenhuma comanda aberta</h1>');
+
+      const itens = await qAll(
+        'SELECT ic.* FROM itens_comanda ic WHERE ic.comanda_id=? AND ic.tenant_id=? ORDER BY ic.created_at ASC',
+        [comanda.id, req.tenantId]
+      );
+      if (!itens.length) return res.status(404).send('<h1>Comanda vazia</h1>');
+
+      const subtotal = itens.reduce((acc:number, item:any) => acc + Number(item.quantity) * Number(item.price_at_time), 0);
+      const rawCreatedAt = String(comanda.created_at || '');
+      const createdAt = new Date(rawCreatedAt.includes('Z') ? rawCreatedAt : `${rawCreatedAt}-03:00`);
+      const openedAt = createdAt.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: TZ,
+      });
+      const now = new Date().toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: TZ,
+      });
+      const cliente = await q1('SELECT nome_estabelecimento FROM clientes WHERE id=?', [req.tenantId]);
+
+      res.send(gerarCupomHtml({
+        titulo:`Mesa ${mesa.numero}`,
+        estabelecimento:cliente?.nome_estabelecimento || undefined,
+        orderNumber:`Mesa-${mesa.numero}`,
+        data:now,
+        variant:'table-slip',
+        canal:'mesa',
+        metadata:[
+          { label:'Mesa', value:String(mesa.numero) },
+          { label:'Abertura', value:openedAt },
+          { label:'Status', value:String(mesa.status || 'aberta') },
+        ],
+        itens:itens.map((item:any)=>({
+          qtd:Number(item.quantity),
+          nome:item.product_name,
+          valor:Number(item.quantity) * Number(item.price_at_time),
+        })),
+        totais:[{ label:'Total parcial', valor:subtotal, destaque:true }],
+      }));
+    } catch (e: any) { res.status(500).send(e.message); }
+  });
+
   router.post('/:id/comanda/adicionar', async (req: Request, res) => {
     try {
       const { product_id, product_name, quantity, price_at_time } = req.body;
@@ -219,7 +296,13 @@ export function createMesasRouter() {
       await ajustarEstoque(req.tenantId, Number(product_id), qtd, 'Venda Mesa');
       await syncKdsItem(req.tenantId, req.params.id, product_id, qtd, price_at_time, 'add');
       res.json({ success:true, comanda_id:comanda.id });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) {
+      return handleMesasRouteError(res, e, 'mesas.addComandaItem', {
+        tenantId: req.tenantId,
+        mesaId: req.params.id,
+        productId: req.body?.product_id,
+      });
+    }
   });
 
   router.post('/:id/comanda/finalizar', async (req: Request, res) => {
@@ -246,11 +329,13 @@ export function createMesasRouter() {
       for (const ex of extrasArr) totaisCupom.push({label:ex.name,valor:Number(ex.value)});
       totaisCupom.push({label:'TOTAL',valor:total,destaque:true});
       const receiptHtml = gerarCupomHtml({
-        titulo:`MESA ${mesa.numero}`, estabelecimento:cli?.nome_estabelecimento, orderNumber:on, data:now,
+        titulo:`Mesa ${mesa.numero}`, estabelecimento:cli?.nome_estabelecimento, orderNumber:on, data:now,
+        variant:'receipt', canal:'mesa',
+        metadata:[{ label:'Mesa', value:String(mesa.numero) }, { label:'Operacao', value:'Fechamento de comanda' }],
         itens:itens.map((i:any)=>({qtd:Number(i.quantity),nome:i.product_name,valor:Number(i.quantity)*Number(i.price_at_time)})),
         totais:totaisCupom,
         pagamentos:payments.map((p:any,i:number)=>({metodo:p.method,valor:Number(p.amount_paid),troco:i===payments.length-1&&troco>0?troco:undefined})),
-        rodape:observation||undefined,
+        observacao:observation||undefined,
       });
       await withTx(async (client) => {
         const pid = await txInsert(client, "INSERT INTO pedidos (order_number,status,total_amount,observation,receipt_text,tenant_id) VALUES (?,'Concluído',?,?,?,?)", [on,total,observation||`[Fechado] Mesa ${mesa.numero} - ${on}`,receiptHtml,req.tenantId]);
