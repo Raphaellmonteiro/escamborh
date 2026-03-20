@@ -20,6 +20,7 @@ export interface Product {
   ordem?: number;
   disponivel_de?: string | null;
   disponivel_ate?: string | null;
+  requires_preparation?: number | boolean | null;
 }
 
 export interface Category {

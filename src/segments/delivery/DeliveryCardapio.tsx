@@ -23,7 +23,50 @@ interface Produto {
   grupos_opcao?: GrupoOpcao[];
 }
 interface Categoria { nome: string; itens: Produto[]; }
-interface Config { taxa_entrega: number; pedido_minimo: number; tempo_preparo: number; pix_chave?: string; pix_nome?: string; pix_cidade?: string; whatsapp?: string; horario_abertura?: string; horario_fechamento?: string; desconto_pix?: number; zonas_entrega?: Array<{nome: string; taxa: number}>; }
+interface Config {
+  modelo_entrega?: 'bairro_fixo';
+  taxa_entrega: number;
+  pedido_minimo: number;
+  tempo_preparo: number;
+  pix_chave?: string;
+  pix_nome?: string;
+  pix_cidade?: string;
+  whatsapp?: string;
+  horario_abertura?: string;
+  horario_fechamento?: string;
+  desconto_pix?: number;
+  zonas_entrega?: Array<{nome: string; taxa: number}>;
+  desconto_primeiro_cliente_ativo?: boolean;
+  desconto_primeiro_cliente_tipo?: 'percentual'|'fixo'|'frete_gratis';
+  desconto_primeiro_cliente_valor?: number;
+  desconto_primeiro_cliente_min_pedido?: number;
+}
+interface CheckoutResumo {
+  modelo_entrega: 'bairro_fixo';
+  bairro_entrega: string | null;
+  subtotal: number;
+  desconto_pix: number;
+  subtotal_apos_desconto_pix: number;
+  taxa_entrega: number;
+  zona_entrega: { nome: string; taxa: number } | null;
+  desconto_cupom: number;
+  cupom_aplicado: { codigo: string; tipo: 'percentual'|'fixo'|'frete_gratis' } | null;
+  cupom_invalido?: string;
+  desconto_primeiro_cliente: number;
+  primeiro_cliente: {
+    ativo: boolean;
+    elegivel: boolean;
+    aplicado: boolean;
+    tipo: 'percentual'|'fixo'|'frete_gratis';
+    valor_configurado: number;
+    min_pedido: number;
+    descricao: string;
+    motivo: string;
+    mensagem: string;
+  };
+  total: number;
+}
+type CupomAplicadoResumo = CheckoutResumo['cupom_aplicado'];
 
 // Seleção de opções: mapa grupoId → {itemId: quantidade}
 type Selecoes = Record<number, Record<number, number>>;
@@ -39,10 +82,206 @@ interface Endereco { id: number; label: string; logradouro: string; numero?: str
 interface ClienteAuth { id: number; nome: string; telefone: string; email?: string; favoritos: number[]; }
 interface PedidoHist { id: number; order_number: string; status: string; total_amount: number; created_at: string; resumo_itens: string; itens_raw?: string; }
 type Tela = 'cardapio'|'cart'|'checkout'|'confirmado'|'conta'|'identificar'|'historico'|'enderecos'|'novo_endereco'|'editar_perfil';
+type TipoAtendimento = 'entrega'|'retirada';
 
 const fmt = (v: number) => `R$ ${(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')}`;
-const STATUS_COR: Record<string,string> = { 'Pedido Recebido':'bg-blue-100 text-blue-700 border border-blue-200','Em Preparo':'bg-amber-100 text-amber-700 border border-amber-200','Pronto para Entrega':'bg-purple-100 text-purple-700 border border-purple-200','Saiu para Entrega':'bg-orange-100 text-orange-700 border border-orange-200','Entregue':'bg-emerald-100 text-emerald-700 border border-emerald-200','Cancelado':'bg-red-100 text-red-700 border border-red-200' };
-const STATUS_TXT: Record<string,string> = { 'Pedido Recebido':'Recebido','Em Preparo':'Em Preparo','Pronto para Entrega':'Pronto','Saiu para Entrega':'A caminho 🛵','Entregue':'Entregue ✓','Cancelado':'Cancelado' };
+const STATUS_COR: Record<string,string> = { 'Criado':'bg-blue-100 text-blue-700 border border-blue-200','Pedido Recebido':'bg-blue-100 text-blue-700 border border-blue-200','Em Preparo':'bg-amber-100 text-amber-700 border border-amber-200','Pronto':'bg-purple-100 text-purple-700 border border-purple-200','Pronto para Entrega':'bg-purple-100 text-purple-700 border border-purple-200','Saiu para Entrega':'bg-orange-100 text-orange-700 border border-orange-200','Entregue':'bg-emerald-100 text-emerald-700 border border-emerald-200','Concluído':'bg-emerald-100 text-emerald-700 border border-emerald-200','Cancelado':'bg-red-100 text-red-700 border border-red-200' };
+const STATUS_TXT: Record<string,string> = { 'Criado':'Recebido','Pedido Recebido':'Recebido','Em Preparo':'Em Preparo','Pronto':'Pronto','Pronto para Entrega':'Pronto','Saiu para Entrega':'A caminho 🛵','Entregue':'Entregue ✓','Concluído':'Concluído','Cancelado':'Cancelado' };
+
+function describeFirstCustomerDiscountConfig(config: Config) {
+  const tipo = config.desconto_primeiro_cliente_tipo || 'percentual';
+  const valor = Number(config.desconto_primeiro_cliente_valor || 0);
+
+  if (tipo === 'frete_gratis') return 'Frete gratis na primeira compra';
+  if (tipo === 'fixo') return `${fmt(valor)} na primeira compra`;
+  return `${valor}% na primeira compra`;
+}
+
+function createFallbackCheckoutResumo(params: {
+  config: Config;
+  subtotal: number;
+  pagamentoTipo: string;
+  taxaEntrega: number;
+  zonaEntrega?: { nome: string; taxa: number } | null;
+  bairroEntrega?: string | null;
+  cupomAplicado?: CupomAplicadoResumo;
+  descontoCupom?: number;
+  mensagemPrimeiroCliente?: string;
+}): CheckoutResumo {
+  const descontoPix = params.pagamentoTipo === 'pix'
+    ? params.subtotal * ((Number(params.config.desconto_pix || 0)) / 100)
+    : 0;
+  const subtotalAposPix = Math.max(0, params.subtotal - descontoPix);
+  const descontoCupom = Number(params.descontoCupom || 0);
+
+  return {
+    modelo_entrega: 'bairro_fixo' as const,
+    bairro_entrega: params.bairroEntrega?.trim() || null,
+    subtotal: params.subtotal,
+    desconto_pix: descontoPix,
+    subtotal_apos_desconto_pix: subtotalAposPix,
+    taxa_entrega: Number(params.taxaEntrega || 0),
+    zona_entrega: params.zonaEntrega || null,
+    desconto_cupom: descontoCupom,
+    cupom_aplicado: params.cupomAplicado || null,
+    desconto_primeiro_cliente: 0,
+    primeiro_cliente: {
+      ativo: Boolean(params.config.desconto_primeiro_cliente_ativo),
+      elegivel: false,
+      aplicado: false,
+      tipo: params.config.desconto_primeiro_cliente_tipo || 'percentual',
+      valor_configurado: Number(params.config.desconto_primeiro_cliente_valor || 0),
+      min_pedido: Number(params.config.desconto_primeiro_cliente_min_pedido || 0),
+      descricao: params.config.desconto_primeiro_cliente_ativo
+        ? describeFirstCustomerDiscountConfig(params.config)
+        : '',
+      motivo: 'aguardando_resumo',
+      mensagem: params.mensagemPrimeiroCliente || (
+        params.config.desconto_primeiro_cliente_ativo
+          ? 'Validando o desconto de primeira compra no servidor...'
+          : 'Desconto de primeira compra desativado.'
+      ),
+    },
+    total: Math.max(0, subtotalAposPix + Number(params.taxaEntrega || 0) - descontoCupom),
+  };
+}
+
+function ResumoComercialLinhas({
+  resumo,
+  descontoPixPercentual,
+  zonaFallback,
+  bairroFallback,
+  mensagemAuxiliar,
+  totalLabel = 'Total final',
+  tipoAtendimento = 'entrega',
+}: {
+  resumo: CheckoutResumo;
+  descontoPixPercentual?: number;
+  zonaFallback?: { nome: string; taxa: number } | null;
+  bairroFallback?: string | null;
+  mensagemAuxiliar?: string | null;
+  totalLabel?: string;
+  tipoAtendimento?: TipoAtendimento;
+}) {
+  const taxaEntrega = Number(resumo.taxa_entrega || 0);
+  const zonaResumo = resumo.zona_entrega || zonaFallback || null;
+  const bairroResumo = String(resumo.bairro_entrega || bairroFallback || '').trim();
+  const primeiroCliente = resumo.primeiro_cliente;
+  const primeiroClienteMensagem = String(primeiroCliente?.mensagem || '').trim();
+  const showPrimeiroClienteStatus = Boolean(
+    resumo.desconto_primeiro_cliente > 0 ||
+    primeiroCliente?.ativo ||
+    primeiroClienteMensagem
+  );
+  const primeiroClienteStatusLabel = resumo.desconto_primeiro_cliente > 0
+    ? `-${fmt(resumo.desconto_primeiro_cliente)}`
+    : primeiroCliente?.motivo === 'aguardando_resumo'
+      ? 'Validando'
+      : primeiroCliente?.motivo === 'cliente_nao_identificado'
+        ? 'Identifique-se'
+        : 'Nao aplicado';
+
+  return (
+    <>
+      <div className="flex justify-between text-sm text-zinc-500">
+        <span>Subtotal</span>
+        <span className="font-semibold text-zinc-700">{fmt(resumo.subtotal)}</span>
+      </div>
+      {tipoAtendimento === 'retirada' ? (
+        <div className="flex justify-between text-sm text-emerald-600">
+          <span className="font-semibold">Atendimento</span>
+          <span className="font-bold">Retirar no local</span>
+        </div>
+      ) : taxaEntrega > 0 ? (
+        <div className="flex justify-between text-sm text-zinc-500">
+          <span>Taxa de entrega{zonaResumo ? ` · ${zonaResumo.nome}` : bairroResumo ? ` · ${bairroResumo}` : ''}</span>
+          <span className="font-semibold text-zinc-700">{fmt(taxaEntrega)}</span>
+        </div>
+      ) : (
+        <div className="flex justify-between text-sm text-emerald-600">
+          <span className="font-semibold">Taxa de entrega</span>
+          <span className="font-bold">Gratis</span>
+        </div>
+      )}
+      {resumo.desconto_pix > 0 && (
+        <div className="flex justify-between text-sm text-emerald-600">
+          <span className="font-semibold">Desconto Pix{descontoPixPercentual ? ` (${descontoPixPercentual}%)` : ''}</span>
+          <span className="font-bold">-{fmt(resumo.desconto_pix)}</span>
+        </div>
+      )}
+      {showPrimeiroClienteStatus && (
+        <div className={`flex justify-between text-sm ${resumo.desconto_primeiro_cliente > 0 ? 'text-amber-600' : 'text-zinc-500'}`}>
+          <span className="font-semibold">{resumo.desconto_primeiro_cliente > 0 ? 'Desconto primeira compra' : 'Primeira compra'}</span>
+          <span className="font-bold">{primeiroClienteStatusLabel}</span>
+        </div>
+      )}
+      {showPrimeiroClienteStatus && primeiroClienteMensagem && (
+        <div className={`text-[11px] ${resumo.desconto_primeiro_cliente > 0 ? 'text-amber-600' : 'text-zinc-500'}`}>
+          {primeiroClienteMensagem}
+        </div>
+      )}
+      {resumo.cupom_aplicado && resumo.desconto_cupom > 0 && (
+        <div className="flex justify-between text-sm text-emerald-600">
+          <span className="font-semibold">Cupom ({resumo.cupom_aplicado.codigo})</span>
+          <span className="font-bold">-{fmt(resumo.desconto_cupom)}</span>
+        </div>
+      )}
+      {mensagemAuxiliar && (
+        <div className="text-[11px] text-zinc-400">
+          {mensagemAuxiliar}
+        </div>
+      )}
+      <div className="border-t border-zinc-100 pt-2 flex justify-between font-black text-zinc-900">
+        <span>{totalLabel}</span>
+        <span className="text-emerald-600 text-xl">{fmt(Math.max(0, resumo.total))}</span>
+      </div>
+    </>
+  );
+}
+
+function TelaEscolhaAtendimento({
+  nome,
+  onSelect,
+}: {
+  nome: string;
+  onSelect: (tipo: TipoAtendimento) => void;
+}) {
+  return (
+    <div className="min-h-screen bg-[#f8f8f8] flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-xl space-y-4">
+        <div className="text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-600">FlowPDV</p>
+          <h1 className="mt-3 text-3xl font-black text-zinc-900">{nome || 'Cardápio online'}</h1>
+          <p className="mt-2 text-sm text-zinc-500">Escolha como você quer receber seu pedido antes de continuar.</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            onClick={() => onSelect('entrega')}
+            className="rounded-3xl border border-zinc-200 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white flex items-center justify-center mb-4">
+              <Bike size={22} />
+            </div>
+            <p className="text-lg font-black text-zinc-900">Entrega</p>
+            <p className="mt-2 text-sm text-zinc-500">Mantém o fluxo atual com endereço e cálculo da taxa de entrega.</p>
+          </button>
+
+          <button
+            onClick={() => onSelect('retirada')}
+            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mb-4">
+              <Package size={22} />
+            </div>
+            <p className="text-lg font-black text-zinc-900">Retirar no local</p>
+            <p className="mt-2 text-sm text-zinc-600">Checkout mais simples, sem endereço e sem taxa de entrega.</p>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Calcula o preço mínimo possível de um produto com opções
 function calcPrecoMinimo(produto: Produto): number {
@@ -157,9 +396,10 @@ export default function DeliveryCardapio() {
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [tela, setTela] = useState<Tela>('cardapio');
+  const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento | null>(null);
   const [search, setSearch] = useState('');
   const [catAtiva, setCatAtiva] = useState('');
-  const [pedidoOk, setPedidoOk] = useState<{orderNumber:string;waLink:string|null;total:number;orderId:number;pagamento_tipo:string;mapsUrl?:string;itens?:any[]}|null>(null);
+  const [pedidoOk, setPedidoOk] = useState<{orderNumber:string;waLink:string|null;total:number;orderId:number;pagamento_tipo:string;mapsUrl?:string;itens?:any[];canal?:'delivery'|'retirada'}|null>(null);
   const [abaCardapio, setAbaCardapio] = useState<'todos'|'favoritos'>('todos');
   const [produtoModal, setProdutoModal] = useState<Produto|null>(null); // modal de opções
   const catRefs = useRef<Record<string, HTMLDivElement|null>>({});
@@ -174,7 +414,7 @@ export default function DeliveryCardapio() {
   }, [slug]);
 
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
-  const total = subtotal + (config.taxa_entrega||0);
+  const total = subtotal + (tipoAtendimento === 'retirada' ? 0 : (config.taxa_entrega||0));
   const totalItens = cart.reduce((a,i)=>a+i.qty,0);
   // Abre modal de opções se produto tiver grupos, senão adiciona direto
   const handleAddProduto = (p: Produto) => {
@@ -224,7 +464,7 @@ export default function DeliveryCardapio() {
     return cats;
   }, [categorias, search, abaCardapio, cliente?.favoritos]);
 
-  const onPedidoOk = (d:{orderNumber:string;waLink:string|null;total:number;orderId:number;pagamento_tipo:string;mapsUrl?:string;itens?:any[]}) => { setCart([]); setPedidoOk(d); setTela('confirmado'); };
+  const onPedidoOk = (d:{orderNumber:string;waLink:string|null;total:number;orderId:number;pagamento_tipo:string;mapsUrl?:string;itens?:any[];canal?:'delivery'|'retirada'}) => { setCart([]); setPedidoOk(d); setTela('confirmado'); };
 
   if (loading||authLoad) return (
     <div className="min-h-screen bg-white flex items-center justify-center">
@@ -235,16 +475,17 @@ export default function DeliveryCardapio() {
     </div>
   );
   if (!slug) return <div className="min-h-screen bg-white flex items-center justify-center text-zinc-300"><Package size={48}/></div>;
+  if (!tipoAtendimento && tela === 'cardapio') return <TelaEscolhaAtendimento nome={nome} onSelect={setTipoAtendimento} />;
 
-  if (tela==='confirmado'&&pedidoOk) return <TelaConfirmado pedidoOk={pedidoOk} config={config} slug={slug} onNovo={()=>{setPedidoOk(null);setTela('cardapio');}} />;
-  if (tela==='identificar') return <TelaIdentificar slug={slug} onSuccess={(t,c)=>{salvarToken(t,c);setTela('cardapio');}} onBack={()=>setTela('cardapio')} />;
+  if (tela==='confirmado'&&pedidoOk) return <TelaConfirmado pedidoOk={pedidoOk} config={config} slug={slug} tipoAtendimento={tipoAtendimento || 'entrega'} onNovo={()=>{setPedidoOk(null);setTela('cardapio');}} />;
+  if (tela==='identificar') return <TelaIdentificar slug={slug} tipoAtendimento={tipoAtendimento || 'entrega'} onSuccess={(t,c)=>{salvarToken(t,c);setTela('cardapio');}} onBack={()=>setTela('cardapio')} />;
   if (tela==='conta') return <TelaConta slug={slug} token={cliToken} cliente={cliente} onLogout={()=>{logout();setTela('cardapio');}} onBack={()=>setTela('cardapio')} onHistorico={()=>setTela('historico')} onEnderecos={()=>setTela('enderecos')} onEditarPerfil={()=>setTela('editar_perfil')} />;
   if (tela==='editar_perfil') return <TelaEditarPerfil slug={slug} token={cliToken} cliente={cliente} onSaved={(c)=>{salvarToken(cliToken!,c);setTela('conta');}} onBack={()=>setTela('conta')} />;
   if (tela==='historico') return <TelaHistorico slug={slug} token={cliToken} onBack={()=>setTela('conta')} onRepetir={(its)=>{its.forEach(i=>addCartItem({...i,qty:1,preco_final:i.price,cart_key:`${i.id}_`,selecoes:{}}));setTela('cart');}} categorias={categorias} />;
   if (tela==='enderecos') return <TelaEnderecos slug={slug} token={cliToken} onBack={()=>setTela('conta')} onNovo={()=>setTela('novo_endereco')} />;
   if (tela==='novo_endereco') return <TelaNovo Endereco slug={slug} token={cliToken} onBack={()=>setTela('enderecos')} onSaved={()=>setTela('enderecos')} />;
-  if (tela==='cart') return <TelaCart cart={cart} config={config} onAdd={(p)=>addCartItem({...p,qty:1})} onRemove={(key)=>removeCart(key)} onBack={()=>setTela('cardapio')} onCheckout={()=>{if(!cliente){setTela('identificar');return;}setTela('checkout');}} />;
-  if (tela==='checkout') return <TelaCheckout slug={slug} cart={cart} config={config} cliToken={cliToken} cliente={cliente!} onBack={()=>setTela('cart')} onSuccess={onPedidoOk} />;
+  if (tela==='cart') return <TelaCart slug={slug} cliToken={cliToken} cart={cart} config={config} tipoAtendimento={tipoAtendimento || 'entrega'} onAdd={(p)=>addCartItem({...p,qty:1})} onRemove={(key)=>removeCart(key)} onBack={()=>setTela('cardapio')} onCheckout={()=>{if(!cliente){setTela('identificar');return;}setTela('checkout');}} />;
+  if (tela==='checkout') return <TelaCheckout slug={slug} cart={cart} config={config} cliToken={cliToken} cliente={cliente!} tipoAtendimento={tipoAtendimento || 'entrega'} onBack={()=>setTela('cart')} onSuccess={onPedidoOk} />;
 
   return (
     <div className="min-h-screen bg-[#f8f8f8]">
@@ -258,6 +499,13 @@ export default function DeliveryCardapio() {
               {config.taxa_entrega>0
                 ? <span className="flex items-center gap-1 text-xs text-zinc-500"><Bike size={11}/>{fmt(config.taxa_entrega)}</span>
                 : <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><Bike size={11}/>Entrega grátis</span>}
+              <span className={`flex items-center gap-1 text-xs font-semibold ${tipoAtendimento === 'retirada' ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                {tipoAtendimento === 'retirada' ? <Package size={11}/> : <Bike size={11}/>}
+                {tipoAtendimento === 'retirada' ? 'Retirar no local' : 'Entrega'}
+              </span>
+              <button onClick={()=>setTipoAtendimento(null)} className="text-xs font-semibold text-zinc-500 underline underline-offset-2 hover:text-zinc-700">
+                Alterar
+              </button>
               <span className={`flex items-center gap-1 text-xs font-semibold ${ativo?'text-emerald-600':'text-red-500'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${ativo?'bg-emerald-500 animate-pulse':'bg-red-500'}`}/>
                 {ativo?'Aberto agora':'Fechado'}
@@ -692,13 +940,70 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CARRINHO
 // ═══════════════════════════════════════════════════════════════════════════════
-function TelaCart({ cart, config, onAdd, onRemove, onBack, onCheckout }: {
+function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemove, onBack, onCheckout }: {
+  slug: string;
+  cliToken: string | null;
   cart: CartItem[]; config: Config;
+  tipoAtendimento: TipoAtendimento;
   onAdd: (p: CartItem)=>void; onRemove: (key: string)=>void;
   onBack: ()=>void; onCheckout: ()=>void;
 }) {
   const sub=cart.reduce((a,i)=>a+i.preco_final*i.qty,0);
-  const tot=sub+(config.taxa_entrega||0);
+  const [resumoCheckout, setResumoCheckout] = useState<CheckoutResumo | null>(null);
+  const [carregandoResumo, setCarregandoResumo] = useState(false);
+  const resumoReqRef = useRef(0);
+  const descontoPixPercentual = Number(config.desconto_pix || 0);
+  const resumoFallback = useMemo(() => createFallbackCheckoutResumo({
+    config,
+    subtotal: sub,
+    pagamentoTipo: 'pix',
+    taxaEntrega: tipoAtendimento === 'retirada' ? 0 : Number(config.taxa_entrega || 0),
+    mensagemPrimeiroCliente: 'Validando beneficios e total estimado do carrinho...',
+  }), [config, sub, tipoAtendimento]);
+  const resumoAtual = resumoCheckout || resumoFallback;
+  const mensagemResumo = carregandoResumo
+    ? 'Atualizando beneficios do carrinho...'
+    : (tipoAtendimento === 'retirada'
+      ? 'Retirada no local sem taxa de entrega.'
+      : (config.zonas_entrega?.length
+      ? 'Taxa e total finais sao confirmados no checkout apos escolher o endereco.'
+      : (descontoPixPercentual > 0 ? 'Preview com Pix, que ja vem selecionado no checkout.' : null)));
+
+  useEffect(() => {
+    if (!slug || cart.length === 0) {
+      setResumoCheckout(null);
+      return;
+    }
+
+    const requestId = ++resumoReqRef.current;
+    setCarregandoResumo(true);
+
+    fetch(`/public/delivery/${slug}/pedido/resumo`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'' })),
+        pagamento_tipo: 'pix',
+        clienteToken: cliToken || undefined,
+        canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
+      }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (requestId !== resumoReqRef.current) return;
+        if (d?.success && d.resumo) {
+          setResumoCheckout(d.resumo as CheckoutResumo);
+        } else {
+          setResumoCheckout(null);
+        }
+      })
+      .catch(() => {
+        if (requestId === resumoReqRef.current) setResumoCheckout(null);
+      })
+      .finally(() => {
+        if (requestId === resumoReqRef.current) setCarregandoResumo(false);
+      });
+  }, [slug, cliToken, cart, tipoAtendimento]);
   return (
     <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
@@ -724,13 +1029,16 @@ function TelaCart({ cart, config, onAdd, onRemove, onBack, onCheckout }: {
           </div>
         ))}
         {cart.length>0&&(
-          <div className="bg-white rounded-2xl p-4 shadow-sm space-y-2">
-            <div className="flex justify-between text-sm text-zinc-500"><span>Subtotal</span><span className="font-semibold text-zinc-700">{fmt(sub)}</span></div>
-            {config.taxa_entrega>0?<div className="flex justify-between text-sm text-zinc-500"><span>Taxa de entrega</span><span className="font-semibold text-zinc-700">{fmt(config.taxa_entrega)}</span></div>
-            :<div className="flex justify-between text-sm"><span className="text-zinc-500">Taxa de entrega</span><span className="text-emerald-600 font-bold">Grátis 🎉</span></div>}
-            <div className="border-t border-zinc-100 pt-2 flex justify-between font-black text-zinc-900"><span>Total</span><span className="text-emerald-600 text-xl">{fmt(tot)}</span></div>
-          </div>
-        )}
+        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-2">
+          <p className="font-black text-zinc-900 text-sm">Resumo comercial</p>
+          <ResumoComercialLinhas
+            resumo={resumoAtual}
+            descontoPixPercentual={descontoPixPercentual}
+            tipoAtendimento={tipoAtendimento}
+            mensagemAuxiliar={mensagemResumo}
+          />
+        </div>
+      )}
       </div>
       {cart.length>0&&(
         <div className="p-4 bg-white border-t border-zinc-100 max-w-2xl mx-auto w-full">
@@ -742,14 +1050,16 @@ function TelaCart({ cart, config, onAdd, onRemove, onBack, onCheckout }: {
   );
 }
 
-function TelaCheckout({ slug, cart, config, cliToken, cliente, onBack, onSuccess }: {
+function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, onBack, onSuccess }: {
   slug:string; cart:CartItem[]; config:Config;
   cliToken:string|null; cliente:ClienteAuth;
+  tipoAtendimento: TipoAtendimento;
   onBack:()=>void; onSuccess:(d:any)=>void;
 }) {
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [endSel, setEndSel] = useState<number|'novo'|''>('');
   const [novoEnd, setNovoEnd] = useState('');
+  const [bairroNovo, setBairroNovo] = useState('');
   const [pag, setPag] = useState('pix');
   const [obs, setObs] = useState('');
   const [precisaTroco, setPrecisaTroco] = useState(false);
@@ -761,6 +1071,9 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, onBack, onSuccess
   const [cupomValido, setCupomValido] = useState<any>(null);
   const [cupomErro, setCupomErro] = useState('');
   const [validandoCupom, setValidandoCupom] = useState(false);
+  const [resumoCheckout, setResumoCheckout] = useState<CheckoutResumo | null>(null);
+  const [carregandoResumo, setCarregandoResumo] = useState(false);
+  const resumoReqRef = useRef(0);
 
   const zonas = config.zonas_entrega || [];
   const temZonas = zonas.length > 0;
@@ -783,7 +1096,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, onBack, onSuccess
 
   // Bairro do endereço atualmente selecionado
   const bairroAtual = endSel === 'novo'
-    ? '' // endereço livre — sem bairro estruturado
+    ? bairroNovo
     : (() => {
         const e = enderecos.find(x => x.id === endSel);
         return e?.bairro || '';
@@ -792,19 +1105,36 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, onBack, onSuccess
   const zonaDetectada = detectarZona(bairroAtual);
 
   // Taxa efetiva: zona detectada > taxa padrão
-  const taxaEntrega = temZonas
-    ? (zonaDetectada ? zonaDetectada.taxa : config.taxa_entrega || 0)
-    : (config.taxa_entrega || 0);
-
-  const descontoPix = config.desconto_pix || 0;
+  const taxaEntregaFallback = tipoAtendimento === 'retirada'
+    ? 0
+    : temZonas
+      ? (zonaDetectada ? zonaDetectada.taxa : config.taxa_entrega || 0)
+      : (config.taxa_entrega || 0);
   const sub = cart.reduce((a,i)=>a+i.preco_final*i.qty,0);
-  const subComDesconto = pag==='pix' && descontoPix > 0 ? sub * (1 - descontoPix/100) : sub;
-  const descontoCupom = cupomValido
-    ? cupomValido.cupom.tipo === 'frete_gratis' ? taxaEntrega : cupomValido.desconto
+  const descontoCupomFallback = cupomValido
+    ? cupomValido.cupom.tipo === 'frete_gratis' ? taxaEntregaFallback : cupomValido.desconto
     : 0;
-  const taxaFinal = cupomValido?.cupom?.tipo === 'frete_gratis' ? 0 : taxaEntrega;
-  const tot = subComDesconto + taxaFinal - (cupomValido?.cupom?.tipo !== 'frete_gratis' ? descontoCupom : 0);
-  const economiaPix = pag==='pix' && descontoPix > 0 ? sub - subComDesconto : 0;
+  const resumoAtual = resumoCheckout || createFallbackCheckoutResumo({
+    config,
+    subtotal: sub,
+    pagamentoTipo: pag,
+    taxaEntrega: taxaEntregaFallback,
+    zonaEntrega: tipoAtendimento === 'retirada' ? null : zonaDetectada,
+    bairroEntrega: tipoAtendimento === 'retirada' ? null : (bairroAtual.trim() || null),
+    cupomAplicado: cupomValido?.cupom || null,
+    descontoCupom: descontoCupomFallback,
+  });
+  const usandoResumoFallback = !resumoCheckout;
+  const taxaEntrega = resumoAtual.taxa_entrega;
+  const descontoPix = resumoAtual.desconto_pix;
+  const descontoCupom = resumoAtual.desconto_cupom;
+  const descontoPrimeiroCliente = resumoAtual.desconto_primeiro_cliente;
+  const cupomAplicado = resumoAtual.cupom_aplicado;
+  const zonaResumo = resumoAtual.zona_entrega || zonaDetectada;
+  const bairroResumo = (resumoAtual.bairro_entrega || bairroAtual || '').trim();
+  const tot = resumoAtual.total;
+  const economiaPix = 0;
+  const descontoPixPercentual = Number(config.desconto_pix || 0);
   const inp = "w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50 transition-all";
 
   useEffect(()=>{
@@ -819,27 +1149,95 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, onBack, onSuccess
       });
   },[cliToken,slug]);
 
-  const endStr = endSel==='novo' ? novoEnd
+  const atualizarResumo = useCallback(async (cupomCodigo?: string | null) => {
+    if (!cliToken || !slug || cart.length === 0) {
+      setResumoCheckout(null);
+      return null;
+    }
+
+    const requestId = ++resumoReqRef.current;
+    setCarregandoResumo(true);
+
+    try {
+      const r = await fetch(`/public/delivery/${slug}/pedido/resumo`, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'' })),
+          pagamento_tipo: pag,
+          clienteToken: cliToken,
+          canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
+          endereco_id: tipoAtendimento === 'retirada' ? undefined : (typeof endSel === 'number' ? endSel : undefined),
+          bairro_temporario: tipoAtendimento === 'retirada' ? undefined : (endSel === 'novo' ? bairroNovo.trim() || undefined : undefined),
+          cupom_codigo: cupomCodigo === undefined ? (cupomValido?.cupom?.codigo || undefined) : (cupomCodigo || undefined),
+        }),
+      });
+      const d = await r.json();
+      if (requestId !== resumoReqRef.current) return null;
+
+      if (!d.success || !d.resumo) {
+        if (cupomCodigo) {
+          setCupomValido(null);
+          setCupomErro(d.error || 'Nao foi possivel validar o cupom');
+        }
+        setResumoCheckout(null);
+        return null;
+      }
+
+      const resumo = d.resumo as CheckoutResumo;
+      setResumoCheckout(resumo);
+
+      if (resumo.cupom_aplicado) {
+        setCupomValido({ cupom: resumo.cupom_aplicado, desconto: resumo.desconto_cupom });
+        setCupomErro('');
+      } else if (cupomCodigo !== undefined || cupomValido?.cupom?.codigo) {
+        setCupomValido(null);
+        setCupomErro(resumo.cupom_invalido || '');
+      }
+
+      return resumo;
+    } catch {
+      if (requestId === resumoReqRef.current) {
+        if (cupomCodigo) setCupomErro('Erro ao validar cupom');
+        setResumoCheckout(null);
+      }
+      return null;
+    } finally {
+      if (requestId === resumoReqRef.current) {
+        setCarregandoResumo(false);
+      }
+    }
+  }, [cliToken, slug, cart, pag, endSel, bairroNovo, cupomValido?.cupom?.codigo, tipoAtendimento]);
+
+  useEffect(() => {
+    atualizarResumo();
+  }, [atualizarResumo]);
+
+  const endStr = endSel==='novo'
+    ? [novoEnd.trim(), bairroNovo.trim() ? `Bairro: ${bairroNovo.trim()}` : ''].filter(Boolean).join(' • ')
     : (() => { const e=enderecos.find(x=>x.id===endSel); return e?`${e.logradouro}${e.numero?', '+e.numero:''}${e.complemento?' — '+e.complemento:''}${e.bairro?' • '+e.bairro:''}${e.referencia?' — Ref: '+e.referencia:''}`.trim():''; })();
 
   const validarCupom = async () => {
-    if (!cupomInput.trim()) return;
-    setValidandoCupom(true); setCupomErro(''); setCupomValido(null);
-    try {
-      const r = await fetch(`/public/delivery/${slug}/cupom/validar`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ codigo: cupomInput, total: subComDesconto + taxaEntrega }),
-      });
-      const d = await r.json();
-      if (d.valido) { setCupomValido(d); setCupomErro(''); }
-      else { setCupomErro(d.mensagem || 'Cupom inválido'); }
-    } catch { setCupomErro('Erro ao validar cupom'); }
-    finally { setValidandoCupom(false); }
+    const codigo = cupomInput.trim().toUpperCase();
+    if (!codigo) return;
+    setValidandoCupom(true);
+    setCupomErro('');
+    const resumo = await atualizarResumo(codigo);
+    if (!resumo?.cupom_aplicado && !resumo?.cupom_invalido) {
+      setCupomErro('Erro ao validar cupom');
+    }
+    setValidandoCupom(false);
   };
 
 const finalizar = async () => {
     setErro('');
+    if (tipoAtendimento === 'entrega') {
     if (!endStr.trim()) { setErro('Selecione ou informe o endereço de entrega'); return; }
+    if (temZonas && endSel === 'novo' && !bairroNovo.trim()) {
+      setErro('Informe o bairro do endereço para calcular a taxa de entrega.');
+      return;
+    }
+    }
     if (pag==='dinheiro' && precisaTroco) {
       const trocoVal = parseFloat(troco.replace(',','.'));
       if (!trocoVal || trocoVal < tot) { setErro(`Troco deve ser maior que ${fmt(tot)}`); return; }
@@ -847,6 +1245,11 @@ const finalizar = async () => {
     if (enviando) return;
     setEnviando(true);
     try {
+      if (!await atualizarResumo()) {
+        setErro('Nao foi possivel validar o resumo final do pedido. Tente novamente.');
+        return;
+      }
+
       let obsCompleta = obs;
       if (pag==='dinheiro' && precisaTroco && troco) {
         obsCompleta = `Troco para R$ ${troco}${obs ? ` | ${obs}` : ''}`;
@@ -857,14 +1260,17 @@ const finalizar = async () => {
         desconto_pix: pag==='pix' ? descontoPix : 0,
         observation: obsCompleta,
         cliente_nome: cliente.nome, cliente_tel: cliente.telefone,
-        endereco: endStr, clienteToken: cliToken,
+        endereco: tipoAtendimento === 'retirada' ? null : endStr,
+        clienteToken: cliToken,
+        canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
+        bairro_temporario: tipoAtendimento === 'retirada' ? undefined : (endSel === 'novo' ? bairroNovo.trim() || undefined : undefined),
         cupom_codigo: cupomValido ? cupomValido.cupom.codigo : undefined,
       };
-      if (typeof endSel==='number') body.endereco_id = endSel;
+      if (tipoAtendimento === 'entrega' && typeof endSel==='number') body.endereco_id = endSel;
       const r = await fetch(`/public/delivery/${slug}/pedido`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d = await r.json();
       // CORREÇÃO: Pegamos o config_pix que vem do backend e mandamos para a próxima tela
-      if (d.success) onSuccess({orderNumber:d.orderNumber,waLink:d.waLink,total:d.total,orderId:d.orderId,pagamento_tipo:pag,mapsUrl:d.mapsUrl,itens:cart, config_pix: d.config_pix});
+      if (d.success) onSuccess({orderNumber:d.orderNumber,waLink:d.waLink,total:d.total,orderId:d.orderId,pagamento_tipo:pag,mapsUrl:d.mapsUrl,itens:cart, config_pix: d.config_pix, canal: d.canal});
       else setErro(d.error||'Erro ao enviar pedido');
     } catch { setErro('Erro de conexão. Tente novamente.'); }
     finally { setEnviando(false); }
@@ -897,8 +1303,19 @@ const finalizar = async () => {
         </div>
 
         {/* Endereço */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
+        {tipoAtendimento === 'retirada' && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <p className="font-black text-zinc-900 mb-2 flex items-center gap-2"><Package size={15} className="text-emerald-500"/>Retirar no local</p>
+            <p className="text-sm text-zinc-500">Nao vamos pedir endereco neste pedido. Assim que ficar pronto, a retirada acontece diretamente no estabelecimento.</p>
+          </div>
+        )}
+        <div className={`bg-white rounded-2xl p-4 shadow-sm ${tipoAtendimento === 'retirada' ? 'hidden' : ''}`}> 
           <p className="font-black text-zinc-900 mb-3 flex items-center gap-2"><MapPin size={15} className="text-emerald-500"/>Endereço de entrega</p>
+          {temZonas && (
+            <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[12px] text-blue-700">
+              Nesta fase a taxa e calculada por bairro com valor fixo. Se o bairro nao casar com um cadastro, usamos a taxa padrao de {fmt(config.taxa_entrega||0)}.
+            </div>
+          )}
           {enderecos.length>0&&(
             <div className="space-y-2 mb-2">
               {enderecos.map(e=>(
@@ -927,12 +1344,20 @@ const finalizar = async () => {
             </div>
           )}
           {(endSel==='novo'||enderecos.length===0) && (
-            <textarea value={novoEnd} onChange={e=>setNovoEnd(e.target.value)}
-              placeholder="Rua, número, bairro, referência..." rows={3} className={`${inp} resize-none`}/>
+            <div className="space-y-2">
+              <textarea value={novoEnd} onChange={e=>setNovoEnd(e.target.value)}
+                placeholder="Rua, número, complemento, referência..." rows={3} className={`${inp} resize-none`}/>
+              <input
+                value={bairroNovo}
+                onChange={e=>setBairroNovo(e.target.value)}
+                placeholder={temZonas ? 'Bairro para calcular a taxa de entrega *' : 'Bairro (opcional)'}
+                className={inp}
+              />
+            </div>
           )}
 
           {/* Badge da zona detectada automaticamente */}
-          {temZonas && zonaDetectada && endSel !== 'novo' && (
+          {temZonas && zonaDetectada && (
             <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold ${
               zonaDetectada.taxa === 0
                 ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
@@ -941,17 +1366,17 @@ const finalizar = async () => {
               <Bike size={14}/>
               <span>
                 {zonaDetectada.taxa === 0
-                  ? `Entrega grátis para ${zonaDetectada.nome} 🎉`
+                  ? `Entrega gratis para ${zonaDetectada.nome}`
                   : `Taxa para ${zonaDetectada.nome}: ${fmt(zonaDetectada.taxa)}`}
               </span>
             </div>
           )}
 
           {/* Aviso se bairro não está nas zonas cadastradas */}
-          {temZonas && !zonaDetectada && bairroAtual && endSel !== 'novo' && (
+          {temZonas && !zonaDetectada && bairroAtual && (
             <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-sm bg-amber-50 border border-amber-200 text-amber-700">
               <AlertCircle size={14}/>
-              <span>Bairro fora das zonas cadastradas. Taxa padrão: {fmt(config.taxa_entrega||0)}</span>
+              <span>Bairro fora dos bairros cadastrados. Taxa padrao: {fmt(config.taxa_entrega||0)}</span>
             </div>
           )}
         </div>
@@ -963,8 +1388,8 @@ const finalizar = async () => {
             {/* Banner de desconto se configurado */}
             {descontoPix > 0 && (
               <div className="bg-emerald-500 px-4 py-1.5 flex items-center justify-between">
-                <span className="text-white text-xs font-black">🎉 Pague com Pix e economize {descontoPix}%</span>
-                <span className="text-white text-xs font-black bg-white/20 px-2 py-0.5 rounded-full">-{fmt(sub * descontoPix/100)}</span>
+                <span className="text-white text-xs font-black">🎉 Pague com Pix e economize {descontoPixPercentual}%</span>
+                <span className="text-white text-xs font-black bg-white/20 px-2 py-0.5 rounded-full">-{fmt(descontoPix)}</span>
               </div>
             )}
             <div className={`p-4 flex items-center justify-between ${pag==='pix'?'bg-emerald-50':'bg-white'}`}>
@@ -975,7 +1400,7 @@ const finalizar = async () => {
                 <div className="text-left">
                   <p className={`font-black text-sm ${pag==='pix'?'text-emerald-900':'text-zinc-800'}`}>Pix</p>
                   <p className={`text-[11px] ${pag==='pix'?'text-emerald-600':'text-zinc-400'}`}>
-                    {descontoPix > 0 ? `${descontoPix}% de desconto • Pague agora` : 'Pague agora via Pix Copia e Cola'}
+                    {descontoPixPercentual > 0 ? `${descontoPixPercentual}% de desconto • Pague agora` : 'Pague agora via Pix Copia e Cola'}
                   </p>
                 </div>
               </div>
@@ -1074,7 +1499,7 @@ const finalizar = async () => {
                   {cupomValido.cupom.tipo==='frete_gratis' ? 'Frete grátis!' : `-${fmt(cupomValido.desconto)} de desconto`}
                 </p>
               </div>
-              <button onClick={()=>{ setCupomValido(null); setCupomInput(''); }}
+              <button onClick={()=>{ setCupomValido(null); setCupomInput(''); setCupomErro(''); atualizarResumo(''); }}
                 className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-600">
                 <X size={14}/>
               </button>
@@ -1094,6 +1519,35 @@ const finalizar = async () => {
           {cupomErro && <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><X size={11}/>{cupomErro}</p>}
         </div>
 
+        {config.desconto_primeiro_cliente_ativo && (
+          <div className={`rounded-2xl border p-4 shadow-sm ${
+            descontoPrimeiroCliente > 0
+              ? 'border-amber-200 bg-amber-50'
+              : 'border-zinc-200 bg-white'
+          }`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-sm font-black ${descontoPrimeiroCliente > 0 ? 'text-amber-800' : 'text-zinc-900'}`}>
+                  Primeira compra
+                </p>
+                <p className={`text-xs mt-1 ${descontoPrimeiroCliente > 0 ? 'text-amber-700' : 'text-zinc-500'}`}>
+                  {resumoAtual.primeiro_cliente.mensagem}
+                </p>
+              </div>
+              {descontoPrimeiroCliente > 0 && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-700">
+                  -{fmt(descontoPrimeiroCliente)}
+                </span>
+              )}
+            </div>
+            {resumoAtual.primeiro_cliente.descricao && (
+              <p className="mt-2 text-[11px] text-zinc-500">
+                Regra configurada: {resumoAtual.primeiro_cliente.descricao}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Obs geral */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="font-black text-zinc-900 mb-2 text-sm">Observação <span className="text-zinc-400 font-normal text-xs">(opcional)</span></p>
@@ -1102,20 +1556,39 @@ const finalizar = async () => {
         {erro&&<div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 flex items-center gap-2"><X size={14}/>{erro}</div>}
       </div>
       <div className="bg-white border-t border-zinc-100 p-4 max-w-2xl mx-auto w-full">
-        <div className="flex justify-between text-sm text-zinc-500 mb-1"><span>Subtotal</span><span>{fmt(sub)}</span></div>
-        {economiaPix > 0 && <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🎉 Desconto Pix ({descontoPix}%)</span><span>-{fmt(economiaPix)}</span></div>}
-        {cupomValido && cupomValido.cupom.tipo === 'frete_gratis' && (
-          <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🏷️ Frete grátis ({cupomValido.cupom.codigo})</span><span>-{fmt(taxaEntrega)}</span></div>
+        <ResumoComercialLinhas
+          resumo={resumoAtual}
+          descontoPixPercentual={descontoPixPercentual}
+          zonaFallback={zonaResumo}
+          bairroFallback={bairroResumo}
+          tipoAtendimento={tipoAtendimento}
+          mensagemAuxiliar={carregandoResumo ? 'Atualizando beneficios e total...' : (usandoResumoFallback ? 'Total estimado ate concluir a validacao do checkout.' : null)}
+        />
+        {economiaPix > 0 && <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🎉 Desconto Pix ({descontoPixPercentual}%)</span><span>-{fmt(economiaPix)}</span></div>}
+        {false && (
+          <>
+        {cupomAplicado && cupomAplicado.tipo === 'frete_gratis' && (
+          <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🏷️ Frete grátis ({cupomAplicado.codigo})</span><span>-{fmt(descontoCupom)}</span></div>
         )}
-        {cupomValido && cupomValido.cupom.tipo !== 'frete_gratis' && (
-          <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🏷️ Cupom ({cupomValido.cupom.codigo})</span><span>-{fmt(descontoCupom)}</span></div>
+        {cupomAplicado && cupomAplicado.tipo !== 'frete_gratis' && (
+          <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🏷️ Cupom ({cupomAplicado.codigo})</span><span>-{fmt(descontoCupom)}</span></div>
         )}
-        {taxaFinal > 0
-          ? <div className="flex justify-between text-sm text-zinc-500 mb-1"><span>Taxa de entrega{zonaDetectada ? ` · ${zonaDetectada.nome}` : ''}</span><span>{fmt(taxaFinal)}</span></div>
-          : taxaEntrega > 0 && <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>Taxa de entrega</span><span>Grátis 🎉</span></div>
+        {descontoPrimeiroCliente > 0 && (
+          <div className="flex justify-between text-sm text-amber-600 mb-1 font-semibold"><span>Primeira compra</span><span>-{fmt(descontoPrimeiroCliente)}</span></div>
+        )}
+        {taxaEntrega > 0
+          ? <div className="flex justify-between text-sm text-zinc-500 mb-1"><span>Taxa de entrega{zonaResumo ? ` · ${zonaResumo.nome}` : bairroResumo ? ` · ${bairroResumo}` : ''}</span><span>{fmt(taxaEntrega)}</span></div>
+          : <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>Taxa de entrega</span><span>Gratis</span></div>
         }
+        {(carregandoResumo || usandoResumoFallback) && (
+          <div className="text-[11px] text-zinc-400 mb-2">
+            {carregandoResumo ? 'Atualizando beneficios e total...' : 'Total estimado ate concluir a validacao do checkout.'}
+          </div>
+        )}
         <div className="flex justify-between font-black text-zinc-900 mb-4"><span>Total</span><span className="text-xl text-emerald-600">{fmt(Math.max(0, tot))}</span></div>
-        <button onClick={finalizar} disabled={enviando} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+          </>
+        )}
+        <button onClick={finalizar} disabled={enviando||carregandoResumo} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
           {enviando?<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:<CheckCircle2 size={18}/>}
           {enviando?'Enviando...':'Confirmar Pedido'}
         </button>
@@ -1177,8 +1650,9 @@ const BANCOS_DEEPLINK = [
   { nome:'Picpay',    cor:'#21C25E', logo:'💚', link:(payload:string)=>`picpay://pix?payload=${encodeURIComponent(payload)}` },
 ];
 
-function TelaConfirmado({ pedidoOk, config, slug, onNovo }: { pedidoOk:any;config:Config;slug:string;onNovo:()=>void }) {
+function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { pedidoOk:any;config:Config;slug:string;tipoAtendimento: TipoAtendimento;onNovo:()=>void }) {
   const isPix = pedidoOk.pagamento_tipo === 'pix';
+  const isRetirada = pedidoOk.canal === 'retirada' || tipoAtendimento === 'retirada';
   const [pixPago, setPixPago] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -1227,6 +1701,7 @@ function TelaConfirmado({ pedidoOk, config, slug, onNovo }: { pedidoOk:any;confi
   const waNumber = pxConf.whatsapp?.replace(/\D/g,'');
   const waMsgPix = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(`🧾 *Comprovante Pix — Pedido #${pedidoOk.orderNumber}*\n\nOlá! Acabei de realizar o pagamento de *${fmt(pedidoOk.total)}* via Pix.\n\n📎 Segue o comprovante em anexo.`)}` : null;
   const waMsgEntrega = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(`✅ *Pedido Confirmado #${pedidoOk.orderNumber}*\n\nOlá! Meu pedido foi confirmado. Aguardo a entrega!\n💰 Pagarei *${fmt(pedidoOk.total)}* ${pedidoOk.pagamento_tipo === 'dinheiro' ? 'em dinheiro' : 'no cartão'} na entrega.`)}` : null;
+  const waMsgOperacao = isRetirada ? null : waMsgEntrega;
 
   return (
     <div className="min-h-screen bg-[#f8f8f8]">
@@ -1279,6 +1754,11 @@ function TelaConfirmado({ pedidoOk, config, slug, onNovo }: { pedidoOk:any;confi
               <p className="text-[10px] text-zinc-400 text-center mt-2">Toque no banco para abrir direto no app</p>
             </div>
 
+            {false && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-emerald-700">
+                Retirada no local selecionada. O cadastro segue sem pedir endereÃ§o.
+              </div>
+            )}
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Pix Copia e Cola</p>
               <div className="flex justify-center">
@@ -1362,7 +1842,7 @@ function TelaConfirmado({ pedidoOk, config, slug, onNovo }: { pedidoOk:any;confi
               <div className="bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 flex items-center gap-3">
                 {pedidoOk.pagamento_tipo==='dinheiro' ? <Banknote size={20} className="text-zinc-500 shrink-0"/> : <CreditCard size={20} className="text-zinc-500 shrink-0"/>}
                 <div>
-                  <p className="text-xs text-zinc-400">Pagamento na entrega</p>
+                  <p className="text-xs text-zinc-400">{isRetirada ? 'Pagamento na retirada' : 'Pagamento na entrega'}</p>
                   <p className="font-bold text-zinc-800">{pedidoOk.pagamento_tipo==='dinheiro'?'Dinheiro':'Cartão'} — <span className="text-emerald-600">{fmt(pedidoOk.total)}</span></p>
                 </div>
               </div>
@@ -1373,8 +1853,8 @@ function TelaConfirmado({ pedidoOk, config, slug, onNovo }: { pedidoOk:any;confi
                 <Smartphone size={16}/>Confirmar no WhatsApp
               </a>
             )}
-            {waMsgEntrega && !pedidoOk.waLink && (
-              <a href={waMsgEntrega} target="_blank" rel="noreferrer"
+            {waMsgOperacao && !pedidoOk.waLink && (
+              <a href={waMsgOperacao} target="_blank" rel="noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3.5 bg-green-500 hover:bg-green-600 text-white rounded-2xl font-bold text-sm transition-all">
                 <Smartphone size={16}/>Acompanhar pedido no WhatsApp
               </a>
@@ -1421,7 +1901,7 @@ function TelaConfirmado({ pedidoOk, config, slug, onNovo }: { pedidoOk:any;confi
   );
 }
 
-function TelaIdentificar({ slug, onSuccess, onBack }: { slug:string;onSuccess:(t:string,c:ClienteAuth)=>void;onBack:()=>void }) {
+function TelaIdentificar({ slug, tipoAtendimento, onSuccess, onBack }: { slug:string;tipoAtendimento: TipoAtendimento;onSuccess:(t:string,c:ClienteAuth)=>void;onBack:()=>void }) {
   const [etapa, setEtapa] = useState<'tel'|'dados'>('tel');
   const [tel, setTel] = useState('');
   const [nome, setNome] = useState('');
@@ -1448,13 +1928,15 @@ function TelaIdentificar({ slug, onSuccess, onBack }: { slug:string;onSuccess:(t
   const cadastrar=async()=>{
     setErro('');
     if(!nome.trim()){setErro('Informe seu nome');return;}
-    if(!endLogradouro.trim()){setErro('Informe a rua/avenida');return;}
+    if(tipoAtendimento==='entrega' && !endLogradouro.trim()){setErro('Informe a rua/avenida');return;}
     setLoad(true);
     try{
       const r=await fetch(`/public/delivery/${slug}/auth/cadastrar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:telNorm,nome,email})});
       const d=await r.json();
       if(!d.success){setErro(d.error||'Erro');return;}
-      await fetch(`/public/delivery/${slug}/cliente/enderecos`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${d.token}`},body:JSON.stringify({label:'Casa',logradouro:endLogradouro,numero:endNumero,bairro:endBairro,referencia:endRef,principal:true})});
+      if (tipoAtendimento === 'entrega') {
+        await fetch(`/public/delivery/${slug}/cliente/enderecos`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${d.token}`},body:JSON.stringify({label:'Casa',logradouro:endLogradouro,numero:endNumero,bairro:endBairro,referencia:endRef,principal:true})});
+      }
       onSuccess(d.token,d.cliente);
     }catch{setErro('Erro de conexão');}finally{setLoad(false);}
   };
@@ -1497,17 +1979,22 @@ function TelaIdentificar({ slug, onSuccess, onBack }: { slug:string;onSuccess:(t
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">E-mail (opcional)</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="joao@email.com" type="email" className={inp}/></div>
             </div>
             {/* Endereço */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+            {tipoAtendimento === 'retirada' && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-emerald-700">
+                Retirada no local selecionada. O cadastro segue sem pedir endereco.
+              </div>
+            )}
+            <div className={`bg-white rounded-2xl p-4 shadow-sm space-y-3 ${tipoAtendimento === 'retirada' ? 'hidden' : ''}`}> 
               <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><MapPin size={14} className="text-emerald-500"/>Endereço de entrega *</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2"><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Rua / Avenida *</label><input value={endLogradouro} onChange={e=>setEndLogradouro(e.target.value)} placeholder="Rua das Flores" className={inp}/></div>
                 <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nº</label><input value={endNumero} onChange={e=>setEndNumero(e.target.value)} placeholder="123" className={inp}/></div>
               </div>
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Bairro</label><input value={endBairro} onChange={e=>setEndBairro(e.target.value)} placeholder="Centro" className={inp}/></div>
-              <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Referência</label><input value={endRef} onChange={e=>setEndRef(e.target.value)} placeholder="Próximo ao mercado..." className={inp}/></div>
+              <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Referencia</label><input value={endRef} onChange={e=>setEndRef(e.target.value)} placeholder="Proximo ao mercado..." className={inp}/></div>
             </div>
             {erro&&<div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 flex items-center gap-2"><X size={14}/>{erro}</div>}
-            <button onClick={cadastrar} disabled={load||!nome.trim()||!endLogradouro.trim()} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+            <button onClick={cadastrar} disabled={load||!nome.trim()||(tipoAtendimento==='entrega'&&!endLogradouro.trim())} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
               {load?<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:<><CheckCircle2 size={16}/>Criar conta e continuar</>}
             </button>
           </>
@@ -1682,3 +2169,4 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
     </div>
   );
 }
+

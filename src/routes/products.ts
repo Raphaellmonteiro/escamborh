@@ -6,6 +6,7 @@ import { upload, uploadFotoFunc, checkMagicBytes } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
+import { normalizeRequiresPreparationInput } from '../utils/preparation';
 
 export function createProductsRouter() {
   const router = Router();
@@ -83,13 +84,14 @@ export function createProductsRouter() {
 
   router.post('/', async (req: Request, res) => {
     try {
-      const { name, price, category, active, color, codigo_barras, marca, descricao, custo, destaque, disponivel_de, disponivel_ate } = req.body;
+      const { name, price, category, active, color, codigo_barras, marca, descricao, custo, destaque, disponivel_de, disponivel_ate, requires_preparation } = req.body;
       const normalizedBarcode = normalizeBarcode(codigo_barras);
+      const normalizedRequiresPreparation = normalizeRequiresPreparationInput(requires_preparation, { name, category });
       await ensureBarcodeAvailable(req.tenantId, normalizedBarcode);
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,requires_preparation,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedRequiresPreparation, req.tenantId]
       );
       res.json({ id });
     } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
@@ -106,18 +108,22 @@ export function createProductsRouter() {
 
   router.put('/:id', async (req: Request, res) => {
     try {
-      const { name, price, category, active, color, codigo_barras, marca, descricao, custo, destaque, disponivel_de, disponivel_ate } = req.body;
-      const current = await q1<{ codigo_barras?: string | null }>(
-        'SELECT codigo_barras FROM produtos WHERE id=? AND tenant_id=?',
+      const { name, price, category, active, color, codigo_barras, marca, descricao, custo, destaque, disponivel_de, disponivel_ate, requires_preparation } = req.body;
+      const current = await q1<{ codigo_barras?: string | null; requires_preparation?: number | null; name?: string | null; category?: string | null }>(
+        'SELECT codigo_barras, requires_preparation, name, category FROM produtos WHERE id=? AND tenant_id=?',
         [req.params.id, req.tenantId]
       );
       const normalizedBarcode = normalizeBarcode(codigo_barras);
+      const normalizedRequiresPreparation = normalizeRequiresPreparationInput(
+        requires_preparation ?? current?.requires_preparation,
+        { name: name ?? current?.name ?? null, category: category ?? current?.category ?? null }
+      );
       if (normalizedBarcode !== normalizeBarcode(current?.codigo_barras)) {
         await ensureBarcodeAvailable(req.tenantId, normalizedBarcode, Number(req.params.id));
       }
       await qRun(
-        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,disponivel_de=?,disponivel_ate=? WHERE id=? AND tenant_id=?',
-        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, disponivel_de||null, disponivel_ate||null, req.params.id, req.tenantId]
+        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,disponivel_de=?,disponivel_ate=?,requires_preparation=? WHERE id=? AND tenant_id=?',
+        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, disponivel_de||null, disponivel_ate||null, normalizedRequiresPreparation, req.params.id, req.tenantId]
       );
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }

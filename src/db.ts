@@ -1,5 +1,6 @@
 // src/db.ts - reexport e migrações
 import { pool } from './db/pool';
+import { inferRequiresPreparation } from './utils/preparation';
 
 export * from './db/index';
 
@@ -333,6 +334,7 @@ export async function runMigrations() {
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS mesa_id INTEGER;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comanda_id INTEGER;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS subtotal REAL DEFAULT 0;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS delivery_checkout_snapshot TEXT;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS taxa_servico_ativa INTEGER DEFAULT 0;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS taxa_servico_percentual REAL DEFAULT 0;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_taxa_servico REAL DEFAULT 0;
@@ -342,6 +344,7 @@ export async function runMigrations() {
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_couvert REAL DEFAULT 0;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS total_extras REAL DEFAULT 0;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS public_id TEXT;
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS requires_preparation INTEGER;
       ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
       CREATE TABLE IF NOT EXISTS pedido_eventos (
         id SERIAL PRIMARY KEY,
@@ -381,6 +384,11 @@ export async function runMigrations() {
       SET public_id = CONCAT('prd_', SUBSTRING(MD5(CONCAT(tenant_id::text, '-', id::text, '-produto')), 1, 24))
       WHERE public_id IS NULL OR BTRIM(public_id) = '';
 
+      UPDATE pedidos
+      SET canal = 'retirada'
+      WHERE LOWER(COALESCE(tipo_retirada, '')) = 'levar'
+        AND LOWER(COALESCE(canal, 'balcao')) = 'balcao';
+
       UPDATE ingredientes
       SET public_id = CONCAT('ing_', SUBSTRING(MD5(CONCAT(tenant_id::text, '-', id::text, '-ingrediente')), 1, 24))
       WHERE public_id IS NULL OR BTRIM(public_id) = '';
@@ -395,6 +403,23 @@ export async function runMigrations() {
       WHERE codigo_barras IS NOT NULL
         AND codigo_barras <> UPPER(REGEXP_REPLACE(BTRIM(codigo_barras), '\\s+', '', 'g'));
     `);
+
+    const productsMissingPreparation = await client.query<{
+      id: number;
+      name: string | null;
+      category: string | null;
+    }>(
+      `SELECT id, name, category
+       FROM produtos
+       WHERE requires_preparation IS NULL`
+    );
+
+    for (const product of productsMissingPreparation.rows) {
+      await client.query(
+        'UPDATE produtos SET requires_preparation=$1 WHERE id=$2',
+        [inferRequiresPreparation(product) ? 1 : 0, product.id]
+      );
+    }
 
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_pedidos_tenant_date      ON pedidos(tenant_id, created_at);

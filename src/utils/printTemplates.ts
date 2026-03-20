@@ -1,5 +1,5 @@
 export type PrintVariant = 'receipt' | 'kitchen-ticket' | 'table-slip' | 'proof';
-export type PrintChannel = 'balcao' | 'mesa' | 'delivery' | 'generic';
+export type PrintChannel = 'balcao' | 'mesa' | 'delivery' | 'retirada' | 'generic';
 
 type PrintItem = {
   qtd: number;
@@ -77,6 +77,8 @@ function buildChannelLabel(channel: PrintChannel) {
       return 'Delivery';
     case 'mesa':
       return 'Mesa';
+    case 'retirada':
+      return 'Retirada';
     case 'balcao':
       return 'Balcao';
     default:

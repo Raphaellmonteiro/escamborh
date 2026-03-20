@@ -6,10 +6,22 @@ import path from 'path';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
 import { publicRateLimit, authDeliveryCliente } from '../middleware';
 import { requireProductInventoryTargets } from '../services/stockIdentification';
-import { isAppError } from '../utils/errors';
+import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 
 const TZ = 'America/Sao_Paulo';
+type DeliveryZone = { nome: string; taxa: number };
+type OrderChannel = 'delivery' | 'retirada';
+type FirstCustomerDiscountType = 'percentual' | 'fixo' | 'frete_gratis';
+type FirstCustomerDiscountReason =
+  | 'inativo'
+  | 'cliente_nao_identificado'
+  | 'pedido_abaixo_minimo'
+  | 'nao_primeira_compra'
+  | 'sem_valor_configurado'
+  | 'sem_taxa_entrega'
+  | 'frete_ja_bonificado'
+  | 'aplicado';
 
 type DeliveryConfig = {
   taxa_entrega?: number;
@@ -24,7 +36,38 @@ type DeliveryConfig = {
   horario_fechamento?: string;
   desconto_pix?: number;
   valor_por_entrega?: number;
-  zonas_entrega?: Array<{ nome: string; taxa: number }>;
+  zonas_entrega?: DeliveryZone[];
+  desconto_primeiro_cliente_ativo?: boolean;
+  desconto_primeiro_cliente_tipo?: FirstCustomerDiscountType;
+  desconto_primeiro_cliente_valor?: number;
+  desconto_primeiro_cliente_min_pedido?: number;
+};
+
+type CheckoutSummary = {
+  modelo_entrega: 'bairro_fixo';
+  bairro_entrega: string | null;
+  subtotal: number;
+  desconto_pix: number;
+  subtotal_apos_desconto_pix: number;
+  taxa_entrega: number;
+  zona_entrega: DeliveryZone | null;
+  desconto_cupom: number;
+  cupom_aplicado: any | null;
+  cupom_invalido?: string;
+  desconto_primeiro_cliente: number;
+  primeiro_cliente: {
+    ativo: boolean;
+    elegivel: boolean;
+    aplicado: boolean;
+    tipo: FirstCustomerDiscountType;
+    valor_configurado: number;
+    min_pedido: number;
+    descricao: string;
+    motivo: FirstCustomerDiscountReason;
+    mensagem: string;
+  };
+  total: number;
+  itensValidados: any[];
 };
 
 function parseDeliveryConfig(rawConfig?: string | null): DeliveryConfig {
@@ -65,7 +108,7 @@ function normalizeZoneName(value?: string | null) {
 }
 
 function findDeliveryZone(
-  zonas: Array<{ nome: string; taxa: number }>,
+  zonas: DeliveryZone[],
   bairro?: string | null
 ) {
   const normalizedBairro = normalizeZoneName(bairro);
@@ -116,17 +159,115 @@ function validateCupom(
   return { valido: true, desconto };
 }
 
+function describeFirstCustomerDiscount(config: DeliveryConfig) {
+  const tipo = String(config.desconto_primeiro_cliente_tipo || 'percentual').toLowerCase() as FirstCustomerDiscountType;
+  const valor = Number(config.desconto_primeiro_cliente_valor || 0);
+
+  if (tipo === 'frete_gratis') return 'Frete gratis na primeira compra';
+  if (tipo === 'fixo') return `R$ ${valor.toFixed(2).replace('.', ',')} na primeira compra`;
+  return `${valor}% na primeira compra`;
+}
+
+function buildFirstCustomerDiscountMessage(params: {
+  ativo: boolean;
+  tipo: FirstCustomerDiscountType;
+  valorConfigurado: number;
+  minPedido: number;
+  motivo: FirstCustomerDiscountReason;
+}) {
+  if (!params.ativo) return 'Desconto de primeira compra desativado.';
+  if (params.motivo === 'cliente_nao_identificado') return 'Identifique o cliente para validar a primeira compra.';
+  if (params.motivo === 'pedido_abaixo_minimo') {
+    return `Disponivel a partir de R$ ${params.minPedido.toFixed(2).replace('.', ',')} no subtotal do pedido.`;
+  }
+  if (params.motivo === 'nao_primeira_compra') return 'Beneficio valido somente na primeira compra do cliente.';
+  if (params.motivo === 'sem_valor_configurado') return 'Configure um valor valido para o desconto de primeira compra.';
+  if (params.motivo === 'sem_taxa_entrega') return 'Este pedido ja esta com entrega gratis.';
+  if (params.motivo === 'frete_ja_bonificado') return 'O frete deste pedido ja foi zerado por outro beneficio.';
+  if (params.tipo === 'frete_gratis') return 'Frete gratis aplicado na primeira compra.';
+  if (params.tipo === 'fixo') {
+    return `Desconto de R$ ${params.valorConfigurado.toFixed(2).replace('.', ',')} aplicado na primeira compra.`;
+  }
+  return `Desconto de ${params.valorConfigurado}% aplicado na primeira compra.`;
+}
+
+async function resolveDeliveryCustomerId(tenantId: number, clienteToken?: unknown) {
+  if (!clienteToken) return null;
+
+  try {
+    const dec: any = jwt.verify(String(clienteToken), process.env.JWT_SECRET || 'dev_secret');
+    if (dec.tipo === 'delivery_cliente' && Number(dec.tenantId) === Number(tenantId)) {
+      return Number(dec.clienteId);
+    }
+  } catch {}
+
+  return null;
+}
+
+async function validateDeliveryItems(tenantId: number, items: any[]) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new AppError('Pedido sem itens', 400);
+  }
+
+  let subtotal = 0;
+  const itensValidados: any[] = [];
+
+  for (const item of items) {
+    const productId = Number(item?.product_id);
+    const quantity = Number(item?.quantity);
+    const priceAtTime = Number(item?.price_at_time);
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new AppError('Produto invalido', 400);
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new AppError(`Quantidade invalida para o produto ${productId}`, 400);
+    }
+
+    if (!Number.isFinite(priceAtTime) || priceAtTime < 0) {
+      throw new AppError(`Preco invalido para o produto ${productId}`, 400);
+    }
+
+    const prod = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=? AND active=1', [productId, tenantId]);
+    if (!prod) {
+      throw new AppError(`Produto ${productId} invalido`, 400);
+    }
+
+    subtotal += priceAtTime * quantity;
+    itensValidados.push({ ...item, product_id: productId, quantity, price_at_time: priceAtTime });
+  }
+
+  return { subtotal, itensValidados };
+}
+
 async function resolveDeliveryFee(params: {
   tenantId: number;
   clienteId: number | null;
   enderecoId?: unknown;
+  bairro?: unknown;
   config: DeliveryConfig;
+  canalPedido?: OrderChannel;
 }) {
+  if (params.canalPedido === 'retirada') {
+    return { taxa: 0, zona: null as DeliveryZone | null, bairro: null as string | null };
+  }
+
   const defaultFee = Number(params.config.taxa_entrega || 0);
   const zonas = Array.isArray(params.config.zonas_entrega) ? params.config.zonas_entrega : [];
+  const bairroInformado = String(params.bairro || '').trim();
+
+  if (bairroInformado) {
+    const zona = findDeliveryZone(zonas, bairroInformado);
+    return {
+      taxa: zona ? Number(zona.taxa || 0) : defaultFee,
+      zona,
+      bairro: bairroInformado,
+    };
+  }
 
   if (zonas.length === 0 || !params.enderecoId) {
-    return defaultFee;
+    return { taxa: defaultFee, zona: null as DeliveryZone | null, bairro: null as string | null };
   }
 
   const endereco = params.clienteId
@@ -140,7 +281,220 @@ async function resolveDeliveryFee(params: {
       );
 
   const zona = findDeliveryZone(zonas, endereco?.bairro);
-  return zona ? Number(zona.taxa || 0) : defaultFee;
+  return {
+    taxa: zona ? Number(zona.taxa || 0) : defaultFee,
+    zona,
+    bairro: String(endereco?.bairro || '').trim() || null,
+  };
+}
+
+async function resolveFirstCustomerDiscount(params: {
+  tenantId: number;
+  clienteId: number | null;
+  config: DeliveryConfig;
+  subtotalAfterPix: number;
+  taxaEntrega: number;
+  cupomAplicado: any | null;
+  totalBeforeFirstCustomerDiscount: number;
+}) {
+  const ativo = Boolean(params.config.desconto_primeiro_cliente_ativo);
+  const tipo = String(params.config.desconto_primeiro_cliente_tipo || 'percentual').toLowerCase() as FirstCustomerDiscountType;
+  const valorConfigurado = Number(params.config.desconto_primeiro_cliente_valor || 0);
+  const minPedido = Number(params.config.desconto_primeiro_cliente_min_pedido || 0);
+  const descricao = describeFirstCustomerDiscount(params.config);
+  const finalize = (input: {
+    desconto: number;
+    elegivel: boolean;
+    aplicado: boolean;
+    motivo: FirstCustomerDiscountReason;
+  }) => ({
+    desconto: input.desconto,
+    ativo,
+    elegivel: input.elegivel,
+    aplicado: input.aplicado,
+    tipo,
+    valor_configurado: valorConfigurado,
+    min_pedido: minPedido,
+    descricao,
+    motivo: input.motivo,
+    mensagem: buildFirstCustomerDiscountMessage({
+      ativo,
+      tipo,
+      valorConfigurado,
+      minPedido,
+      motivo: input.motivo,
+    }),
+  });
+
+  if (!ativo || !params.clienteId) {
+    return finalize({
+      desconto: 0,
+      elegivel: false,
+      aplicado: false,
+      motivo: ativo ? 'cliente_nao_identificado' : 'inativo',
+    });
+  }
+
+  if (tipo !== 'frete_gratis' && valorConfigurado <= 0) {
+    return finalize({
+      desconto: 0,
+      elegivel: false,
+      aplicado: false,
+      motivo: 'sem_valor_configurado',
+    });
+  }
+
+  if (minPedido > 0 && params.subtotalAfterPix < minPedido) {
+    return finalize({
+      desconto: 0,
+      elegivel: false,
+      aplicado: false,
+      motivo: 'pedido_abaixo_minimo',
+    });
+  }
+
+  const existingOrder = await q1(
+    `SELECT id
+     FROM pedidos
+     WHERE tenant_id=?
+       AND delivery_cliente_id=?
+       AND cancelado_at IS NULL
+       AND LOWER(COALESCE(status, '')) <> 'cancelado'
+     LIMIT 1`,
+    [params.tenantId, params.clienteId]
+  );
+
+  if (existingOrder) {
+    return finalize({
+      desconto: 0,
+      elegivel: false,
+      aplicado: false,
+      motivo: 'nao_primeira_compra',
+    });
+  }
+
+  let desconto = 0;
+  let motivo: FirstCustomerDiscountReason = 'aplicado';
+  if (tipo === 'frete_gratis') {
+    const freteJaBonificado = params.cupomAplicado?.tipo === 'frete_gratis';
+    if (freteJaBonificado) {
+      motivo = 'frete_ja_bonificado';
+      desconto = 0;
+    } else if (params.taxaEntrega <= 0) {
+      motivo = 'sem_taxa_entrega';
+      desconto = 0;
+    } else {
+      desconto = params.taxaEntrega;
+    }
+  } else if (tipo === 'fixo') {
+    desconto = Math.min(valorConfigurado, params.subtotalAfterPix);
+  } else {
+    desconto = params.subtotalAfterPix * (valorConfigurado / 100);
+  }
+
+  desconto = Math.max(0, Math.min(desconto, params.totalBeforeFirstCustomerDiscount));
+
+  return finalize({
+    desconto,
+    elegivel: true,
+    aplicado: desconto > 0,
+    motivo,
+  });
+}
+
+async function buildCheckoutSummary(params: {
+  tenantId: number;
+  config: DeliveryConfig;
+  items: any[];
+  pagamentoTipo?: unknown;
+  enderecoId?: unknown;
+  bairro?: unknown;
+  clienteToken?: unknown;
+  cupomCodigo?: unknown;
+  canalPedido?: OrderChannel;
+}) {
+  const clienteId = await resolveDeliveryCustomerId(params.tenantId, params.clienteToken);
+  const { subtotal, itensValidados } = await validateDeliveryItems(params.tenantId, params.items);
+  const pagamentoTipo = String(params.pagamentoTipo || 'pix').trim().toLowerCase();
+  const fee = await resolveDeliveryFee({
+    tenantId: params.tenantId,
+    clienteId,
+    enderecoId: params.enderecoId,
+    bairro: params.bairro,
+    config: params.config,
+    canalPedido: params.canalPedido,
+  });
+
+  const descontoPixPercent = pagamentoTipo === 'pix' ? Number(params.config.desconto_pix || 0) : 0;
+  const descontoPix = descontoPixPercent > 0 ? subtotal * (descontoPixPercent / 100) : 0;
+  const subtotalAposPix = Math.max(0, subtotal - descontoPix);
+  const totalAntesDoCupom = subtotalAposPix + fee.taxa;
+
+  let cupomAplicado: any = null;
+  let descontoCupom = 0;
+  let cupomInvalido: string | undefined;
+  const cupomCodigo = String(params.cupomCodigo || '').trim().toUpperCase();
+
+  if (cupomCodigo) {
+    const cupom = await q1(
+      'SELECT * FROM delivery_cupons WHERE tenant_id=? AND codigo=? AND ativo=1',
+      [params.tenantId, cupomCodigo]
+    );
+    const resultadoCupom = validateCupom(cupom, totalAntesDoCupom);
+    if (resultadoCupom.valido) {
+      cupomAplicado = cupom;
+      descontoCupom = cupom?.tipo === 'frete_gratis'
+        ? fee.taxa
+        : Math.min(resultadoCupom.desconto, totalAntesDoCupom);
+    } else {
+      cupomInvalido = resultadoCupom.mensagem || 'Cupom invalido ou expirado';
+    }
+  }
+
+  const totalAntesDoPrimeiroCliente = Math.max(0, totalAntesDoCupom - descontoCupom);
+  const primeiroCliente = await resolveFirstCustomerDiscount({
+    tenantId: params.tenantId,
+    clienteId,
+    config: params.config,
+    subtotalAfterPix: subtotalAposPix,
+    taxaEntrega: fee.taxa,
+    cupomAplicado,
+    totalBeforeFirstCustomerDiscount: totalAntesDoPrimeiroCliente,
+  });
+
+  const total = Math.max(0, totalAntesDoPrimeiroCliente - primeiroCliente.desconto);
+
+  const summary: CheckoutSummary = {
+    modelo_entrega: 'bairro_fixo',
+    bairro_entrega: fee.bairro,
+    subtotal,
+    desconto_pix: descontoPix,
+    subtotal_apos_desconto_pix: subtotalAposPix,
+    taxa_entrega: fee.taxa,
+    zona_entrega: fee.zona,
+    desconto_cupom: descontoCupom,
+    cupom_aplicado: cupomAplicado,
+    desconto_primeiro_cliente: primeiroCliente.desconto,
+    primeiro_cliente: {
+      ativo: primeiroCliente.ativo,
+      elegivel: primeiroCliente.elegivel,
+      aplicado: primeiroCliente.aplicado,
+      tipo: primeiroCliente.tipo,
+      valor_configurado: primeiroCliente.valor_configurado,
+      min_pedido: primeiroCliente.min_pedido,
+      descricao: primeiroCliente.descricao,
+      motivo: primeiroCliente.motivo,
+      mensagem: primeiroCliente.mensagem,
+    },
+    total,
+    itensValidados,
+  };
+
+  if (cupomInvalido) {
+    summary.cupom_invalido = cupomInvalido;
+  }
+
+  return summary;
 }
 
 export function createDeliveryPublicRouter() {
@@ -202,6 +556,7 @@ export function createDeliveryPublicRouter() {
         aberto,
         config: {
           taxa_entrega: dcfg.taxa_entrega ?? 0,
+          modelo_entrega: 'bairro_fixo',
           pedido_minimo: dcfg.pedido_minimo ?? 0,
           tempo_preparo: dcfg.tempo_preparo ?? 30,
           pix_chave: dcfg.pix_chave,
@@ -212,6 +567,10 @@ export function createDeliveryPublicRouter() {
           horario_abertura: dcfg.horario_abertura,
           horario_fechamento: dcfg.horario_fechamento,
           desconto_pix: dcfg.desconto_pix ?? 0,
+          desconto_primeiro_cliente_ativo: dcfg.desconto_primeiro_cliente_ativo ?? false,
+          desconto_primeiro_cliente_tipo: dcfg.desconto_primeiro_cliente_tipo ?? 'percentual',
+          desconto_primeiro_cliente_valor: dcfg.desconto_primeiro_cliente_valor ?? 0,
+          desconto_primeiro_cliente_min_pedido: dcfg.desconto_primeiro_cliente_min_pedido ?? 0,
           zonas_entrega: Array.isArray(dcfg.zonas_entrega) ? dcfg.zonas_entrega : [],
         },
         categorias,
@@ -240,6 +599,13 @@ export function createDeliveryPublicRouter() {
 
       pedido.total_amount = Number(pedido.total_amount || 0);
       pedido.taxa_entrega = Number(pedido.taxa_entrega || 0);
+      try {
+        pedido.delivery_checkout_snapshot = pedido.delivery_checkout_snapshot
+          ? JSON.parse(pedido.delivery_checkout_snapshot)
+          : null;
+      } catch {
+        pedido.delivery_checkout_snapshot = null;
+      }
 
       res.json({
         pedido,
@@ -271,6 +637,34 @@ export function createDeliveryPublicRouter() {
       res.json({ valido: true, cupom, desconto: resultado.desconto });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.post('/:slug/pedido/resumo', async (req, res) => {
+    try {
+      const tenant = await getTenant(req.params.slug);
+      if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
+
+      const dcfg = parseDeliveryConfig(tenant.delivery_config);
+      const summary = await buildCheckoutSummary({
+        tenantId: tenant.id,
+        config: dcfg,
+        items: req.body?.items || [],
+        pagamentoTipo: req.body?.pagamento_tipo,
+        enderecoId: req.body?.endereco_id,
+        bairro: req.body?.bairro_temporario,
+        clienteToken: req.body?.clienteToken,
+        cupomCodigo: req.body?.cupom_codigo,
+        canalPedido: String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery',
+      });
+
+      res.json({ success: true, resumo: summary });
+    } catch (e: any) {
+      if (isAppError(e)) {
+        return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+      }
+
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 
@@ -415,51 +809,52 @@ export function createDeliveryPublicRouter() {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
-      const { items, pagamento_tipo, observation, cliente_nome, cliente_tel, endereco, clienteToken, cupom_codigo, endereco_id } = req.body;
-      if (!items?.length) return res.status(400).json({ error: 'Pedido sem itens' });
-
-      let clienteId: number | null = null;
-      if (clienteToken) {
-        try {
-          const dec: any = jwt.verify(clienteToken, process.env.JWT_SECRET || 'dev_secret');
-          if (dec.tipo === 'delivery_cliente' && dec.tenantId === tenant.id) clienteId = dec.clienteId;
-        } catch {}
-      }
-
-      let subtotal = 0;
-      const itensValidados: any[] = [];
-      for (const item of items) {
-        const prod = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=? AND active=1', [item.product_id, tenant.id]);
-        if (!prod) return res.status(400).json({ error: `Produto ${item.product_id} invalido` });
-        subtotal += item.price_at_time * item.quantity;
-        itensValidados.push(item);
-      }
-
-      const taxaEntrega = await resolveDeliveryFee({
+      const { items, pagamento_tipo, observation, cliente_nome, cliente_tel, endereco, clienteToken, cupom_codigo, endereco_id, bairro_temporario } = req.body;
+      const canalPedido: OrderChannel = String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
+      const tipoRetirada = canalPedido === 'retirada' ? 'levar' : 'local';
+      const clienteId = await resolveDeliveryCustomerId(tenant.id, clienteToken);
+      const checkoutSummary = await buildCheckoutSummary({
         tenantId: tenant.id,
-        clienteId,
-        enderecoId: endereco_id,
         config: dcfg,
+        items: items || [],
+        pagamentoTipo: pagamento_tipo,
+        enderecoId: endereco_id,
+        bairro: bairro_temporario,
+        clienteToken,
+        cupomCodigo: cupom_codigo,
+        canalPedido,
       });
-      const descontoPixPercent = pagamento_tipo === 'pix' ? Number(dcfg.desconto_pix || 0) : 0;
-      const discPix = descontoPixPercent > 0 ? subtotal * (descontoPixPercent / 100) : 0;
-      let totalFinal = subtotal - discPix + taxaEntrega;
 
-      let cupom: any = null;
-      if (cupom_codigo) {
-        cupom = await q1(
-          'SELECT * FROM delivery_cupons WHERE tenant_id=? AND codigo=? AND ativo=1',
-          [tenant.id, String(cupom_codigo).toUpperCase().trim()]
-        );
-        const resultadoCupom = validateCupom(cupom, totalFinal);
-        if (!resultadoCupom.valido) {
-          return res.status(400).json({ success: false, error: resultadoCupom.mensagem || 'Cupom invalido ou expirado' });
-        }
-
-        if (cupom.tipo === 'frete_gratis') totalFinal -= taxaEntrega;
-        else totalFinal -= resultadoCupom.desconto;
-        totalFinal = Math.max(0, totalFinal);
+      if (cupom_codigo && !checkoutSummary.cupom_aplicado) {
+        return res.status(400).json({
+          success: false,
+          error: checkoutSummary.cupom_invalido || 'Cupom invalido ou expirado',
+        });
       }
+
+      const itensValidados = checkoutSummary.itensValidados;
+      const taxaEntrega = checkoutSummary.taxa_entrega;
+      const totalFinal = checkoutSummary.total;
+      const cupom = checkoutSummary.cupom_aplicado;
+      const checkoutSnapshot = {
+        modelo_entrega: checkoutSummary.modelo_entrega,
+        bairro_entrega: checkoutSummary.bairro_entrega,
+        subtotal: checkoutSummary.subtotal,
+        desconto_pix: checkoutSummary.desconto_pix,
+        subtotal_apos_desconto_pix: checkoutSummary.subtotal_apos_desconto_pix,
+        taxa_entrega: checkoutSummary.taxa_entrega,
+        zona_entrega: checkoutSummary.zona_entrega,
+        desconto_cupom: checkoutSummary.desconto_cupom,
+        cupom_aplicado: checkoutSummary.cupom_aplicado
+          ? {
+              codigo: checkoutSummary.cupom_aplicado.codigo,
+              tipo: checkoutSummary.cupom_aplicado.tipo,
+            }
+          : null,
+        desconto_primeiro_cliente: checkoutSummary.desconto_primeiro_cliente,
+        primeiro_cliente: checkoutSummary.primeiro_cliente,
+        total: checkoutSummary.total,
+      };
 
       const dateObj = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
       const y = String(dateObj.getFullYear()).slice(-2);
@@ -474,12 +869,12 @@ export function createDeliveryPublicRouter() {
 
         const orderId = await txInsert(
           client,
-          `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id) VALUES (?,?,?,?,?,'delivery',?,?,?,?,?,?,?)`,
-          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, endereco || null, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', 'Criado', clienteId]
+          `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,delivery_checkout_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, canalPedido === 'retirada' ? null : (endereco || null), pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', 'Criado', clienteId, JSON.stringify(checkoutSnapshot)]
         );
 
           for (const item of itensValidados) {
-            await txRun(client, 'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)', [orderId, item.product_id, item.quantity, 'Delivery', item.price_at_time, tenant.id]);
+            await txRun(client, 'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)', [orderId, item.product_id, item.quantity, canalPedido === 'retirada' ? 'Retirada' : 'Delivery', item.price_at_time, tenant.id]);
             const resolution = await requireProductInventoryTargets({
               client,
               tenantId: tenant.id,
@@ -518,10 +913,14 @@ export function createDeliveryPublicRouter() {
         return `- ${item.quantity}x ${produto?.name || 'Produto'} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;
       }));
       const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao' };
-      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco || '')}`;
+      const mapsUrl = canalPedido === 'delivery'
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco || '')}`
+        : null;
       const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const data = new Date().toLocaleDateString('pt-BR');
-      const msg = `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${endereco || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
+      const msg = canalPedido === 'retirada'
+        ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`
+        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${endereco || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;
 
       res.json({
@@ -529,6 +928,7 @@ export function createDeliveryPublicRouter() {
         orderId: result.orderId,
         orderNumber: result.orderNumber,
         total: totalFinal,
+        canal: canalPedido,
         waLink,
         mapsUrl,
         config_pix: {
@@ -537,6 +937,13 @@ export function createDeliveryPublicRouter() {
           pix_cidade: dcfg.pix_cidade,
           pix_payload_estatico: dcfg.pix_payload_estatico,
           desconto_pix: dcfg.desconto_pix,
+        },
+        resumo_checkout: {
+          taxa_entrega: checkoutSummary.taxa_entrega,
+          desconto_pix: checkoutSummary.desconto_pix,
+          desconto_cupom: checkoutSummary.desconto_cupom,
+          desconto_primeiro_cliente: checkoutSummary.desconto_primeiro_cliente,
+          total: checkoutSummary.total,
         },
       });
       } catch (e: any) {
@@ -559,7 +966,9 @@ export function createDeliveryPublicRouter() {
       if (!tenant) return res.status(404).json({ error: 'Estabelecimento nao encontrado' });
       const pedido = await q1('SELECT id, pagamento_status, canal FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, tenant.id]);
       if (!pedido) return res.status(404).json({ error: 'Pedido nao encontrado' });
-      if (pedido.canal !== 'delivery') return res.status(400).json({ error: 'Pedido nao e delivery' });
+      if (pedido.canal !== 'delivery' && pedido.canal !== 'retirada') {
+        return res.status(400).json({ error: 'Canal do pedido nao permite confirmacao por aqui' });
+      }
       if (pedido.pagamento_status !== 'pago') {
         await qRun("UPDATE pedidos SET pagamento_status='aguardando_confirmacao' WHERE id=? AND tenant_id=?", [pedido.id, tenant.id]);
       }

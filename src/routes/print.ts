@@ -4,6 +4,7 @@ import net from 'net';
 import { q1, qAll } from '../db';
 import { buildMesaFinanceSnapshot, buildMesaReceiptTotals } from '../utils/mesaFinance';
 import { getProfilePaperColumns, getProfilePaperWidthMm } from '../utils/printProfiles';
+import { resolveRequiresPreparation } from '../utils/preparation';
 import { gerarCupomHtml } from '../utils/printTemplates';
 
 function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
@@ -17,6 +18,7 @@ function getOrderChannel(order: { canal?: string | null; tipo_retirada?: string 
 
   if (canal === 'delivery') return 'delivery' as const;
   if (canal === 'mesa') return 'mesa' as const;
+  if (canal === 'retirada' || tipoRetirada === 'levar') return 'retirada' as const;
   if (tipoRetirada === 'mesa' || /mesa\s+\d+/i.test(observation)) return 'mesa' as const;
   if (canal === 'balcao') return 'balcao' as const;
 
@@ -31,12 +33,34 @@ function buildKitchenMetadata(order: { canal?: string | null; cliente_nome?: str
     metadata.push({ label: 'Cliente', value: order.cliente_nome });
   }
 
+  if (channel === 'retirada') {
+    metadata.push({ label: 'Operacao', value: 'Retirada no local' });
+  }
+
   if (channel === 'mesa' || /mesa\s+\d+/i.test(String(order.observation || ''))) {
     const mesaMatch = String(order.observation || '').match(/mesa\s+(\d+)/i);
     if (mesaMatch) metadata.push({ label: 'Mesa', value: mesaMatch[1] });
   }
 
   return metadata;
+}
+
+async function getKitchenItems(orderId: string | number, tenantId: number) {
+  const items = await qAll(
+    `SELECT p.name, p.category, p.requires_preparation, ip.quantity
+     FROM itens_pedido ip
+     JOIN produtos p ON p.id=ip.product_id
+     WHERE ip.order_id=? AND ip.tenant_id=?`,
+    [orderId, tenantId]
+  );
+
+  return items.filter((item: any) =>
+    resolveRequiresPreparation({
+      name: item.name,
+      category: item.category,
+      requires_preparation: item.requires_preparation,
+    })
+  );
 }
 
 function formatPrintDateTime(value?: string | null) {
@@ -265,7 +289,7 @@ export function createPrintRouter() {
         orderNumber: pedido.order_number,
         data: now,
         variant: 'receipt',
-        canal: isDelivery ? 'delivery' : isMesa ? 'mesa' : 'balcao',
+        canal: getOrderChannel(pedido),
         paperWidthMm: getProfilePaperWidthMm(cliente?.printer_config, 'caixa'),
         metadata: [
           { label: 'Status', value: String(pedido.status || 'Concluido') },
@@ -389,13 +413,8 @@ export function createPrintRouter() {
       if (isCanceledOrder(pedido)) return res.status(409).send('<h1>Pedido cancelado</h1>');
       const cliente = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
 
-      const itens = await qAll(
-        `SELECT p.name, ip.quantity
-         FROM itens_pedido ip
-         JOIN produtos p ON p.id=ip.product_id
-         WHERE ip.order_id=? AND ip.tenant_id=?`,
-        [req.params.pedidoId, req.tenantId]
-      );
+      const itens = await getKitchenItems(req.params.pedidoId, req.tenantId);
+      if (itens.length === 0) return res.send('<h1>Nenhum item de preparo neste pedido.</h1>');
       const now = new Date().toLocaleString('pt-BR', {
         timeZone: 'America/Sao_Paulo',
         day: '2-digit',
@@ -432,13 +451,10 @@ export function createPrintRouter() {
       if (!pedido) return res.status(404).json({ success: false, message: 'Pedido nao encontrado' });
       if (isCanceledOrder(pedido)) return res.status(409).json({ success: false, message: 'Pedido cancelado nao pode gerar comanda' });
 
-      const itens = await qAll(
-        `SELECT p.name, ip.quantity
-         FROM itens_pedido ip
-         JOIN produtos p ON p.id=ip.product_id
-         WHERE ip.order_id=? AND ip.tenant_id=?`,
-        [req.params.pedidoId, req.tenantId]
-      );
+      const itens = await getKitchenItems(req.params.pedidoId, req.tenantId);
+      if (itens.length === 0) {
+        return res.json({ success: false, message: 'Pedido sem itens de preparo para a cozinha' });
+      }
       const texto =
         `COMANDA #${pedido.order_number}\n` +
         itens.map((item: any) => `${item.quantity}x ${item.name}`).join('\n') +

@@ -24,6 +24,7 @@ import type {
 import { AppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 import { getProfilePaperWidthMm } from '../utils/printProfiles';
+import { resolveRequiresPreparation } from '../utils/preparation';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { requireProductInventoryTargets } from './stockIdentification';
 
@@ -79,6 +80,7 @@ type NormalizedCreateOrderInput = {
   observation?: string;
   total_amount: number;
   tipo_retirada: string;
+  canal: string;
   status: string;
 };
 
@@ -117,6 +119,8 @@ type OrderItemRow = {
 type ProductRow = {
   id: number;
   name: string;
+  category?: string | null;
+  requires_preparation?: number | null;
   codigo_barras?: string | null;
 };
 
@@ -226,6 +230,15 @@ function normalizePayment(payment: PaymentInput, index: number): NormalizedPayme
   };
 }
 
+function deriveOrderChannel(tipoRetirada?: string | null, currentCanal?: string | null) {
+  const canal = String(currentCanal || '').trim().toLowerCase();
+  if (canal === 'delivery' || canal === 'mesa' || canal === 'retirada' || canal === 'balcao') {
+    return canal;
+  }
+
+  return String(tipoRetirada || '').trim().toLowerCase() === 'levar' ? 'retirada' : 'balcao';
+}
+
 function toMoneyCents(value: number) {
   return Math.round((value + Number.EPSILON) * 100);
 }
@@ -285,6 +298,7 @@ function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrde
     observation: data.observation?.trim() || undefined,
     total_amount: totalAmount,
     tipo_retirada: data.tipo_retirada?.trim() || 'local',
+    canal: deriveOrderChannel(data.tipo_retirada),
     status,
   };
 
@@ -353,6 +367,29 @@ async function ensureProductsExist(items: NormalizedOrderItem[], tenantId: Tenan
   if (missingId) {
     throw new AppError(`Produto ${missingId} não encontrado`, 404);
   }
+}
+
+async function orderHasPreparationItems(client: PoolClient, orderId: number, tenantId: TenantId) {
+  const items = await txQAll<{
+    product_name?: string | null;
+    product_category?: string | null;
+    requires_preparation?: number | null;
+  }>(
+    client,
+    `SELECT p.name AS product_name, p.category AS product_category, p.requires_preparation
+     FROM itens_pedido ip
+     JOIN produtos p ON p.id=ip.product_id
+     WHERE ip.order_id=? AND ip.tenant_id=?`,
+    [orderId, tenantId]
+  );
+
+  return items.some((item) =>
+    resolveRequiresPreparation({
+      name: item.product_name,
+      category: item.product_category,
+      requires_preparation: item.requires_preparation,
+    })
+  );
 }
 
 async function insertOrderItems(
@@ -674,6 +711,8 @@ async function generateReceipt(
     orderNumber,
     orderId,
     tenantId,
+    canal,
+    tipoRetirada,
   }: {
     items: NormalizedOrderItem[];
     payments: NormalizedPayment[];
@@ -682,6 +721,8 @@ async function generateReceipt(
     orderNumber: string;
     orderId: number;
     tenantId: TenantId;
+    canal: string;
+    tipoRetirada: string;
   }
 ) {
   const now = new Date().toLocaleString('pt-BR', {
@@ -705,7 +746,7 @@ async function generateReceipt(
   if (productIds.length > 0) {
     const productRows = await txQAll<ProductRow>(
       client,
-      `SELECT id, name
+      `SELECT id, name, category, requires_preparation
        FROM produtos
        WHERE id IN (${productIds.map(() => '?').join(',')})
          AND tenant_id=?`,
@@ -723,9 +764,12 @@ async function generateReceipt(
     orderNumber,
     data: now,
     variant: 'receipt',
-    canal: 'balcao',
+    canal: canal === 'retirada' ? 'retirada' : 'balcao',
     paperWidthMm: getProfilePaperWidthMm(clientRow?.printer_config, 'caixa'),
-    metadata: [{ label: 'Operacao', value: 'Venda de balcao' }],
+    metadata: [{
+      label: 'Operacao',
+      value: tipoRetirada === 'levar' ? 'Retirada no local' : 'Venda de balcao',
+    }],
     itens: items.map((item) => ({
       qtd: item.quantity,
       nome: productMap[item.product_id] || 'Produto',
@@ -812,8 +856,8 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         await txInsert(
           client,
           `INSERT INTO pedidos
-            (order_number,status,total_amount,observation,tenant_id,senha_pedido,tipo_retirada)
-           VALUES (?,?,?,?,?,?,?)`,
+            (order_number,status,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal)
+           VALUES (?,?,?,?,?,?,?,?)`,
           [
             orderNumber,
             input.status,
@@ -822,6 +866,7 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
             tenantId,
             senhaPedido,
             input.tipo_retirada,
+            input.canal,
           ]
         )
       );
@@ -840,6 +885,7 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
           itens: input.items.length,
           pagamentos: input.payments.length,
           tipo_retirada: input.tipo_retirada,
+          canal: input.canal,
         },
       });
 
@@ -851,6 +897,8 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         orderNumber,
         orderId,
         tenantId,
+        canal: input.canal,
+        tipoRetirada: input.tipo_retirada,
       });
 
       return {
@@ -1193,10 +1241,15 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
         );
       }
 
+      const effectiveStatus =
+        status === 'Em Preparo' && !(await orderHasPreparationItems(client, orderId, input.tenantId))
+          ? 'Pronto'
+          : status;
+
       await txRun(
         client,
         'UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?',
-        [status, orderId, input.tenantId]
+        [effectiveStatus, orderId, input.tenantId]
       );
 
       await createOrderEvent(client, {
@@ -1204,9 +1257,10 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
         tenantId: input.tenantId,
         tipo: 'STATUS',
         statusAnterior: order.status,
-        statusNovo: status,
+        statusNovo: effectiveStatus,
         payload: {
           origem: 'ordersService.updateOrderStatus',
+          requested_status: status,
         },
         usuarioId: input.userId,
       });

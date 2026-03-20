@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Trash2,
+  Bike,
   Clock,
   FileText,
   ChevronRight,
   X,
   Printer,
   Monitor,
+  ShoppingBag,
+  Store,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../types';
 import { getSegCfg } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
+import { resolveRequiresPreparation } from '../utils/preparation';
 import { openPrintPreview, ensurePrintableHtmlDocument, isPrintableHtmlDocument } from '../utils/print';
 
 type OrderWithRefund = Order & {
@@ -35,9 +40,23 @@ type OrderHistoryEvent = {
   synthetic?: boolean;
 };
 
+type OrderScreenItem = OrderItem & {
+  product_name?: string | null;
+  product_category?: string | null;
+  requires_preparation?: number | boolean | null;
+};
+
 type HistoryDetail = {
   label: string;
   value: string;
+};
+
+type OrderChannelMeta = {
+  kind: 'delivery' | 'pickup' | 'dine_in' | 'counter';
+  label: string;
+  icon: React.ElementType;
+  badgeClassName: string;
+  detailClassName: string;
 };
 
 export default function OrdersScreen({
@@ -142,9 +161,17 @@ export default function OrdersScreen({
     };
   };
 
-  const getOrderReference = (order: Order, isDelivery: boolean) => {
+  const getMesaReference = (order: Order) => {
+    const mesaId = (order as any).mesa_id;
+    if (mesaId) return String(mesaId);
+
     const observation = String((order as any).observation || '');
     const mesaMatch = observation.match(/Mesa\s+(\d+)/i);
+    return mesaMatch ? mesaMatch[1] : null;
+  };
+
+  const getOrderReference = (order: Order, isDelivery: boolean) => {
+    const mesaReference = getMesaReference(order);
     const senhaPedido = (order as any).senha_pedido;
     const hasSenha = senhaPedido && senhaPedido !== 0;
 
@@ -156,31 +183,54 @@ export default function OrdersScreen({
       return { label: 'Senha', value: String(senhaPedido).padStart(2, '0') };
     }
 
-    if (mesaMatch) {
-      return { label: 'Mesa', value: mesaMatch[1] };
+    if (mesaReference) {
+      return { label: 'Mesa', value: mesaReference };
     }
 
     return { label: 'Pedido', value: String(order.id) };
   };
 
-  const getOrderChannelMeta = (order: Order, isDelivery: boolean, isLevar: boolean) => {
+  const getOrderChannelMeta = (order: Order): OrderChannelMeta => {
+    const isDelivery = (order as any).canal === 'delivery';
+    const isLevar = (order as any).tipo_retirada === 'levar';
+    const mesaReference = getMesaReference(order);
+
     if (isDelivery) {
       return {
-        label: 'Delivery',
-        style: 'bg-orange-100 text-orange-700 border-orange-200',
+        kind: 'delivery',
+        label: 'Entrega',
+        icon: Bike,
+        badgeClassName: 'bg-orange-100 text-orange-700 border-orange-200',
+        detailClassName: 'text-orange-700',
       };
     }
 
     if (isLevar) {
       return {
-        label: 'Para levar',
-        style: 'bg-amber-100 text-amber-700 border-amber-200',
+        kind: 'pickup',
+        label: 'Retirada no local',
+        icon: ShoppingBag,
+        badgeClassName: 'bg-amber-100 text-amber-700 border-amber-200',
+        detailClassName: 'text-amber-700',
+      };
+    }
+
+    if (mesaReference) {
+      return {
+        kind: 'dine_in',
+        label: 'Consumo no local',
+        icon: UtensilsCrossed,
+        badgeClassName: 'bg-blue-100 text-blue-700 border-blue-200',
+        detailClassName: 'text-blue-700',
       };
     }
 
     return {
-      label: 'Consumo local',
-      style: 'bg-blue-100 text-blue-700 border-blue-200',
+      kind: 'counter',
+      label: 'Balcao',
+      icon: Store,
+      badgeClassName: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+      detailClassName: 'text-zinc-700',
     };
   };
 
@@ -535,6 +585,20 @@ export default function OrdersScreen({
     if (idx >= 0 && idx < PIPELINE.length - 1) return PIPELINE[idx + 1];
     return null;
   };
+  const orderHasPreparationItems = (order: Order) =>
+    (order.items || []).some((item) => {
+      const orderItem = item as OrderScreenItem;
+      return resolveRequiresPreparation({
+        name: orderItem.name || orderItem.product_name,
+        category: orderItem.product_category,
+        requires_preparation: orderItem.requires_preparation,
+      });
+    });
+  const getNextActionStatus = (order: Order) => {
+    const next = nextStatus(order.status);
+    if (next !== 'Em Preparo') return next;
+    return orderHasPreparationItems(order) ? next : 'Pronto';
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6">
@@ -636,14 +700,15 @@ export default function OrdersScreen({
           {activeOrders.map(order => {
             const orderWithRefund = order as OrderWithRefund;
             const sc = getStatusCfg(order.status);
-            const next = nextStatus(order.status);
+            const next = getNextActionStatus(order);
             const pipeIdx = PIPELINE.indexOf(normalizeStatus(order.status));
             const isLevar = (order as any).tipo_retirada === 'levar';
-            const isDelivery = (order as any).canal === 'delivery';
+            const channelMeta = getOrderChannelMeta(order);
+            const ChannelIcon = channelMeta.icon;
+            const isDelivery = channelMeta.kind === 'delivery';
             const elapsed = Math.max(0, Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000));
             const refundMeta = getRefundMeta(orderWithRefund);
             const orderReference = getOrderReference(order, isDelivery);
-            const channelMeta = getOrderChannelMeta(order, isDelivery, isLevar);
             return (
               <div key={order.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isDelivery ? 'border-orange-200' : 'border-zinc-100'}`}>
                 {/* Top stripe — laranja para delivery */}
@@ -652,7 +717,8 @@ export default function OrdersScreen({
                 {isDelivery && (
                   <div className="bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2 flex-wrap">
                     <span className="text-sm">🛵</span>
-                    <span className="text-xs font-black text-orange-700 uppercase tracking-wider">Delivery</span>
+                    <Bike size={14} className="text-orange-700" />
+                    <span className="text-xs font-black text-orange-700 uppercase tracking-wider">{channelMeta.label}</span>
                     {(order as any).cliente_nome && <span className="text-xs text-orange-600 font-semibold">— {(order as any).cliente_nome}</span>}
                     {(order as any).cliente_tel && <span className="text-xs text-orange-500 ml-1">({(order as any).cliente_tel})</span>}
                     {(order as any).pagamento_status === 'aguardando' && (
@@ -679,7 +745,7 @@ export default function OrdersScreen({
                           const hasSenha  = (order as any).senha_pedido && (order as any).senha_pedido !== 0;
                           if (isDelivery) return (
                             <>
-                              <span className="text-[8px] uppercase tracking-widest opacity-70">Deliv</span>
+                              <span className="text-[8px] uppercase tracking-widest opacity-70">Canal</span>
                               <span className="text-lg leading-none">🛵</span>
                             </>
                           );
@@ -706,14 +772,18 @@ export default function OrdersScreen({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {/* Tipo badge */}
-                          {isDelivery ? (
+                          {false ? (
                             <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">🛵 Delivery</span>
                           ) : (
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
+                            <span className="hidden text-[10px] font-black px-2 py-0.5 rounded-full"
                               style={{ background: isLevar ? '#fef3c7' : '#eff6ff', color: isLevar ? '#92400e' : '#1d4ed8' }}>
                               {isLevar ? '🛍️ Para Levar' : '🪑 Consumo Local'}
                             </span>
                           )}
+                          <span className={`inline-flex items-center gap-1.5 text-[10px] font-black px-2 py-0.5 rounded-full border ${channelMeta.badgeClassName}`}>
+                            <ChannelIcon size={12} />
+                            {channelMeta.label}
+                          </span>
                           {/* Status badge */}
                           <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
                             style={{ background: sc.bg, color: sc.color }}>
@@ -810,7 +880,10 @@ export default function OrdersScreen({
                     </div>
                     <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Canal</p>
-                      <p className="mt-1 text-sm font-bold text-zinc-900">{channelMeta.label}</p>
+                      <div className={`mt-1 inline-flex items-center gap-2 text-sm font-bold ${channelMeta.detailClassName}`}>
+                        <ChannelIcon size={14} />
+                        <span>{channelMeta.label}</span>
+                      </div>
                       <p className="mt-1 text-[11px] text-zinc-500">
                         {orderReference.label}: {orderReference.value}
                       </p>
@@ -939,6 +1012,8 @@ export default function OrdersScreen({
             const orderWithRefund = order as OrderWithRefund;
             const sc = getStatusCfg(order.status);
             const isLevar = (order as any).tipo_retirada === 'levar';
+            const channelMeta = getOrderChannelMeta(order);
+            const ChannelIcon = channelMeta.icon;
             const refundMeta = getRefundMeta(orderWithRefund);
             return (
               <div key={order.id} className="bg-white rounded-xl border border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
@@ -958,9 +1033,13 @@ export default function OrdersScreen({
                     <span className="text-xs font-black text-zinc-700">#{order.order_number}</span>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: sc.bg, color: sc.color }}>Operacao: {order.status}</span>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                    {false && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: isLevar ? '#fef3c7' : '#eff6ff', color: isLevar ? '#92400e' : '#1d4ed8' }}>
                       {isLevar ? '🛍️' : '🪑'}
+                    </span>}
+                    <span className={`inline-flex items-center gap-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${channelMeta.badgeClassName}`}>
+                      <ChannelIcon size={11} />
+                      {channelMeta.label}
                     </span>
                   </div>
                   {refundMeta && (

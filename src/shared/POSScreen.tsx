@@ -5,12 +5,13 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, OrderItem, PaymentMethod } from '../types';
-import { getSegCfg, categoryNeedsPrep } from '../config/segmentos';
+import { getSegCfg } from '../config/segmentos';
 import type { TipoItem } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
 import MesaPickerModal from '../segments/bar/MesaPickerModal';
 import { normalizeBarcode } from '../utils/barcode';
 import { openPrintPreview } from '../utils/print';
+import { resolveRequiresPreparation } from '../utils/preparation';
 
 // ── Constantes de estilo ──────────────────────────────────────────────────────
 const PAY_METHODS: PaymentMethod[] = ['Dinheiro', 'PIX', 'Débito', 'Crédito'];
@@ -535,7 +536,7 @@ export default function POSScreen({
                 const isRestaurante = ['Restaurante/Food', 'Bar/Pub'].includes(estabelecimentoSegmento || '');
                 const cartHasFood = cart.some(item => {
                   const prod = products.find(p => p.id === item.product_id);
-                  return prod ? categoryNeedsPrep(prod.category || '') : false;
+                  return prod ? resolveRequiresPreparation(prod) : false;
                 });
                 if (isRestaurante && cartHasFood && !cfg.usaTipoItem) { setShowTipoRetirada(true); }
                 else { finalizeOrder('local'); }

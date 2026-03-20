@@ -37,6 +37,7 @@ interface Pedido {
   pagamento_tipo?: string; pagamento_status?: string; taxa_entrega?: number;
   motoboy_id?: number; saiu_entrega_at?: string; entregue_at?: string;
   created_at: string; resumo_itens?: string; observation?: string;
+  delivery_checkout_snapshot?: DeliveryCheckoutSnapshot | string | null;
 }
 interface Motoboy { id: number; nome: string; cargo: string; }
 interface DeliveryConfig {
@@ -44,8 +45,13 @@ interface DeliveryConfig {
   tempo_preparo?: number; whatsapp?: string; pix_chave?: string;
   pix_nome?: string; pix_cidade?: string; pix_payload_estatico?: string;
   desconto_pix?: number; horario_abertura?: string; horario_fechamento?: string;
+  modelo_entrega?: 'bairro_fixo';
   bairros_atendidos?: string; valor_por_entrega?: number;
   zonas_entrega?: Array<{ nome: string; taxa: number }>;
+  desconto_primeiro_cliente_ativo?: boolean;
+  desconto_primeiro_cliente_tipo?: 'percentual'|'fixo'|'frete_gratis';
+  desconto_primeiro_cliente_valor?: number;
+  desconto_primeiro_cliente_min_pedido?: number;
   evolution_url?: string; evolution_token?: string; evolution_instance?: string;
 }
 interface Dashboard {
@@ -58,6 +64,20 @@ interface Cupom {
   id: number; codigo: string; tipo: 'percentual'|'fixo'|'frete_gratis';
   valor: number; min_pedido: number; limite_uso: number|null;
   uso_atual: number; ativo: number; validade: string|null; created_at: string;
+}
+interface DeliveryCheckoutSnapshot {
+  modelo_entrega?: 'bairro_fixo';
+  bairro_entrega?: string | null;
+  taxa_entrega?: number;
+  zona_entrega?: { nome: string; taxa: number } | null;
+  desconto_pix?: number;
+  desconto_cupom?: number;
+  desconto_primeiro_cliente?: number;
+  total?: number;
+  primeiro_cliente?: {
+    descricao?: string;
+    mensagem?: string;
+  } | null;
 }
 interface DeliveryCustomer {
   id: number;
@@ -104,6 +124,17 @@ const PAGS: Record<string, { label: string; icon: React.ReactNode }> = {
 
 const fmt      = (v: number) => `R$ ${(v||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 const fmtHour  = (d?: string) => d ? new Date(d.includes('T')?d:d.replace(' ','T')).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+const parseDeliveryCheckoutSnapshot = (value: Pedido['delivery_checkout_snapshot']) => {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as DeliveryCheckoutSnapshot;
+    } catch {
+      return null;
+    }
+  }
+  return value;
+};
 const CUSTOMER_ACTIVITY_CFG: Record<string, { label: string; tone: string; helper: string }> = {
   ativo:      { label: 'Ativo',      tone: 'bg-emerald-50 text-emerald-700 border-emerald-200', helper: 'Comprou recentemente' },
   em_risco:   { label: 'Em risco',   tone: 'bg-amber-50 text-amber-700 border-amber-200',       helper: 'Vale acompanhar' },
@@ -301,6 +332,7 @@ function TabPainel({ token }: { token: string }) {
     : statusFilter === 'Pedido Recebido' ? pedidos.filter(p => p.status==='Criado'||p.status==='Pedido Recebido')
     : pedidos.filter(p => p.status === statusFilter);
   const COLUNAS = ['Criado','Em Preparo','Pronto para Entrega','Saiu para Entrega'];
+  const selectedPedidoSnapshot = parseDeliveryCheckoutSnapshot(selectedPedido?.delivery_checkout_snapshot);
 
   return (
     <div className="space-y-5">
@@ -499,6 +531,41 @@ function TabPainel({ token }: { token: string }) {
                     </span>
                   </div>
                 </div>
+
+                {selectedPedidoSnapshot && (
+                  <div className="bg-zinc-50 rounded-xl p-3 space-y-1.5">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Resumo comercial</p>
+                    <p className="text-xs text-zinc-500">
+                      Modelo atual: bairro com taxa fixa
+                      {selectedPedidoSnapshot.zona_entrega?.nome
+                        ? ` · ${selectedPedidoSnapshot.zona_entrega.nome}`
+                        : selectedPedidoSnapshot.bairro_entrega
+                          ? ` · ${selectedPedidoSnapshot.bairro_entrega}`
+                          : ''}
+                    </p>
+                    {Number(selectedPedidoSnapshot.desconto_pix || 0) > 0 && (
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+                        <span>Desconto Pix</span>
+                        <span>-{fmt(Number(selectedPedidoSnapshot.desconto_pix || 0))}</span>
+                      </div>
+                    )}
+                    {Number(selectedPedidoSnapshot.desconto_cupom || 0) > 0 && (
+                      <div className="flex items-center justify-between text-xs text-emerald-600 font-semibold">
+                        <span>Cupom</span>
+                        <span>-{fmt(Number(selectedPedidoSnapshot.desconto_cupom || 0))}</span>
+                      </div>
+                    )}
+                    {Number(selectedPedidoSnapshot.desconto_primeiro_cliente || 0) > 0 && (
+                      <div className="flex items-center justify-between text-xs text-amber-600 font-semibold">
+                        <span>Primeira compra</span>
+                        <span>-{fmt(Number(selectedPedidoSnapshot.desconto_primeiro_cliente || 0))}</span>
+                      </div>
+                    )}
+                    {selectedPedidoSnapshot.primeiro_cliente?.mensagem && (
+                      <p className="text-[11px] text-zinc-500">{selectedPedidoSnapshot.primeiro_cliente.mensagem}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Mapa para motoboy */}
                 {selectedPedido.endereco && (() => {
@@ -1250,6 +1317,13 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
         <div className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-5">
           <h3 className="text-base font-black text-zinc-900">Configurações gerais</h3>
 
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            <p className="font-bold text-blue-900">Modelo atual da entrega</p>
+            <p className="text-xs text-blue-700 mt-1">
+              Nesta fase o FlowPDV calcula o delivery por bairro com taxa fixa. A taxa padrão abaixo entra apenas quando nenhum bairro cadastrado casar com o endereço do cliente. Não há cálculo por km/raio ainda.
+            </p>
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <p className="font-bold text-zinc-800">Delivery ativo</p>
@@ -1262,12 +1336,65 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Taxa de entrega (R$)" value={String(cfg.taxa_entrega||'')} onChange={v=>setCfg(c=>({...c,taxa_entrega:parseFloat(v)||0}))} type="number" placeholder="0"/>
+            <Field label="Taxa padrão (R$)" value={String(cfg.taxa_entrega||'')} onChange={v=>setCfg(c=>({...c,taxa_entrega:parseFloat(v)||0}))} type="number" placeholder="0"/>
             <Field label="Pedido mínimo (R$)"   value={String(cfg.pedido_minimo||'')} onChange={v=>setCfg(c=>({...c,pedido_minimo:parseFloat(v)||0}))} type="number" placeholder="0"/>
             <Field label="Tempo de preparo (min)" value={String(cfg.tempo_preparo||'')} onChange={v=>setCfg(c=>({...c,tempo_preparo:parseInt(v)||0}))} type="number" placeholder="40"/>
             <Field label="Desconto Pix (%)"     value={String(cfg.desconto_pix||'')} onChange={v=>setCfg(c=>({...c,desconto_pix:parseFloat(v)||0}))} type="number" placeholder="0"/>
             <Field label="Horário abertura"     value={cfg.horario_abertura||''} onChange={v=>setCfg(c=>({...c,horario_abertura:v}))} type="time"/>
             <Field label="Horário fechamento"   value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-bold text-zinc-800">Desconto automÃ¡tico de primeira compra</p>
+                <p className="text-xs text-zinc-500">Calculado no backend e aplicado apenas na primeira compra válida do cliente, entrando corretamente no total final do pedido.</p>
+              </div>
+              <button
+                onClick={() => setCfg(c=>({...c,desconto_primeiro_cliente_ativo:!c.desconto_primeiro_cliente_ativo}))}
+                className={`w-12 h-6 rounded-full transition-all relative ${cfg.desconto_primeiro_cliente_ativo?'bg-emerald-500':'bg-zinc-200'}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${cfg.desconto_primeiro_cliente_ativo?'left-6':'left-0.5'}`}/>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tipo do desconto</label>
+                <select
+                  value={cfg.desconto_primeiro_cliente_tipo || 'percentual'}
+                  disabled={!cfg.desconto_primeiro_cliente_ativo}
+                  onChange={e=>setCfg(c=>({...c,desconto_primeiro_cliente_tipo:e.target.value as DeliveryConfig['desconto_primeiro_cliente_tipo']}))}
+                  className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400 disabled:bg-zinc-100 disabled:text-zinc-400"
+                >
+                  <option value="percentual">% Percentual</option>
+                  <option value="fixo">R$ Valor fixo</option>
+                  <option value="frete_gratis">Frete grÃ¡tis</option>
+                </select>
+              </div>
+
+              {cfg.desconto_primeiro_cliente_tipo !== 'frete_gratis' ? (
+                <Field
+                  label={cfg.desconto_primeiro_cliente_tipo === 'fixo' ? 'Valor do desconto (R$)' : 'Valor do desconto (%)'}
+                  value={String(cfg.desconto_primeiro_cliente_valor||'')}
+                  onChange={v=>setCfg(c=>({...c,desconto_primeiro_cliente_valor:parseFloat(v)||0}))}
+                  type="number"
+                  placeholder="0"
+                />
+              ) : (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700 flex items-center">
+                  O frete da primeira compra serÃ¡ zerado quando houver taxa.
+                </div>
+              )}
+
+              <Field
+                label="Pedido mÃ­nimo para aplicar (R$)"
+                value={String(cfg.desconto_primeiro_cliente_min_pedido||'')}
+                onChange={v=>setCfg(c=>({...c,desconto_primeiro_cliente_min_pedido:parseFloat(v)||0}))}
+                type="number"
+                placeholder="0"
+              />
+            </div>
           </div>
 
           <div>
@@ -1317,8 +1444,8 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       {activeSection === 'zonas' && (
         <div className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-4">
           <div>
-            <h3 className="text-base font-black text-zinc-900">Zonas de entrega</h3>
-            <p className="text-xs text-zinc-400 mt-0.5">Configure bairros atendidos e a taxa de cada um. A taxa da zona substitui a taxa padrão.</p>
+            <h3 className="text-base font-black text-zinc-900">Bairros e taxas fixas</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">Modelo atual: bairro cadastrado = taxa fixa. Se nenhum bairro casar, o sistema usa a taxa padrão de {fmt(Number(cfg.taxa_entrega || 0))}. Sem km/raio nesta fase.</p>
           </div>
 
           {/* Lista de zonas */}
@@ -1340,7 +1467,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
           {/* Adicionar zona */}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Bairro/Zona</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Bairro atendido</label>
               <input value={novaZona.nome} onChange={e=>setNovaZona(v=>({...v,nome:e.target.value}))}
                 placeholder="Ex: Centro, Vila X..."
                 className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
@@ -1356,7 +1483,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
               <Plus size={14}/> Adicionar
             </button>
           </div>
-          {zonas.length===0&&<p className="text-xs text-zinc-400">Sem zonas configuradas. Taxa padrão aplica-se a todas as entregas.</p>}
+          {zonas.length===0&&<p className="text-xs text-zinc-400">Nenhum bairro com taxa fixa cadastrado ainda. A taxa padrão será usada em todas as entregas.</p>}
         </div>
       )}
 

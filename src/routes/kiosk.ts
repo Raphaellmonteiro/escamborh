@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { q1, qAll, qRun, qInsert } from '../db';
 import { publicRateLimit } from '../middleware';
+import { resolveRequiresPreparation } from '../utils/preparation';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -450,8 +451,22 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const deduped = Array.from(seen.values()).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
       const orders = [];
       for (const o of deduped) {
-        const items = await qAll('SELECT i.quantity,i.type,i.price_at_time,p.name as product_name FROM itens_pedido i LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE i.order_id=? AND i.tenant_id=?', [o.id, tenant.id]);
-        orders.push({ ...o, items });
+        const items = await qAll('SELECT i.quantity,i.type,i.price_at_time,p.name as product_name,p.category as product_category,p.requires_preparation FROM itens_pedido i LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE i.order_id=? AND i.tenant_id=?', [o.id, tenant.id]);
+        const prepItems = items
+          .filter((item: any) =>
+            resolveRequiresPreparation({
+              name: item.product_name,
+              category: item.product_category,
+              requires_preparation: item.requires_preparation,
+            })
+          )
+          .map((item: any) => ({
+            quantity: item.quantity,
+            type: item.type,
+            price_at_time: item.price_at_time,
+            product_name: item.product_name,
+          }));
+        if (prepItems.length > 0) orders.push({ ...o, items: prepItems });
       }
       res.json({ estabelecimento:tenant.nome_estabelecimento, orders });
     } catch(e: any) { res.status(500).json({ error:e.message }); }

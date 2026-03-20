@@ -13,6 +13,7 @@ import {
 } from '../utils/mesaFinance';
 import { getProfilePaperWidthMm } from '../utils/printProfiles';
 import { gerarCupomHtml } from '../utils/printTemplates';
+import { resolveRequiresPreparation } from '../utils/preparation';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -181,10 +182,8 @@ async function ajustarEstoque(tenantId: number, productId: number, qtd: number, 
 // â”€â”€ Sincroniza item entre comanda e pedido KDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function syncKdsItem(tenantId: number, mesaId: string|number, productId: number, diffQtd: number, priceAtTime: number, mode: 'add'|'remove') {
   try {
-    const NO_PREP = ['bebida','refrigerante','suco','cerveja','chopp','Ã¡gua','agua','energetico','drink','vinho','licor','whisky','dose','balde','ice'];
     const produto = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [productId, tenantId]);
-    const cat = (produto?.category||'').toLowerCase();
-    const needsPrep = cat==='' ? true : !NO_PREP.some((kw: string) => cat.includes(kw));
+    const needsPrep = produto ? resolveRequiresPreparation(produto) : true;
     if (!needsPrep) return;
     const mesa = await q1('SELECT numero FROM mesas WHERE id=? AND tenant_id=?', [mesaId, tenantId]);
     if (!mesa) return;
@@ -584,14 +583,16 @@ export function createMesasRouter() {
 
         const pedidoId = await txInsert(
           client,
-          `INSERT INTO pedidos (
-             order_number,status,total_amount,observation,receipt_text,tenant_id,canal,tipo_retirada,
-             mesa_id,comanda_id,subtotal,taxa_servico_ativa,taxa_servico_percentual,valor_taxa_servico,
-             couvert_ativo,couvert_valor_unitario,couvert_quantidade_pessoas,valor_couvert,total_extras
-           ) VALUES (
-             ?,'Concluido',?,?,?,?,?,?,?,
-             ?,?,?,?,?,?,?,?,?,?,?
-           )`,
+           `INSERT INTO pedidos (
+              order_number,status,total_amount,observation,receipt_text,tenant_id,canal,tipo_retirada,
+              mesa_id,comanda_id,subtotal,taxa_servico_ativa,taxa_servico_percentual,valor_taxa_servico,
+              couvert_ativo,couvert_valor_unitario,couvert_quantidade_pessoas,valor_couvert,total_extras
+            ) VALUES (
+             ?,
+             'Concluido',
+             ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?
+            )`,
           [
             orderNumber,
             snapshot.total,
@@ -671,7 +672,13 @@ export function createMesasRouter() {
       });
 
       return res.status(result.status).json(result.body);
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) {
+      return handleMesasRouteError(res, e, 'mesas.finalizarComanda', {
+        tenantId: req.tenantId,
+        mesaId: req.params.id,
+        paymentCount: Array.isArray(req.body?.payments) ? req.body.payments.length : 0,
+      });
+    }
   });
 
   return router;
