@@ -27,7 +27,7 @@ export function createExpensesRouter() {
   // CRIAR DESPESA
   router.post('/', async (req: TenantRequest, res: Response) => {
     try {
-      const { description, amount, category, payment_method, observation } = req.body;
+      const { description, amount, category } = req.body;
 
       if (!description?.trim()) {
         return res.status(400).json({ success: false, error: 'Descrição é obrigatória' });
@@ -39,14 +39,12 @@ export function createExpensesRouter() {
 
       const id = await qInsert(
         `INSERT INTO despesas
-        (description, amount, category, payment_method, observation, tenant_id)
-        VALUES (?, ?, ?, ?, ?, ?)`,
+        (description, amount, category, tenant_id)
+        VALUES (?, ?, ?, ?)`,
         [
           description.trim(),
           Number(amount),
           category || null,
-          payment_method || null,
-          observation || null,
           req.tenantId,
         ]
       );
