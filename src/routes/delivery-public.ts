@@ -8,7 +8,6 @@ import { publicRateLimit, authDeliveryCliente } from '../middleware';
 import { requireProductInventoryTargets } from '../services/stockIdentification';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
-import { pool } from '../db';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -1043,54 +1042,108 @@ export function createDeliveryPublicRouter() {
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
+  });
 
-// Rota para buscar sugestões de produtos (Camada 1)
-  router.post('/suggestions', async (req: any, res: any) => {
+  router.post('/:slug/suggestions', publicRateLimit, async (req, res) => {
     try {
-      // Ajuste como o tenantId chega na sua rota (req.tenantId se for autenticada, ou via slug/body se for pública)
-      const tenantId = req.tenantId || req.body.tenantId; 
-      const { productIds } = req.body;
+      const tenant = await getTenant(req.params.slug);
+      if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
 
-      if (!Array.isArray(productIds) || productIds.length === 0) {
-        return res.json({ suggestions: [] });
+      const rawIds = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+      const productIds = [...new Set(
+        rawIds
+          .map((id: any) => Number(id))
+          .filter((id: number) => Number.isInteger(id) && id > 0)
+      )];
+      if (!productIds.length) {
+        return res.json([]);
       }
 
-      // Query otimizada para PostgreSQL com sintaxe de Array (ANY / ALL)
-      const result = await pool.query(
-        `
-        SELECT 
-          ps.produto_sugerido_id,
-          MAX(ps.prioridade) AS prioridade,
-          p.id,
-          p.name,
-          p.price,
-          p.category,
-          p.photo_url AS image,
-          p.active AS ativo
-        FROM produto_sugestoes ps
-        JOIN produtos p ON p.id = ps.produto_sugerido_id
-        WHERE 
-          ps.tenant_id = $1
-          AND ps.ativo = 1
-          AND p.active = 1
-          AND ps.produto_id = ANY($2::int[])
-          AND ps.produto_sugerido_id <> ALL($2::int[])
-        GROUP BY ps.produto_sugerido_id, p.id, p.name, p.price, p.category, p.photo_url, p.active
-        ORDER BY MAX(ps.prioridade) DESC, p.name ASC
-        LIMIT 3
-        `,
-        [tenantId, productIds]
+      const sourcePlaceholders = productIds.map(() => '?').join(',');
+      const excludePlaceholders = productIds.map(() => '?').join(',');
+      const manualRows = await qAll(
+        `SELECT
+           p.id,
+           p.name,
+           p.price,
+           p.category,
+           p.photo_url,
+           MAX(ps.prioridade) AS prioridade
+         FROM produto_sugestoes ps
+         JOIN produtos p
+           ON p.id = ps.produto_sugerido_id
+          AND p.tenant_id = ps.tenant_id
+         WHERE ps.tenant_id = ?
+           AND ps.ativo = 1
+           AND p.active = 1
+           AND ps.produto_id IN (${sourcePlaceholders})
+           AND ps.produto_id <> ps.produto_sugerido_id
+           AND ps.produto_sugerido_id NOT IN (${excludePlaceholders})
+         GROUP BY p.id, p.name, p.price, p.category, p.photo_url
+         ORDER BY MAX(ps.prioridade) DESC, p.name ASC
+         LIMIT 3`,
+        [tenant.id, ...productIds, ...productIds]
       );
 
-      return res.json({ suggestions: result.rows });
+      const suggestions = [...manualRows];
+      if (suggestions.length < 3) {
+        const cartProfile = await qAll(
+          `SELECT production_type, category
+           FROM produtos
+           WHERE tenant_id = ?
+             AND id IN (${sourcePlaceholders})`,
+          [tenant.id, ...productIds]
+        );
+
+        const hasKitchen = cartProfile.some((p: any) => String(p.production_type || '').toLowerCase() === 'kitchen');
+        const hasDrink = cartProfile.some((p: any) => {
+          const productionType = String(p.production_type || '').toLowerCase();
+          const category = String(p.category || '').toLowerCase();
+          return productionType === 'bar' || category.includes('bebida');
+        });
+
+        if (hasKitchen || hasDrink) {
+          const alreadySuggestedIds = suggestions.map((s: any) => Number(s.id)).filter((id: number) => Number.isInteger(id) && id > 0);
+          const excludedIds = [...new Set([...productIds, ...alreadySuggestedIds])];
+          const excludedPlaceholders = excludedIds.map(() => '?').join(',');
+          const fallbackFilters: string[] = [];
+
+          if (hasKitchen) {
+            fallbackFilters.push(`(LOWER(COALESCE(p.production_type, '')) = 'bar' OR LOWER(COALESCE(p.category, '')) LIKE '%bebida%')`);
+          }
+          if (hasDrink) {
+            fallbackFilters.push(`LOWER(COALESCE(p.production_type, '')) = 'kitchen'`);
+          }
+
+          if (fallbackFilters.length > 0) {
+            const missing = 3 - suggestions.length;
+            const fallbackRows = await qAll(
+              `SELECT
+                 p.id,
+                 p.name,
+                 p.price,
+                 p.category,
+                 p.photo_url,
+                 0 AS prioridade
+               FROM produtos p
+               WHERE p.tenant_id = ?
+                 AND p.active = 1
+                 AND p.id NOT IN (${excludedPlaceholders})
+                 AND (${fallbackFilters.join(' OR ')})
+               ORDER BY p.name ASC
+               LIMIT ?`,
+              [tenant.id, ...excludedIds, missing]
+            );
+            suggestions.push(...fallbackRows);
+          }
+        }
+      }
+
+      return res.json(suggestions.slice(0, 3));
     } catch (error) {
       console.error('Erro ao buscar sugestões:', error);
       return res.status(500).json({ error: 'Erro interno ao buscar sugestões' });
     }
-  });
-
-
-
   });
 
   return router;

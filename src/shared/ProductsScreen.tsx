@@ -36,6 +36,14 @@ interface ProductExtended extends Product {
   disponivel_de?: string;
   disponivel_ate?: string;
 }
+interface ProductSuggestion {
+  id: number;
+  name: string;
+  price: number;
+  category: string;
+  photo_url?: string;
+  prioridade: number;
+}
 
 type ViewMode = 'list' | 'grid';
 
@@ -82,6 +90,10 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [opcoesProdutoId, setOpcoesProdutoId] = useState<number|null>(null); // produto com modal de opções aberto
+  const [productSuggestions, setProductSuggestions] = useState<ProductSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestedProductId, setSuggestedProductId] = useState<number>(0);
+  const [suggestionPriority, setSuggestionPriority] = useState<number>(0);
 
   // ── filtros + view ───────────────────────────────────────────
   const [busca, setBusca]                     = useState('');
@@ -141,6 +153,52 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       setEditing(null); setPendingPhoto(null); onUpdate();
     } catch { alert('Erro ao salvar produto.'); }
     finally { setUploadingPhoto(false); }
+  };
+
+  const loadProductSuggestions = async (productId: number) => {
+    setLoadingSuggestions(true);
+    try {
+      const r = await fetch(`/api/products/${productId}/suggestions`, { headers: hdrs });
+      setProductSuggestions(r.ok ? await r.json() : []);
+    } catch {
+      setProductSuggestions([]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const handleAddSuggestion = async () => {
+    if (!editing?.id || !suggestedProductId) return;
+    try {
+      const r = await fetch(`/api/products/${editing.id}/suggestions`, {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({ suggestedProductId, priority: suggestionPriority }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        alert(d.error || 'Nao foi possivel adicionar a sugestao');
+        return;
+      }
+      setSuggestedProductId(0);
+      setSuggestionPriority(0);
+      loadProductSuggestions(editing.id);
+    } catch {
+      alert('Erro ao adicionar sugestao.');
+    }
+  };
+
+  const handleRemoveSuggestion = async (id: number) => {
+    if (!editing?.id) return;
+    try {
+      await fetch(`/api/products/${editing.id}/suggestions/${id}`, {
+        method: 'DELETE',
+        headers: hdrs,
+      });
+      loadProductSuggestions(editing.id);
+    } catch {
+      alert('Erro ao remover sugestao.');
+    }
   };
 
   // ── duplicar ─────────────────────────────────────────────────
@@ -276,11 +334,25 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   }, [products, busca, catFiltro, statusFiltro, destaqueFiltro]);
 
   const catList = useMemo(() => [...new Set(products.map(p => p.category))].sort(), [products]);
+  const availableSuggestionProducts = useMemo(
+    () => products.filter((p) => p.id !== editing?.id),
+    [products, editing?.id]
+  );
 
   const margem = (p?: Partial<ProductExtended>) => {
     if (!p?.price || !p?.custo || p.custo <= 0) return null;
     return ((p.price - p.custo) / p.price) * 100;
   };
+
+  useEffect(() => {
+    if (!editing?.id) {
+      setProductSuggestions([]);
+      setSuggestedProductId(0);
+      setSuggestionPriority(0);
+      return;
+    }
+    loadProductSuggestions(editing.id);
+  }, [editing?.id]);
 
   // ════════════════════════════════════════════════════════════
   // RENDER
@@ -634,6 +706,67 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     </label>
                   )}
                 </div>
+
+                {editing.id && (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-800">Sugestões de complementos</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Cadastre produtos sugeridos para este item.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {loadingSuggestions ? (
+                        <p className="text-xs text-zinc-400">Carregando sugestões...</p>
+                      ) : productSuggestions.length === 0 ? (
+                        <p className="text-xs text-zinc-400">Nenhuma sugestão cadastrada.</p>
+                      ) : (
+                        productSuggestions.map((s) => (
+                          <div key={s.id} className="flex items-center justify-between bg-white border border-zinc-200 rounded-xl px-3 py-2">
+                            <div>
+                              <p className="text-sm font-bold text-zinc-800">{s.name}</p>
+                              <p className="text-xs text-zinc-500">{fmtR$(s.price)} · prioridade {s.prioridade}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSuggestion(s.id)}
+                              className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <select
+                        value={suggestedProductId || ''}
+                        onChange={(e) => setSuggestedProductId(Number(e.target.value) || 0)}
+                        className="sm:col-span-2 px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                      >
+                        <option value="">Selecionar produto sugerido</option>
+                        {availableSuggestionProducts.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        value={suggestionPriority}
+                        onChange={(e) => setSuggestionPriority(parseInt(e.target.value, 10) || 0)}
+                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        placeholder="Prioridade"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSuggestion}
+                      disabled={!suggestedProductId}
+                      className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-xl text-sm font-bold transition-all"
+                    >
+                      Adicionar sugestão
+                    </button>
+                  </div>
+                )}
 
                 {/* Toggles */}
                 <div className="flex gap-4">

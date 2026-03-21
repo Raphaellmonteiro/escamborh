@@ -83,6 +83,199 @@ export function createProductsRouter() {
     res.json({ found: true, product });
   });
 
+  router.post('/suggestions', async (req: Request, res) => {
+    try {
+      const rawIds = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+      const productIds = [...new Set(
+        rawIds
+          .map((id: any) => Number(id))
+          .filter((id: number) => Number.isInteger(id) && id > 0)
+      )];
+
+      if (!productIds.length) return res.json([]);
+
+      const sourcePlaceholders = productIds.map(() => '?').join(',');
+      const excludePlaceholders = productIds.map(() => '?').join(',');
+      const manualRows = await qAll(
+        `SELECT
+           p.id,
+           p.name,
+           p.price,
+           p.category,
+           p.photo_url,
+           MAX(ps.prioridade) AS prioridade
+         FROM produto_sugestoes ps
+         JOIN produtos p
+           ON p.id = ps.produto_sugerido_id
+          AND p.tenant_id = ps.tenant_id
+         WHERE ps.tenant_id = ?
+           AND ps.ativo = 1
+           AND p.active = 1
+           AND ps.produto_id IN (${sourcePlaceholders})
+           AND ps.produto_id <> ps.produto_sugerido_id
+           AND ps.produto_sugerido_id NOT IN (${excludePlaceholders})
+         GROUP BY p.id, p.name, p.price, p.category, p.photo_url
+         ORDER BY MAX(ps.prioridade) DESC, p.name ASC
+         LIMIT 3`,
+        [req.tenantId, ...productIds, ...productIds]
+      );
+
+      const suggestions = [...manualRows];
+      if (suggestions.length < 3) {
+        const cartProfile = await qAll(
+          `SELECT production_type, category
+           FROM produtos
+           WHERE tenant_id = ?
+             AND id IN (${sourcePlaceholders})`,
+          [req.tenantId, ...productIds]
+        );
+
+        const hasKitchen = cartProfile.some((p: any) => String(p.production_type || '').toLowerCase() === 'kitchen');
+        const hasDrink = cartProfile.some((p: any) => {
+          const productionType = String(p.production_type || '').toLowerCase();
+          const category = String(p.category || '').toLowerCase();
+          return productionType === 'bar' || category.includes('bebida');
+        });
+
+        if (hasKitchen || hasDrink) {
+          const alreadySuggestedIds = suggestions.map((s: any) => Number(s.id)).filter((id: number) => Number.isInteger(id) && id > 0);
+          const excludedIds = [...new Set([...productIds, ...alreadySuggestedIds])];
+          const excludedPlaceholders = excludedIds.map(() => '?').join(',');
+          const fallbackFilters: string[] = [];
+
+          if (hasKitchen) {
+            fallbackFilters.push(`(LOWER(COALESCE(p.production_type, '')) = 'bar' OR LOWER(COALESCE(p.category, '')) LIKE '%bebida%')`);
+          }
+          if (hasDrink) {
+            fallbackFilters.push(`LOWER(COALESCE(p.production_type, '')) = 'kitchen'`);
+          }
+
+          if (fallbackFilters.length > 0) {
+            const missing = 3 - suggestions.length;
+            const fallbackRows = await qAll(
+              `SELECT
+                 p.id,
+                 p.name,
+                 p.price,
+                 p.category,
+                 p.photo_url,
+                 0 AS prioridade
+               FROM produtos p
+               WHERE p.tenant_id = ?
+                 AND p.active = 1
+                 AND p.id NOT IN (${excludedPlaceholders})
+                 AND (${fallbackFilters.join(' OR ')})
+               ORDER BY p.name ASC
+               LIMIT ?`,
+              [req.tenantId, ...excludedIds, missing]
+            );
+            suggestions.push(...fallbackRows);
+          }
+        }
+      }
+
+      res.json(suggestions.slice(0, 3));
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.get('/:id/suggestions', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+
+      const rows = await qAll(
+        `SELECT
+           ps.produto_sugerido_id AS id,
+           p.name,
+           p.price,
+           p.category,
+           p.photo_url,
+           ps.prioridade
+         FROM produto_sugestoes ps
+         JOIN produtos p
+           ON p.id = ps.produto_sugerido_id
+          AND p.tenant_id = ps.tenant_id
+         WHERE ps.tenant_id = ?
+           AND ps.produto_id = ?
+           AND ps.ativo = 1
+         ORDER BY ps.prioridade DESC, p.name ASC`,
+        [req.tenantId, productId]
+      );
+
+      res.json(rows);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.post('/:id/suggestions', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const suggestedProductId = Number(req.body?.suggestedProductId);
+      const priority = Number(req.body?.priority ?? 0);
+
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+      if (!Number.isInteger(suggestedProductId) || suggestedProductId <= 0) {
+        return res.status(400).json({ error: 'Produto sugerido invalido' });
+      }
+      if (productId === suggestedProductId) {
+        return res.status(400).json({ error: 'Nao e permitido sugerir o proprio produto' });
+      }
+
+      const [origem, sugerido] = await Promise.all([
+        q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]),
+        q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [suggestedProductId, req.tenantId]),
+      ]);
+      if (!origem || !sugerido) {
+        return res.status(404).json({ error: 'Produto nao encontrado' });
+      }
+
+      const existente = await q1(
+        `SELECT id
+         FROM produto_sugestoes
+         WHERE tenant_id=?
+           AND produto_id=?
+           AND produto_sugerido_id=?
+         LIMIT 1`,
+        [req.tenantId, productId, suggestedProductId]
+      );
+      if (existente) {
+        return res.status(400).json({ error: 'Sugestao ja cadastrada' });
+      }
+
+      await qRun(
+        `INSERT INTO produto_sugestoes
+          (tenant_id, produto_id, produto_sugerido_id, prioridade, ativo)
+         VALUES (?, ?, ?, ?, 1)`,
+        [req.tenantId, productId, suggestedProductId, Number.isFinite(priority) ? priority : 0]
+      );
+
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.delete('/:id/suggestions/:suggestedId', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const suggestedId = Number(req.params.suggestedId);
+      if (!Number.isInteger(productId) || productId <= 0 || !Number.isInteger(suggestedId) || suggestedId <= 0) {
+        return res.status(400).json({ error: 'Parametros invalidos' });
+      }
+
+      await qRun(
+        `DELETE FROM produto_sugestoes
+         WHERE tenant_id=?
+           AND produto_id=?
+           AND produto_sugerido_id=?`,
+        [req.tenantId, productId, suggestedId]
+      );
+
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   router.post('/', async (req: Request, res) => {
     try {
       const {

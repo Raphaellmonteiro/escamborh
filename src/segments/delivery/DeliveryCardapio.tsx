@@ -495,7 +495,49 @@ export default function DeliveryCardapio() {
   if (tela==='historico') return <TelaHistorico slug={slug} token={cliToken} onBack={()=>setTela('conta')} onRepetir={(its)=>{its.forEach(i=>addCartItem({...i,qty:1,preco_final:i.price,cart_key:`${i.id}_`,selecoes:{}}));setTela('cart');}} categorias={categorias} />;
   if (tela==='enderecos') return <TelaEnderecos slug={slug} token={cliToken} onBack={()=>setTela('conta')} onNovo={()=>setTela('novo_endereco')} />;
   if (tela==='novo_endereco') return <TelaNovo Endereco slug={slug} token={cliToken} onBack={()=>setTela('enderecos')} onSaved={()=>setTela('enderecos')} />;
-  if (tela==='cart') return <TelaCart slug={slug} cliToken={cliToken} cart={cart} config={config} tipoAtendimento={tipoAtendimento || 'entrega'} onAdd={(p)=>addCartItem({...p,qty:1})} onRemove={(key)=>removeCart(key)} onBack={()=>setTela('cardapio')} onCheckout={()=>{if(!cliente){setTela('identificar');return;}setTela('checkout');}} />;
+  if (tela==='cart') return (
+    <>
+      <TelaCart
+        slug={slug}
+        cliToken={cliToken}
+        cart={cart}
+        config={config}
+        tipoAtendimento={tipoAtendimento || 'entrega'}
+        onAdd={(p)=>addCartItem({...p,qty:1})}
+        onAddSuggestion={(item:any)=>{
+          const produtoCompleto = categorias
+            .flatMap(c => c.itens)
+            .find(p => Number(p.id) === Number(item?.id));
+          if (produtoCompleto) {
+            handleAddProduto(produtoCompleto);
+            return;
+          }
+          console.warn('[delivery-suggestions] Produto sugerido nao encontrado no cardapio carregado:', {
+            suggestedId: item?.id,
+            suggestedName: item?.name,
+          });
+          addCartItem({
+            ...item,
+            qty: 1,
+            preco_final: Number(item?.price || 0),
+            cart_key: `${item?.id}_`,
+          } as CartItem);
+        }}
+        onRemove={(key)=>removeCart(key)}
+        onBack={()=>setTela('cardapio')}
+        onCheckout={()=>{if(!cliente){setTela('identificar');return;}setTela('checkout');}}
+      />
+      <AnimatePresence>
+        {produtoModal && (
+          <ModalOpcoes
+            produto={produtoModal}
+            onClose={()=>setProdutoModal(null)}
+            onAdicionar={(item)=>{ addCartItem(item); setProdutoModal(null); }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
   if (tela==='checkout') return <TelaCheckout slug={slug} cart={cart} config={config} cliToken={cliToken} cliente={cliente!} tipoAtendimento={tipoAtendimento || 'entrega'} onBack={()=>setTela('cart')} onSuccess={onPedidoOk} />;
 
   return (
@@ -951,12 +993,13 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CARRINHO
 // ═══════════════════════════════════════════════════════════════════════════════
-function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemove, onBack, onCheckout }: {
+function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddSuggestion, onRemove, onBack, onCheckout }: {
   slug: string;
   cliToken: string | null;
   cart: CartItem[]; config: Config;
   tipoAtendimento: TipoAtendimento;
   onAdd: (p: CartItem)=>void; onRemove: (key: string)=>void;
+  onAddSuggestion: (item: any)=>void;
   onBack: ()=>void; onCheckout: ()=>void;
 }) {
   const sub=cart.reduce((a,i)=>a+i.preco_final*i.qty,0);
@@ -966,26 +1009,38 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemo
   const resumoReqRef = useRef(0);
 
 // --- INÍCIO DA CAMADA 1: SUGESTÕES ---
-  const [sugestoes, setSugestoes] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   useEffect(() => {
-    if (!slug || cart.length === 0) {
-      setSugestoes([]);
+    const productIds = Array.from(new Set(cart.map(i => i.id)));
+    if (productIds.length === 0) {
+      setSuggestions([]);
+      setLoadingSuggestions(false);
       return;
     }
-    // Extrai apenas os IDs únicos dos produtos no carrinho
-    const productIds = Array.from(new Set(cart.map(i => i.id)));
+
+    let cancelled = false;
+    setLoadingSuggestions(true);
 
     fetch(`/public/delivery/${slug}/suggestions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productIds })
+      body: JSON.stringify({ productIds }),
     })
-    .then(r => r.ok ? r.json() : null)
-    .then(d => {
-      if (d && d.suggestions) setSugestoes(d.suggestions);
-    })
-    .catch(console.error);
+      .then(r => (r.ok ? r.json() : []))
+      .then((d) => {
+        if (cancelled) return;
+        setSuggestions(Array.isArray(d) ? d.slice(0, 3) : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSuggestions(false);
+      });
+
+    return () => { cancelled = true; };
   }, [slug, cart]);
   // --- FIM DA CAMADA 1: SUGESTÕES ---
 
@@ -1067,35 +1122,35 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemo
         ))}
 
         {/* --- INÍCIO DO VISUAL DE SUGESTÕES --- */}
-        {sugestoes.length > 0 && (
+        {!loadingSuggestions && suggestions.length > 0 && (
           <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-            <p className="font-black text-zinc-900 text-sm flex items-center gap-2">
-              ✨ Combina com seu pedido
-            </p>
+            <p className="font-black text-zinc-900 text-sm">Combina com seu pedido</p>
             <div className="space-y-2">
-              {sugestoes.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <div className="flex items-center gap-3">
-                    {item.image ? (
-                      <img src={item.image} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
+              {suggestions.slice(0, 3).map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {item.photo_url ? (
+                      <img
+                        src={item.photo_url}
+                        alt={item.name}
+                        className="w-12 h-12 rounded-lg object-cover shrink-0 border border-zinc-200"
+                      />
                     ) : (
-                      <div className="w-10 h-10 bg-zinc-200 rounded-lg flex items-center justify-center text-lg">🍔</div>
+                      <div className="w-12 h-12 rounded-lg bg-zinc-200 text-zinc-500 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        ITEM
+                      </div>
                     )}
-                    <div>
-                      <p className="text-sm font-bold text-zinc-800">{item.name}</p>
-                      <p className="text-xs font-black text-emerald-600">
-                        {fmt(item.price)}
-                      </p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-zinc-800 leading-tight truncate">{item.name}</p>
+                      {item.category && (
+                        <p className="text-[11px] text-zinc-500 truncate">{item.category}</p>
+                      )}
+                      <p className="text-xs font-black text-emerald-600 mt-0.5">{fmt(Number(item.price || 0))}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => {
-                      onAdd({
-                        ...item,
-                        qty: 1,
-                        preco_final: item.price,
-                        cart_key: `${item.id}_`
-                      } as any);
+                      onAddSuggestion(item);
                     }}
                     className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-700 transition-colors"
                   >
