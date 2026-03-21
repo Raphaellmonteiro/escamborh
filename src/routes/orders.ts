@@ -7,6 +7,7 @@ import {
   getOrders,
   refundOrder,
   updateOrderStatus,
+  confirmQrOrder,
 } from '../services/ordersService';
 
 type TenantRequest = Request & {
@@ -76,6 +77,21 @@ export function createOrdersRouter() {
       res.json({ success: true, order });
     })
   );
+
+// Rota para confirmar pedido via QR Code
+  router.post('/:id/confirm', async (req: any, res: any) => {
+    try {
+      const status = await confirmQrOrder({
+        orderId: req.params.id,
+        tenantId: req.tenantId,
+        userId: req.userId, // caso tenha o ID de quem clicou
+      });
+      res.json({ success: true, status });
+    } catch (error: any) {
+      const status = error.statusCode || 500;
+      res.status(status).json({ error: error.message });
+    }
+  });
 
   router.get(
     '/:id/history',

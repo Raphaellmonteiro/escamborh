@@ -23,6 +23,82 @@ function buildOperationalKdsOrderClause(alias?: string) {
   return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'entregue' AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado' AND LOWER(COALESCE(${prefix}status,'')) NOT LIKE 'conclu%'`;
 }
 
+async function syncMesaOrderVisibility(
+  tenantId: number,
+  mesa: { id: number; numero: number },
+  comandaId: number,
+  itens: Array<{ product_id: number; quantity: number; price_at_time: number }>
+) {
+  const mesaLabel = `Mesa ${mesa.numero}`;
+  let pedido = await q1(
+    `SELECT id
+     FROM pedidos
+     WHERE tenant_id=?
+       AND observation=?
+       AND ${buildOperationalKdsOrderClause()}
+     ORDER BY id DESC
+     LIMIT 1`,
+    [tenantId, mesaLabel]
+  );
+
+  if (!pedido) {
+    const dateObj = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
+    const y = String(dateObj.getFullYear()).slice(-2);
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    const orderDate = `${y}${m}${d}`;
+    const maxOrder = await q1('SELECT MAX(id) as maxId FROM pedidos WHERE tenant_id=?', [tenantId]);
+    const orderNumber = `${orderDate}-${tenantId}-KDS-${((maxOrder?.maxId || 0) + 1).toString().padStart(4, '0')}-${Date.now()}`;
+
+    const pedidoId = await qInsert(
+      `INSERT INTO pedidos
+        (order_number,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal,status,mesa_id,comanda_id)
+       VALUES (?,?,?,?,?,'mesa','mesa','Aguardando confirmação',?,?)`,
+      [orderNumber, 0, mesaLabel, tenantId, mesa.numero, mesa.id, comandaId]
+    );
+
+    pedido = { id: pedidoId };
+  }
+
+  let totalDelta = 0;
+
+  for (const item of itens) {
+    const quantity = Number(item.quantity) || 0;
+    const priceAtTime = Number(item.price_at_time) || 0;
+    if (quantity <= 0) continue;
+
+    const existingItem = await q1(
+      'SELECT id FROM itens_pedido WHERE order_id=? AND product_id=? AND tenant_id=?',
+      [pedido.id, item.product_id, tenantId]
+    );
+
+    if (existingItem) {
+      await qRun(
+        'UPDATE itens_pedido SET quantity=quantity+?, price_at_time=? WHERE id=? AND tenant_id=?',
+        [quantity, priceAtTime, existingItem.id, tenantId]
+      );
+    } else {
+      await qRun(
+        "INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id) VALUES (?,?,?,'Mesa',?,?)",
+        [pedido.id, item.product_id, quantity, priceAtTime, tenantId]
+      );
+    }
+
+    totalDelta += quantity * priceAtTime;
+  }
+
+  if (totalDelta > 0) {
+    await qRun(
+      `UPDATE pedidos
+       SET total_amount=COALESCE(total_amount, 0)+?,
+           mesa_id=COALESCE(mesa_id, ?),
+           comanda_id=COALESCE(comanda_id, ?)
+       WHERE id=? AND tenant_id=?`,
+      [totalDelta, mesa.id, comandaId, pedido.id, tenantId]
+    );
+  }
+}
+
 export function createKioskRouter() {
   const router = Router();
   const PIPELINE_KDS = ['Criado','Em Preparo','Pronto','Entregue'];
@@ -534,6 +610,16 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
         if (ex) await qRun('UPDATE itens_comanda SET quantity=quantity+? WHERE id=? AND tenant_id=?', [qtd, ex.id, tenant.id]);
         else await qInsert('INSERT INTO itens_comanda (comanda_id,product_id,product_name,quantity,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)', [comanda.id, item.product_id, item.name, qtd, item.price_at_time, tenant.id]);
       }
+      await syncMesaOrderVisibility(
+        Number(tenant.id),
+        { id: Number(mesa.id), numero: Number(mesa.numero) },
+        Number(comanda.id),
+        itens.map((item: any) => ({
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity) || 1,
+          price_at_time: Number(item.price_at_time) || 0,
+        }))
+      );
       res.json({ success:true });
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });

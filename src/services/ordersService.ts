@@ -32,6 +32,7 @@ const TZ = 'America/Sao_Paulo';
 
 const ALLOWED_ORDER_STATUSES = new Set([
   'Criado',
+  'Aguardando confirmação',
   'Em Preparo',
   'Pronto',
   'Entregue',
@@ -1201,7 +1202,7 @@ export async function refundOrder(input: RefundOrderInput) {
 
 export async function updateOrderStatus(input: UpdateOrderStatusInput) {
   ensureTenantId(input.tenantId);
-
+  
   const orderId = parseOrderId(input.orderId);
   const status = String(input.status || '').trim();
 
@@ -1230,6 +1231,10 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
 
       if (!order) {
         throw new AppError('Pedido não encontrado', 404);
+      }
+      
+      if (order.status === 'Aguardando confirmação') {
+        throw new AppError('Pedido via QR Code precisa ser confirmado antes de alterar o status', 400);
       }
 
       if (isCanceledStatus(order.status) || order.cancelado_at) {
@@ -1413,6 +1418,58 @@ export async function getOrders(filters: GetOrdersFilters) {
       from: filters.from,
       to: filters.to,
     });
+    throw error;
+  }
+
+}
+
+export async function confirmQrOrder(input: { orderId: number | string; tenantId: TenantId; userId?: number }) {
+  ensureTenantId(input.tenantId);
+  const orderId = parseOrderId(input.orderId);
+
+  try {
+    return await withTx(async (client) => {
+      // 1. Busca o pedido travando a linha (FOR UPDATE)
+      const order = await txQ1<OrderRow>(
+        client,
+        `SELECT * FROM pedidos WHERE id=? AND tenant_id=? FOR UPDATE`,
+        [orderId, input.tenantId]
+      );
+
+      if (!order) {
+        throw new AppError('Pedido não encontrado', 404);
+      }
+
+      if (order.status !== 'Aguardando confirmação') {
+        throw new AppError('Pedido não está aguardando confirmação', 400);
+      }
+
+      // 2. Verifica se algum item precisa de preparo na cozinha
+      const requiresPrep = await orderHasPreparationItems(client, orderId, input.tenantId);
+      const novoStatus = requiresPrep ? 'Em Preparo' : 'Pronto';
+
+      // 3. Atualiza o status
+      await txRun(
+        client,
+        'UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?',
+        [novoStatus, orderId, input.tenantId]
+      );
+
+      // 4. Registra no histórico do pedido
+      await createOrderEvent(client, {
+        pedidoId: orderId,
+        tenantId: input.tenantId,
+        tipo: 'STATUS',
+        statusAnterior: order.status,
+        statusNovo: novoStatus,
+        payload: { origem: 'ordersService.confirmQrOrder' },
+        usuarioId: input.userId,
+      });
+
+      return novoStatus;
+    });
+  } catch (error) {
+    logError('ordersService.confirmQrOrder', error, { orderId, tenantId: input.tenantId });
     throw error;
   }
 }

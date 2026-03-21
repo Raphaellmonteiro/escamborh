@@ -323,6 +323,23 @@ export default function OrdersScreen({
     fetchOrders();
   };
 
+const handleConfirmOrder = async (id: number) => {
+    try {
+      const res = await fetch(`/api/orders/${id}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || 'Erro ao confirmar pedido.');
+        return;
+      }
+      fetchOrders(); // Atualiza a tela com o novo status
+    } catch (error) {
+      alert('Erro de conexão ao confirmar pedido.');
+    }
+  };
+
   const handleDeleteClick = (id: number) => {
     setOrderToDelete(id); setDeleteStep('password');
     setShowAuthModal(true); setAuthPassword('');
@@ -498,6 +515,7 @@ export default function OrdersScreen({
   const normalizeStatus = (s: string) => STATUS_NORM_OS[s] || s;
 
   const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string; emoji: string }> = {
+    'Aguardando confirmação': { color: '#0369a1', bg: '#e0f2fe', dot: '#0ea5e9', emoji: '🔔' },
     'Criado':          { color: '#3b82f6', bg: '#eff6ff', dot: '#3b82f6', emoji: '🆕' },
     'Pedido Recebido': { color: '#3b82f6', bg: '#eff6ff', dot: '#3b82f6', emoji: '🛵' },
     'Em Preparo':      { color: '#d97706', bg: '#fffbeb', dot: '#f59e0b', emoji: '🔥' },
@@ -832,8 +850,14 @@ export default function OrdersScreen({
                     </div>
                     {/* Direita: ações */}
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      {/* Avançar status */}
-                      {next && (
+                      {/* Avançar / Confirmar status */}
+                      {order.status === 'Aguardando confirmação' ? (
+                        <button onClick={() => handleConfirmOrder(order.id)}
+                          className={primaryActionClassName}
+                          style={{ background: '#0ea5e9', color: '#fff', border: `1px solid #0284c7` }}>
+                          🔔 Confirmar Pedido
+                        </button>
+                      ) : next && (
                         <button onClick={() => updateStatus(order.id, next)}
                           className={primaryActionClassName}
                           style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.dot}22` }}>
