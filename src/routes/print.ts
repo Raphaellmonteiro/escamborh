@@ -47,21 +47,22 @@ function buildKitchenMetadata(order: { canal?: string | null; cliente_nome?: str
 
 async function getKitchenItems(orderId: string | number, tenantId: number) {
   const items = await qAll(
-    `SELECT p.name, p.category, p.requires_preparation, ip.quantity
-     FROM itens_pedido ip
-     JOIN produtos p ON p.id=ip.product_id
-     WHERE ip.order_id=? AND ip.tenant_id=?`,
+    `SELECT p.name, p.category, p.requires_preparation, p.production_type, ip.quantity
+       FROM itens_pedido ip
+       JOIN produtos p ON p.id=ip.product_id
+       WHERE ip.order_id=? AND ip.tenant_id=?`,
     [orderId, tenantId]
   );
 
   return items.filter((item: any) =>
     resolveRequiresPreparation({
-      name: item.name,
-      category: item.category,
-      requires_preparation: item.requires_preparation,
-    })
-  );
-}
+        name: item.name,
+        category: item.category,
+        requires_preparation: item.requires_preparation,
+        production_type: item.production_type,
+      })
+    );
+  }
 
 function formatPrintDateTime(value?: string | null) {
   const rawValue = String(value || '').trim();

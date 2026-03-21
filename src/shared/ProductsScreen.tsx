@@ -8,7 +8,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
-import { resolveRequiresPreparation } from '../utils/preparation';
+import type { ProductionType } from '../utils/preparation';
+import { resolveProductionType, resolveRequiresPreparation } from '../utils/preparation';
 
 // ─── helpers ─────────────────────────────────────────────────────
 const fmtR$ = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
@@ -37,6 +38,37 @@ interface ProductExtended extends Product {
 }
 
 type ViewMode = 'list' | 'grid';
+
+const PRODUCTION_TYPE_META: Record<ProductionType, { label: string; description: string; badgeClass: string; badgeSolidClass: string }> = {
+  kitchen: {
+    label: 'Cozinha',
+    description: 'Entra na fila de preparo da cozinha.',
+    badgeClass: 'bg-orange-100 text-orange-700',
+    badgeSolidClass: 'bg-orange-500 text-white',
+  },
+  bar: {
+    label: 'Bar',
+    description: 'Entra na producao de bar e bebidas.',
+    badgeClass: 'bg-cyan-100 text-cyan-700',
+    badgeSolidClass: 'bg-cyan-500 text-white',
+  },
+  counter: {
+    label: 'Balcao',
+    description: 'Item pronto ou retirado no balcao, sem fila de cozinha.',
+    badgeClass: 'bg-emerald-100 text-emerald-700',
+    badgeSolidClass: 'bg-emerald-500 text-white',
+  },
+  none: {
+    label: 'Sem producao',
+    description: 'Nao entra em nenhuma fila de producao.',
+    badgeClass: 'bg-zinc-100 text-zinc-700',
+    badgeSolidClass: 'bg-zinc-500 text-white',
+  },
+};
+
+function getProductionMeta(product: Partial<ProductExtended>) {
+  return PRODUCTION_TYPE_META[resolveProductionType(product)];
+}
 
 export default function ProductsScreen({ products, onUpdate, token }: { products: ProductExtended[], onUpdate: () => void, token: string }) {
   const [editing, setEditing]                 = useState<Partial<ProductExtended> | null>(null);
@@ -280,7 +312,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
               <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
               <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
             </div>
-            <button onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, ordem: 0, requires_preparation: 1 })}
+            <button onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95">
               <Plus size={16}/> Novo Produto
             </button>
@@ -347,8 +379,8 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
                         {p.active ? 'Ativo' : 'Inativo'}
                       </span>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${resolveRequiresPreparation(p) ? 'bg-orange-100 text-orange-700' : 'bg-sky-100 text-sky-700'}`}>
-                        {resolveRequiresPreparation(p) ? 'Cozinha' : 'Sem preparo'}
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${getProductionMeta(p).badgeClass}`}>
+                        {getProductionMeta(p).label}
                       </span>
                     </div>
                     <p className="text-xs text-zinc-400 mt-0.5 truncate">
@@ -379,7 +411,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       className="flex items-center gap-1 px-3 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all">
                       <Settings2 size={12}/> Opções
                     </button>}
-                    <button onClick={() => { setEditing({ ...p, requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }}
+                    <button onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }}
                       className="flex items-center gap-1 px-3 py-1.5 border border-zinc-200 text-zinc-700 hover:bg-zinc-50 rounded-lg text-xs font-bold transition-all">
                       <Pencil size={12}/> Editar
                     </button>
@@ -407,8 +439,8 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${p.active ? 'bg-emerald-500 text-white' : 'bg-zinc-500 text-white'}`}>
                       {p.active ? 'Ativo' : 'Inativo'}
                     </div>
-                    <div className={`absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${resolveRequiresPreparation(p) ? 'bg-orange-500 text-white' : 'bg-sky-500 text-white'}`}>
-                      {resolveRequiresPreparation(p) ? 'Cozinha' : 'Sem preparo'}
+                    <div className={`absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${getProductionMeta(p).badgeSolidClass}`}>
+                      {getProductionMeta(p).label}
                     </div>
                   </div>
                   {/* Body */}
@@ -427,7 +459,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     <button onClick={() => handleToggleAtivo(p)} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all">{p.active ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
                     <button onClick={() => handleDuplicate(p.id)} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Copy size={14}/></button>
                     {p.id && <button onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais" className="p-1.5 hover:bg-emerald-50 text-zinc-300 hover:text-emerald-600 rounded-lg transition-all"><Settings2 size={14}/></button>}
-                    <button onClick={() => { setEditing({ ...p, requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
+                    <button onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
                     <button onClick={() => handleDeleteClick(p.id)} className="p-1.5 hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14}/></button>
                   </div>
                 </div>
@@ -523,20 +555,33 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 </div>
 
                 <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!editing.requires_preparation}
-                      onChange={e => setEditing(p => ({ ...p, requires_preparation: e.target.checked ? 1 : 0 }))}
-                      className="mt-0.5 w-4 h-4 rounded border-zinc-300 text-orange-500 focus:ring-orange-500"
-                    />
-                    <span>
-                      <span className="block text-sm font-semibold text-zinc-800">Envia para cozinha / preparo</span>
-                      <span className="block text-xs text-zinc-500 mt-0.5">
-                        Desmarque para itens prontos para venda, como cerveja, água e outras bebidas sem preparo.
-                      </span>
+                  <div>
+                    <span className="block text-sm font-semibold text-zinc-800">Setor de producao</span>
+                    <span className="block text-xs text-zinc-500 mt-0.5">
+                      Define se o item vai para cozinha, bar, balcao/pronto ou se nao entra em fila de producao.
                     </span>
-                  </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                    {(Object.entries(PRODUCTION_TYPE_META) as [ProductionType, typeof PRODUCTION_TYPE_META[ProductionType]][]).map(([value, meta]) => {
+                      const selectedType = resolveProductionType(editing);
+                      const isSelected = selectedType === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setEditing(prev => ({
+                            ...prev,
+                            production_type: value,
+                            requires_preparation: value === 'kitchen' || value === 'bar' ? 1 : 0,
+                          }))}
+                          className={`rounded-xl border px-3 py-3 text-left transition-all ${isSelected ? 'border-zinc-900 bg-white shadow-sm' : 'border-zinc-200 bg-white/70 hover:bg-white'}`}
+                        >
+                          <span className="block text-sm font-bold text-zinc-900">{meta.label}</span>
+                          <span className="block text-xs text-zinc-500 mt-1">{meta.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Cor */}

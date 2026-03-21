@@ -6,7 +6,7 @@ import { upload, uploadFotoFunc, checkMagicBytes } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
-import { normalizeRequiresPreparationInput } from '../utils/preparation';
+import { normalizeProductProductionInput } from '../utils/preparation';
 
 export function createProductsRouter() {
   const router = Router();
@@ -32,7 +32,7 @@ export function createProductsRouter() {
     );
 
     if (existing) {
-      throw new Error('Já existe um produto com este código de barras.');
+      throw new Error('J\u00E1 existe um produto com este c\u00F3digo de barras.');
     }
   }
 
@@ -62,12 +62,12 @@ export function createProductsRouter() {
         `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ORDER BY COALESCE(ordem,0) ASC, name ASC`,
         [req.tenantId, ...activeParam]
       ));
-    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: any) { res.status(e.message?.includes('c\u00F3digo de barras') ? 400 : 500).json({ error: e.message }); }
   });
 
   router.get('/barcode/:code', async (req: Request, res) => {
     const barcode = normalizeBarcode(req.params.code);
-    if (!barcode) return res.status(400).json({ found: false, message: 'Código de barras inválido' });
+    if (!barcode) return res.status(400).json({ found: false, message: 'C\u00F3digo de barras inv\u00E1lido' });
     const product = await q1(
       `SELECT *
        FROM produtos
@@ -84,17 +84,35 @@ export function createProductsRouter() {
 
   router.post('/', async (req: Request, res) => {
     try {
-      const { name, price, category, active, color, codigo_barras, marca, descricao, custo, destaque, disponivel_de, disponivel_ate, requires_preparation } = req.body;
+      const {
+        name,
+        price,
+        category,
+        active,
+        color,
+        codigo_barras,
+        marca,
+        descricao,
+        custo,
+        destaque,
+        disponivel_de,
+        disponivel_ate,
+        requires_preparation,
+        production_type,
+      } = req.body;
       const normalizedBarcode = normalizeBarcode(codigo_barras);
-      const normalizedRequiresPreparation = normalizeRequiresPreparationInput(requires_preparation, { name, category });
+      const normalizedProduction = normalizeProductProductionInput(
+        { production_type, requires_preparation },
+        { name, category }
+      );
       await ensureBarcodeAvailable(req.tenantId, normalizedBarcode);
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,requires_preparation,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedRequiresPreparation, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.tenantId]
       );
       res.json({ id });
-    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: any) { res.status(e.message?.includes('c\u00F3digo de barras') ? 400 : 500).json({ error: e.message }); }
   });
 
   router.put('/reorder', async (req: Request, res) => {
@@ -103,27 +121,55 @@ export function createProductsRouter() {
       if (!Array.isArray(items)) return res.status(400).json({ error: 'items deve ser array' });
       for (const item of items) await qRun('UPDATE produtos SET ordem=? WHERE id=? AND tenant_id=?', [item.ordem, item.id, req.tenantId]);
       res.json({ success: true });
-    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: any) { res.status(e.message?.includes('c\u00F3digo de barras') ? 400 : 500).json({ error: e.message }); }
   });
 
   router.put('/:id', async (req: Request, res) => {
     try {
-      const { name, price, category, active, color, codigo_barras, marca, descricao, custo, destaque, disponivel_de, disponivel_ate, requires_preparation } = req.body;
-      const current = await q1<{ codigo_barras?: string | null; requires_preparation?: number | null; name?: string | null; category?: string | null }>(
-        'SELECT codigo_barras, requires_preparation, name, category FROM produtos WHERE id=? AND tenant_id=?',
+      const {
+        name,
+        price,
+        category,
+        active,
+        color,
+        codigo_barras,
+        marca,
+        descricao,
+        custo,
+        destaque,
+        disponivel_de,
+        disponivel_ate,
+        requires_preparation,
+        production_type,
+      } = req.body;
+      const current = await q1<{
+        codigo_barras?: string | null;
+        requires_preparation?: number | null;
+        production_type?: string | null;
+        name?: string | null;
+        category?: string | null;
+      }>(
+        'SELECT codigo_barras, requires_preparation, production_type, name, category FROM produtos WHERE id=? AND tenant_id=?',
         [req.params.id, req.tenantId]
       );
       const normalizedBarcode = normalizeBarcode(codigo_barras);
-      const normalizedRequiresPreparation = normalizeRequiresPreparationInput(
-        requires_preparation ?? current?.requires_preparation,
-        { name: name ?? current?.name ?? null, category: category ?? current?.category ?? null }
+      const normalizedProduction = normalizeProductProductionInput(
+        {
+          production_type,
+          requires_preparation,
+        },
+        { name: name ?? current?.name ?? null, category: category ?? current?.category ?? null },
+        {
+          production_type: current?.production_type,
+          requires_preparation: current?.requires_preparation,
+        },
       );
       if (normalizedBarcode !== normalizeBarcode(current?.codigo_barras)) {
         await ensureBarcodeAvailable(req.tenantId, normalizedBarcode, Number(req.params.id));
       }
       await qRun(
-        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,disponivel_de=?,disponivel_ate=?,requires_preparation=? WHERE id=? AND tenant_id=?',
-        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, disponivel_de||null, disponivel_ate||null, normalizedRequiresPreparation, req.params.id, req.tenantId]
+        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=? WHERE id=? AND tenant_id=?',
+        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.params.id, req.tenantId]
       );
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -132,11 +178,11 @@ export function createProductsRouter() {
   router.post('/:id/duplicar', async (req: Request, res) => {
     try {
       const p = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      if (!p) return res.status(404).json({ error: 'Produto não encontrado' });
+      if (!p) return res.status(404).json({ error: 'Produto n\u00E3o encontrado' });
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?)',
-        [`${p.name} (cópia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, req.tenantId]
+        'INSERT INTO produtos (name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [`${p.name} (c\u00F3pia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, 0, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, p.requires_preparation ?? null, p.production_type ?? null, req.tenantId]
       );
       res.json({ id, success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -159,8 +205,8 @@ export function createProductsRouter() {
       await qRun('DELETE FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       res.json({ success: true });
     } catch (e: any) {
-      if (e.code === '23503') // PostgreSQL foreign key violation
-        return res.status(400).json({ success: false, message: 'Produto com vendas registradas. Desative-o ao invés de excluir.' });
+      if (e.code === '23503')
+        return res.status(400).json({ success: false, message: 'Produto com vendas registradas. Desative-o ao inv\u00E9s de excluir.' });
       next(e);
     }
   });
@@ -185,7 +231,6 @@ export function createProductsRouter() {
     } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
   });
 
-  // ── Opções de produto ──────────────────────────────────────────────────────
   router.get('/:id/opcoes', async (req: Request, res) => {
     try {
       const grupos = await qAll('SELECT * FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC', [req.params.id, req.tenantId]);
@@ -201,7 +246,7 @@ export function createProductsRouter() {
   router.post('/:id/opcoes/grupos', async (req: Request, res) => {
     try {
       const { nome, tipo, min_selecoes, max_selecoes, obrigatorio, ordem, modo_preco } = req.body;
-      if (!nome?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
+      if (!nome?.trim()) return res.status(400).json({ error: 'Nome obrigat\u00F3rio' });
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       const id = await qInsert(
         'INSERT INTO produto_grupos_opcao (produto_id,tenant_id,nome,tipo,min_selecoes,max_selecoes,obrigatorio,ordem,modo_preco) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -233,7 +278,7 @@ export function createProductsRouter() {
   router.post('/opcoes/grupos/:grupoId/itens', async (req: Request, res) => {
     try {
       const { nome, preco_adicional, ordem } = req.body;
-      if (!nome?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
+      if (!nome?.trim()) return res.status(400).json({ error: 'Nome obrigat\u00F3rio' });
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=?', [req.params.grupoId, req.tenantId]);
       const id = await qInsert(
         'INSERT INTO produto_opcao_itens (grupo_id,tenant_id,nome,preco_adicional,ordem) VALUES (?,?,?,?,?)',

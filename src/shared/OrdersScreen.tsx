@@ -43,6 +43,7 @@ type OrderHistoryEvent = {
 type OrderScreenItem = OrderItem & {
   product_name?: string | null;
   product_category?: string | null;
+  production_type?: string | null;
   requires_preparation?: number | boolean | null;
 };
 
@@ -578,7 +579,24 @@ export default function OrdersScreen({
   };
 
   const STATUSES_FINAIS = ['Entregue', 'Concluído', 'concluido', 'cancelado', 'Cancelado', cfg.statusConcluido];
-  const activeOrders = orders.filter(o => !STATUSES_FINAIS.includes(o.status));
+  const normalizeOrderStatus = (status?: string | null) =>
+    String(status || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
+  const isFinalOrderStatus = (status?: string | null) => {
+    const normalizedStatus = normalizeOrderStatus(status);
+    const normalizedSegmentFinalStatus = normalizeOrderStatus(cfg.statusConcluido);
+
+    return normalizedStatus === 'entregue'
+      || normalizedStatus === 'concluido'
+      || normalizedStatus === 'cancelado'
+      || normalizedStatus === normalizedSegmentFinalStatus;
+  };
+
+  const activeOrders = orders.filter((order) => !isFinalOrderStatus(order.status));
   const nextStatus = (current: string) => {
     const norm = normalizeStatus(current);
     const idx = PIPELINE.indexOf(norm);
@@ -588,12 +606,13 @@ export default function OrdersScreen({
   const orderHasPreparationItems = (order: Order) =>
     (order.items || []).some((item) => {
       const orderItem = item as OrderScreenItem;
-      return resolveRequiresPreparation({
-        name: orderItem.name || orderItem.product_name,
-        category: orderItem.product_category,
-        requires_preparation: orderItem.requires_preparation,
+        return resolveRequiresPreparation({
+          name: orderItem.name || orderItem.product_name,
+          category: orderItem.product_category,
+          requires_preparation: orderItem.requires_preparation,
+          production_type: orderItem.production_type,
+        });
       });
-    });
   const getNextActionStatus = (order: Order) => {
     const next = nextStatus(order.status);
     if (next !== 'Em Preparo') return next;

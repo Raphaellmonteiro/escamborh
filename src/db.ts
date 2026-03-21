@@ -1,6 +1,6 @@
 // src/db.ts - reexport e migrações
 import { pool } from './db/pool';
-import { inferRequiresPreparation } from './utils/preparation';
+  import { normalizeProductProductionInput } from './utils/preparation';
 
 export * from './db/index';
 
@@ -345,6 +345,7 @@ export async function runMigrations() {
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS total_extras REAL DEFAULT 0;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS public_id TEXT;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS requires_preparation INTEGER;
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS production_type TEXT;
       ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
       CREATE TABLE IF NOT EXISTS pedido_eventos (
         id SERIAL PRIMARY KEY,
@@ -404,20 +405,32 @@ export async function runMigrations() {
         AND codigo_barras <> UPPER(REGEXP_REPLACE(BTRIM(codigo_barras), '\\s+', '', 'g'));
     `);
 
-    const productsMissingPreparation = await client.query<{
+    const productsMissingProduction = await client.query<{
       id: number;
       name: string | null;
       category: string | null;
+      requires_preparation: number | null;
+      production_type: string | null;
     }>(
-      `SELECT id, name, category
+      `SELECT id, name, category, requires_preparation, production_type
        FROM produtos
-       WHERE requires_preparation IS NULL`
+       WHERE requires_preparation IS NULL
+          OR production_type IS NULL
+          OR BTRIM(COALESCE(production_type, '')) = ''`
     );
 
-    for (const product of productsMissingPreparation.rows) {
+    for (const product of productsMissingProduction.rows) {
+      const normalized = normalizeProductProductionInput(
+        {
+          requires_preparation: product.requires_preparation,
+          production_type: product.production_type,
+        },
+        product
+      );
+
       await client.query(
-        'UPDATE produtos SET requires_preparation=$1 WHERE id=$2',
-        [inferRequiresPreparation(product) ? 1 : 0, product.id]
+        'UPDATE produtos SET requires_preparation=$1, production_type=$2 WHERE id=$3',
+        [normalized.requiresPreparation, normalized.productionType, product.id]
       );
     }
 

@@ -451,13 +451,14 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const deduped = Array.from(seen.values()).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
       const orders = [];
       for (const o of deduped) {
-        const items = await qAll('SELECT i.quantity,i.type,i.price_at_time,p.name as product_name,p.category as product_category,p.requires_preparation FROM itens_pedido i LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE i.order_id=? AND i.tenant_id=?', [o.id, tenant.id]);
+        const items = await qAll('SELECT i.quantity,i.type,i.price_at_time,p.name as product_name,p.category as product_category,p.requires_preparation,p.production_type FROM itens_pedido i LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE i.order_id=? AND i.tenant_id=?', [o.id, tenant.id]);
         const prepItems = items
           .filter((item: any) =>
             resolveRequiresPreparation({
               name: item.product_name,
               category: item.product_category,
               requires_preparation: item.requires_preparation,
+              production_type: item.production_type,
             })
           )
           .map((item: any) => ({

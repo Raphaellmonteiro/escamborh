@@ -114,12 +114,16 @@ type OrderItemRow = {
   type?: string | null;
   price_at_time: number;
   product_name?: string | null;
+  product_category?: string | null;
+  production_type?: string | null;
+  requires_preparation?: number | null;
 };
 
 type ProductRow = {
   id: number;
   name: string;
   category?: string | null;
+  production_type?: string | null;
   requires_preparation?: number | null;
   codigo_barras?: string | null;
 };
@@ -373,10 +377,11 @@ async function orderHasPreparationItems(client: PoolClient, orderId: number, ten
   const items = await txQAll<{
     product_name?: string | null;
     product_category?: string | null;
+    production_type?: string | null;
     requires_preparation?: number | null;
   }>(
     client,
-    `SELECT p.name AS product_name, p.category AS product_category, p.requires_preparation
+    `SELECT p.name AS product_name, p.category AS product_category, p.requires_preparation, p.production_type
      FROM itens_pedido ip
      JOIN produtos p ON p.id=ip.product_id
      WHERE ip.order_id=? AND ip.tenant_id=?`,
@@ -388,6 +393,7 @@ async function orderHasPreparationItems(client: PoolClient, orderId: number, ten
       name: item.product_name,
       category: item.product_category,
       requires_preparation: item.requires_preparation,
+      production_type: item.production_type,
     })
   );
 }
@@ -746,7 +752,7 @@ async function generateReceipt(
   if (productIds.length > 0) {
     const productRows = await txQAll<ProductRow>(
       client,
-      `SELECT id, name, category, requires_preparation
+      `SELECT id, name, category, requires_preparation, production_type
        FROM produtos
        WHERE id IN (${productIds.map(() => '?').join(',')})
          AND tenant_id=?`,
@@ -1367,7 +1373,9 @@ export async function getOrders(filters: GetOrdersFilters) {
 
     const orderIds = orders.map((order) => order.id);
     const items = await qAll<OrderItemRow>(
-      `SELECT ip.order_id, ip.product_id, ip.quantity, ip.type, ip.price_at_time, p.name AS product_name
+      `SELECT ip.order_id, ip.product_id, ip.quantity, ip.type, ip.price_at_time,
+              p.name AS product_name, p.category AS product_category,
+              p.production_type, p.requires_preparation
        FROM itens_pedido ip
        LEFT JOIN produtos p ON p.id=ip.product_id
        WHERE ip.order_id IN (${orderIds.map(() => '?').join(',')})
@@ -1392,6 +1400,9 @@ export async function getOrders(filters: GetOrdersFilters) {
         type: item.type || undefined,
         price_at_time: Number(item.price_at_time || 0),
         product_name: item.product_name || 'Produto',
+        product_category: item.product_category || null,
+        production_type: item.production_type || null,
+        requires_preparation: item.requires_preparation ?? null,
         name: item.product_name || 'Produto',
       })),
     }));

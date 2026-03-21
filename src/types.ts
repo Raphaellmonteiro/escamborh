@@ -3,6 +3,8 @@
 // ================================================================
 
 // â”€â”€ Produto / CatÃ¡logo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export type ProductionType = 'kitchen' | 'bar' | 'counter' | 'none';
+
 export interface Product {
   id: number;
   public_id?: string | null;
@@ -20,6 +22,7 @@ export interface Product {
   ordem?: number;
   disponivel_de?: string | null;
   disponivel_ate?: string | null;
+  production_type?: ProductionType | null;
   requires_preparation?: number | boolean | null;
 }
 
