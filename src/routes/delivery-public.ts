@@ -8,6 +8,7 @@ import { publicRateLimit, authDeliveryCliente } from '../middleware';
 import { requireProductInventoryTargets } from '../services/stockIdentification';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
+import { pool } from '../db';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -1042,6 +1043,54 @@ export function createDeliveryPublicRouter() {
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
+
+// Rota para buscar sugestões de produtos (Camada 1)
+  router.post('/suggestions', async (req: any, res: any) => {
+    try {
+      // Ajuste como o tenantId chega na sua rota (req.tenantId se for autenticada, ou via slug/body se for pública)
+      const tenantId = req.tenantId || req.body.tenantId; 
+      const { productIds } = req.body;
+
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return res.json({ suggestions: [] });
+      }
+
+      // Query otimizada para PostgreSQL com sintaxe de Array (ANY / ALL)
+      const result = await pool.query(
+        `
+        SELECT 
+          ps.produto_sugerido_id,
+          MAX(ps.prioridade) AS prioridade,
+          p.id,
+          p.name,
+          p.price,
+          p.category,
+          p.photo_url AS image,
+          p.active AS ativo
+        FROM produto_sugestoes ps
+        JOIN produtos p ON p.id = ps.produto_sugerido_id
+        WHERE 
+          ps.tenant_id = $1
+          AND ps.ativo = 1
+          AND p.active = 1
+          AND ps.produto_id = ANY($2::int[])
+          AND ps.produto_sugerido_id <> ALL($2::int[])
+        GROUP BY ps.produto_sugerido_id, p.id, p.name, p.price, p.category, p.photo_url, p.active
+        ORDER BY MAX(ps.prioridade) DESC, p.name ASC
+        LIMIT 3
+        `,
+        [tenantId, productIds]
+      );
+
+      return res.json({ suggestions: result.rows });
+    } catch (error) {
+      console.error('Erro ao buscar sugestões:', error);
+      return res.status(500).json({ error: 'Erro interno ao buscar sugestões' });
+    }
+  });
+
+
+
   });
 
   return router;

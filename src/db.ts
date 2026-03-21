@@ -269,6 +269,20 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+
+    CREATE TABLE IF NOT EXISTS produto_sugestoes (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        produto_id INTEGER NOT NULL,
+        produto_sugerido_id INTEGER NOT NULL,
+        prioridade INTEGER NOT NULL DEFAULT 0,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tenant_id, produto_id, produto_sugerido_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_produto_sugestoes_produto ON produto_sugestoes (tenant_id, produto_id);
+      CREATE INDEX IF NOT EXISTS idx_produto_sugestoes_sugerido ON produto_sugestoes (tenant_id, produto_sugerido_id);
+
       CREATE TABLE IF NOT EXISTS funcionarios (
         id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
         nome TEXT NOT NULL, cargo TEXT NOT NULL DEFAULT '',

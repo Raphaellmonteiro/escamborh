@@ -964,6 +964,31 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemo
   const [resumoCheckout, setResumoCheckout] = useState<CheckoutResumo | null>(null);
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const resumoReqRef = useRef(0);
+
+// --- INÍCIO DA CAMADA 1: SUGESTÕES ---
+  const [sugestoes, setSugestoes] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!slug || cart.length === 0) {
+      setSugestoes([]);
+      return;
+    }
+    // Extrai apenas os IDs únicos dos produtos no carrinho
+    const productIds = Array.from(new Set(cart.map(i => i.id)));
+
+    fetch(`/public/delivery/${slug}/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds })
+    })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (d && d.suggestions) setSugestoes(d.suggestions);
+    })
+    .catch(console.error);
+  }, [slug, cart]);
+  // --- FIM DA CAMADA 1: SUGESTÕES ---
+
   const descontoPixPercentual = Number(config.desconto_pix || 0);
   const resumoFallback = useMemo(() => createFallbackCheckoutResumo({
     config,
@@ -1040,6 +1065,49 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemo
             </div>
           </div>
         ))}
+
+        {/* --- INÍCIO DO VISUAL DE SUGESTÕES --- */}
+        {sugestoes.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+            <p className="font-black text-zinc-900 text-sm flex items-center gap-2">
+              ✨ Combina com seu pedido
+            </p>
+            <div className="space-y-2">
+              {sugestoes.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <div className="flex items-center gap-3">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 bg-zinc-200 rounded-lg flex items-center justify-center text-lg">🍔</div>
+                    )}
+                    <div>
+                      <p className="text-sm font-bold text-zinc-800">{item.name}</p>
+                      <p className="text-xs font-black text-emerald-600">
+                        {fmt(item.price)}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      onAdd({
+                        ...item,
+                        qty: 1,
+                        preco_final: item.price,
+                        cart_key: `${item.id}_`
+                      } as any);
+                    }}
+                    className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-700 transition-colors"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* --- FIM DO VISUAL DE SUGESTÕES --- */}
+
         {cart.length>0&&(
         <div className="bg-white rounded-2xl p-4 shadow-sm space-y-2">
           <p className="font-black text-zinc-900 text-sm">Resumo comercial</p>

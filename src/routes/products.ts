@@ -7,6 +7,7 @@ import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
 import { normalizeProductProductionInput } from '../utils/preparation';
+import { pool } from '../db';
 
 export function createProductsRouter() {
   const router = Router();
