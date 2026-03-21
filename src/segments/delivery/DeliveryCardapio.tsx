@@ -426,7 +426,6 @@ export default function DeliveryCardapio() {
   }, [slug]);
 
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
-  const total = subtotal + (tipoAtendimento === 'retirada' ? 0 : (config.taxa_entrega||0));
   const totalItens = cart.reduce((a,i)=>a+i.qty,0);
   // Abre modal de opções se produto tiver grupos, senão adiciona direto
   const handleAddProduto = (p: Produto) => {
@@ -961,6 +960,7 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemo
   onBack: ()=>void; onCheckout: ()=>void;
 }) {
   const sub=cart.reduce((a,i)=>a+i.preco_final*i.qty,0);
+  const pedidoMinimoAplicavel = tipoAtendimento === 'retirada' ? 0 : Number(config.pedido_minimo || 0);
   const [resumoCheckout, setResumoCheckout] = useState<CheckoutResumo | null>(null);
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const resumoReqRef = useRef(0);
@@ -1054,8 +1054,8 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onRemo
       </div>
       {cart.length>0&&(
         <div className="p-4 bg-white border-t border-zinc-100 max-w-2xl mx-auto w-full">
-          {sub<config.pedido_minimo&&<p className="text-xs text-amber-600 font-bold text-center mb-3 bg-amber-50 py-2 rounded-xl">Pedido mínimo: {fmt(config.pedido_minimo)}</p>}
-          <button onClick={onCheckout} disabled={sub<config.pedido_minimo} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-200 text-white rounded-2xl font-black transition-all active:scale-[0.98]">Finalizar Pedido →</button>
+          {sub<pedidoMinimoAplicavel&&<p className="text-xs text-amber-600 font-bold text-center mb-3 bg-amber-50 py-2 rounded-xl">Pedido mínimo: {fmt(pedidoMinimoAplicavel)}</p>}
+          <button onClick={onCheckout} disabled={sub<pedidoMinimoAplicavel} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-200 text-white rounded-2xl font-black transition-all active:scale-[0.98]">Finalizar Pedido →</button>
         </div>
       )}
     </div>
@@ -1137,15 +1137,11 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
     descontoCupom: descontoCupomFallback,
   });
   const usandoResumoFallback = !resumoCheckout;
-  const taxaEntrega = resumoAtual.taxa_entrega;
   const descontoPix = resumoAtual.desconto_pix;
-  const descontoCupom = resumoAtual.desconto_cupom;
   const descontoPrimeiroCliente = resumoAtual.desconto_primeiro_cliente;
-  const cupomAplicado = resumoAtual.cupom_aplicado;
   const zonaResumo = resumoAtual.zona_entrega || zonaDetectada;
   const bairroResumo = (resumoAtual.bairro_entrega || bairroAtual || '').trim();
   const tot = resumoAtual.total;
-  const economiaPix = 0;
   const descontoPixPercentual = Number(config.desconto_pix || 0);
   const inp = "w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50 transition-all";
 
@@ -1576,30 +1572,6 @@ const finalizar = async () => {
           tipoAtendimento={tipoAtendimento}
           mensagemAuxiliar={carregandoResumo ? 'Atualizando beneficios e total...' : (usandoResumoFallback ? 'Total estimado ate concluir a validacao do checkout.' : null)}
         />
-        {economiaPix > 0 && <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🎉 Desconto Pix ({descontoPixPercentual}%)</span><span>-{fmt(economiaPix)}</span></div>}
-        {false && (
-          <>
-        {cupomAplicado && cupomAplicado.tipo === 'frete_gratis' && (
-          <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🏷️ Frete grátis ({cupomAplicado.codigo})</span><span>-{fmt(descontoCupom)}</span></div>
-        )}
-        {cupomAplicado && cupomAplicado.tipo !== 'frete_gratis' && (
-          <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>🏷️ Cupom ({cupomAplicado.codigo})</span><span>-{fmt(descontoCupom)}</span></div>
-        )}
-        {descontoPrimeiroCliente > 0 && (
-          <div className="flex justify-between text-sm text-amber-600 mb-1 font-semibold"><span>Primeira compra</span><span>-{fmt(descontoPrimeiroCliente)}</span></div>
-        )}
-        {taxaEntrega > 0
-          ? <div className="flex justify-between text-sm text-zinc-500 mb-1"><span>Taxa de entrega{zonaResumo ? ` · ${zonaResumo.nome}` : bairroResumo ? ` · ${bairroResumo}` : ''}</span><span>{fmt(taxaEntrega)}</span></div>
-          : <div className="flex justify-between text-sm text-emerald-600 mb-1 font-semibold"><span>Taxa de entrega</span><span>Gratis</span></div>
-        }
-        {(carregandoResumo || usandoResumoFallback) && (
-          <div className="text-[11px] text-zinc-400 mb-2">
-            {carregandoResumo ? 'Atualizando beneficios e total...' : 'Total estimado ate concluir a validacao do checkout.'}
-          </div>
-        )}
-        <div className="flex justify-between font-black text-zinc-900 mb-4"><span>Total</span><span className="text-xl text-emerald-600">{fmt(Math.max(0, tot))}</span></div>
-          </>
-        )}
         <button onClick={finalizar} disabled={enviando||carregandoResumo} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
           {enviando?<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:<CheckCircle2 size={18}/>}
           {enviando?'Enviando...':'Confirmar Pedido'}
@@ -1765,12 +1737,6 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
               </div>
               <p className="text-[10px] text-zinc-400 text-center mt-2">Toque no banco para abrir direto no app</p>
             </div>
-
-            {false && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-emerald-700">
-                Retirada no local selecionada. O cadastro segue sem pedir endereÃ§o.
-              </div>
-            )}
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Pix Copia e Cola</p>
               <div className="flex justify-center">
@@ -2181,4 +2147,5 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
     </div>
   );
 }
+
 
