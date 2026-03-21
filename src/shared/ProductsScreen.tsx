@@ -45,6 +45,16 @@ interface ProductSuggestion {
   prioridade: number;
 }
 
+interface ProdutoVariacaoVendavel {
+  id: number;
+  produto_id: number;
+  nome: string;
+  preco: number;
+  codigo_barras: string | null;
+  ativo: number;
+  ordem: number;
+}
+
 type ViewMode = 'list' | 'grid';
 
 const PRODUCTION_TYPE_META: Record<ProductionType, { label: string; description: string; badgeClass: string; badgeSolidClass: string }> = {
@@ -94,6 +104,13 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestedProductId, setSuggestedProductId] = useState<number>(0);
   const [suggestionPriority, setSuggestionPriority] = useState<number>(0);
+  const [variacoesVendaveis, setVariacoesVendaveis] = useState<ProdutoVariacaoVendavel[]>([]);
+  const [loadingVariacoes, setLoadingVariacoes] = useState(false);
+  const [newVarNome, setNewVarNome] = useState('');
+  const [newVarPreco, setNewVarPreco] = useState('');
+  const [newVarCodigoBarras, setNewVarCodigoBarras] = useState('');
+  const [newVarAtivo, setNewVarAtivo] = useState(true);
+  const [newVarOrdem, setNewVarOrdem] = useState(0);
 
   // ── filtros + view ───────────────────────────────────────────
   const [busca, setBusca]                     = useState('');
@@ -198,6 +215,80 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       loadProductSuggestions(editing.id);
     } catch {
       alert('Erro ao remover sugestao.');
+    }
+  };
+
+  const loadProductVariacoes = async (productId: number) => {
+    setLoadingVariacoes(true);
+    try {
+      const r = await fetch(
+        `/api/products/${productId}/variacoes-vendaveis?includeInactive=1`,
+        { headers: hdrs }
+      );
+      setVariacoesVendaveis(r.ok ? await r.json() : []);
+    } catch {
+      setVariacoesVendaveis([]);
+    } finally {
+      setLoadingVariacoes(false);
+    }
+  };
+
+  const handleAddVariacaoVendavel = async () => {
+    if (!editing?.id) return;
+    const nome = newVarNome.trim();
+    if (!nome) {
+      alert('Informe o nome da variacao.');
+      return;
+    }
+    const preco = Number(String(newVarPreco).replace(',', '.'));
+    if (!Number.isFinite(preco) || preco < 0) {
+      alert('Preco invalido.');
+      return;
+    }
+    try {
+      const r = await fetch(`/api/products/${editing.id}/variacoes-vendaveis`, {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({
+          nome,
+          preco,
+          codigo_barras: newVarCodigoBarras || null,
+          ativo: newVarAtivo,
+          ordem: newVarOrdem,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        alert(d.error || 'Nao foi possivel adicionar a variacao');
+        return;
+      }
+      setNewVarNome('');
+      setNewVarPreco('');
+      setNewVarCodigoBarras('');
+      setNewVarAtivo(true);
+      setNewVarOrdem(0);
+      loadProductVariacoes(editing.id);
+    } catch {
+      alert('Erro ao adicionar variacao.');
+    }
+  };
+
+  const handleRemoveVariacaoVendavel = async (variationId: number) => {
+    if (!editing?.id) return;
+    if (!confirm('Remover esta variacao vendavel?')) return;
+    try {
+      const r = await fetch(
+        `/api/products/${editing.id}/variacoes-vendaveis/${variationId}`,
+        { method: 'DELETE', headers: hdrs }
+      );
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert((d as { error?: string }).error || 'Nao foi possivel remover');
+        return;
+      }
+      loadProductVariacoes(editing.id);
+    } catch {
+      alert('Erro ao remover variacao.');
     }
   };
 
@@ -349,9 +440,16 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       setProductSuggestions([]);
       setSuggestedProductId(0);
       setSuggestionPriority(0);
+      setVariacoesVendaveis([]);
+      setNewVarNome('');
+      setNewVarPreco('');
+      setNewVarCodigoBarras('');
+      setNewVarAtivo(true);
+      setNewVarOrdem(0);
       return;
     }
     loadProductSuggestions(editing.id);
+    loadProductVariacoes(editing.id);
   }, [editing?.id]);
 
   // ════════════════════════════════════════════════════════════
@@ -764,6 +862,103 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-xl text-sm font-bold transition-all"
                     >
                       Adicionar sugestão
+                    </button>
+                  </div>
+                )}
+
+                {editing.id && (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-800">Variações vendáveis</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Sabores, tamanhos ou opções com preço e código de barras próprios no PDV.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {loadingVariacoes ? (
+                        <p className="text-xs text-zinc-400">Carregando variações...</p>
+                      ) : variacoesVendaveis.length === 0 ? (
+                        <p className="text-xs text-zinc-400">Nenhuma variação cadastrada.</p>
+                      ) : (
+                        variacoesVendaveis.map((v) => (
+                          <div
+                            key={v.id}
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white border border-zinc-200 rounded-xl px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-zinc-800 truncate">{v.nome}</p>
+                              <p className="text-xs text-zinc-500">
+                                {fmtR$(v.preco)}
+                                {v.codigo_barras ? ` · ${v.codigo_barras}` : ''}
+                                {' · '}
+                                ordem {v.ordem}
+                                {' · '}
+                                {Number(v.ativo) === 1 ? (
+                                  <span className="text-emerald-600 font-semibold">ativo</span>
+                                ) : (
+                                  <span className="text-zinc-400 font-semibold">inativo</span>
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVariacaoVendavel(v.id)}
+                              className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all shrink-0 self-start sm:self-center"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nome"
+                        value={newVarNome}
+                        onChange={(e) => setNewVarNome(e.target.value)}
+                        className="sm:col-span-2 px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Preço"
+                        value={newVarPreco}
+                        onChange={(e) => setNewVarPreco(e.target.value)}
+                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Código de barras (opcional)"
+                        value={newVarCodigoBarras}
+                        onChange={(e) => setNewVarCodigoBarras(e.target.value)}
+                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Ordem"
+                        value={newVarOrdem}
+                        onChange={(e) => setNewVarOrdem(parseInt(e.target.value, 10) || 0)}
+                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                      />
+                      <label className="flex items-center gap-2 px-1 py-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newVarAtivo}
+                          onChange={(e) => setNewVarAtivo(e.target.checked)}
+                          className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        />
+                        <span className="text-sm font-medium text-zinc-700">Ativo</span>
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddVariacaoVendavel}
+                      className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all"
+                    >
+                      Adicionar variação
                     </button>
                   </div>
                 )}

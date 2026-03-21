@@ -7,7 +7,6 @@ import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
 import { normalizeProductProductionInput } from '../utils/preparation';
-import { pool } from '../db';
 
 export function createProductsRouter() {
   const router = Router();
@@ -250,6 +249,99 @@ export function createProductsRouter() {
           (tenant_id, produto_id, produto_sugerido_id, prioridade, ativo)
          VALUES (?, ?, ?, ?, 1)`,
         [req.tenantId, productId, suggestedProductId, Number.isFinite(priority) ? priority : 0]
+      );
+
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.get('/:id/variacoes-vendaveis', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+
+      const produto = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
+      if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' });
+
+      const includeInactive = String(req.query.includeInactive || '') === '1';
+      const activeFilter = includeInactive ? '' : ' AND ativo=1';
+
+      const rows = await qAll(
+        `SELECT id, produto_id, nome, preco, codigo_barras, ativo, ordem, ingrediente_id
+         FROM produto_variacoes_vendaveis
+         WHERE tenant_id=?
+           AND produto_id=?${activeFilter}
+         ORDER BY ordem ASC, nome ASC`,
+        [req.tenantId, productId]
+      );
+
+      res.json(rows);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.post('/:id/variacoes-vendaveis', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+
+      const produto = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
+      if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' });
+
+      const nome = String(req.body?.nome || '').trim();
+      if (!nome) {
+        return res.status(400).json({ error: 'Nome obrigatorio' });
+      }
+
+      const preco = Number(req.body?.preco);
+      if (!Number.isFinite(preco) || preco < 0) {
+        return res.status(400).json({ error: 'Preco invalido' });
+      }
+
+      const ordem = Number(req.body?.ordem ?? 0);
+      const ativo = req.body?.ativo === false || req.body?.ativo === 0 ? 0 : 1;
+      const codigoBarras = normalizeBarcode(req.body?.codigo_barras);
+
+      const dupNome = await q1(
+        `SELECT id FROM produto_variacoes_vendaveis
+         WHERE tenant_id=?
+           AND produto_id=?
+           AND LOWER(TRIM(nome)) = LOWER(?)
+         LIMIT 1`,
+        [req.tenantId, productId, nome]
+      );
+      if (dupNome) {
+        return res.status(400).json({ error: 'Ja existe variacao com este nome neste produto' });
+      }
+
+      await qInsert(
+        `INSERT INTO produto_variacoes_vendaveis
+          (tenant_id, produto_id, nome, preco, codigo_barras, ativo, ordem)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.tenantId, productId, nome, preco, codigoBarras || null, ativo, Number.isFinite(ordem) ? ordem : 0]
+      );
+
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.delete('/:id/variacoes-vendaveis/:variationId', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const variationId = Number(req.params.variationId);
+      if (!Number.isInteger(productId) || productId <= 0 || !Number.isInteger(variationId) || variationId <= 0) {
+        return res.status(400).json({ error: 'Parametros invalidos' });
+      }
+
+      await qRun(
+        `DELETE FROM produto_variacoes_vendaveis
+         WHERE id=?
+           AND tenant_id=?
+           AND produto_id=?`,
+        [variationId, req.tenantId, productId]
       );
 
       res.json({ success: true });

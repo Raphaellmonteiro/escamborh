@@ -266,6 +266,19 @@ export async function runMigrations() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(tenant_id, codigo)
       );
+      CREATE TABLE IF NOT EXISTS produto_variacoes_vendaveis (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        produto_id INTEGER NOT NULL,
+        nome TEXT NOT NULL,
+        preco REAL NOT NULL DEFAULT 0,
+        codigo_barras TEXT,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        ordem INTEGER NOT NULL DEFAULT 0,
+        ingrediente_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(tenant_id, produto_id, nome)
+      );
     `);
 
     await client.query(`
@@ -467,6 +480,8 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_delivery_motoboys_tenant ON delivery_motoboys(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_delivery_clientes_recencia ON delivery_clientes(tenant_id, ultima_compra_at DESC);
       CREATE INDEX IF NOT EXISTS idx_pedidos_delivery_cliente ON pedidos(tenant_id, delivery_cliente_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_prod_var_vend_produto ON produto_variacoes_vendaveis(tenant_id, produto_id, ativo, ordem);
+      CREATE INDEX IF NOT EXISTS idx_prod_var_vend_barcode ON produto_variacoes_vendaveis(tenant_id, codigo_barras);
     `);
 
     await client.query(`

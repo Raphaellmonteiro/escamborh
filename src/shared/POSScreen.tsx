@@ -39,6 +39,10 @@ export default function POSScreen({
   const [currentPaymentMethod, setCurrentPaymentMethod]  = useState<PaymentMethod>('Dinheiro');
   const [currentAmount, setCurrentAmount]                 = useState<number>(0);
   const [pendingProduct, setPendingProduct]               = useState<Product | null>(null);
+  const [pendingSelection, setPendingSelection]           = useState<{ product_id: number; product_name: string; price_at_time: number; variation_id?: number | null } | null>(null);
+  const [variacaoModalProduct, setVariacaoModalProduct]   = useState<Product | null>(null);
+  const [variacoesVendaveis, setVariacoesVendaveis]       = useState<any[]>([]);
+  const [carregandoVariacoes, setCarregandoVariacoes]     = useState(false);
   const [showSuccess, setShowSuccess]                     = useState<{ number: string; receipt: string; senha: number; tipo: string; orderId?: number } | null>(null);
   const [isFinalizing, setIsFinalizing]                   = useState(false);
   const [showTipoRetirada, setShowTipoRetirada]           = useState(false);
@@ -125,35 +129,100 @@ export default function POSScreen({
 
   const addToCartDirect = (product: Product) => {
     const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
+    const seed = { product_id: product.id, product_name: product.name, price_at_time: product.price, variation_id: null };
     setCart(prev => {
-      const ex = prev.find(i => i.product_id === product.id && i.type === tipo);
-      if (ex) return prev.map(i => i.product_id === product.id && i.type === tipo ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { product_id: product.id, product_name: product.name, quantity: 1, type: tipo, price_at_time: product.price }];
+      const ex = prev.find(i =>
+        i.product_id === seed.product_id
+        && i.type === tipo
+        && Number((i as any).variation_id || 0) === Number(seed.variation_id || 0)
+      );
+      if (ex) {
+        return prev.map(i =>
+          i.product_id === seed.product_id
+          && i.type === tipo
+          && Number((i as any).variation_id || 0) === Number(seed.variation_id || 0)
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        );
+      }
+      return [...prev, { ...seed, quantity: 1, type: tipo } as any];
     });
   };
 
-  const handleProductClick = (product: Product) => {
+  const addSelectionToCart = (selection: { product_id: number; product_name: string; price_at_time: number; variation_id?: number | null }, tipo: string) => {
+    setCart(prev => {
+      const ex = prev.find(i =>
+        i.product_id === selection.product_id
+        && i.type === tipo
+        && Number((i as any).variation_id || 0) === Number(selection.variation_id || 0)
+      );
+      if (ex) {
+        return prev.map(i =>
+          i.product_id === selection.product_id
+          && i.type === tipo
+          && Number((i as any).variation_id || 0) === Number(selection.variation_id || 0)
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        );
+      }
+      return [...prev, { ...selection, quantity: 1, type: tipo } as any];
+    });
+  };
+
+  const proceedSelection = (product: Product, variation?: any) => {
+    const selection = variation
+      ? {
+          product_id: product.id,
+          product_name: `${product.name} - ${variation.nome}`,
+          price_at_time: Number(variation.preco || 0),
+          variation_id: Number(variation.id || 0),
+        }
+      : {
+          product_id: product.id,
+          product_name: product.name,
+          price_at_time: product.price,
+          variation_id: null,
+        };
+
     if (cfg.usaTipoItem && cfg.tiposItem.length > 1) {
+      setPendingSelection(selection);
       setPendingProduct(product);
-    } else {
-      const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
-      setCart(prev => {
-        const ex = prev.find(i => i.product_id === product.id && i.type === tipo);
-        if (ex) return prev.map(i => i.product_id === product.id && i.type === tipo ? { ...i, quantity: i.quantity + 1 } : i);
-        return [...prev, { product_id: product.id, product_name: product.name, quantity: 1, type: tipo, price_at_time: product.price }];
+      return;
+    }
+    const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
+    addSelectionToCart(selection, tipo);
+  };
+
+  const handleProductClick = async (product: Product) => {
+    try {
+      setCarregandoVariacoes(true);
+      const res = await fetch(`/api/products/${product.id}/variacoes-vendaveis`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
+      const vars = res.ok ? await res.json() : [];
+      const ativas = Array.isArray(vars)
+        ? vars.filter((v: { ativo?: number }) => Number(v?.ativo) === 1)
+        : [];
+      if (ativas.length > 0) {
+        setVariacoesVendaveis(ativas);
+        setVariacaoModalProduct(product);
+        return;
+      }
+      proceedSelection(product);
+    } catch {
+      proceedSelection(product);
+    } finally {
+      setCarregandoVariacoes(false);
     }
   };
 
   const addToCartWithType = (tipo: TipoItem) => {
-    if (!pendingProduct) return;
+    if (!pendingProduct || !pendingSelection) return;
     setPendingProduct(null);
+    const selection = pendingSelection;
+    setPendingSelection(null);
     if (tipo.usaMesas) { setPendingMesaProduct(pendingProduct); setShowMesaPicker(true); return; }
-    setCart(prev => {
-      const ex = prev.find(i => i.product_id === pendingProduct.id && i.type === tipo.type);
-      if (ex) return prev.map(i => (i.product_id === pendingProduct.id && i.type === tipo.type) ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { product_id: pendingProduct.id, product_name: pendingProduct.name, quantity: 1, type: tipo.type, price_at_time: pendingProduct.price }];
-    });
+    addSelectionToCart(selection, tipo.type);
   };
 
   const updateQuantity = (index: number, delta: number) => {
@@ -281,7 +350,7 @@ export default function POSScreen({
                 return (
                   <motion.button
                     key={product.id}
-                    onClick={() => handleProductClick(product)}
+                    onClick={() => { if (!carregandoVariacoes) void handleProductClick(product); }}
                     whileTap={{ scale: 0.97 }}
                     className="group text-left rounded-2xl border border-zinc-200 bg-white overflow-hidden hover:border-amber-300 hover:shadow-lg hover:shadow-amber-100 transition-all"
                   >
@@ -561,8 +630,8 @@ export default function POSScreen({
               <div className="text-center mb-6">
                 {pendingProduct.photo_url && <div className="w-full h-40 rounded-2xl overflow-hidden mb-4"><img src={pendingProduct.photo_url} alt={pendingProduct.name} className="w-full h-full object-cover" /></div>}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>
-                <h3 className="text-2xl font-black text-zinc-900">{pendingProduct.name}</h3>
-                <p className="text-xl font-black text-amber-500 mt-1">R$ {pendingProduct.price.toFixed(2)}</p>
+                <h3 className="text-2xl font-black text-zinc-900">{pendingSelection?.product_name || pendingProduct.name}</h3>
+                <p className="text-xl font-black text-amber-500 mt-1">R$ {Number(pendingSelection?.price_at_time ?? pendingProduct.price).toFixed(2)}</p>
               </div>
               <p className="text-center text-sm text-zinc-500 mb-6 font-medium">Como será este item?</p>
               <div className={`grid gap-4 ${cfg.tiposItem.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -576,7 +645,47 @@ export default function POSScreen({
                   );
                 })}
               </div>
-              <button onClick={() => setPendingProduct(null)} className="w-full mt-4 py-2 text-zinc-400 hover:text-zinc-600 text-sm font-medium transition-colors">Cancelar</button>
+              <button onClick={() => { setPendingProduct(null); setPendingSelection(null); }} className="w-full mt-4 py-2 text-zinc-400 hover:text-zinc-600 text-sm font-medium transition-colors">Cancelar</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {variacaoModalProduct && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <div className="mb-4">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Escolha a variação</p>
+                <h3 className="text-xl font-black text-zinc-900">{variacaoModalProduct.name}</h3>
+              </div>
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {variacoesVendaveis.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => {
+                      const product = variacaoModalProduct;
+                      setVariacaoModalProduct(null);
+                      setVariacoesVendaveis([]);
+                      proceedSelection(product, v);
+                    }}
+                    className="w-full text-left p-3 rounded-xl border border-zinc-200 hover:border-amber-300 hover:bg-amber-50 transition-all"
+                  >
+                    <p className="font-bold text-sm text-zinc-800">{v.nome}</p>
+                    <p className="text-xs text-zinc-500">
+                      R$ {Number(v.preco || 0).toFixed(2)}
+                      {v.codigo_barras ? ` · ${v.codigo_barras}` : ''}
+                    </p>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => { setVariacaoModalProduct(null); setVariacoesVendaveis([]); }}
+                className="w-full mt-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all"
+              >
+                Cancelar
+              </button>
             </motion.div>
           </div>
         )}
