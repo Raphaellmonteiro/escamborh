@@ -8,6 +8,8 @@ import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
 import { normalizeProductProductionInput } from '../utils/preparation';
 
+const REPORT_TZ = 'America/Sao_Paulo';
+
 export function createProductsRouter() {
   const router = Router();
 
@@ -102,11 +104,19 @@ export function createProductsRouter() {
            p.price,
            p.category,
            p.photo_url,
-           MAX(ps.prioridade) AS prioridade
+           MAX(ps.prioridade) AS prioridade,
+           COALESCE(MAX(se.total_eventos), 0) AS total_eventos,
+           (array_agg(ps.produto_id ORDER BY ps.prioridade DESC, ps.produto_id ASC))[1] AS source_product_id
          FROM produto_sugestoes ps
          JOIN produtos p
            ON p.id = ps.produto_sugerido_id
           AND p.tenant_id = ps.tenant_id
+         LEFT JOIN (
+           SELECT produto_sugerido_id, COUNT(id) AS total_eventos
+           FROM sugestoes_eventos
+           WHERE tenant_id = ?
+           GROUP BY produto_sugerido_id
+         ) se ON se.produto_sugerido_id = p.id
          WHERE ps.tenant_id = ?
            AND ps.ativo = 1
            AND p.active = 1
@@ -114,9 +124,9 @@ export function createProductsRouter() {
            AND ps.produto_id <> ps.produto_sugerido_id
            AND ps.produto_sugerido_id NOT IN (${excludePlaceholders})
          GROUP BY p.id, p.name, p.price, p.category, p.photo_url
-         ORDER BY MAX(ps.prioridade) DESC, p.name ASC
+         ORDER BY MAX(ps.prioridade) DESC, COALESCE(MAX(se.total_eventos), 0) DESC, p.name ASC
          LIMIT 3`,
-        [req.tenantId, ...productIds, ...productIds]
+        [req.tenantId, req.tenantId, ...productIds, ...productIds]
       );
 
       const suggestions = [...manualRows];
@@ -158,7 +168,8 @@ export function createProductsRouter() {
                  p.price,
                  p.category,
                  p.photo_url,
-                 0 AS prioridade
+                 0 AS prioridade,
+                 CAST(NULL AS INTEGER) AS source_product_id
                FROM produtos p
                WHERE p.tenant_id = ?
                  AND p.active = 1
@@ -175,6 +186,44 @@ export function createProductsRouter() {
 
       res.json(suggestions.slice(0, 3));
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.get('/suggestions/events/summary', async (req: Request, res) => {
+    try {
+      const { periodo } = req.query;
+      let pKey = periodo ? String(periodo).toLowerCase().replace(/ /g, '').replace('_', '') : '';
+      if (pKey === '7dias') pKey = '7d';
+      if (pKey === '30dias') pKey = '30d';
+      if (pKey === 'estemes') pKey = 'mes';
+
+      const periodoMap: Record<string, string> = {
+        hoje: `(se.created_at AT TIME ZONE '${REPORT_TZ}')::date = (NOW() AT TIME ZONE '${REPORT_TZ}')::date`,
+        '7d': `(se.created_at AT TIME ZONE '${REPORT_TZ}')::date >= (NOW() AT TIME ZONE '${REPORT_TZ}')::date - INTERVAL '6 days'`,
+        '30d': `(se.created_at AT TIME ZONE '${REPORT_TZ}')::date >= (NOW() AT TIME ZONE '${REPORT_TZ}')::date - INTERVAL '29 days'`,
+        mes: `DATE_TRUNC('month', se.created_at AT TIME ZONE '${REPORT_TZ}') = DATE_TRUNC('month', NOW() AT TIME ZONE '${REPORT_TZ}')`,
+      };
+      const dateFilter = pKey && periodoMap[pKey] ? ` AND ${periodoMap[pKey]}` : '';
+
+      const rows = await qAll(
+        `SELECT
+           se.produto_origem_id,
+           se.produto_sugerido_id,
+           COUNT(*)::int AS total,
+           MAX(po.name) AS origem_name,
+           MAX(ps.name) AS sugerido_name
+         FROM sugestoes_eventos se
+         LEFT JOIN produtos po ON po.id = se.produto_origem_id AND po.tenant_id = se.tenant_id
+         LEFT JOIN produtos ps ON ps.id = se.produto_sugerido_id AND ps.tenant_id = se.tenant_id
+         WHERE se.tenant_id = ?${dateFilter}
+         GROUP BY se.produto_origem_id, se.produto_sugerido_id
+         ORDER BY total DESC
+         LIMIT 500`,
+        [req.tenantId]
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   router.get('/:id/suggestions', async (req: Request, res) => {

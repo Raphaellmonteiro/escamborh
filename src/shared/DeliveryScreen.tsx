@@ -1052,6 +1052,10 @@ function TabRelatorio({ token }: { token: string }) {
   const [periodo, setPeriodo] = useState<string>('7d');
   const [data, setData]       = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [sugestoesAceitas, setSugestoesAceitas] = useState<
+    { produto_origem_id: number; produto_sugerido_id: number; total: number; origem_name: string | null; sugerido_name: string | null }[]
+  >([]);
+  const [loadingSugestoes, setLoadingSugestoes] = useState(true);
   const hdrs = { Authorization: `Bearer ${token}` };
 
   const fetchRelatorio = useCallback(async () => {
@@ -1064,6 +1068,25 @@ function TabRelatorio({ token }: { token: string }) {
   }, [token, periodo]);
 
   useEffect(() => { fetchRelatorio(); }, [fetchRelatorio]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingSugestoes(true);
+      try {
+        const res = await fetch(
+          `/api/products/suggestions/events/summary?periodo=${encodeURIComponent(periodo)}`,
+          { headers: hdrs }
+        );
+        if (res.ok && !cancelled) {
+          const d = await res.json();
+          setSugestoesAceitas(Array.isArray(d) ? d : []);
+        }
+      } catch {}
+      if (!cancelled) setLoadingSugestoes(false);
+    })();
+    return () => { cancelled = true; };
+  }, [token, periodo]);
 
   const periodos = [
     { key:'hoje', label:'Hoje' },
@@ -1192,6 +1215,47 @@ function TabRelatorio({ token }: { token: string }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-zinc-100 flex items-center gap-2">
+          <Tag size={16} className="text-emerald-600 shrink-0"/>
+          <div>
+            <h3 className="text-sm font-black text-zinc-900">Sugestões aceitas (complementos)</h3>
+            <p className="text-[11px] text-zinc-400 mt-0.5">Pares origem → sugerido no cardápio online, no mesmo período dos botões acima</p>
+          </div>
+        </div>
+        {loadingSugestoes ? (
+          <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-zinc-100">
+                  <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Produto de origem</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Sugerido</th>
+                  <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Aceitações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-50">
+                {sugestoesAceitas.map((row) => (
+                  <tr key={`${row.produto_origem_id}-${row.produto_sugerido_id}`} className="hover:bg-zinc-50">
+                    <td className="px-4 py-3 text-zinc-800">
+                      <span className="font-medium">{row.origem_name || `Produto #${row.produto_origem_id}`}</span>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-800">
+                      <span className="font-medium">{row.sugerido_name || `Produto #${row.produto_sugerido_id}`}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-black text-emerald-700">{row.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {sugestoesAceitas.length === 0 && (
+              <p className="text-center text-zinc-400 py-10 text-sm">Nenhum evento registrado ainda</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

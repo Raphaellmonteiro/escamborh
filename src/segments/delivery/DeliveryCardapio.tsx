@@ -333,30 +333,35 @@ function gerarCartKey(prodId: number, selecoes: Selecoes): string {
   return `${prodId}_${partes}`;
 }
 
-// Calcula adicional total das seleções
-// modo 'adicional' (padrão): soma preco_adicional ao preço base do produto
-// modo 'final': o item selecionado É o preço total; subtrai o preço base para obter o "delta"
-function calcAdicionais(grupos: GrupoOpcao[], selecoes: Selecoes, precoBase: number = 0): number {
-  let delta = 0;
+// Preço unitário do item no carrinho:
+// - modo 'adicional': preço base + soma dos preco_adicional das seleções
+// - modo 'final' (variação vendável / preço substituto): o preco_adicional do item escolhido SUBSTITUI o preço base;
+//   não soma base + variação; grupos adicionais somam por cima
+function calcPrecoUnitario(grupos: GrupoOpcao[], selecoes: Selecoes, precoBase: number): number {
+  let substitutoFinal = -1;
+  let somaAdicional = 0;
   for (const g of grupos) {
-    const itensSel: Record<number,number> = selecoes[g.id] || {};
+    const itensSel: Record<number, number> = selecoes[g.id] || {};
     if (g.modo_preco === 'final') {
-      // Pega o maior preço_adicional selecionado neste grupo (representa o preço final do produto)
-      let maxFinal = 0;
+      let maxSel = -1;
       for (const item of g.itens) {
         const qty = (itensSel[item.id] as number) || 0;
-        if (qty > 0 && item.preco_adicional > maxFinal) maxFinal = item.preco_adicional;
+        if (qty > 0) maxSel = Math.max(maxSel, item.preco_adicional);
       }
-      if (maxFinal > 0) delta = Math.max(delta, maxFinal - precoBase);
+      if (maxSel >= 0) {
+        substitutoFinal = Math.max(substitutoFinal, maxSel);
+      }
     } else {
-      // Modo padrão: soma adicionais
       for (const item of g.itens) {
         const qty = (itensSel[item.id] as number) || 0;
-        delta += item.preco_adicional * qty;
+        somaAdicional += item.preco_adicional * qty;
       }
     }
   }
-  return delta;
+  if (substitutoFinal >= 0) {
+    return substitutoFinal + somaAdicional;
+  }
+  return precoBase + somaAdicional;
 }
 
 // Gera texto legível das seleções
@@ -753,8 +758,8 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
   const [qty, setQty] = useState(1);
   const [erros, setErros] = useState<Record<number,string>>({});
 
-  const adicional = calcAdicionais(grupos, selecoes, produto.price);
-  const precoUnit = produto.price + adicional;
+  const precoUnit = calcPrecoUnitario(grupos, selecoes, produto.price);
+  const adicional = precoUnit - produto.price;
   const precoTotal = precoUnit * qty;
 
   const toggleRadio = (grupoId: number, itemId: number) => {
@@ -1150,6 +1155,23 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddS
                   </div>
                   <button
                     onClick={() => {
+                      const sourceProductId = Number(item?.source_product_id);
+                      const suggestedProductId = Number(item?.id);
+                      if (
+                        Number.isInteger(sourceProductId) &&
+                        sourceProductId > 0 &&
+                        Number.isInteger(suggestedProductId) &&
+                        suggestedProductId > 0
+                      ) {
+                        void fetch(
+                          `/api/products/suggestions/event?slug=${encodeURIComponent(slug)}`,
+                          {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sourceProductId, suggestedProductId }),
+                          }
+                        ).catch(() => {});
+                      }
                       onAddSuggestion(item);
                     }}
                     className="px-3 py-1.5 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-700 transition-colors"

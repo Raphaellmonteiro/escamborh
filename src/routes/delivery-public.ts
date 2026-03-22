@@ -1068,11 +1068,19 @@ export function createDeliveryPublicRouter() {
            p.price,
            p.category,
            p.photo_url,
-           MAX(ps.prioridade) AS prioridade
+           MAX(ps.prioridade) AS prioridade,
+           COALESCE(MAX(se.total_eventos), 0) AS total_eventos,
+           (array_agg(ps.produto_id ORDER BY ps.prioridade DESC, ps.produto_id ASC))[1] AS source_product_id
          FROM produto_sugestoes ps
          JOIN produtos p
            ON p.id = ps.produto_sugerido_id
           AND p.tenant_id = ps.tenant_id
+         LEFT JOIN (
+           SELECT produto_sugerido_id, COUNT(id) AS total_eventos
+           FROM sugestoes_eventos
+           WHERE tenant_id = ?
+           GROUP BY produto_sugerido_id
+         ) se ON se.produto_sugerido_id = p.id
          WHERE ps.tenant_id = ?
            AND ps.ativo = 1
            AND p.active = 1
@@ -1080,9 +1088,9 @@ export function createDeliveryPublicRouter() {
            AND ps.produto_id <> ps.produto_sugerido_id
            AND ps.produto_sugerido_id NOT IN (${excludePlaceholders})
          GROUP BY p.id, p.name, p.price, p.category, p.photo_url
-         ORDER BY MAX(ps.prioridade) DESC, p.name ASC
+         ORDER BY MAX(ps.prioridade) DESC, COALESCE(MAX(se.total_eventos), 0) DESC, p.name ASC
          LIMIT 3`,
-        [tenant.id, ...productIds, ...productIds]
+        [tenant.id, tenant.id, ...productIds, ...productIds]
       );
 
       const suggestions = [...manualRows];
@@ -1124,7 +1132,8 @@ export function createDeliveryPublicRouter() {
                  p.price,
                  p.category,
                  p.photo_url,
-                 0 AS prioridade
+                 0 AS prioridade,
+                 CAST(NULL AS INTEGER) AS source_product_id
                FROM produtos p
                WHERE p.tenant_id = ?
                  AND p.active = 1

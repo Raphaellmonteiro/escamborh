@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { q1, qRun } from '../db';
-import { authenticateToken, resolveAuthenticatedSession } from '../middleware';
+import { q1, qAll, qInsert, qRun } from '../db';
+import { authenticateToken, publicRateLimit, resolveAuthenticatedSession } from '../middleware';
 import { AppError } from '../utils/errors';
 import { createExpensesRouter } from '../expenses/expenses';
 import { createAdminRouter } from './admin';
@@ -117,6 +117,74 @@ export function createApiRouter() {
     const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), 30000);
     req.on('close', () => clearInterval(ping));
   });
+
+  router.post(
+    '/products/suggestions/event',
+    publicRateLimit,
+    async (req: Request, res: Response) => {
+      try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.split(' ')[1];
+        let tenantId: number | null = null;
+
+        if (token) {
+          const session = await resolveAuthenticatedSession(req);
+          if (session.ok === false) {
+            return res.status(session.status).json(session.body);
+          }
+          tenantId = session.tenantId;
+        } else {
+          const slug = typeof req.query.slug === 'string' ? req.query.slug.trim() : '';
+          if (!slug) {
+            return res.status(400).json({ error: 'slug obrigatório' });
+          }
+          const tenant = await q1<{ id: number }>(
+            'SELECT id FROM clientes WHERE usuario=? AND status=?',
+            [slug, 'ativo']
+          );
+          if (!tenant) {
+            return res.status(404).json({ error: 'Loja não encontrada' });
+          }
+          tenantId = tenant.id;
+        }
+
+        const sourceProductId = Number(req.body?.sourceProductId);
+        const suggestedProductId = Number(req.body?.suggestedProductId);
+
+        if (
+          !Number.isInteger(sourceProductId) ||
+          sourceProductId <= 0 ||
+          !Number.isInteger(suggestedProductId) ||
+          suggestedProductId <= 0
+        ) {
+          return res.status(400).json({ error: 'sourceProductId e suggestedProductId são obrigatórios' });
+        }
+
+        if (sourceProductId === suggestedProductId) {
+          return res.status(400).json({ error: 'Produto de origem e sugerido devem ser diferentes' });
+        }
+
+        const produtosOk = await qAll<{ id: number }>(
+          'SELECT id FROM produtos WHERE tenant_id=? AND id IN (?,?) AND active=1',
+          [tenantId, sourceProductId, suggestedProductId]
+        );
+
+        if (produtosOk.length !== 2) {
+          return res.status(400).json({ error: 'Produtos inválidos para este estabelecimento' });
+        }
+
+        await qInsert(
+          'INSERT INTO sugestoes_eventos (tenant_id, produto_origem_id, produto_sugerido_id) VALUES (?, ?, ?)',
+          [tenantId, sourceProductId, suggestedProductId]
+        );
+
+        return res.json({ success: true });
+      } catch (e: any) {
+        console.error('POST /products/suggestions/event:', e?.message);
+        return res.status(500).json({ error: e?.message || 'Erro ao registrar evento' });
+      }
+    }
+  );
 
   protectedRouter.use(authenticateToken);
   protectedRouter.use('/products', createProductsRouter());

@@ -296,6 +296,15 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_produto_sugestoes_produto ON produto_sugestoes (tenant_id, produto_id);
       CREATE INDEX IF NOT EXISTS idx_produto_sugestoes_sugerido ON produto_sugestoes (tenant_id, produto_sugerido_id);
 
+      CREATE TABLE IF NOT EXISTS sugestoes_eventos (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        produto_origem_id INTEGER NOT NULL,
+        produto_sugerido_id INTEGER NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_sugestoes_eventos_tenant ON sugestoes_eventos (tenant_id, created_at);
+
       CREATE TABLE IF NOT EXISTS funcionarios (
         id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
         nome TEXT NOT NULL, cargo TEXT NOT NULL DEFAULT '',
