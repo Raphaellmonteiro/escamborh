@@ -6,7 +6,7 @@ import {
   ShoppingCart, Plus, Minus, MapPin, Smartphone, Banknote,
   CreditCard, CheckCircle2, Search, Package, User, LogOut,
   History, ArrowLeft, Trash2, Home, ChevronRight, Clock,
-  Bike, Heart, X, Pencil, AlertCircle,
+  Bike, Heart, X, Pencil, AlertCircle, ClipboardList,
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -17,10 +17,12 @@ interface GrupoOpcao {
   modo_preco?: 'adicional'|'final'; // 'final' = item define o preço total, não adiciona ao base
   itens: OpcaoItem[];
 }
+interface VariacaoVendavel { id: number; nome: string; preco: number; }
 interface Produto {
   id: number; name: string; price: number; category: string;
   photo_url?: string; description?: string;
   grupos_opcao?: GrupoOpcao[];
+  variacoes_vendaveis?: VariacaoVendavel[];
 }
 interface Categoria { nome: string; itens: Produto[]; }
 interface Config {
@@ -78,11 +80,13 @@ interface CartItem extends Produto {
   preco_final: number;        // preço base + adicionais
   obs_opcoes?: string;        // descrição textual das opções (para o pedido)
   cart_key: string;           // chave única para diferenciar variações do mesmo produto
+  variation_id?: number | null;
 }
 interface Endereco { id: number; label: string; logradouro: string; numero?: string; complemento?: string; bairro?: string; referencia?: string; principal: number; }
 interface ClienteAuth { id: number; nome: string; telefone: string; email?: string; favoritos: number[]; }
-interface PedidoHist { id: number; order_number: string; status: string; total_amount: number; created_at: string; resumo_itens: string; itens_raw?: string; }
-type Tela = 'cardapio'|'cart'|'checkout'|'confirmado'|'conta'|'identificar'|'historico'|'enderecos'|'novo_endereco'|'editar_perfil';
+interface PedidoHistItem { product_id: number; quantity: number; price_at_time: number; variation_id?: number | null; }
+interface PedidoHist { id: number; order_number: string; status: string; total_amount: number; created_at: string; resumo_itens: string; itens?: PedidoHistItem[]; }
+type Tela = 'cardapio'|'cart'|'escolha_atendimento'|'checkout'|'confirmado'|'conta'|'identificar'|'historico'|'enderecos'|'novo_endereco'|'editar_perfil';
 type TipoAtendimento = 'entrega'|'retirada';
 type PedidoConfirmado = {
   orderNumber: string;
@@ -97,6 +101,30 @@ type PedidoConfirmado = {
 };
 
 const fmt = (v: number) => `R$ ${(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')}`;
+
+/** Status amigável para “Meus pedidos” (telefone, sem login) */
+function labelStatusPedidoCliente(status: string): string {
+  const raw = String(status || '').trim();
+  const k = raw.toLowerCase();
+  if (k.includes('cancel')) return 'Cancelado';
+  if (k === 'em preparo') return 'Em preparo';
+  if (k === 'pronto' || k === 'pronto para entrega') return 'Pronto';
+  if (k === 'saiu para entrega') return 'Saiu para entrega';
+  if (k === 'entregue' || k === 'concluído' || k === 'concluido') return 'Entregue';
+  if (k === 'criado' || k === 'pedido recebido') return 'Recebido';
+  return raw || '—';
+}
+
+function badgeClassStatusPedido(status: string): string {
+  const k = String(status || '').toLowerCase();
+  if (k.includes('cancel')) return 'bg-red-100 text-red-800 border border-red-200';
+  if (k.includes('entregue') || k.includes('conclu')) return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+  if (k.includes('saiu')) return 'bg-orange-100 text-orange-800 border border-orange-200';
+  if (k.includes('pronto')) return 'bg-purple-100 text-purple-800 border border-purple-200';
+  if (k.includes('preparo')) return 'bg-amber-100 text-amber-800 border border-amber-200';
+  return 'bg-zinc-100 text-zinc-700 border border-zinc-200';
+}
+
 const STATUS_COR: Record<string,string> = { 'Criado':'bg-blue-100 text-blue-700 border border-blue-200','Pedido Recebido':'bg-blue-100 text-blue-700 border border-blue-200','Em Preparo':'bg-amber-100 text-amber-700 border border-amber-200','Pronto':'bg-purple-100 text-purple-700 border border-purple-200','Pronto para Entrega':'bg-purple-100 text-purple-700 border border-purple-200','Saiu para Entrega':'bg-orange-100 text-orange-700 border border-orange-200','Entregue':'bg-emerald-100 text-emerald-700 border border-emerald-200','Concluído':'bg-emerald-100 text-emerald-700 border border-emerald-200','Cancelado':'bg-red-100 text-red-700 border border-red-200' };
 const STATUS_TXT: Record<string,string> = { 'Criado':'Recebido','Pedido Recebido':'Recebido','Em Preparo':'Em Preparo','Pronto':'Pronto','Pronto para Entrega':'Pronto','Saiu para Entrega':'A caminho 🛵','Entregue':'Entregue ✓','Concluído':'Concluído','Cancelado':'Cancelado' };
 
@@ -254,12 +282,22 @@ function ResumoComercialLinhas({
 function TelaEscolhaAtendimento({
   nome,
   onSelect,
+  onBack,
 }: {
   nome: string;
   onSelect: (tipo: TipoAtendimento) => void;
+  onBack?: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+      {onBack && (
+        <div className="p-4">
+          <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
+            <ArrowLeft size={20} className="text-zinc-700"/>
+          </button>
+        </div>
+      )}
+      <div className="flex-1 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-xl space-y-4">
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-600">FlowPDV</p>
@@ -290,6 +328,7 @@ function TelaEscolhaAtendimento({
             <p className="mt-2 text-sm text-zinc-600">Checkout mais simples, sem endereço e sem taxa de entrega.</p>
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -417,9 +456,20 @@ export default function DeliveryCardapio() {
   const [search, setSearch] = useState('');
   const [catAtiva, setCatAtiva] = useState('');
   const [pedidoOk, setPedidoOk] = useState<PedidoConfirmado|null>(null);
-  const [abaCardapio, setAbaCardapio] = useState<'todos'|'favoritos'>('todos');
+  const [abaCardapio, setAbaCardapio] = useState<'todos'|'favoritos'|'meus_pedidos'>('todos');
+  const [mpPhone, setMpPhone] = useState('');
+  const [mpTelDigits, setMpTelDigits] = useState('');
+  const [mpList, setMpList] = useState<Array<{ id: number; status: string; total: number; created_at: string; order_number?: string }>>([]);
+  const [mpLoading, setMpLoading] = useState(false);
+  const [mpErr, setMpErr] = useState('');
+  const [mpDetalhe, setMpDetalhe] = useState<{
+    id: number; status: string; total: number; created_at: string; order_number?: string;
+    itens: Array<{ product_id: number; name: string; quantity: number; price_at_time: number }>;
+  } | null>(null);
   const [produtoModal, setProdutoModal] = useState<Produto|null>(null); // modal de opções
+  const [variacaoModalProduct, setVariacaoModalProduct] = useState<Produto|null>(null);
   const catRefs = useRef<Record<string, HTMLDivElement|null>>({});
+  const mpPhoneStorageKey = slug ? `dc_mp_phone_${slug}` : '';
 
   useEffect(() => {
     if (!slug) return;
@@ -432,13 +482,108 @@ export default function DeliveryCardapio() {
 
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
   const totalItens = cart.reduce((a,i)=>a+i.qty,0);
-  // Abre modal de opções se produto tiver grupos, senão adiciona direto
+
+  const buscarMeusPedidos = useCallback(async (opts?: { keepDetail?: boolean }) => {
+    if (cliToken) {
+      setMpErr('');
+      setMpLoading(true);
+      if (!opts?.keepDetail) setMpDetalhe(null);
+      try {
+        const r = await fetch(`/public/delivery/${slug}/cliente/pedidos`, { headers: { Authorization: `Bearer ${cliToken}` } });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Nao foi possivel carregar');
+        const list = Array.isArray(d) ? d.map((r: any) => ({ id: r.id, status: r.status, total: Number(r.total_amount || 0), created_at: r.created_at, order_number: r.order_number })) : [];
+        setMpList(list);
+      } catch (e: any) {
+        setMpErr(e?.message || 'Erro ao buscar');
+        setMpList([]);
+      } finally {
+        setMpLoading(false);
+      }
+      return;
+    }
+    const tel = mpPhone.replace(/\D/g, '');
+    if (tel.length < 10) {
+      setMpErr('Digite um telefone valido (DDD + numero).');
+      return;
+    }
+    setMpErr('');
+    setMpLoading(true);
+    if (!opts?.keepDetail) setMpDetalhe(null);
+    try {
+      const r = await fetch(`/public/delivery/${slug}/orders?phone=${encodeURIComponent(tel)}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Nao foi possivel carregar');
+      setMpTelDigits(tel);
+      setMpList(Array.isArray(d) ? d : []);
+      try {
+        if (mpPhoneStorageKey) localStorage.setItem(mpPhoneStorageKey, mpPhone);
+      } catch { /* ignore */ }
+    } catch (e: any) {
+      setMpErr(e?.message || 'Erro ao buscar');
+      setMpList([]);
+    } finally {
+      setMpLoading(false);
+    }
+  }, [slug, mpPhone, mpPhoneStorageKey, cliToken]);
+
+  useEffect(() => {
+    if (abaCardapio !== 'meus_pedidos' || !mpPhoneStorageKey || cliToken) return;
+    try {
+      const saved = localStorage.getItem(mpPhoneStorageKey);
+      if (saved) setMpPhone(prev => (prev.trim() ? prev : saved));
+    } catch { /* ignore */ }
+  }, [abaCardapio, mpPhoneStorageKey, cliToken]);
+
+  useEffect(() => {
+    if (abaCardapio !== 'meus_pedidos' || !cliToken || !slug) return;
+    void buscarMeusPedidos();
+  }, [abaCardapio, cliToken, slug, buscarMeusPedidos]);
+
+  const abrirDetalheMeusPedidos = useCallback(async (pedidoId: number) => {
+    const tel = cliToken && cliente ? cliente.telefone.replace(/\D/g, '') : mpTelDigits;
+    if (!tel || tel.length < 10) return;
+    setMpLoading(true);
+    setMpErr('');
+    try {
+      const r = await fetch(`/public/delivery/${slug}/orders/${pedidoId}?phone=${encodeURIComponent(tel)}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Pedido nao encontrado');
+      setMpDetalhe(d);
+    } catch (e: any) {
+      setMpErr(e?.message || 'Erro ao abrir pedido');
+      setMpDetalhe(null);
+    } finally {
+      setMpLoading(false);
+    }
+  }, [slug, mpTelDigits, cliToken, cliente]);
+
+  useEffect(() => {
+    const podePollar = cliToken || (mpTelDigits && mpTelDigits.length >= 10);
+    if (abaCardapio !== 'meus_pedidos' || !podePollar || !slug) return;
+    const interval = setInterval(() => void buscarMeusPedidos({ keepDetail: true }), 25000);
+    return () => clearInterval(interval);
+  }, [abaCardapio, mpTelDigits, slug, cliToken, buscarMeusPedidos]);
+
+  useEffect(() => {
+    const telOk = (cliToken && cliente) || (mpTelDigits && mpTelDigits.length >= 10);
+    if (abaCardapio !== 'meus_pedidos' || !mpDetalhe || !telOk || !slug) return;
+    const interval = setInterval(() => {
+      abrirDetalheMeusPedidos(mpDetalhe!.id);
+    }, 25000);
+    return () => clearInterval(interval);
+  }, [abaCardapio, mpDetalhe?.id ?? null, mpTelDigits, slug, cliToken, cliente?.id ?? null, abrirDetalheMeusPedidos]);
+  // Variações vendáveis têm prioridade (igual PDV). Depois grupos de opção. Senão adiciona direto.
   const handleAddProduto = (p: Produto) => {
     if (!ativo) return;
+    const variacoes = p.variacoes_vendaveis?.filter((v: VariacaoVendavel) => v?.id && Number(v.preco) >= 0);
+    if (variacoes && variacoes.length > 0) {
+      setVariacaoModalProduct(p);
+      return;
+    }
     if (p.grupos_opcao && p.grupos_opcao.length > 0) {
       setProdutoModal(p);
     } else {
-      // Sem opções — adiciona direto
       const cartKey = `${p.id}_`;
       setCart(prev => {
         const ex = prev.find(i => i.cart_key === cartKey);
@@ -448,6 +593,26 @@ export default function DeliveryCardapio() {
       });
     }
   };
+
+  const addCartItemVariacao = useCallback((produto: Produto, variacao: VariacaoVendavel) => {
+    const cartKey = `${produto.id}_v${variacao.id}`;
+    const name = `${produto.name} - ${variacao.nome}`;
+    const item: CartItem = {
+      ...produto,
+      name,
+      qty: 1,
+      preco_final: Number(variacao.preco),
+      cart_key: cartKey,
+      variation_id: variacao.id,
+    };
+    setVariacaoModalProduct(null);
+    setCart(prev => {
+      const ex = prev.find(i => i.cart_key === cartKey);
+      return ex
+        ? prev.map(i => i.cart_key === cartKey ? {...i, qty: i.qty+1} : i)
+        : [...prev, item];
+    });
+  }, []);
 
   const addCartItem = (item: CartItem) => {
     setCart(prev => {
@@ -491,13 +656,20 @@ export default function DeliveryCardapio() {
     </div>
   );
   if (!slug) return <div className="min-h-screen bg-white flex items-center justify-center text-zinc-300"><Package size={48}/></div>;
-  if (!tipoAtendimento && tela === 'cardapio') return <TelaEscolhaAtendimento nome={nome} onSelect={setTipoAtendimento} />;
 
-  if (tela==='confirmado'&&pedidoOk) return <TelaConfirmado pedidoOk={pedidoOk} config={config} slug={slug} tipoAtendimento={tipoAtendimento || 'entrega'} onNovo={()=>{setPedidoOk(null);setTela('cardapio');}} />;
+  if (tela==='escolha_atendimento') return (
+    <TelaEscolhaAtendimento
+      nome={nome}
+      onSelect={(t) => { setTipoAtendimento(t); setTela(!cliente ? 'identificar' : 'checkout'); }}
+      onBack={() => setTela('cart')}
+    />
+  );
+
+  if (tela==='confirmado'&&pedidoOk) return <TelaConfirmado pedidoOk={pedidoOk} config={config} slug={slug} tipoAtendimento={tipoAtendimento || 'entrega'} onNovo={()=>{setPedidoOk(null);setTipoAtendimento(null);setTela('cardapio');}} />;
   if (tela==='identificar') return <TelaIdentificar slug={slug} tipoAtendimento={tipoAtendimento || 'entrega'} onSuccess={(t,c)=>{salvarToken(t,c);setTela('cardapio');}} onBack={()=>setTela('cardapio')} />;
   if (tela==='conta') return <TelaConta slug={slug} token={cliToken} cliente={cliente} onLogout={()=>{logout();setTela('cardapio');}} onBack={()=>setTela('cardapio')} onHistorico={()=>setTela('historico')} onEnderecos={()=>setTela('enderecos')} onEditarPerfil={()=>setTela('editar_perfil')} />;
   if (tela==='editar_perfil') return <TelaEditarPerfil slug={slug} token={cliToken} cliente={cliente} onSaved={(c)=>{salvarToken(cliToken!,c);setTela('conta');}} onBack={()=>setTela('conta')} />;
-  if (tela==='historico') return <TelaHistorico slug={slug} token={cliToken} onBack={()=>setTela('conta')} onRepetir={(its)=>{its.forEach(i=>addCartItem({...i,qty:1,preco_final:i.price,cart_key:`${i.id}_`,selecoes:{}}));setTela('cart');}} categorias={categorias} />;
+  if (tela==='historico') return <TelaHistorico slug={slug} token={cliToken} onBack={()=>setTela('conta')} onRepetir={(items)=>{items.forEach(i=>addCartItem({...i,qty:1}));setTela('cart');}} categorias={categorias} />;
   if (tela==='enderecos') return <TelaEnderecos slug={slug} token={cliToken} onBack={()=>setTela('conta')} onNovo={()=>setTela('novo_endereco')} />;
   if (tela==='novo_endereco') return <TelaNovo Endereco slug={slug} token={cliToken} onBack={()=>setTela('enderecos')} onSaved={()=>setTela('enderecos')} />;
   if (tela==='cart') return (
@@ -517,6 +689,14 @@ export default function DeliveryCardapio() {
             handleAddProduto(produtoCompleto);
             return;
           }
+          let variacoes: VariacaoVendavel[] = [];
+          if (Array.isArray(item?.variacoes_vendaveis)) variacoes = item.variacoes_vendaveis;
+          else if (typeof item?.variacoes_vendaveis === 'string') { try { variacoes = JSON.parse(item.variacoes_vendaveis || '[]'); } catch { /* ignore */ } }
+          if (variacoes.length > 0) {
+            const produtoFallback = { ...item, variacoes_vendaveis: variacoes } as Produto;
+            setVariacaoModalProduct(produtoFallback);
+            return;
+          }
           console.warn('[delivery-suggestions] Produto sugerido nao encontrado no cardapio carregado:', {
             suggestedId: item?.id,
             suggestedName: item?.name,
@@ -530,7 +710,7 @@ export default function DeliveryCardapio() {
         }}
         onRemove={(key)=>removeCart(key)}
         onBack={()=>setTela('cardapio')}
-        onCheckout={()=>{if(!cliente){setTela('identificar');return;}setTela('checkout');}}
+        onCheckout={()=>{if(!tipoAtendimento){setTela('escolha_atendimento');return;}if(!cliente){setTela('identificar');return;}setTela('checkout');}}
       />
       <AnimatePresence>
         {produtoModal && (
@@ -538,6 +718,13 @@ export default function DeliveryCardapio() {
             produto={produtoModal}
             onClose={()=>setProdutoModal(null)}
             onAdicionar={(item)=>{ addCartItem(item); setProdutoModal(null); }}
+          />
+        )}
+        {variacaoModalProduct && (
+          <ModalVariacoes
+            produto={variacaoModalProduct}
+            onClose={()=>setVariacaoModalProduct(null)}
+            onSelecionar={addCartItemVariacao}
           />
         )}
       </AnimatePresence>
@@ -557,13 +744,6 @@ export default function DeliveryCardapio() {
               {config.taxa_entrega>0
                 ? <span className="flex items-center gap-1 text-xs text-zinc-500"><Bike size={11}/>{fmt(config.taxa_entrega)}</span>
                 : <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><Bike size={11}/>Entrega grátis</span>}
-              <span className={`flex items-center gap-1 text-xs font-semibold ${tipoAtendimento === 'retirada' ? 'text-emerald-600' : 'text-zinc-500'}`}>
-                {tipoAtendimento === 'retirada' ? <Package size={11}/> : <Bike size={11}/>}
-                {tipoAtendimento === 'retirada' ? 'Retirar no local' : 'Entrega'}
-              </span>
-              <button onClick={()=>setTipoAtendimento(null)} className="text-xs font-semibold text-zinc-500 underline underline-offset-2 hover:text-zinc-700">
-                Alterar
-              </button>
               <span className={`flex items-center gap-1 text-xs font-semibold ${ativo?'text-emerald-600':'text-red-500'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${ativo?'bg-emerald-500 animate-pulse':'bg-red-500'}`}/>
                 {ativo?'Aberto agora':'Fechado'}
@@ -610,14 +790,22 @@ export default function DeliveryCardapio() {
         </div>
 
         {/* Abas */}
-        {cliente && !search && (
-          <div className="flex gap-2">
-            {([{k:'todos',l:'Todos'},{k:'favoritos',l:`♥ Favoritos (${cliente.favoritos.length})`}] as const).map(a=>(
-              <button key={a.k} onClick={()=>setAbaCardapio(a.k)}
-                className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${abaCardapio===a.k?'bg-zinc-900 text-white shadow':'bg-white text-zinc-500 border border-zinc-200 hover:border-zinc-300'}`}>
-                {a.l}
+        {!search && (
+          <div className="flex gap-2 flex-wrap">
+            <button type="button" onClick={()=>setAbaCardapio('todos')}
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${abaCardapio==='todos'?'bg-zinc-900 text-white shadow':'bg-white text-zinc-500 border border-zinc-200 hover:border-zinc-300'}`}>
+              Todos
+            </button>
+            {cliente && (
+              <button type="button" onClick={()=>setAbaCardapio('favoritos')}
+                className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${abaCardapio==='favoritos'?'bg-zinc-900 text-white shadow':'bg-white text-zinc-500 border border-zinc-200 hover:border-zinc-300'}`}>
+                ♥ Favoritos ({cliente.favoritos.length})
               </button>
-            ))}
+            )}
+            <button type="button" onClick={()=>setAbaCardapio('meus_pedidos')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all ${abaCardapio==='meus_pedidos'?'bg-zinc-900 text-white shadow':'bg-white text-zinc-500 border border-zinc-200 hover:border-zinc-300'}`}>
+              <ClipboardList size={14}/> Meus pedidos
+            </button>
           </div>
         )}
 
@@ -634,8 +822,72 @@ export default function DeliveryCardapio() {
           </div>
         )}
 
+        {/* Meus pedidos */}
+        {abaCardapio === 'meus_pedidos' && !search && (
+          <div className="space-y-4">
+            {!cliToken && (
+              <div className="bg-white rounded-2xl border border-zinc-200 p-4 shadow-sm">
+                <p className="text-sm font-bold text-zinc-800 mb-2">Consultar por telefone</p>
+                <p className="text-[11px] text-zinc-400 mb-3">Digite o mesmo telefone usado no pedido (com DDD).</p>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="(11) 99999-9999"
+                    value={mpPhone}
+                    onChange={(e) => setMpPhone(e.target.value)}
+                    className="flex-1 min-w-0 px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void buscarMeusPedidos()}
+                    disabled={mpLoading}
+                    className="px-4 py-3 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 disabled:opacity-50 shrink-0"
+                  >
+                    {mpLoading ? '...' : 'Buscar'}
+                  </button>
+                </div>
+                {mpErr && <p className="text-xs text-red-600 mt-2 font-medium">{mpErr}</p>}
+              </div>
+            )}
+            {cliToken && mpErr && <p className="text-xs text-red-600 px-1 font-medium">{mpErr}</p>}
+            {mpList.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-black text-zinc-400 uppercase tracking-wider px-1">Pedidos encontrados</p>
+                {mpList.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => void abrirDetalheMeusPedidos(p.id)}
+                    className="w-full text-left bg-white rounded-2xl border border-zinc-200 p-4 shadow-sm hover:border-emerald-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs text-zinc-400 font-medium">
+                          {p.order_number ? `#${p.order_number}` : `Pedido #${p.id}`}
+                        </p>
+                        <p className="text-sm font-bold text-zinc-800 mt-0.5">
+                          {new Date(p.created_at).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <span className={`text-[11px] font-black px-2.5 py-1 rounded-full shrink-0 ${badgeClassStatusPedido(p.status)}`}>
+                        {labelStatusPedidoCliente(p.status)}
+                      </span>
+                    </div>
+                    <p className="text-sm font-black text-emerald-600 mt-2">{fmt(p.total)}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {((cliToken && mpList.length === 0) || (mpTelDigits && mpList.length === 0)) && !mpLoading && !mpErr && (
+              <p className="text-center text-zinc-400 text-sm py-8">{cliToken ? 'Nenhum pedido ainda.' : 'Nenhum pedido encontrado para este telefone.'}</p>
+            )}
+          </div>
+        )}
+
         {/* Produtos */}
-        {prodsFiltrados.length===0
+        {abaCardapio !== 'meus_pedidos' && (prodsFiltrados.length===0
           ? <div className="text-center py-20 text-zinc-400">
               <Heart size={40} className="mx-auto mb-3 opacity-20"/>
               <p className="font-semibold text-sm">{abaCardapio==='favoritos'?'Nenhum favorito — toque no ♥ para salvar':'Nenhum produto encontrado'}</p>
@@ -651,9 +903,12 @@ export default function DeliveryCardapio() {
                 {cat.itens.map(p=>{
                   const qty=cartQty(p.id);
                   const isFav=cliente?.favoritos.includes(p.id)||false;
+                  const temVariacoes = !!(p.variacoes_vendaveis && p.variacoes_vendaveis.length > 0);
                   const temOpcoes = p.grupos_opcao && p.grupos_opcao.length > 0;
-                  const precoMinimo = calcPrecoMinimo(p);
-                  const temPrecoVariavel = precoMinimo > p.price; // grupos obrigatórios adicionam valor
+                  const precoMinimo = temVariacoes
+                    ? Math.min(...(p.variacoes_vendaveis!.map(v=>Number(v.preco))))
+                    : calcPrecoMinimo(p);
+                  const temPrecoVariavel = precoMinimo > p.price || temVariacoes;
                   return (
                     <div key={p.id} className={`bg-white rounded-2xl overflow-hidden shadow-sm border-2 transition-all ${qty>0?'border-emerald-300':'border-transparent hover:border-zinc-100 hover:shadow-md'}`}>
                       <div className="flex items-stretch">
@@ -666,36 +921,41 @@ export default function DeliveryCardapio() {
                         <div className="flex-1 p-3.5 flex flex-col justify-between min-w-0">
                           <div>
                             <div className="flex items-start justify-between gap-2">
-                              <p className="font-bold text-zinc-900 text-sm leading-tight cursor-pointer" onClick={()=>handleAddProduto(p)}>{p.name}</p>
+                              <p className="font-bold text-zinc-900 text-sm leading-snug tracking-tight cursor-pointer" onClick={()=>handleAddProduto(p)}>{p.name}</p>
                               <button onClick={()=>toggleFav(p.id)} className="shrink-0 mt-0.5 p-0.5 active:scale-125 transition-transform">
                                 <Heart size={14} className={isFav?'fill-red-500 text-red-500':'text-zinc-300 hover:text-zinc-400 transition-colors'}/>
                               </button>
                             </div>
                             {p.description&&<p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{p.description}</p>}
-                            {temOpcoes && <p className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1">⚙️ Personalizável</p>}
+                            {(temOpcoes || temVariacoes) && <p className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1">⚙️ Personalizável</p>}
                           </div>
                           <div className="flex items-center justify-between mt-2.5">
-                            {/* Preço: mostra "a partir de" se grupos obrigatórios têm preço adicional */}
+                            {/* Preço: "A partir de" quando tem variações; preço fixo quando não tem */}
                             <div>
-                              {temPrecoVariavel ? (
+                              {temVariacoes ? (
                                 <div>
-                                  <span className="text-[10px] text-zinc-400 font-medium">a partir de</span>
-                                  <p className="font-black text-emerald-600 text-base leading-tight">{fmt(precoMinimo)}</p>
+                                  <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wide">A partir de</span>
+                                  <p className="font-black text-emerald-600 text-base leading-tight mt-0.5">{fmt(precoMinimo)}</p>
+                                </div>
+                              ) : temPrecoVariavel ? (
+                                <div>
+                                  <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wide">A partir de</span>
+                                  <p className="font-black text-emerald-600 text-base leading-tight mt-0.5">{fmt(precoMinimo)}</p>
                                 </div>
                               ) : (
-                                <span className="font-black text-emerald-600 text-base">{fmt(p.price)}</span>
+                                <p className="font-black text-emerald-600 text-base leading-tight">{fmt(p.price)}</p>
                               )}
                             </div>
-                            {/* Se tem opções: sempre mostra botão "Adicionar" que abre modal */}
-                            {temOpcoes ? (
+                            {/* Se tem variações ou opções: botão "Adicionar" abre modal */}
+                            {(temOpcoes || temVariacoes) ? (
                               <button onClick={()=>ativo&&handleAddProduto(p)} disabled={!ativo}
                                 className="flex items-center gap-1 px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-700 disabled:bg-zinc-200 text-white disabled:text-zinc-400 rounded-full text-xs font-bold transition-all active:scale-95">
-                                {qty>0?<><span className="bg-white/20 px-1.5 rounded-md font-black">{qty}</span> Adicionar</>:<><Plus size={12}/>Adicionar</>}
+                                {qty>0?<><span className="bg-white/20 px-1.5 rounded-md font-black">{qty}</span> + Adicionar</>:<><Plus size={12}/>+ Adicionar</>}
                               </button>
                             ) : qty===0 ? (
                               <button onClick={()=>ativo&&handleAddProduto(p)} disabled={!ativo}
                                 className="flex items-center gap-1 px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-700 disabled:bg-zinc-200 text-white disabled:text-zinc-400 rounded-full text-xs font-bold transition-all active:scale-95">
-                                <Plus size={12}/>Adicionar
+                                <Plus size={12}/>+ Adicionar
                               </button>
                             ) : (
                               <div className="flex items-center gap-1.5 bg-zinc-100 rounded-full p-0.5">
@@ -713,18 +973,62 @@ export default function DeliveryCardapio() {
               </div>
             </div>
           ))
-        }
+        )}
       </div>
 
-      {/* Carrinho fixo */}
+      {/* Detalhe pedido (Meus pedidos) */}
       <AnimatePresence>
-        {cart.length>0&&(
+        {mpDetalhe && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMpDetalhe(null)}/>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
+              <div className="p-5 border-b border-zinc-100 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-zinc-400 font-medium">
+                    {mpDetalhe.order_number ? `#${mpDetalhe.order_number}` : `Pedido #${mpDetalhe.id}`}
+                  </p>
+                  <span className={`inline-block mt-2 text-[11px] font-black px-2.5 py-1 rounded-full ${badgeClassStatusPedido(mpDetalhe.status)}`}>
+                    {labelStatusPedidoCliente(mpDetalhe.status)}
+                  </span>
+                  <p className="text-xs text-zinc-400 mt-2">
+                    {new Date(mpDetalhe.created_at).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setMpDetalhe(null)} className="p-2 hover:bg-zinc-100 rounded-xl shrink-0">
+                  <X size={20} className="text-zinc-500"/>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                <p className="text-sm font-black text-zinc-900">Itens</p>
+                {Array.isArray(mpDetalhe.itens) && mpDetalhe.itens.map((it, idx) => (
+                  <div key={idx} className="flex justify-between gap-3 text-sm border-b border-zinc-50 pb-2">
+                    <span className="text-zinc-800 font-medium flex-1 min-w-0">{it.name} <span className="text-zinc-400 font-normal">x{it.quantity}</span></span>
+                    <span className="font-bold text-zinc-700 shrink-0">{fmt(it.price_at_time * it.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="p-5 border-t border-zinc-100 flex justify-between items-center bg-zinc-50">
+                <span className="font-black text-zinc-900">Total</span>
+                <span className="text-lg font-black text-emerald-600">{fmt(mpDetalhe.total)}</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Barra fixa do carrinho — visível enquanto navega no cardápio */}
+      <AnimatePresence>
+        {cart.length > 0 && (
           <motion.div initial={{y:100,opacity:0}} animate={{y:0,opacity:1}} exit={{y:100,opacity:0}} className="fixed bottom-5 left-4 right-4 max-w-2xl mx-auto z-30">
-            <button onClick={()=>setTela('cart')}
-              className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-black shadow-2xl flex items-center justify-between px-5 active:scale-[0.98] transition-all">
-              <span className="bg-white/20 px-2.5 py-1 rounded-xl text-sm font-black">{totalItens}</span>
-              <span className="flex items-center gap-2"><ShoppingCart size={16}/>Ver Carrinho</span>
+            <button onClick={() => setTela('cart')} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-black shadow-2xl flex items-center justify-between px-5 active:scale-[0.98] transition-all">
+              <span className="flex items-center gap-2">
+                <ShoppingCart size={16}/>
+                <span className="bg-white/20 px-2.5 py-1 rounded-xl text-sm font-black">{totalItens} {totalItens===1?'item':'itens'}</span>
+              </span>
               <span className="text-emerald-400">{fmt(subtotal)}</span>
+              <span className="font-bold">Ver pedido</span>
             </button>
           </motion.div>
         )}
@@ -739,8 +1043,59 @@ export default function DeliveryCardapio() {
             onAdicionar={(item)=>{ addCartItem(item); setProdutoModal(null); }}
           />
         )}
+        {variacaoModalProduct && (
+          <ModalVariacoes
+            produto={variacaoModalProduct}
+            onClose={()=>setVariacaoModalProduct(null)}
+            onSelecionar={addCartItemVariacao}
+          />
+        )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL DE VARIAÇÕES VENDÁVEIS (igual PDV)
+// ═══════════════════════════════════════════════════════════════════════════════
+function ModalVariacoes({ produto, onClose, onSelecionar }: {
+  produto: Produto;
+  onClose: ()=>void;
+  onSelecionar: (produto: Produto, variacao: VariacaoVendavel)=>void;
+}) {
+  const variacoes = produto.variacoes_vendaveis || [];
+  return (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}/>
+      <motion.div initial={{y:'100%'}} animate={{y:0}} exit={{y:'100%'}}
+        transition={{type:'spring',damping:30,stiffness:400}}
+        className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-start justify-between p-5 border-b border-zinc-100">
+          <div>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Escolha a variação</p>
+            <h3 className="text-xl font-black text-zinc-900">{produto.name}</h3>
+          </div>
+        </div>
+        <div className="p-5 space-y-2 max-h-[50vh] overflow-y-auto">
+          {variacoes.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => onSelecionar(produto, v)}
+              className="w-full text-left p-3 rounded-xl border border-zinc-200 hover:border-amber-300 hover:bg-amber-50 transition-all"
+            >
+              <p className="font-bold text-sm text-zinc-800">{v.nome}</p>
+              <p className="text-xs text-zinc-500">{fmt(Number(v.preco))}</p>
+            </button>
+          ))}
+        </div>
+        <div className="p-5 border-t border-zinc-100">
+          <button onClick={onClose} className="w-full py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">
+            Cancelar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -1079,7 +1434,7 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddS
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({
-        items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'' })),
+        items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'', variation_id:i.variation_id ?? null })),
         pagamento_tipo: 'pix',
         clienteToken: cliToken || undefined,
         canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
@@ -1316,7 +1671,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
         method: 'POST',
         headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
-          items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'' })),
+          items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'', variation_id:i.variation_id ?? null })),
           pagamento_tipo: pag,
           clienteToken: cliToken,
           canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
@@ -1408,7 +1763,7 @@ const finalizar = async () => {
         obsCompleta = `Troco para R$ ${troco}${obs ? ` | ${obs}` : ''}`;
       }
       const body: any = {
-        items: cart.map(i=>({product_id:i.id,quantity:i.qty,price_at_time:i.preco_final,name:i.name,obs_opcoes:i.obs_opcoes||''})),
+        items: cart.map(i=>({product_id:i.id,quantity:i.qty,price_at_time:i.preco_final,name:i.name,obs_opcoes:i.obs_opcoes||'',variation_id:i.variation_id ?? null})),
         pagamento_tipo: pag,
         desconto_pix: pag==='pix' ? descontoPix : 0,
         observation: obsCompleta,
@@ -2191,12 +2546,27 @@ function TelaEditarPerfil({ slug, token, cliente, onSaved, onBack }: { slug:stri
   );
 }
 
-function TelaHistorico({ slug, token, onBack, onRepetir, categorias }: { slug:string;token:string|null;onBack:()=>void;onRepetir:(its:Produto[])=>void;categorias:Categoria[] }) {
+function TelaHistorico({ slug, token, onBack, onRepetir, categorias }: { slug:string;token:string|null;onBack:()=>void;onRepetir:(items:CartItem[])=>void;categorias:Categoria[] }) {
   const [pedidos, setPedidos]=useState<PedidoHist[]>([]);
   const [load, setLoad]=useState(true);
   useEffect(()=>{if(!token)return;fetch(`/public/delivery/${slug}/cliente/pedidos`,{headers:{Authorization:`Bearer ${token}`}}).then(r=>r.ok?r.json():[]).then(d=>{if(Array.isArray(d))setPedidos(d);}).finally(()=>setLoad(false));},[token,slug]);
   const pm=useMemo(()=>{const m:Record<number,Produto>={};categorias.forEach(c=>c.itens.forEach(p=>{m[p.id]=p;}));return m;},[categorias]);
-  const repetir=(p:PedidoHist)=>{if(!p.itens_raw)return;const its:Produto[]=[];p.itens_raw.split('||').forEach(raw=>{const[id]=raw.split(':');const n=parseInt(id);if(pm[n])its.push(pm[n]);});if(its.length)onRepetir(its);};
+  const repetir=(p:PedidoHist)=>{
+    const itens = Array.isArray(p.itens) ? p.itens : [];
+    if (!itens.length) return;
+    const toAdd: CartItem[]=[];
+    for (const it of itens) {
+      const produto = pm[it.product_id];
+      if (!produto) continue;
+      const vid = it.variation_id && Number.isInteger(Number(it.variation_id)) && Number(it.variation_id)>0 ? Number(it.variation_id) : null;
+      const variacao = vid && produto.variacoes_vendaveis ? produto.variacoes_vendaveis.find(v=>v.id===vid) : null;
+      const cartItem: CartItem = variacao
+        ? { ...produto, name: `${produto.name} - ${variacao.nome}`, preco_final: Number(variacao.preco), cart_key: `${produto.id}_v${variacao.id}`, variation_id: variacao.id }
+        : { ...produto, preco_final: Number(it.price_at_time||produto.price), cart_key: `${produto.id}_` };
+      for (let q=0; q<Math.max(1, it.quantity); q++) toAdd.push({ ...cartItem, qty: 1 });
+    }
+    if (toAdd.length) onRepetir(toAdd);
+  };
   const fd=(d:string)=>new Date(d.includes('T')?d:d.replace(' ','T')).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
   return (
     <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
@@ -2212,7 +2582,7 @@ function TelaHistorico({ slug, token, onBack, onRepetir, categorias }: { slug:st
             <div className="flex items-center justify-between mb-2"><span className="font-mono font-black text-zinc-800">#{p.order_number}</span><span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${STATUS_COR[p.status]||'bg-zinc-100 text-zinc-500'}`}>{STATUS_TXT[p.status]||p.status}</span></div>
             <p className="text-sm text-zinc-500 line-clamp-2 mb-2">{p.resumo_itens}</p>
             <div className="flex items-center justify-between"><span className="text-xs text-zinc-400">{fd(p.created_at)}</span><span className="font-black text-emerald-600">{fmt(p.total_amount)}</span></div>
-            {p.status==='Entregue'&&p.itens_raw&&<button onClick={()=>repetir(p)} className="w-full mt-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 rounded-xl text-xs font-bold transition-all">🔄 Repetir pedido</button>}
+            {p.status==='Entregue'&&Array.isArray(p.itens)&&p.itens.length>0&&<button onClick={()=>repetir(p)} className="w-full mt-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 rounded-xl text-xs font-bold transition-all">🔄 Repetir pedido</button>}
           </div>
         ))}
       </div>

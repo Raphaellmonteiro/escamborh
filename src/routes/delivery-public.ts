@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
 import { publicRateLimit, authDeliveryCliente } from '../middleware';
-import { requireProductInventoryTargets } from '../services/stockIdentification';
+import { resolveProductInventoryTargets } from '../services/stockIdentification';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 
@@ -286,8 +286,23 @@ async function validateDeliveryItems(tenantId: number, items: any[]) {
       throw new AppError(`Produto ${productId} invalido`, 400);
     }
 
+    const vid = Number(item?.variation_id);
+    const variation_id = Number.isInteger(vid) && vid > 0 ? vid : null;
+    if (variation_id !== null) {
+      const variacao = await q1(
+        'SELECT id FROM produto_variacoes_vendaveis WHERE id=? AND tenant_id=? AND produto_id=? AND ativo=1',
+        [variation_id, tenantId, productId]
+      );
+      if (!variacao) {
+        throw new AppError(
+          `Variacao ${variation_id} invalida ou nao pertence ao produto ${productId}`,
+          400
+        );
+      }
+    }
+
     subtotal += priceAtTime * quantity;
-    itensValidados.push({ ...item, product_id: productId, quantity, price_at_time: priceAtTime });
+    itensValidados.push({ ...item, product_id: productId, quantity, price_at_time: priceAtTime, variation_id });
   }
 
   return { subtotal, itensValidados };
@@ -577,7 +592,8 @@ export function createDeliveryPublicRouter() {
           const itens = await qAll('SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC', [g.id, tenant.id]);
           gruposComItens.push({ ...g, itens });
         }
-        produtosComOpcoes.push({ ...p, grupos_opcao: gruposComItens });
+        const variacoes = await qAll('SELECT id, nome, preco FROM produto_variacoes_vendaveis WHERE produto_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC, nome ASC', [p.id, tenant.id]);
+        produtosComOpcoes.push({ ...p, grupos_opcao: gruposComItens, variacoes_vendaveis: variacoes });
       }
 
       const logo = (() => {
@@ -622,6 +638,127 @@ export function createDeliveryPublicRouter() {
         },
         categorias,
         produtos: produtosComOpcoes,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  function normalizeDeliveryPhonePublic(value: unknown) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  /** Lista pedidos do cliente por telefone (sem login) — delivery/retirada do tenant */
+  router.get('/:slug/orders', publicRateLimit, async (req, res) => {
+    try {
+      const tel = normalizeDeliveryPhonePublic(req.query.phone);
+      if (tel.length < 10) {
+        return res.status(400).json({ error: 'Informe um telefone valido (minimo 10 digitos)' });
+      }
+      const tenant = await getTenant(req.params.slug);
+      if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
+
+      const rows = await qAll<{
+        id: number;
+        status: string;
+        total_amount: number;
+        created_at: string;
+        order_number: string;
+      }>(
+        `SELECT p.id, p.status, p.total_amount, p.created_at, p.order_number
+         FROM pedidos p
+         WHERE p.tenant_id = ?
+           AND p.canal IN ('delivery', 'retirada')
+           AND (
+             regexp_replace(coalesce(p.cliente_tel, ''), '[^0-9]', '', 'g') = ?
+             OR p.delivery_cliente_id IN (
+               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
+             )
+           )
+         ORDER BY p.created_at DESC
+         LIMIT 50`,
+        [tenant.id, tel, tenant.id, tel]
+      );
+
+      res.json(
+        rows.map((r) => ({
+          id: r.id,
+          status: r.status,
+          total: Number(r.total_amount || 0),
+          created_at: r.created_at,
+          order_number: r.order_number,
+        }))
+      );
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** Detalhe de um pedido — exige o mesmo telefone da listagem */
+  router.get('/:slug/orders/:orderId', publicRateLimit, async (req, res) => {
+    try {
+      const tel = normalizeDeliveryPhonePublic(req.query.phone);
+      if (tel.length < 10) {
+        return res.status(400).json({ error: 'Informe um telefone valido (minimo 10 digitos)' });
+      }
+      const orderId = Number(req.params.orderId);
+      if (!Number.isInteger(orderId) || orderId <= 0) {
+        return res.status(400).json({ error: 'Pedido invalido' });
+      }
+      const tenant = await getTenant(req.params.slug);
+      if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
+
+      const pedido = await q1<{
+        id: number;
+        status: string;
+        total_amount: number;
+        created_at: string;
+        order_number: string;
+      }>(
+        `SELECT p.id, p.status, p.total_amount, p.created_at, p.order_number
+         FROM pedidos p
+         WHERE p.id = ?
+           AND p.tenant_id = ?
+           AND p.canal IN ('delivery', 'retirada')
+           AND (
+             regexp_replace(coalesce(p.cliente_tel, ''), '[^0-9]', '', 'g') = ?
+             OR p.delivery_cliente_id IN (
+               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
+             )
+           )`,
+        [orderId, tenant.id, tel, tenant.id, tel]
+      );
+
+      if (!pedido) {
+        return res.status(404).json({ error: 'Pedido nao encontrado' });
+      }
+
+      const itens = await qAll<{
+        product_id: number;
+        product_name: string;
+        quantity: number;
+        price_at_time: number;
+      }>(
+        `SELECT ip.product_id, pr.name AS product_name, ip.quantity, ip.price_at_time
+         FROM itens_pedido ip
+         JOIN produtos pr ON pr.id = ip.product_id
+         WHERE ip.order_id = ?
+         ORDER BY ip.id ASC`,
+        [orderId]
+      );
+
+      res.json({
+        id: pedido.id,
+        status: pedido.status,
+        total: Number(pedido.total_amount || 0),
+        created_at: pedido.created_at,
+        order_number: pedido.order_number,
+        itens: itens.map((i) => ({
+          product_id: i.product_id,
+          name: i.product_name,
+          quantity: i.quantity,
+          price_at_time: Number(i.price_at_time || 0),
+        })),
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -842,11 +979,15 @@ export function createDeliveryPublicRouter() {
 
   router.get('/:slug/cliente/pedidos', authDeliveryCliente, async (req: any, res) => {
     try {
-      res.json(await qAll(
-        `SELECT p.*, (SELECT STRING_AGG(pr.name||' x'||ip.quantity::text,', ') FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens
+      const rows = await qAll(
+        `SELECT p.*,
+          (SELECT STRING_AGG(pr.name||' x'||ip.quantity::text,', ') FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens,
+          (SELECT COALESCE(JSON_AGG(json_build_object('product_id', ip.product_id, 'quantity', ip.quantity, 'price_at_time', ip.price_at_time, 'variation_id', ip.variation_id)), '[]') FROM itens_pedido ip WHERE ip.order_id=p.id) as itens
          FROM pedidos p WHERE p.delivery_cliente_id=? AND p.tenant_id=? ORDER BY p.created_at DESC LIMIT 30`,
         [req.clienteId, req.tenantId]
-      ));
+      );
+      const parsed = rows.map((r: any) => ({ ...r, itens: Array.isArray(r.itens) ? r.itens : (typeof r.itens === 'string' ? JSON.parse(r.itens || '[]') : []) }));
+      res.json(parsed);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -939,21 +1080,29 @@ export function createDeliveryPublicRouter() {
         );
 
           for (const item of itensValidados) {
-            await txRun(client, 'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)', [orderId, item.product_id, item.quantity, canalPedido === 'retirada' ? 'Retirada' : 'Delivery', item.price_at_time, tenant.id]);
-            const resolution = await requireProductInventoryTargets({
+            await txRun(client, 'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id) VALUES (?,?,?,?,?,?,?)', [orderId, item.product_id, item.quantity, canalPedido === 'retirada' ? 'Retirada' : 'Delivery', item.price_at_time, tenant.id, item.variation_id ?? null]);
+            const resolution = await resolveProductInventoryTargets({
               client,
               tenantId: tenant.id,
               productId: item.product_id,
-              context: 'delivery-public.createOrder',
-              orderId,
-              direction: 'saida',
+              variationId: item.variation_id ?? null,
             });
-            for (const target of resolution?.targets || []) {
-              const qtd = Number(target.quantityMultiplier) * Number(item.quantity);
-            await txRun(client, 'UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [qtd, target.ingredientId, tenant.id]);
-            await txRun(client, "INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,'saida',?,'Venda delivery automatica',?)", [target.ingredientId, qtd, tenant.id]);
+            if (resolution && resolution.targets.length > 0) {
+              for (const target of resolution.targets) {
+                const qtd = Number(target.quantityMultiplier) * Number(item.quantity);
+                await txRun(client, 'UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [qtd, target.ingredientId, tenant.id]);
+                await txRun(client, "INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,'saida',?,'Venda delivery automatica',?)", [target.ingredientId, qtd, tenant.id]);
+              }
+            } else {
+              console.warn('[delivery-estoque] Pedido autorizado sem baixa de estoque - produto sem vinculo', {
+                tenantId: tenant.id,
+                orderId,
+                productId: item.product_id,
+                variationId: item.variation_id ?? null,
+                productName: resolution?.product?.name ?? '?',
+              });
+            }
           }
-        }
 
         if (cupom) await txRun(client, 'UPDATE delivery_cupons SET uso_atual=uso_atual+1 WHERE id=?', [cupom.id]);
         if (clienteId) {
@@ -974,8 +1123,8 @@ export function createDeliveryPublicRouter() {
 
       const waNumber = (dcfg.whatsapp || tenant.whatsapp || '').replace(/\D/g, '');
       const listaItens = await Promise.all(itensValidados.map(async (item: any) => {
-        const produto = await q1('SELECT name FROM produtos WHERE id=?', [item.product_id]);
-        return `- ${item.quantity}x ${produto?.name || 'Produto'} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;
+        const name = item.name || (await q1('SELECT name FROM produtos WHERE id=?', [item.product_id]))?.name || 'Produto';
+        return `- ${item.quantity}x ${name} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;
       }));
       const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao' };
       const mapsUrl = canalPedido === 'delivery'
@@ -1070,7 +1219,8 @@ export function createDeliveryPublicRouter() {
            p.photo_url,
            MAX(ps.prioridade) AS prioridade,
            COALESCE(MAX(se.total_eventos), 0) AS total_eventos,
-           (array_agg(ps.produto_id ORDER BY ps.prioridade DESC, ps.produto_id ASC))[1] AS source_product_id
+           (array_agg(ps.produto_id ORDER BY ps.prioridade DESC, ps.produto_id ASC))[1] AS source_product_id,
+           (SELECT COALESCE(JSON_AGG(json_build_object('id', pvv.id, 'nome', pvv.nome, 'preco', pvv.preco) ORDER BY pvv.ordem, pvv.nome), '[]') FROM produto_variacoes_vendaveis pvv WHERE pvv.produto_id=p.id AND pvv.tenant_id=p.tenant_id AND pvv.ativo=1) AS variacoes_vendaveis
          FROM produto_sugestoes ps
          JOIN produtos p
            ON p.id = ps.produto_sugerido_id
@@ -1133,7 +1283,8 @@ export function createDeliveryPublicRouter() {
                  p.category,
                  p.photo_url,
                  0 AS prioridade,
-                 CAST(NULL AS INTEGER) AS source_product_id
+                 CAST(NULL AS INTEGER) AS source_product_id,
+                 (SELECT COALESCE(JSON_AGG(json_build_object('id', pvv.id, 'nome', pvv.nome, 'preco', pvv.preco) ORDER BY pvv.ordem, pvv.nome), '[]') FROM produto_variacoes_vendaveis pvv WHERE pvv.produto_id=p.id AND pvv.tenant_id=p.tenant_id AND pvv.ativo=1) AS variacoes_vendaveis
                FROM produtos p
                WHERE p.tenant_id = ?
                  AND p.active = 1
