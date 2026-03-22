@@ -17,6 +17,7 @@ export interface OrderItemInput {
   type?: string;
   price_at_time?: number;
   unitPrice?: number;
+  variation_id?: number | null;
 }
 
 export interface PaymentInput {

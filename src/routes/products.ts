@@ -305,6 +305,19 @@ export function createProductsRouter() {
       const ativo = req.body?.ativo === false || req.body?.ativo === 0 ? 0 : 1;
       const codigoBarras = normalizeBarcode(req.body?.codigo_barras);
 
+      let ingredienteId: number | null = null;
+      if (req.body?.ingrediente_id != null && req.body?.ingrediente_id !== '') {
+        const iid = Number(req.body.ingrediente_id);
+        if (!Number.isInteger(iid) || iid <= 0) {
+          return res.status(400).json({ error: 'ingrediente_id invalido' });
+        }
+        const ing = await q1('SELECT id FROM ingredientes WHERE id=? AND tenant_id=?', [iid, req.tenantId]);
+        if (!ing) {
+          return res.status(400).json({ error: 'Ingrediente nao encontrado' });
+        }
+        ingredienteId = iid;
+      }
+
       const dupNome = await q1(
         `SELECT id FROM produto_variacoes_vendaveis
          WHERE tenant_id=?
@@ -319,9 +332,9 @@ export function createProductsRouter() {
 
       await qInsert(
         `INSERT INTO produto_variacoes_vendaveis
-          (tenant_id, produto_id, nome, preco, codigo_barras, ativo, ordem)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [req.tenantId, productId, nome, preco, codigoBarras || null, ativo, Number.isFinite(ordem) ? ordem : 0]
+          (tenant_id, produto_id, nome, preco, codigo_barras, ativo, ordem, ingrediente_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.tenantId, productId, nome, preco, codigoBarras || null, ativo, Number.isFinite(ordem) ? ordem : 0, ingredienteId]
       );
 
       res.json({ success: true });
@@ -343,6 +356,86 @@ export function createProductsRouter() {
            AND produto_id=?`,
         [variationId, req.tenantId, productId]
       );
+
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.put('/:id/variacoes-vendaveis/:variationId', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const variationId = Number(req.params.variationId);
+      if (!Number.isInteger(productId) || productId <= 0 || !Number.isInteger(variationId) || variationId <= 0) {
+        return res.status(400).json({ error: 'Parametros invalidos' });
+      }
+
+      const produto = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
+      if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' });
+
+      const variacao = await q1(
+        'SELECT id FROM produto_variacoes_vendaveis WHERE id=? AND tenant_id=? AND produto_id=?',
+        [variationId, req.tenantId, productId]
+      );
+      if (!variacao) return res.status(404).json({ error: 'Variacao nao encontrada' });
+
+      const nome = String(req.body?.nome || '').trim();
+      if (!nome) {
+        return res.status(400).json({ error: 'Nome obrigatorio' });
+      }
+
+      const preco = Number(req.body?.preco);
+      if (!Number.isFinite(preco) || preco < 0) {
+        return res.status(400).json({ error: 'Preco invalido' });
+      }
+
+      const ordem = Number(req.body?.ordem ?? 0);
+      const ativo = req.body?.ativo === false || req.body?.ativo === 0 ? 0 : 1;
+      const codigoBarras = normalizeBarcode(req.body?.codigo_barras);
+
+      let ingredienteId: number | null | undefined;
+      if (Object.hasOwn(req.body || {}, 'ingrediente_id')) {
+        ingredienteId = null;
+        if (req.body?.ingrediente_id != null && req.body?.ingrediente_id !== '') {
+          const iid = Number(req.body.ingrediente_id);
+          if (!Number.isInteger(iid) || iid <= 0) {
+            return res.status(400).json({ error: 'ingrediente_id invalido' });
+          }
+          const ing = await q1('SELECT id FROM ingredientes WHERE id=? AND tenant_id=?', [iid, req.tenantId]);
+          if (!ing) {
+            return res.status(400).json({ error: 'Ingrediente nao encontrado' });
+          }
+          ingredienteId = iid;
+        }
+      }
+
+      const dupNome = await q1(
+        `SELECT id FROM produto_variacoes_vendaveis
+         WHERE tenant_id=?
+           AND produto_id=?
+           AND LOWER(TRIM(nome)) = LOWER(?)
+           AND id <> ?
+         LIMIT 1`,
+        [req.tenantId, productId, nome, variationId]
+      );
+      if (dupNome) {
+        return res.status(400).json({ error: 'Ja existe variacao com este nome neste produto' });
+      }
+
+      if (ingredienteId === undefined) {
+        await qRun(
+          `UPDATE produto_variacoes_vendaveis
+           SET nome=?, preco=?, codigo_barras=?, ativo=?, ordem=?
+           WHERE id=? AND tenant_id=? AND produto_id=?`,
+          [nome, preco, codigoBarras || null, ativo, Number.isFinite(ordem) ? ordem : 0, variationId, req.tenantId, productId]
+        );
+      } else {
+        await qRun(
+          `UPDATE produto_variacoes_vendaveis
+           SET nome=?, preco=?, codigo_barras=?, ativo=?, ordem=?, ingrediente_id=?
+           WHERE id=? AND tenant_id=? AND produto_id=?`,
+          [nome, preco, codigoBarras || null, ativo, Number.isFinite(ordem) ? ordem : 0, ingredienteId, variationId, req.tenantId, productId]
+        );
+      }
 
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }

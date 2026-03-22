@@ -374,6 +374,7 @@ export async function runMigrations() {
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS requires_preparation INTEGER;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS production_type TEXT;
       ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
+      ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS variation_id INTEGER;
       CREATE TABLE IF NOT EXISTS pedido_eventos (
         id SERIAL PRIMARY KEY,
         pedido_id INTEGER NOT NULL,

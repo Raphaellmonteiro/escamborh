@@ -77,7 +77,7 @@ export function createAuthRouter() {
       if (isAppError(e)) {
         if (e.statusCode === 400) return res.status(400).json({ success: false });
         if (e.code === 'AUTH_USER_NOT_FOUND') return res.status(401).json({ success: false, message: e.message });
-        if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(401).json({ success: false, message: e.message });
+        if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(403).json({ success: false, message: e.message });
       }
       return res.status(500).json({ success: false, error: e.message });
     }
@@ -99,7 +99,7 @@ export function createAuthRouter() {
       if (isAppError(e)) {
         if (e.statusCode === 400) return res.status(400).json({ success: false });
         if (e.code === 'AUTH_USER_NOT_FOUND') return res.status(401).json({ success: false, message: e.message });
-        if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(401).json({ success: false, message: e.message });
+        if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(403).json({ success: false, message: e.message });
       }
       return res.status(500).json({ success: false, error: e.message });
     }

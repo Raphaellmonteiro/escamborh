@@ -14,6 +14,9 @@ import { resolveProductionType, resolveRequiresPreparation } from '../utils/prep
 // ─── helpers ─────────────────────────────────────────────────────
 const fmtR$ = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 
+const fmtQtdEstoque = (q: number, unidade: string) =>
+  `${Number(q || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}${unidade ? ` ${unidade}` : ''}`;
+
 const COLOR_MAP: Record<string, { bg: string; ring: string; dot: string }> = {
   zinc:   { bg: 'bg-zinc-100',   ring: 'ring-zinc-400',   dot: 'bg-zinc-300' },
   red:    { bg: 'bg-red-100',    ring: 'ring-red-400',    dot: 'bg-red-400' },
@@ -53,6 +56,7 @@ interface ProdutoVariacaoVendavel {
   codigo_barras: string | null;
   ativo: number;
   ordem: number;
+  ingrediente_id?: number | null;
 }
 
 type ViewMode = 'list' | 'grid';
@@ -111,6 +115,23 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   const [newVarCodigoBarras, setNewVarCodigoBarras] = useState('');
   const [newVarAtivo, setNewVarAtivo] = useState(true);
   const [newVarOrdem, setNewVarOrdem] = useState(0);
+  const [newVarIngredienteId, setNewVarIngredienteId] = useState<number | null>(null);
+  const [ingredientesEstoque, setIngredientesEstoque] = useState<
+    { id: number; nome: string; estoque_atual: number; unidade: string }[]
+  >([]);
+  const [editingVar, setEditingVar] = useState<ProdutoVariacaoVendavel | null>(null);
+
+  function handleEditVar(v: ProdutoVariacaoVendavel) {
+    setEditingVar(v);
+    setNewVarNome(v.nome || '');
+    setNewVarPreco(String(v.preco ?? ''));
+    setNewVarCodigoBarras(v.codigo_barras || '');
+    setNewVarOrdem(Number.isFinite(v.ordem) ? v.ordem : 0);
+    setNewVarAtivo(Number(v.ativo) === 1);
+    const iid = v.ingrediente_id != null ? Number(v.ingrediente_id) : NaN;
+    setNewVarIngredienteId(Number.isInteger(iid) && iid > 0 ? iid : null);
+  }
+
 
   // ── filtros + view ───────────────────────────────────────────
   const [busca, setBusca]                     = useState('');
@@ -233,6 +254,27 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
     }
   };
 
+  const loadVariacoesVendaveis = loadProductVariacoes;
+
+  const loadIngredientesEstoque = async () => {
+    try {
+      const r = await fetch('/api/estoque', { headers: hdrs });
+      const rows = r.ok ? await r.json() : [];
+      setIngredientesEstoque(
+        Array.isArray(rows)
+          ? rows.map((x: { id: number; nome?: string; estoque_atual?: number; unidade?: string }) => ({
+              id: Number(x.id),
+              nome: String(x.nome || ''),
+              estoque_atual: Number(x.estoque_atual ?? 0),
+              unidade: String(x.unidade || ''),
+            }))
+          : []
+      );
+    } catch {
+      setIngredientesEstoque([]);
+    }
+  };
+
   const handleAddVariacaoVendavel = async () => {
     if (!editing?.id) return;
     const nome = newVarNome.trim();
@@ -245,21 +287,27 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       alert('Preco invalido.');
       return;
     }
+    const body: Record<string, unknown> = {
+      nome,
+      preco,
+      codigo_barras: newVarCodigoBarras || null,
+      ativo: newVarAtivo,
+      ordem: newVarOrdem,
+      ingrediente_id: newVarIngredienteId,
+    };
+    const url = editingVar
+      ? `/api/products/${editing.id}/variacoes-vendaveis/${editingVar.id}`
+      : `/api/products/${editing.id}/variacoes-vendaveis`;
+    const method = editingVar ? 'PUT' : 'POST';
     try {
-      const r = await fetch(`/api/products/${editing.id}/variacoes-vendaveis`, {
-        method: 'POST',
+      const r = await fetch(url, {
+        method,
         headers: jHdrs,
-        body: JSON.stringify({
-          nome,
-          preco,
-          codigo_barras: newVarCodigoBarras || null,
-          ativo: newVarAtivo,
-          ordem: newVarOrdem,
-        }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) {
-        alert(d.error || 'Nao foi possivel adicionar a variacao');
+        alert(d.error || (editingVar ? 'Nao foi possivel salvar a variacao' : 'Nao foi possivel adicionar a variacao'));
         return;
       }
       setNewVarNome('');
@@ -267,9 +315,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       setNewVarCodigoBarras('');
       setNewVarAtivo(true);
       setNewVarOrdem(0);
-      loadProductVariacoes(editing.id);
+      setNewVarIngredienteId(null);
+      setEditingVar(null);
+      loadVariacoesVendaveis(editing.id);
     } catch {
-      alert('Erro ao adicionar variacao.');
+      alert(editingVar ? 'Erro ao salvar variacao.' : 'Erro ao adicionar variacao.');
     }
   };
 
@@ -285,6 +335,15 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       if (!r.ok) {
         alert((d as { error?: string }).error || 'Nao foi possivel remover');
         return;
+      }
+      if (editingVar?.id === variationId) {
+        setEditingVar(null);
+        setNewVarNome('');
+        setNewVarPreco('');
+        setNewVarCodigoBarras('');
+        setNewVarAtivo(true);
+        setNewVarOrdem(0);
+        setNewVarIngredienteId(null);
       }
       loadProductVariacoes(editing.id);
     } catch {
@@ -446,10 +505,15 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       setNewVarCodigoBarras('');
       setNewVarAtivo(true);
       setNewVarOrdem(0);
+      setNewVarIngredienteId(null);
+      setEditingVar(null);
+      setIngredientesEstoque([]);
       return;
     }
+    setEditingVar(null);
     loadProductSuggestions(editing.id);
     loadProductVariacoes(editing.id);
+    loadIngredientesEstoque();
   }, [editing?.id]);
 
   // ════════════════════════════════════════════════════════════
@@ -871,7 +935,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     <div>
                       <p className="text-sm font-semibold text-zinc-800">Variações vendáveis</p>
                       <p className="text-xs text-zinc-500 mt-0.5">
-                        Sabores, tamanhos ou opções com preço e código de barras próprios no PDV.
+                        Sabores, tamanhos ou opções com preço, insumo de estoque ou código de barras próprios no PDV.
                       </p>
                     </div>
 
@@ -890,6 +954,14 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                               <p className="text-sm font-bold text-zinc-800 truncate">{v.nome}</p>
                               <p className="text-xs text-zinc-500">
                                 {fmtR$(v.preco)}
+                                {v.ingrediente_id
+                                  ? (() => {
+                                      const ing = ingredientesEstoque.find((i) => i.id === Number(v.ingrediente_id));
+                                      const label = ing?.nome || `insumo #${v.ingrediente_id}`;
+                                      const q = ing ? fmtQtdEstoque(ing.estoque_atual, ing.unidade) : '';
+                                      return ` · ${label}${q ? ` (atual: ${q})` : ''}`;
+                                    })()
+                                  : ''}
                                 {v.codigo_barras ? ` · ${v.codigo_barras}` : ''}
                                 {' · '}
                                 ordem {v.ordem}
@@ -901,13 +973,22 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                                 )}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveVariacaoVendavel(v.id)}
-                              className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all shrink-0 self-start sm:self-center"
-                            >
-                              Remover
-                            </button>
+                            <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-center">
+                              <button
+                                type="button"
+                                onClick={() => handleEditVar(v)}
+                                className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-100 text-zinc-800 hover:bg-zinc-200 transition-all"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveVariacaoVendavel(v.id)}
+                                className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all"
+                              >
+                                Remover
+                              </button>
+                            </div>
                           </div>
                         ))
                       )}
@@ -936,6 +1017,36 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                         onChange={(e) => setNewVarCodigoBarras(e.target.value)}
                         className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
                       />
+                      <label className="sm:col-span-2 flex flex-col gap-1">
+                        <span className="text-xs font-medium text-zinc-600">Insumo no estoque (opcional)</span>
+                        <select
+                          value={newVarIngredienteId ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setNewVarIngredienteId(raw === '' ? null : Number(raw));
+                          }}
+                          className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        >
+                          <option value="">Nenhum (prioriza código de barras da variação, se houver)</option>
+                          {ingredientesEstoque.map((ing) => (
+                            <option key={ing.id} value={ing.id}>
+                              {ing.nome} — atual: {fmtQtdEstoque(ing.estoque_atual, ing.unidade)}
+                            </option>
+                          ))}
+                        </select>
+                        {newVarIngredienteId != null && (
+                          <p className="text-xs text-zinc-500">
+                            Quantidade atual no estoque:{' '}
+                            <span className="font-semibold text-zinc-700">
+                              {(() => {
+                                const ing = ingredientesEstoque.find((i) => i.id === newVarIngredienteId);
+                                return ing ? fmtQtdEstoque(ing.estoque_atual, ing.unidade) : '—';
+                              })()}
+                            </span>
+                            {' '}(ajuste no menu Estoque)
+                          </p>
+                        )}
+                      </label>
                       <input
                         type="number"
                         placeholder="Ordem"
@@ -958,7 +1069,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       onClick={handleAddVariacaoVendavel}
                       className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all"
                     >
-                      Adicionar variação
+                      {editingVar ? 'Salvar edição' : 'Adicionar variação'}
                     </button>
                   </div>
                 )}

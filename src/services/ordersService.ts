@@ -67,6 +67,7 @@ type NormalizedOrderItem = {
   quantity: number;
   type?: string;
   price_at_time: number;
+  variation_id: number | null;
 };
 
 type NormalizedPayment = {
@@ -114,6 +115,7 @@ type OrderItemRow = {
   quantity: number;
   type?: string | null;
   price_at_time: number;
+  variation_id?: number | null;
   product_name?: string | null;
   product_category?: string | null;
   production_type?: string | null;
@@ -195,11 +197,15 @@ function normalizeOrderItem(item: OrderItemInput, index: number): NormalizedOrde
     throw new AppError(`Item ${index + 1} com preço inválido`, 400);
   }
 
+  const vid = Number(item.variation_id);
+  const variation_id = Number.isInteger(vid) && vid > 0 ? vid : null;
+
   return {
     product_id: productId,
     quantity,
     type: item.type?.trim() || undefined,
     price_at_time: priceAtTime,
+    variation_id,
   };
 }
 
@@ -408,8 +414,8 @@ async function insertOrderItems(
   for (const item of items) {
     await txRun(
       client,
-      'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)',
-      [orderId, item.product_id, item.quantity, item.type, item.price_at_time, tenantId]
+      'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id) VALUES (?,?,?,?,?,?,?)',
+      [orderId, item.product_id, item.quantity, item.type, item.price_at_time, tenantId, item.variation_id]
     );
   }
 }
@@ -512,6 +518,7 @@ async function adjustStockForItem(
     client,
     tenantId,
     productId: item.product_id,
+    variationId: item.variation_id,
     context: 'ordersService.adjustStockForItem',
     orderId,
     direction,
@@ -621,13 +628,14 @@ async function restoreStockForOrder(
 
   const items = await txQAll<OrderItemRow>(
     client,
-    `SELECT order_id, product_id, quantity, type, price_at_time
+    `SELECT order_id, product_id, quantity, type, price_at_time, variation_id
      FROM itens_pedido
      WHERE order_id=?`,
     [orderId]
   );
 
   for (const item of items) {
+    const vid = item.variation_id != null ? Number(item.variation_id) : null;
     await adjustStockForItem(
       client,
       {
@@ -635,6 +643,7 @@ async function restoreStockForOrder(
         quantity: Number(item.quantity),
         type: item.type || undefined,
         price_at_time: Number(item.price_at_time || 0),
+        variation_id: Number.isInteger(vid) && vid > 0 ? vid : null,
       },
       tenantId,
       'entrada',

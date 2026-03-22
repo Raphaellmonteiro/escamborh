@@ -47,6 +47,7 @@ export interface OrderItem {
   funcionario_id?: number | null;
   funcionario_nome?: string | null;
   cliente_nome?: string | null;
+  variation_id?: number | null;
 }
 
 export interface Order {

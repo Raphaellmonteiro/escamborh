@@ -494,10 +494,18 @@ function mapPendingInventoryRows(input: {
   return items;
 }
 
+type VariacaoVendavelStockRow = {
+  id: number;
+  produto_id: number;
+  codigo_barras?: string | null;
+  ingrediente_id?: number | string | null;
+};
+
 export async function resolveProductInventoryTargets(input: {
   client: Queryable;
   tenantId: TenantId;
   productId: number;
+  variationId?: number | null;
 }) {
   const product = await txQ1<ProductIdentityRow>(
     input.client,
@@ -507,6 +515,61 @@ export async function resolveProductInventoryTargets(input: {
 
   if (!product) {
     return null;
+  }
+
+  const variationNumericId = Number(input.variationId ?? 0);
+  if (Number.isInteger(variationNumericId) && variationNumericId > 0) {
+    const variation = await txQ1<VariacaoVendavelStockRow>(
+      input.client,
+      `SELECT id, produto_id, codigo_barras, ingrediente_id
+       FROM produto_variacoes_vendaveis
+       WHERE id=? AND tenant_id=? AND produto_id=?`,
+      [variationNumericId, input.tenantId, input.productId]
+    );
+
+    if (variation) {
+      const linkedIngredient = Number(variation.ingrediente_id ?? 0);
+      if (Number.isInteger(linkedIngredient) && linkedIngredient > 0) {
+        return {
+          product,
+          targets: [
+            {
+              ingredientId: linkedIngredient,
+              quantityMultiplier: 1,
+              mode: 'recipe' as const,
+            },
+          ],
+        } satisfies ResolvedProductInventory;
+      }
+
+      const variationBarcode = normalizeBarcode(variation.codigo_barras);
+      if (variationBarcode) {
+        const ingredientByVariationBarcode = await txQ1<IngredientIdRow>(
+          input.client,
+          `SELECT id
+           FROM ingredientes
+           WHERE tenant_id=?
+             AND codigo_barras IS NOT NULL
+             AND UPPER(REGEXP_REPLACE(codigo_barras, '\\s+', '', 'g'))=?
+           ORDER BY id ASC
+           LIMIT 1`,
+          [input.tenantId, variationBarcode]
+        );
+
+        if (ingredientByVariationBarcode) {
+          return {
+            product,
+            targets: [
+              {
+                ingredientId: Number(ingredientByVariationBarcode.id),
+                quantityMultiplier: 1,
+                mode: 'barcode_exact' as const,
+              },
+            ],
+          } satisfies ResolvedProductInventory;
+        }
+      }
+    }
   }
 
   const links = await txQAll<ProductIngredientRow>(
@@ -565,6 +628,7 @@ export async function requireProductInventoryTargets(input: {
   client: Queryable;
   tenantId: TenantId;
   productId: number;
+  variationId?: number | null;
   context: string;
   orderId?: number | string | bigint | null;
   direction?: 'saida' | 'entrada' | null;
@@ -573,6 +637,7 @@ export async function requireProductInventoryTargets(input: {
     client: input.client,
     tenantId: input.tenantId,
     productId: input.productId,
+    variationId: input.variationId,
   });
 
   if (!resolution) {
