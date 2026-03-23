@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../hooks/useDebounce';
+import { usePaginatedList } from '../hooks/usePaginatedList';
 import {
   Package, Plus, Trash2, Lock, AlertCircle, Image as ImageIcon,
   X, Barcode, Search, LayoutGrid, LayoutList, Copy,
@@ -8,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
+import { EmptyState } from '../components/ui/EmptyState';
 import type { ProductionType } from '../utils/preparation';
 import { resolveProductionType, resolveRequiresPreparation } from '../utils/preparation';
 
@@ -135,6 +138,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
 
   // ── filtros + view ───────────────────────────────────────────
   const [busca, setBusca]                     = useState('');
+  const debouncedBusca                        = useDebounce(busca, 250);
   const [catFiltro, setCatFiltro]             = useState<string>('todas');
   const [statusFiltro, setStatusFiltro]       = useState<'todos' | 'ativo' | 'inativo'>('todos');
   const [destaqueFiltro, setDestaqueFiltro]   = useState(false);
@@ -472,8 +476,8 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   // ── lista filtrada ───────────────────────────────────────────
   const produtosFiltrados = useMemo(() => {
     let list = [...products];
-    if (busca) {
-      const q = busca.toLowerCase();
+    if (debouncedBusca) {
+      const q = debouncedBusca.toLowerCase();
       list = list.filter(p => p.name.toLowerCase().includes(q) || (p.descricao || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
     }
     if (catFiltro !== 'todas')    list = list.filter(p => p.category === catFiltro);
@@ -481,7 +485,9 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
     if (statusFiltro === 'inativo') list = list.filter(p => !p.active);
     if (destaqueFiltro)           list = list.filter(p => p.destaque);
     return list.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-  }, [products, busca, catFiltro, statusFiltro, destaqueFiltro]);
+  }, [products, debouncedBusca, catFiltro, statusFiltro, destaqueFiltro]);
+
+  const { visibleItems: produtosVisiveis, hasMore: hasMoreProdutos, loadMore: loadMoreProdutos, totalCount: totalProdutos } = usePaginatedList(produtosFiltrados, { pageSize: 30 });
 
   const catList = useMemo(() => [...new Set(products.map(p => p.category))].sort(), [products]);
   const availableSuggestionProducts = useMemo(
@@ -523,134 +529,136 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col bg-zinc-50">
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-zinc-200 px-6 py-5 flex-shrink-0">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-zinc-900">Cardápio</h2>
-            <p className="text-sm text-zinc-400 mt-0.5">
+      <div className="bg-white border-b border-zinc-200 px-3 sm:px-6 py-3 sm:py-5 flex-shrink-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 lg:gap-4">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-black text-zinc-900">Cardápio</h2>
+            <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 leading-snug">
               {products.filter(p => p.active).length} ativos · {products.filter(p => !p.active).length} inativos
               {products.filter(p => p.destaque).length > 0 && ` · ${products.filter(p => p.destaque).length} em destaque`}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={handleExportPDF}
-              className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
-              <Download size={13}/> PDF
-            </button>
-            <button onClick={() => setShowCategoryModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
-              <Filter size={13}/> Categorias
-            </button>
-            {/* View toggle */}
-            <div className="flex bg-zinc-100 p-0.5 rounded-xl">
-              <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
-              <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:justify-end">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <button type="button" onClick={handleExportPDF}
+                className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
+                <Download size={13}/> PDF
+              </button>
+              <button type="button" onClick={() => setShowCategoryModal(true)}
+                className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
+                <Filter size={13}/> Categorias
+              </button>
+              <div className="flex bg-zinc-100 p-0.5 rounded-xl shrink-0">
+                <button type="button" aria-label="Lista" onClick={() => setViewMode('list')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
+                <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
+              </div>
             </div>
-            <button onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95">
+            <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
               <Plus size={16}/> Novo Produto
             </button>
           </div>
         </div>
 
         {/* ── Filtros ── */}
-        <div className="flex flex-wrap items-center gap-2 mt-4">
-          {/* Busca */}
-          <div className="relative min-w-[200px] flex-1 max-w-sm">
+        <div className="flex flex-col gap-3 mt-3 sm:mt-4">
+          <div className="relative w-full max-w-none sm:max-w-sm sm:min-w-[200px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto..."
-              className="w-full pl-8 pr-4 py-2 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400 bg-zinc-50"/>
+              className="w-full pl-8 pr-4 py-2.5 min-h-[44px] border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400 bg-zinc-50"/>
           </div>
-          {/* Categorias */}
-          <div className="flex gap-1 flex-wrap">
-            <button onClick={() => setCatFiltro('todas')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${catFiltro==='todas'?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>Todas</button>
+          <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
+            <button type="button" onClick={() => setCatFiltro('todas')} className={`px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${catFiltro==='todas'?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>Todas</button>
             {catList.map(c => (
-              <button key={c} onClick={() => setCatFiltro(c)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${catFiltro===c?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>{c}</button>
+              <button type="button" key={c} onClick={() => setCatFiltro(c)} className={`px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 max-w-[12rem] truncate ${catFiltro===c?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`} title={c}>{c}</button>
             ))}
           </div>
-          {/* Status */}
-          <div className="flex gap-1">
-            {(['todos','ativo','inativo'] as const).map(s => (
-              <button key={s} onClick={() => setStatusFiltro(s)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${statusFiltro===s?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>{s}</button>
-            ))}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+            <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden flex-1 min-w-0 touch-pan-x pb-0.5 -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible">
+              {(['todos','ativo','inativo'] as const).map(s => (
+                <button type="button" key={s} onClick={() => setStatusFiltro(s)} className={`px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold capitalize transition-all shrink-0 ${statusFiltro===s?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>{s}</button>
+              ))}
+              <button type="button" onClick={() => setDestaqueFiltro(!destaqueFiltro)} className={`flex items-center gap-1 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${destaqueFiltro?'bg-amber-500 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>
+                <Star size={11}/> Destaque
+              </button>
+            </div>
+            <span className="text-xs text-zinc-400 whitespace-nowrap shrink-0 pl-1">{totalProdutos} produto(s)</span>
           </div>
-          {/* Destaque */}
-          <button onClick={() => setDestaqueFiltro(!destaqueFiltro)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${destaqueFiltro?'bg-amber-500 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>
-            <Star size={11}/> Destaque
-          </button>
-          <span className="text-xs text-zinc-400">{produtosFiltrados.length} produto(s)</span>
         </div>
       </div>
 
       {/* ── Lista / Grid ── */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {produtosFiltrados.length === 0 ? (
-          <div className="flex flex-col items-center py-20 text-zinc-400">
-            <Package size={48} className="mb-3 opacity-20"/>
-            <p className="font-semibold">{busca ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado'}</p>
-          </div>
+      <div className="flex-1 overflow-y-auto overflow-x-auto p-3 sm:p-6 min-w-0">
+        {produtosVisiveis.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title={debouncedBusca ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado'}
+            description={
+              debouncedBusca
+                ? 'Tente outro termo de busca ou limpe os filtros.'
+                : 'Cadastre um produto ou importe sua lista para começar.'
+            }
+          />
         ) : viewMode === 'list' ? (
           /* ── LISTA ── */
           <div className="space-y-2">
-            {produtosFiltrados.map((p, idx) => {
+            {produtosVisiveis.map((p, idx) => {
               const mg = margem(p);
               return (
-                <div key={p.id} className={`bg-white rounded-2xl border border-zinc-200 p-4 flex items-center gap-4 hover:border-zinc-300 transition-all ${!p.active ? 'opacity-60' : ''}`}>
-                  {/* Reorder */}
-                  <div className="flex flex-col gap-0.5 flex-shrink-0">
-                    <button onClick={() => handleReorder(p, 'up')} className="p-0.5 hover:bg-zinc-100 rounded text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === 0}><ChevronUp size={13}/></button>
-                    <button onClick={() => handleReorder(p, 'down')} className="p-0.5 hover:bg-zinc-100 rounded text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === produtosFiltrados.length - 1}><ChevronDown size={13}/></button>
-                  </div>
-                  {/* Foto */}
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${COLOR_MAP[p.color || 'zinc']?.bg || 'bg-zinc-100'}`}>
-                    {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover"/> : <Package size={20} className="text-zinc-400"/>}
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-black text-zinc-900 text-sm truncate">{p.name}</span>
-                      {p.destaque ? <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0"/> : null}
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
-                        {p.active ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${getProductionMeta(p).badgeClass}`}>
-                        {getProductionMeta(p).label}
-                      </span>
+                <div key={p.id} className={`bg-white rounded-2xl border border-zinc-200 p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 hover:border-zinc-300 transition-all ${!p.active ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex flex-col gap-0.5 flex-shrink-0">
+                      <button type="button" onClick={() => handleReorder(p, 'up')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === 0}><ChevronUp size={13}/></button>
+                      <button type="button" onClick={() => handleReorder(p, 'down')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === totalProdutos - 1}><ChevronDown size={13}/></button>
                     </div>
-                    <p className="text-xs text-zinc-400 mt-0.5 truncate">
-                      {p.category} · {fmtR$(p.price)}
-                      {p.custo && p.custo > 0 && <span className="ml-2 text-zinc-300">custo: {fmtR$(p.custo)}</span>}
-                      {mg !== null && <span className={`ml-2 font-bold ${mg >= 50 ? 'text-emerald-600' : mg >= 30 ? 'text-amber-600' : 'text-red-500'}`}>{mg.toFixed(0)}% margem</span>}
-                    </p>
-                    {p.descricao && <p className="text-[11px] text-zinc-400 truncate">{p.descricao}</p>}
-                    {(p.disponivel_de || p.disponivel_ate) && (
-                      <p className="text-[10px] text-blue-500 mt-0.5"><Clock size={9} className="inline mr-0.5"/>{p.disponivel_de || '–'} às {p.disponivel_ate || '–'}</p>
-                    )}
+                    <div className={`w-14 h-14 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${COLOR_MAP[p.color || 'zinc']?.bg || 'bg-zinc-100'}`}>
+                      {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={20} className="text-zinc-400"/>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-zinc-900 text-sm break-words">{p.name}</span>
+                        {p.destaque ? <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0"/> : null}
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                          {p.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${getProductionMeta(p).badgeClass}`}>
+                          {getProductionMeta(p).label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-0.5 break-words">
+                        {p.category} · {fmtR$(p.price)}
+                        {p.custo && p.custo > 0 && <span className="text-zinc-300"> · custo {fmtR$(p.custo)}</span>}
+                        {mg !== null && <span className={`font-bold ${mg >= 50 ? 'text-emerald-600' : mg >= 30 ? 'text-amber-600' : 'text-red-500'}`}> · {mg.toFixed(0)}% margem</span>}
+                      </p>
+                      {p.descricao && <p className="text-[11px] text-zinc-400 line-clamp-2 mt-0.5">{p.descricao}</p>}
+                      {(p.disponivel_de || p.disponivel_ate) && (
+                        <p className="text-[10px] text-blue-500 mt-0.5"><Clock size={9} className="inline mr-0.5"/>{p.disponivel_de || '–'} às {p.disponivel_ate || '–'}</p>
+                      )}
+                    </div>
                   </div>
-                  {/* Ações */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => handleToggleDestaque(p)} title={p.destaque ? 'Remover destaque' : 'Destacar'}
-                      className={`p-2 rounded-lg transition-all ${p.destaque ? 'text-amber-500 bg-amber-50 hover:bg-amber-100' : 'text-zinc-300 hover:text-amber-500 hover:bg-amber-50'}`}>
+                  <div className="flex flex-wrap items-center gap-2 lg:gap-1 lg:flex-nowrap lg:justify-end lg:flex-shrink-0 lg:max-w-none max-lg:pt-1 max-lg:border-t max-lg:border-zinc-100">
+                    <button type="button" onClick={() => handleToggleDestaque(p)} title={p.destaque ? 'Remover destaque' : 'Destacar'}
+                      className={`p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg transition-all ${p.destaque ? 'text-amber-500 bg-amber-50 hover:bg-amber-100' : 'text-zinc-300 hover:text-amber-500 hover:bg-amber-50'}`}>
                       <Star size={15} className={p.destaque ? 'fill-amber-500' : ''}/>
                     </button>
-                    <button onClick={() => handleToggleAtivo(p)} title={p.active ? 'Desativar' : 'Ativar'}
-                      className="p-2 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all">
+                    <button type="button" onClick={() => handleToggleAtivo(p)} title={p.active ? 'Desativar' : 'Ativar'}
+                      className="p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all">
                       {p.active ? <Eye size={15}/> : <EyeOff size={15}/>}
                     </button>
-                    <button onClick={() => handleDuplicate(p.id)} title="Duplicar"
-                      className="p-2 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all">
+                    <button type="button" onClick={() => handleDuplicate(p.id)} title="Duplicar"
+                      className="p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all">
                       <Copy size={15}/>
                     </button>
-                    {p.id && <button onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais"
-                      className="flex items-center gap-1 px-3 py-1.5 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all">
+                    {p.id && <button type="button" onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais"
+                      className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all">
                       <Settings2 size={12}/> Opções
                     </button>}
-                    <button onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }}
-                      className="flex items-center gap-1 px-3 py-1.5 border border-zinc-200 text-zinc-700 hover:bg-zinc-50 rounded-lg text-xs font-bold transition-all">
+                    <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }}
+                      className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-zinc-200 text-zinc-700 hover:bg-zinc-50 rounded-lg text-xs font-bold transition-all">
                       <Pencil size={12}/> Editar
                     </button>
-                    <button onClick={() => handleDeleteClick(p.id)}
-                      className="p-2 hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all">
+                    <button type="button" onClick={() => handleDeleteClick(p.id)}
+                      className="p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all">
                       <Trash2 size={15}/>
                     </button>
                   </div>
@@ -660,15 +668,15 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
           </div>
         ) : (
           /* ── GRID ── */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {produtosFiltrados.map(p => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            {produtosVisiveis.map(p => {
               const mg = margem(p);
               const cc = COLOR_MAP[p.color || 'zinc'] || COLOR_MAP.zinc;
               return (
                 <div key={p.id} className={`bg-white rounded-2xl border border-zinc-200 overflow-hidden hover:border-zinc-300 transition-all flex flex-col ${!p.active ? 'opacity-60' : ''}`}>
                   {/* Foto */}
                   <div className={`w-full h-40 flex items-center justify-center overflow-hidden relative ${cc.bg}`}>
-                    {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover"/> : <Package size={40} className="text-zinc-300"/>}
+                    {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={40} className="text-zinc-300"/>}
                     {p.destaque ? <div className="absolute top-2 left-2 bg-amber-400 text-white rounded-full p-1"><Star size={12} className="fill-white"/></div> : null}
                     <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${p.active ? 'bg-emerald-500 text-white' : 'bg-zinc-500 text-white'}`}>
                       {p.active ? 'Ativo' : 'Inativo'}
@@ -688,17 +696,25 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     </div>
                   </div>
                   {/* Ações */}
-                  <div className="border-t border-zinc-100 px-3 py-2 flex gap-1 justify-end">
-                    <button onClick={() => handleToggleDestaque(p)} className={`p-1.5 rounded-lg transition-all ${p.destaque ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500'}`}><Star size={14} className={p.destaque ? 'fill-amber-500' : ''}/></button>
-                    <button onClick={() => handleToggleAtivo(p)} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all">{p.active ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
-                    <button onClick={() => handleDuplicate(p.id)} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Copy size={14}/></button>
-                    {p.id && <button onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais" className="p-1.5 hover:bg-emerald-50 text-zinc-300 hover:text-emerald-600 rounded-lg transition-all"><Settings2 size={14}/></button>}
-                    <button onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }} className="p-1.5 hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
-                    <button onClick={() => handleDeleteClick(p.id)} className="p-1.5 hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14}/></button>
+                  <div className="border-t border-zinc-100 px-2 sm:px-3 py-2 flex flex-wrap gap-1 justify-end sm:flex-nowrap">
+                    <button type="button" onClick={() => handleToggleDestaque(p)} className={`p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg transition-all ${p.destaque ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500'}`}><Star size={14} className={p.destaque ? 'fill-amber-500' : ''}/></button>
+                    <button type="button" onClick={() => handleToggleAtivo(p)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all">{p.active ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
+                    <button type="button" onClick={() => handleDuplicate(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Copy size={14}/></button>
+                    {p.id && <button type="button" onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-50 text-zinc-300 hover:text-emerald-600 rounded-lg transition-all"><Settings2 size={14}/></button>}
+                    <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
+                    <button type="button" onClick={() => handleDeleteClick(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14}/></button>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+        {produtosVisiveis.length > 0 && hasMoreProdutos && (
+          <div className="flex justify-center pt-4 pb-2">
+            <button onClick={loadMoreProdutos}
+              className="px-6 py-2.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold rounded-xl text-sm transition-all active:scale-95">
+              Carregar mais (+30)
+            </button>
           </div>
         )}
       </div>
@@ -708,15 +724,16 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       {/* Modal: Editar / Novo Produto */}
       <AnimatePresence>
         {editing && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
             <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="bg-white rounded-3xl p-7 max-w-lg w-full shadow-2xl overflow-y-auto max-h-[92vh]">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-black text-zinc-900">{editing.id ? 'Editar Produto' : 'Novo Produto'}</h3>
-                <button onClick={() => { setEditing(null); setPendingPhoto(null); }} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
+              className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full shadow-2xl flex flex-col max-h-[min(100dvh,100svh)] sm:max-h-[min(92vh,900px)] my-auto min-h-0">
+              <div className="flex items-center justify-between px-4 sm:px-7 pt-4 sm:pt-7 pb-3 border-b border-zinc-100 shrink-0">
+                <h3 className="text-lg sm:text-xl font-black text-zinc-900 pr-2">{editing.id ? 'Editar Produto' : 'Novo Produto'}</h3>
+                <button type="button" onClick={() => { setEditing(null); setPendingPhoto(null); }} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-zinc-100 rounded-xl text-zinc-400 shrink-0"><X size={18}/></button>
               </div>
 
-              <form onSubmit={handleSave} className="space-y-4">
+              <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 min-w-0">
+              <div className="space-y-4 px-4 sm:px-7 pt-4 pb-2 overflow-y-auto flex-1 min-h-0 overscroll-contain">
                 {/* Nome */}
                 <div>
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nome do produto *</label>
@@ -734,7 +751,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 </div>
 
                 {/* Preço + Custo */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Preço de venda (R$) *</label>
                     <input type="number" step="0.01" min="0" value={editing.price ?? 0}
@@ -778,7 +795,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     <Clock size={10} className="inline mr-1"/>Disponível das… às…
                     <span className="ml-1 normal-case font-normal text-zinc-400">(deixe vazio para sempre disponível)</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <input type="time" value={editing.disponivel_de || ''}
                       onChange={e => setEditing(p => ({...p, disponivel_de: e.target.value || undefined}))}
                       className="px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
@@ -830,7 +847,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 </div>
 
                 {/* Código de barras + Marca */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1 mb-1.5"><Barcode size={10}/>Cód. Barras</label>
                     <input type="text" placeholder="7896006754345"
@@ -1075,24 +1092,25 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 )}
 
                 {/* Toggles */}
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
                     <input type="checkbox" checked={!!editing.active} onChange={e => setEditing(p => ({...p, active: e.target.checked}))}
                       className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"/>
                     <span className="text-sm font-medium text-zinc-700">Produto ativo</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
                     <input type="checkbox" checked={!!editing.destaque} onChange={e => setEditing(p => ({...p, destaque: e.target.checked ? 1 : 0}))}
                       className="w-4 h-4 rounded border-zinc-300 text-amber-500 focus:ring-amber-500"/>
                     <span className="text-sm font-medium text-zinc-700">⭐ Em destaque</span>
                   </label>
                 </div>
+              </div>
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 px-4 sm:px-7 pt-3 pb-4 sm:pb-6 border-t border-zinc-100 shrink-0 bg-white">
                   <button type="button" onClick={() => { setEditing(null); setPendingPhoto(null); }}
-                    className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">Cancelar</button>
+                    className="flex-1 py-3 min-h-[48px] bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">Cancelar</button>
                   <button type="submit" disabled={uploadingPhoto}
-                    className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-all">
+                    className="flex-1 py-3 min-h-[48px] bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-all">
                     {uploadingPhoto ? 'Salvando...' : 'Salvar'}
                   </button>
                 </div>
@@ -1105,19 +1123,19 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       {/* Modal: Categorias */}
       <AnimatePresence>
         {showCategoryModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
             <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="bg-white rounded-3xl p-7 max-w-md w-full shadow-2xl flex flex-col max-h-[80vh]">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-xl font-black text-zinc-900">Categorias</h3>
-                <button onClick={() => setShowCategoryModal(false)} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
+              className="bg-white rounded-t-3xl sm:rounded-3xl p-4 sm:p-7 max-w-md w-full shadow-2xl flex flex-col max-h-[min(88dvh,100svh)] sm:max-h-[80vh] min-h-0">
+              <div className="flex items-center justify-between mb-4 sm:mb-5 shrink-0">
+                <h3 className="text-lg sm:text-xl font-black text-zinc-900">Categorias</h3>
+                <button type="button" onClick={() => setShowCategoryModal(false)} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
               </div>
-              <form onSubmit={handleAddCategory} className="flex gap-2 mb-4">
+              <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-2 mb-4 shrink-0">
                 <input type="text" placeholder="Nova categoria..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
-                <button type="submit" className="px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all">Adicionar</button>
+                  className="flex-1 min-w-0 px-3.5 py-2.5 min-h-[44px] border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+                <button type="submit" className="px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all shrink-0">Adicionar</button>
               </form>
-              <div className="flex-1 overflow-auto border border-zinc-100 rounded-xl divide-y divide-zinc-50">
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border border-zinc-100 rounded-xl divide-y divide-zinc-50">
                 {categories.length === 0 && <p className="text-center text-zinc-400 py-6 text-sm">Nenhuma categoria</p>}
                 {categories.map(cat => (
                   <div key={cat.id} className="flex justify-between items-center px-4 py-3 hover:bg-zinc-50">
@@ -1209,6 +1227,8 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
   const hdrs = { 'Content-Type':'application/json', Authorization:`Bearer ${token}` };
   const fmtR = (v: number) => v > 0 ? `+R$ ${v.toFixed(2).replace('.',',')}` : 'Incluso';
 
+  const { visibleItems: gruposVisiveis, hasMore: hasMoreGrupos, loadMore: loadMoreGrupos, totalCount: totalGrupos } = usePaginatedList(grupos, { pageSize: 10 });
+
   const carregar = async () => {
     const r = await fetch(`/api/products/${produtoId}/opcoes`, { headers: { Authorization:`Bearer ${token}` } });
     if (r.ok) setGrupos(await r.json());
@@ -1293,21 +1313,21 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
       <motion.div initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}}
-        className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[92vh]">
+        className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col min-h-0 max-h-[min(92dvh,100svh)] sm:max-h-[92vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-100">
-          <div>
-            <h3 className="text-lg font-black text-zinc-900">Opções do Produto</h3>
-            <p className="text-sm text-zinc-400 mt-0.5">{produtoNome}</p>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-zinc-100 shrink-0">
+          <div className="min-w-0 pr-2">
+            <h3 className="text-base sm:text-lg font-black text-zinc-900">Opções do Produto</h3>
+            <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 truncate">{produtoNome}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
+          <button type="button" onClick={onClose} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
         </div>
 
         {/* Dica */}
-        <div className="mx-6 mt-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 space-y-1.5">
+        <div className="mx-4 sm:mx-6 mt-3 sm:mt-4 shrink-0 bg-blue-50 border border-blue-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs text-blue-800 space-y-1.5 overflow-x-auto">
           <p><strong>💡 Duas formas de configurar o preço:</strong></p>
           <p><strong>A) Preço base R$0,00</strong> — coloque o preço cheio em cada item da proteína (Bisteca = R$15,99, Frango = R$16,99...)</p>
           <p><strong>B) Preço base = mais barato</strong> — coloque o preço do item mais barato no produto (R$15,99) e nos outros apenas a diferença (Bife a Parmegiana = +R$4,00)</p>
@@ -1315,7 +1335,7 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
         </div>
 
         {/* Lista de grupos */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 space-y-4">
           {loading ? (
             <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>
           ) : grupos.length === 0 ? (
@@ -1324,7 +1344,7 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
               <p className="font-semibold">Nenhum grupo ainda</p>
               <p className="text-xs mt-1">Crie grupos abaixo para adicionar opções ao produto</p>
             </div>
-          ) : grupos.map(g => (
+          ) : gruposVisiveis.map(g => (
             <div key={g.id} className="border border-zinc-200 rounded-2xl overflow-hidden">
 
               {/* Cabeçalho do grupo — modo edição inline */}
@@ -1416,87 +1436,104 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
               {/* Itens do grupo */}
               <div className="divide-y divide-zinc-50">
                 {g.itens.map(it => (
-                  <div key={it.id} className={`px-4 py-2.5 flex items-center gap-3 transition-colors ${!it.ativo?'bg-zinc-50 opacity-60':''}`}>
+                  <div key={it.id} className={`px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 transition-colors ${!it.ativo?'bg-zinc-50 opacity-60':''}`}>
                     {editItem?.id === it.id ? (
                       <>
                         <input value={editItem.nome} onChange={e=>setEditItem(p=>p?{...p,nome:e.target.value}:p)}
                           className={`${inp} flex-1 min-w-0`} placeholder="Nome"/>
-                        <input value={editItem.preco} onChange={e=>setEditItem(p=>p?{...p,preco:e.target.value}:p)}
-                          type="number" step="0.01" min="0" className={`${inp} w-24`} placeholder="R$ adicional"/>
-                        <button onClick={saveItem} className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold">✓</button>
-                        <button onClick={()=>setEditItem(null)} className="px-3 py-1.5 bg-zinc-200 rounded-lg text-xs font-bold">✕</button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input value={editItem.preco} onChange={e=>setEditItem(p=>p?{...p,preco:e.target.value}:p)}
+                            type="number" step="0.01" min="0" className={`${inp} w-full sm:w-24 min-w-0`} placeholder="R$ adicional"/>
+                          <button type="button" onClick={saveItem} className="px-3 py-2 min-h-[40px] bg-emerald-500 text-white rounded-lg text-xs font-bold">✓</button>
+                          <button type="button" onClick={()=>setEditItem(null)} className="px-3 py-2 min-h-[40px] bg-zinc-200 rounded-lg text-xs font-bold">✕</button>
+                        </div>
                       </>
                     ) : (
                       <>
-                        {/* Toggle ativo/inativo no delivery */}
-                        <button
-                          onClick={()=>toggleItemAtivo(it)}
-                          title={it.ativo ? 'Visível no delivery — clique para ocultar' : 'Oculto no delivery — clique para mostrar'}
-                          className={`w-9 h-5 rounded-full relative shrink-0 transition-all focus:outline-none ${it.ativo?'bg-emerald-500':'bg-zinc-300'}`}>
-                          <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${it.ativo?'left-4':'left-0.5'}`}/>
-                        </button>
-                        <p className={`flex-1 text-sm font-medium ${it.ativo?'text-zinc-700':'text-zinc-400 line-through'}`}>{it.nome}</p>
-                        <span className={`text-xs font-bold ${it.preco_adicional>0?'text-emerald-600':'text-zinc-400'}`}>{fmtR(it.preco_adicional)}</span>
-                        <button onClick={()=>setEditItem({id:it.id,nome:it.nome,preco:String(it.preco_adicional)})} className="p-1.5 hover:bg-zinc-100 text-zinc-300 hover:text-zinc-600 rounded-lg"><Pencil size={12}/></button>
-                        <button onClick={()=>delItem(it.id)} className="p-1.5 hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg"><Trash2 size={12}/></button>
+                        <div className="flex items-start gap-2 sm:gap-3 min-w-0 w-full">
+                          {/* Toggle ativo/inativo no delivery */}
+                          <button
+                            type="button"
+                            onClick={()=>toggleItemAtivo(it)}
+                            title={it.ativo ? 'Visível no delivery — clique para ocultar' : 'Oculto no delivery — clique para mostrar'}
+                            className={`w-9 h-5 rounded-full relative shrink-0 mt-0.5 transition-all focus:outline-none ${it.ativo?'bg-emerald-500':'bg-zinc-300'}`}>
+                            <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${it.ativo?'left-4':'left-0.5'}`}/>
+                          </button>
+                          <p className={`flex-1 min-w-0 text-sm font-medium break-words ${it.ativo?'text-zinc-700':'text-zinc-400 line-through'}`}>{it.nome}</p>
+                          <span className={`text-xs font-bold shrink-0 ${it.preco_adicional>0?'text-emerald-600':'text-zinc-400'}`}>{fmtR(it.preco_adicional)}</span>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button type="button" onClick={()=>setEditItem({id:it.id,nome:it.nome,preco:String(it.preco_adicional)})} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-300 hover:text-zinc-600 rounded-lg"><Pencil size={12}/></button>
+                            <button type="button" onClick={()=>delItem(it.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg"><Trash2 size={12}/></button>
+                          </div>
+                        </div>
                       </>
                     )}
                   </div>
                 ))}
                 {/* Adicionar item */}
-                <div className="px-4 py-2.5 flex items-center gap-2 bg-zinc-50/50">
+                <div className="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 bg-zinc-50/50">
                   <input value={novoItem[g.id]?.nome||''} onChange={e=>setNovoItem(p=>({...p,[g.id]:{...p[g.id],nome:e.target.value}}))}
                     placeholder="Nome do item" className={`${inp} flex-1 min-w-0`}
                     onKeyDown={e=>e.key==='Enter'&&addItem(g.id)}/>
                   <input value={novoItem[g.id]?.preco||''} onChange={e=>setNovoItem(p=>({...p,[g.id]:{...p[g.id],preco:e.target.value}}))}
-                    type="number" step="0.01" min="0" placeholder="R$ adicional" className={`${inp} w-28`}/>
-                  <button onClick={()=>addItem(g.id)} disabled={!novoItem[g.id]?.nome?.trim()}
-                    className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-200 text-white rounded-lg text-xs font-bold transition-all">
+                    type="number" step="0.01" min="0" placeholder="R$ adicional" className={`${inp} w-full sm:w-28 min-w-0`}/>
+                  <button type="button" onClick={()=>addItem(g.id)} disabled={!novoItem[g.id]?.nome?.trim()}
+                    className="px-3 py-2.5 min-h-[44px] bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-200 text-white rounded-lg text-xs font-bold transition-all shrink-0">
                     + Item
                   </button>
                 </div>
               </div>
             </div>
           ))}
+          {hasMoreGrupos && (
+            <div className="flex justify-center py-4">
+              <button onClick={loadMoreGrupos}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-sm transition-all">
+                Carregar mais (+10) — {gruposVisiveis.length} de {totalGrupos} grupos
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Adicionar novo grupo */}
-        <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+        <div className="px-4 sm:px-6 py-4 border-t border-zinc-100 bg-zinc-50/50 space-y-3 shrink-0">
           <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Novo grupo de opções</p>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-col sm:flex-row gap-2 sm:flex-wrap">
             <input value={novoGrupo.nome} onChange={e=>setNovoGrupo(p=>({...p,nome:e.target.value}))}
-              placeholder="Nome do grupo (ex: Acompanhamentos)" className={`${inp} flex-1 min-w-40`}/>
-            <select value={novoGrupo.tipo} onChange={e=>setNovoGrupo(p=>({...p,tipo:e.target.value}))} className={inp}>
+              placeholder="Nome do grupo (ex: Acompanhamentos)" className={`${inp} flex-1 min-w-0 sm:min-w-40`}/>
+            <select value={novoGrupo.tipo} onChange={e=>setNovoGrupo(p=>({...p,tipo:e.target.value}))} className={`${inp} w-full sm:w-auto min-h-[44px]`}>
               <option value="radio">Escolha 1 (radio)</option>
               <option value="checkbox">Múltipla escolha</option>
               <option value="quantidade">Quantidade (+/-)</option>
             </select>
           </div>
-          <div className="flex gap-2 flex-wrap items-center">
-            <div className="flex items-center gap-1.5">
-              <label className="text-xs font-bold text-zinc-500">Mín:</label>
-              <input type="number" min="0" max="10" value={novoGrupo.min_selecoes} onChange={e=>setNovoGrupo(p=>({...p,min_selecoes:parseInt(e.target.value)||0}))} className={`${inp} w-16`}/>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <label className="text-xs font-bold text-zinc-500">Máx:</label>
-              <input type="number" min="1" max="20" value={novoGrupo.max_selecoes} onChange={e=>setNovoGrupo(p=>({...p,max_selecoes:parseInt(e.target.value)||1}))} className={`${inp} w-16`}/>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div onClick={()=>setNovoGrupo(p=>({...p,obrigatorio:!p.obrigatorio}))}
-                className={`w-10 h-5 rounded-full relative transition-all ${novoGrupo.obrigatorio?'bg-emerald-500':'bg-zinc-300'}`}>
-                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${novoGrupo.obrigatorio?'left-5':'left-0.5'}`}/>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-bold text-zinc-500">Mín:</label>
+                <input type="number" min="0" max="10" value={novoGrupo.min_selecoes} onChange={e=>setNovoGrupo(p=>({...p,min_selecoes:parseInt(e.target.value)||0}))} className={`${inp} w-16 min-h-[44px]`}/>
               </div>
-              <span className="text-xs font-bold text-zinc-600">Obrigatório</span>
-            </label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-bold text-zinc-500">Máx:</label>
+                <input type="number" min="1" max="20" value={novoGrupo.max_selecoes} onChange={e=>setNovoGrupo(p=>({...p,max_selecoes:parseInt(e.target.value)||1}))} className={`${inp} w-16 min-h-[44px]`}/>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+                <div onClick={()=>setNovoGrupo(p=>({...p,obrigatorio:!p.obrigatorio}))}
+                  className={`w-10 h-5 rounded-full relative transition-all shrink-0 ${novoGrupo.obrigatorio?'bg-emerald-500':'bg-zinc-300'}`}>
+                  <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow transition-all ${novoGrupo.obrigatorio?'left-5':'left-0.5'}`}/>
+                </div>
+                <span className="text-xs font-bold text-zinc-600">Obrigatório</span>
+              </label>
+            </div>
             <button onClick={addGrupo} disabled={!novoGrupo.nome.trim()||saving}
-              className="ml-auto px-5 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-1.5">
+              className="w-full sm:w-auto sm:ml-auto px-5 py-2.5 min-h-[44px] bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5">
               <Plus size={14}/> Criar grupo
             </button>
           </div>
         </div>
 
-        <div className="px-6 pb-5">
-          <button onClick={onClose} className="w-full py-3 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">
+        <div className="px-4 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5 shrink-0">
+          <button type="button" onClick={onClose} className="w-full py-3 min-h-[44px] bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">
             Fechar
           </button>
         </div>

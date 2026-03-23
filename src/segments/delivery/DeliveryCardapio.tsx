@@ -1,6 +1,7 @@
 // src/segments/delivery/DeliveryCardapio.tsx
 // Cardápio online premium — design limpo, login por telefone
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useDebounce } from '../../hooks/useDebounce';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShoppingCart, Plus, Minus, MapPin, Smartphone, Banknote,
@@ -454,6 +455,7 @@ export default function DeliveryCardapio() {
   const [tela, setTela] = useState<Tela>('cardapio');
   const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento | null>(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 250);
   const [catAtiva, setCatAtiva] = useState('');
   const [pedidoOk, setPedidoOk] = useState<PedidoConfirmado|null>(null);
   const [abaCardapio, setAbaCardapio] = useState<'todos'|'favoritos'|'meus_pedidos'>('todos');
@@ -640,10 +642,10 @@ export default function DeliveryCardapio() {
 
   const prodsFiltrados = useMemo(() => {
     let cats = categorias;
-    if (search) { const t=search.toLowerCase(); cats=cats.map(c=>({...c,itens:c.itens.filter(p=>p.name.toLowerCase().includes(t)||(p.description||'').toLowerCase().includes(t))})).filter(c=>c.itens.length>0); }
+    if (debouncedSearch) { const t=debouncedSearch.toLowerCase(); cats=cats.map(c=>({...c,itens:c.itens.filter(p=>p.name.toLowerCase().includes(t)||(p.description||'').toLowerCase().includes(t))})).filter(c=>c.itens.length>0); }
     if (abaCardapio==='favoritos'&&cliente?.favoritos.length) cats=cats.map(c=>({...c,itens:c.itens.filter(p=>cliente.favoritos.includes(p.id))})).filter(c=>c.itens.length>0);
     return cats;
-  }, [categorias, search, abaCardapio, cliente?.favoritos]);
+  }, [categorias, debouncedSearch, abaCardapio, cliente?.favoritos]);
 
   const onPedidoOk = (d: PedidoConfirmado) => { setCart([]); setPedidoOk(d); setTela('confirmado'); };
 
@@ -914,7 +916,7 @@ export default function DeliveryCardapio() {
                       <div className="flex items-stretch">
                         {p.photo_url && (
                           <div className="w-[90px] relative flex-shrink-0 overflow-hidden cursor-pointer" onClick={()=>handleAddProduto(p)}>
-                            <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover"/>
+                            <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/>
                             {qty>0&&<div className="absolute bottom-1.5 left-1.5 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-black shadow">{qty}</div>}
                           </div>
                         )}

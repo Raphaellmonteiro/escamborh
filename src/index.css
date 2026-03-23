@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* AdminPanel dark mode — aplicado via classe no mount, removido no unmount */
+html.flowpdv-admin-dark,
+html.flowpdv-admin-dark body,
+html.flowpdv-admin-dark #root {
+  background-color: #09090b;
+  color: #f4f4f5;
+  min-height: 100vh;
+}
+
+/* Forçar elementos-chave do admin a ficarem escuros (evitar override) */
+html.flowpdv-admin-dark header { background-color: #18181b !important; }
+html.flowpdv-admin-dark .admin-dark input[type="text"] { background-color: #18181b !important; border-color: #27272a !important; color: #f4f4f5 !important; }
+html.flowpdv-admin-dark .admin-dark input::placeholder { color: #71717a !important; }
+html.flowpdv-admin-dark .admin-dark thead tr { background-color: #18181b !important; color: #d4d4d8 !important; }
+html.flowpdv-admin-dark .admin-dark thead th { color: #a1a1aa !important; }
+html.flowpdv-admin-dark .admin-dark .bg-white { background-color: #18181b !important; }
+
+/* Seleção de texto — feedback visual consistente */
+html.flowpdv-dark ::selection {
+  background-color: rgba(16, 185, 129, 0.28);
+  color: inherit;
+}
+html.flowpdv-admin-dark ::selection {
+  background-color: rgba(52, 211, 153, 0.35);
+  color: #fafafa;
+}

@@ -6,6 +6,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import MesaCard from './MesaCard';
 import ComandaMesaModal from './ComandaMesaModal';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Spinner } from '../../components/ui/Spinner';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
 
 export default function MesasScreen({ token, taxasPagamento }: { token: string; taxasPagamento?: { debito: number; credito: number; pix: number } }) {
@@ -30,16 +32,18 @@ export default function MesasScreen({ token, taxasPagamento }: { token: string; 
 
   useEffect(() => { fetchMesas(); }, [fetchMesas]);
 
-  const handleAbrirMesa = async (mesa: any) => {
+  const handleAbrirMesa = useCallback(async (mesa: any) => {
     await fetch(`/api/mesas/${mesa.id}/abrir`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
     fetchMesas();
-  };
+  }, [token, fetchMesas]);
 
-  const handleFecharMesa = async (mesa: any) => {
+  const handleFecharMesa = useCallback(async (mesa: any) => {
     if (!window.confirm(`Fechar Mesa ${mesa.numero}? Os itens não pagos serão descartados.`)) return;
     await fetch(`/api/mesas/${mesa.id}/fechar`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` } });
     fetchMesas();
-  };
+  }, [token, fetchMesas]);
+
+  const handleClickMesa = useCallback((mesa: any) => setSelectedMesa(mesa), []);
 
   const handleConfigurar = async () => {
     const qtd = parseInt(qtdInput);
@@ -62,6 +66,8 @@ export default function MesasScreen({ token, taxasPagamento }: { token: string; 
 
   const abertas = mesas.filter(m => m.status === 'aberta').length;
   const fechadas = mesas.filter(m => m.status === 'fechada').length;
+  const total = mesas.length;
+  const taxaOcupacao = total > 0 ? Math.round((abertas / total) * 100) : 0;
 
   return (
     <motion.div
@@ -70,59 +76,73 @@ export default function MesasScreen({ token, taxasPagamento }: { token: string; 
       exit={{ opacity: 0 }}
       className="h-full flex flex-col overflow-hidden"
     >
-      {/* Header */}
-      <div className="p-8 border-b border-zinc-200 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black text-zinc-900">Mesas</h1>
-            <div className="flex items-center gap-4 mt-2">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                {abertas} aberta{abertas !== 1 ? 's' : ''}
-              </span>
-              <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-400">
-                <span className="w-2 h-2 rounded-full bg-red-400" />
-                {fechadas} livre{fechadas !== 1 ? 's' : ''}
-              </span>
-            </div>
-          </div>
+      {/* Header + Resumo */}
+      <div className="p-5 border-b border-zinc-200 flex-shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-xl font-black text-zinc-900">Mesas</h1>
           <button
             onClick={() => { setQtdInput(String(mesas.length)); setShowConfig(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-semibold text-sm transition-all active:scale-95"
+            className="flex items-center gap-2 px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg font-semibold text-sm transition-all active:scale-95"
           >
-            <Settings size={16} />
-            Configurar Mesas
+            <Settings size={14} />
+            Configurar
           </button>
         </div>
+        {total > 0 && (
+          <div className="flex flex-wrap gap-3 mt-4">
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Total</span>
+              <span className="text-lg font-black text-zinc-900">{total}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-100 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+              <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Ocupadas</span>
+              <span className="text-lg font-black text-red-700">{abertas}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Livres</span>
+              <span className="text-lg font-black text-emerald-700">{fechadas}</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+              <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Ocupação</span>
+              <span className="text-lg font-black text-amber-700">{taxaOcupacao}%</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid de mesas */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-5">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-10 h-10 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+          <div className="flex items-center justify-center py-20" role="status" aria-label="Carregando mesas">
+            <Spinner className="h-10 w-10" />
           </div>
         ) : mesas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-            <TableProperties size={56} className="mb-4 opacity-20" />
-            <p className="font-semibold text-lg">Nenhuma mesa configurada</p>
-            <p className="text-sm mt-1">Clique em "Configurar Mesas" para começar</p>
+          <div className="flex flex-col items-center">
+            <EmptyState
+              icon={TableProperties}
+              title="Nenhuma mesa configurada"
+              description='Use "Configurar" no topo para definir a quantidade de mesas.'
+              className="!pb-6"
+            />
             <button
+              type="button"
               onClick={() => { setQtdInput('10'); setShowConfig(true); }}
-              className="mt-6 px-6 py-3 bg-zinc-900 text-white rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all"
+              className="mt-2 px-6 py-3 min-h-[44px] bg-zinc-900 text-white rounded-xl font-bold text-sm hover:bg-zinc-800 transition-all"
             >
-              Configurar Agora
+              Configurar agora
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
             {mesas.map(mesa => (
               <MesaCard
                 key={mesa.id}
                 mesa={mesa}
-                onOpen={() => handleAbrirMesa(mesa)}
-                onClose={() => handleFecharMesa(mesa)}
-                onClick={() => setSelectedMesa(mesa)}
+                onOpen={handleAbrirMesa}
+                onClose={handleFecharMesa}
+                onClick={handleClickMesa}
                 token={token}
               />
             ))}

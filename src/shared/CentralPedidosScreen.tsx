@@ -1,0 +1,1181 @@
+import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode } from 'lucide-react';
+import type { Order } from '../types';
+import { Card, Button } from '../components/ui/Card';
+import {
+  canCentralNotifyCustomer,
+  canCentralOpenMaps,
+  canCentralConfirmPayment,
+  canCentralPrintCupom,
+  canCentralPrintProof,
+  executeCentralConfirmPayment,
+  executeCentralPrintAction,
+  executeCentralPrimaryAction,
+  getCentralMapsUrl,
+  getCentralNotifyCustomerUrl,
+  getCentralPrimaryAction,
+} from '../utils/orderCentralActions';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Spinner } from '../components/ui/Spinner';
+import { getSegCfg } from '../config/segmentos';
+import {
+  FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY,
+  type CentralChannelFilter,
+  type CentralColumnId,
+  type CentralQuickFilter,
+  getCentralOrderKind,
+  getOrderAgeMinutes,
+  groupOrdersByCentralColumn,
+  isOrderWithoutAssignedMotoboy,
+  isPaymentPendingOrder,
+  isPendingQrMesaOrder,
+  isUrgentOrder,
+  passesCentralQuickFilter,
+  passesCentralChannelFilter,
+} from '../utils/orderCentralBoard';
+
+const TZ = 'America/Sao_Paulo';
+
+function getTodayRangeQuery(): { from: string; to: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  const d = parts.find((p) => p.type === 'day')?.value;
+  const day = `${y}-${m}-${d}`;
+  return { from: day, to: day };
+}
+
+function formatMoney(value: number) {
+  return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+}
+
+function formatElapsed(createdIso: string) {
+  const t = new Date(createdIso.includes('T') ? createdIso : createdIso.replace(' ', 'T')).getTime();
+  if (Number.isNaN(t)) return '—';
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m < 1) return 'agora';
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60} min`;
+}
+
+function getElapsedMeta(createdIso: string): { label: string; tone: string; dot: string } {
+  const t = new Date(createdIso.includes('T') ? createdIso : createdIso.replace(' ', 'T')).getTime();
+  if (Number.isNaN(t)) {
+    return {
+      label: '—',
+      tone: 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+      dot: 'bg-zinc-400',
+    };
+  }
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m >= 45) {
+    return {
+      label: formatElapsed(createdIso),
+      tone: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-200 dark:border-red-500/30',
+      dot: 'bg-red-500',
+    };
+  }
+  if (m >= 25) {
+    return {
+      label: formatElapsed(createdIso),
+      tone: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+      dot: 'bg-amber-500',
+    };
+  }
+  return {
+    label: formatElapsed(createdIso),
+    tone: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
+    dot: 'bg-emerald-500',
+  };
+}
+
+function channelBadgeMeta(order: Order): { label: string; className: string } {
+  const kind = getCentralOrderKind(order);
+  if (kind === 'mesa') {
+    return { label: 'Mesa', className: 'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-500/20 dark:text-violet-200 dark:border-violet-500/30' };
+  }
+  if (kind === 'delivery') {
+    return { label: 'Delivery', className: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-500/20 dark:text-orange-200 dark:border-orange-500/30' };
+  }
+  if (kind === 'retirada') {
+    return { label: 'Retirada', className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-500/30' };
+  }
+  return { label: 'Balcão', className: 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-700 dark:text-zinc-100 dark:border-zinc-600' };
+}
+
+function getOrderNumberLine(order: Order) {
+  const num = String(order.order_number || '').trim();
+  const senha = order.senha_pedido != null && Number(order.senha_pedido) !== 0
+    ? String(order.senha_pedido).padStart(2, '0')
+    : '';
+  if (senha) return `${num} · Senha ${senha}`;
+  return num || `#${order.id}`;
+}
+
+function getClienteLine(order: Order) {
+  const raw = (order as { cliente_nome?: string | null }).cliente_nome;
+  const nome = String(raw || '').trim();
+  if (nome) return nome;
+  const tel = (order as { cliente_tel?: string | null }).cliente_tel;
+  if (tel && String(tel).trim()) return String(tel).trim();
+  return '—';
+}
+
+function getMesaReference(order: Order) {
+  const mesaId = Number((order as { mesa_id?: number | null }).mesa_id || 0);
+  if (mesaId > 0) return String(mesaId);
+  const observation = String(order.observation || '');
+  const mesaMatch = observation.match(/Mesa\s+(\d+)/i);
+  return mesaMatch ? mesaMatch[1] : null;
+}
+
+function getPagamentoLine(order: Order) {
+  const tipo = (order as { pagamento_tipo?: string | null }).pagamento_tipo;
+  const status = (order as { pagamento_status?: string | null }).pagamento_status;
+  const t = String(tipo || '').trim();
+  const s = String(status || '').trim();
+  if (!t && !s) return null;
+  if (t && s) return `${t} · ${s}`;
+  return t || s;
+}
+
+function getPaymentBadgeMeta(order: Order): { label: string; className: string } | null {
+  const tipo = String((order as { pagamento_tipo?: string | null }).pagamento_tipo || '').trim();
+  const status = String((order as { pagamento_status?: string | null }).pagamento_status || '').trim().toLowerCase();
+  if (!tipo && !status) return null;
+  if (status === 'pago') {
+    return {
+      label: tipo ? `${tipo} pago` : 'Pago',
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
+    };
+  }
+  if (status) {
+    return {
+      label: tipo ? `${tipo} · ${status}` : status,
+      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+    };
+  }
+  return {
+    label: tipo,
+    className: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-500/30',
+  };
+}
+
+function getColumnTone(columnId: CentralColumnId): { shell: string; header: string; count: string; empty: string } {
+  if (columnId === 'a_confirmar') {
+    return {
+      shell: 'border-cyan-200/80 dark:border-cyan-500/20 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-cyan-100 dark:border-cyan-500/20 bg-cyan-50/70 dark:bg-cyan-500/10',
+      count: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-200',
+      empty: 'border-cyan-100/80 text-cyan-300 dark:border-cyan-500/20 dark:text-cyan-700/70',
+    };
+  }
+  if (columnId === 'entrada') {
+    return {
+      shell: 'border-sky-200/80 dark:border-sky-500/20 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-sky-100 dark:border-sky-500/20 bg-sky-50/70 dark:bg-sky-500/10',
+      count: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
+      empty: 'border-sky-100/80 text-sky-300 dark:border-sky-500/20 dark:text-sky-700/70',
+    };
+  }
+  if (columnId === 'em_preparo') {
+    return {
+      shell: 'border-amber-200/80 dark:border-amber-500/20 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-amber-100 dark:border-amber-500/20 bg-amber-50/70 dark:bg-amber-500/10',
+      count: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
+      empty: 'border-amber-100/80 text-amber-300 dark:border-amber-500/20 dark:text-amber-700/70',
+    };
+  }
+  if (columnId === 'pronto') {
+    return {
+      shell: 'border-violet-200/80 dark:border-violet-500/20 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-violet-100 dark:border-violet-500/20 bg-violet-50/70 dark:bg-violet-500/10',
+      count: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200',
+      empty: 'border-violet-100/80 text-violet-300 dark:border-violet-500/20 dark:text-violet-700/70',
+    };
+  }
+  if (columnId === 'rota') {
+    return {
+      shell: 'border-orange-200/80 dark:border-orange-500/20 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-orange-100 dark:border-orange-500/20 bg-orange-50/70 dark:bg-orange-500/10',
+      count: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-200',
+      empty: 'border-orange-100/80 text-orange-300 dark:border-orange-500/20 dark:text-orange-700/70',
+    };
+  }
+  if (columnId === 'outros') {
+    return {
+      shell: 'border-amber-200/80 dark:border-amber-500/20 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-amber-100 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/10',
+      count: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
+      empty: 'border-amber-100/80 text-amber-300 dark:border-amber-500/20 dark:text-amber-700/70',
+    };
+  }
+  if (columnId === 'encerrado') {
+    return {
+      shell: 'border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/80',
+      header: 'border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900',
+      count: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+      empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-800 dark:text-zinc-700/70',
+    };
+  }
+  return {
+    shell: 'border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/80',
+    header: 'border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900',
+    count: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+    empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-800 dark:text-zinc-700/70',
+  };
+}
+
+const COLUMN_DEF: { id: CentralColumnId; title: string; hint?: string }[] = [
+  { id: 'a_confirmar', title: 'A confirmar', hint: 'Pedidos QR da mesa aguardando validação' },
+  { id: 'entrada', title: 'Entrada', hint: 'Novos e confirmação' },
+  { id: 'em_preparo', title: 'Em preparo' },
+  { id: 'pronto', title: 'Pronto' },
+  { id: 'rota', title: 'Rota', hint: 'Delivery em deslocamento' },
+  { id: 'encerrado', title: 'Encerrado' },
+  { id: 'outros', title: 'A revisar', hint: 'Status não mapeado no fluxo' },
+];
+
+const FILTERS: { id: CentralChannelFilter; label: string }[] = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'balcao', label: 'Balcão' },
+  { id: 'delivery', label: 'Delivery' },
+  { id: 'retirada', label: 'Retirada' },
+];
+
+const QUICK_FILTERS: { id: CentralQuickFilter; label: string }[] = [
+  { id: 'todos', label: 'Tudo' },
+  { id: 'urgentes', label: 'Urgentes' },
+  { id: 'pagamento_pendente', label: 'Pagamento pendente' },
+  { id: 'qr_pendente', label: 'QR pendente' },
+  { id: 'sem_motoboy', label: 'Sem motoboy' },
+];
+
+export default function CentralPedidosScreen({
+  token,
+  segmento,
+}: {
+  token: string;
+  /** Segmento operacional — define status final do segmento (ex.: Entregue vs Concluído). */
+  segmento?: string;
+}) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [channelFilter, setChannelFilter] = useState<CentralChannelFilter>('todos');
+  const [quickFilter, setQuickFilter] = useState<CentralQuickFilter>('todos');
+  const [detail, setDetail] = useState<Order | null>(null);
+  const [motoboys, setMotoboys] = useState<Array<{ id: number; nome: string }>>([]);
+  const [showClosed, setShowClosed] = useState(false);
+  const [compactMode, setCompactMode] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY);
+      if (
+        raw === 'todos' ||
+        raw === 'balcao' ||
+        raw === 'delivery' ||
+        raw === 'retirada'
+      ) {
+        setChannelFilter(raw as CentralChannelFilter);
+      }
+      sessionStorage.removeItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const segCfg = useMemo(() => getSegCfg(segmento || 'Restaurante/Food'), [segmento]);
+
+  const fetchOrders = useCallback(async () => {
+    if (!token) return;
+    setError('');
+    setLoading(true);
+    try {
+      const { from, to } = getTodayRangeQuery();
+      const qs = new URLSearchParams({ from, to, limit: '100' });
+      const res = await fetch(`/api/orders?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setError('Não foi possível carregar os pedidos.');
+        setOrders([]);
+        return;
+      }
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch {
+      setError('Erro de conexão ao carregar pedidos.');
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void fetchOrders();
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    if (!token) return;
+    void (async () => {
+      try {
+        const res = await fetch('/api/delivery/motoboys', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!Array.isArray(data)) return;
+        setMotoboys(
+          data.map((m: { id: number; nome: string }) => ({ id: m.id, nome: String(m.nome || '') }))
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [token]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void fetchOrders();
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [fetchOrders]);
+
+  const filtered = useMemo(
+    () => orders.filter((o) => passesCentralChannelFilter(o, channelFilter) && passesCentralQuickFilter(o, quickFilter)),
+    [orders, channelFilter, quickFilter]
+  );
+
+  const buckets = useMemo(
+    () => groupOrdersByCentralColumn(filtered, { segmentFinalStatus: segCfg.statusConcluido }),
+    [filtered, segCfg.statusConcluido]
+  );
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
+      <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <LayoutGrid className="shrink-0 text-zinc-700 dark:text-zinc-300" size={20} />
+              Operação
+            </h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Visão ao vivo do dia · foco nos ativos · ações rápidas no card
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider hidden sm:inline">
+              Até 100 pedidos (hoje)
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!min-h-[40px] !px-3 !py-2 !text-xs"
+              onClick={() => void fetchOrders()}
+              disabled={loading}
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Atualizar
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setChannelFilter(f.id)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border min-h-[40px] transition-colors ${
+                channelFilter === f.id
+                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                  : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowClosed((current) => !current)}
+            className={`px-3 py-2 rounded-xl text-[11px] font-semibold border min-h-[40px] transition-colors ${
+              showClosed
+                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+            }`}
+            title={showClosed ? 'Ocultar pedidos encerrados' : 'Mostrar pedidos encerrados'}
+          >
+            {showClosed ? 'Ocultar encerrados' : `Ver encerrados (${buckets.encerrado.length})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompactMode((current) => !current)}
+            className={`px-3 py-2 rounded-xl text-[11px] font-semibold border min-h-[40px] transition-colors ${
+              compactMode
+                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+            }`}
+            title={compactMode ? 'Voltar ao modo normal' : 'Reduzir altura dos cards'}
+          >
+            {compactMode ? 'Modo compacto ativo' : 'Compactar cards'}
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
+            Operação
+          </span>
+          {QUICK_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setQuickFilter(f.id)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                quickFilter === f.id
+                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                  : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 p-4 sm:p-6 space-y-4">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/40 dark:border-red-900 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+            {error}
+          </div>
+        )}
+
+        {loading && orders.length === 0 ? (
+          <div className="flex justify-center py-24">
+            <Spinner />
+          </div>
+        ) : !loading && orders.length === 0 && !error ? (
+          <EmptyState
+            title="Nenhum pedido hoje"
+            description="Ainda não há pedidos registrados para hoje neste estabelecimento."
+          />
+        ) : (
+          <>
+            {!loading && orders.length > 0 && filtered.length === 0 && (
+              <p className="text-sm text-center text-zinc-500 dark:text-zinc-400 mb-2">
+                Nenhum pedido corresponde ao filtro selecionado.
+              </p>
+            )}
+            <div className="overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 [scrollbar-gutter:stable]">
+              <div className="flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 sm:gap-4 sm:items-start">
+                {COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado').map((col) => {
+                  const tone = getColumnTone(col.id);
+                  return (
+                  <div
+                    key={col.id}
+                    className={`w-[min(100vw-2rem,320px)] sm:w-auto flex flex-col rounded-2xl border min-h-[min(420px,60vh)] max-h-[min(720px,75vh)] flex-shrink-0 sm:min-h-[min(480px,70vh)] sm:max-h-[min(720px,78vh)] shadow-sm shadow-zinc-950/[0.02] ${tone.shell}`}
+                  >
+                    <div className={`shrink-0 px-3 py-2.5 ${tone.header}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                          {col.title}
+                        </span>
+                        <span className={`text-[10px] font-black tabular-nums px-2 py-0.5 rounded-lg ${tone.count}`}>
+                          {buckets[col.id].length}
+                        </span>
+                      </div>
+                      {col.hint && (
+                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-none">{col.hint}</p>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                      {buckets[col.id].length === 0 ? (
+                        <div className={`mx-1 rounded-2xl border border-dashed py-6 px-3 text-center text-[11px] ${tone.empty}`}>
+                          Sem pedidos nesta etapa
+                        </div>
+                      ) : (
+                        buckets[col.id].map((order) => (
+                          <Fragment key={order.id}>
+                            <OrderCard
+                              order={order}
+                              columnId={col.id}
+                              token={token}
+                              segmentFinalStatus={segCfg.statusConcluido}
+                              motoboys={motoboys}
+                              compactMode={compactMode}
+                              onOpenDetail={() => setDetail(order)}
+                              onActionDone={() => void fetchOrders()}
+                            />
+                          </Fragment>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )})}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {detail && (
+          <OrderDetailModal
+            order={detail}
+            token={token}
+            onClose={() => setDetail(null)}
+            onRefresh={() => void fetchOrders()}
+            onOrderPatch={(patch) => setDetail((current) => (current ? { ...current, ...patch } : current))}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function OrderCard({
+  order,
+  columnId,
+  token,
+  segmentFinalStatus,
+  motoboys,
+  compactMode,
+  onOpenDetail,
+  onActionDone,
+}: {
+  order: Order;
+  columnId: CentralColumnId;
+  token: string;
+  segmentFinalStatus: string;
+  motoboys: Array<{ id: number; nome: string }>;
+  compactMode: boolean;
+  onOpenDetail: () => void;
+  onActionDone: () => void;
+}) {
+  const badge = channelBadgeMeta(order);
+  const paymentBadge = getPaymentBadgeMeta(order);
+  const elapsed = getElapsedMeta(order.created_at);
+  const mesaReference = getMesaReference(order);
+  const isQrPending = isPendingQrMesaOrder(order);
+  const urgent = isUrgentOrder(order);
+  const paymentPending = isPaymentPendingOrder(order);
+  const withoutMotoboy = isOrderWithoutAssignedMotoboy(order);
+  const ageMinutes = getOrderAgeMinutes(order);
+  const statusRaw = String(order.status || '').trim() || '—';
+  const statusTone =
+    columnId === 'a_confirmar'
+      ? 'border-cyan-200 bg-cyan-50/90 text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-100'
+      : columnId === 'outros'
+      ? 'border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100'
+      : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100';
+
+  const primary = useMemo(
+    () => getCentralPrimaryAction(order, { columnId, segmentFinalStatus }),
+    [order, columnId, segmentFinalStatus]
+  );
+
+  const [motoboyId, setMotoboyId] = useState<number | ''>('');
+  const [busy, setBusy] = useState(false);
+  const [busyQuickAction, setBusyQuickAction] = useState<'payment' | 'cupom' | 'comprovante' | null>(null);
+
+  const needsMotoboy =
+    primary?.kind === 'patch_delivery' && primary.needsMotoboy;
+  const bloqueadoMotoboy =
+    Boolean(needsMotoboy) && (!motoboyId || motoboys.length === 0);
+  const canConfirmPayment = canCentralConfirmPayment(order);
+  const canPrintCupom = canCentralPrintCupom(order);
+  const canPrintProof = canCentralPrintProof(order);
+  const mapsUrl = getCentralMapsUrl(order);
+  const notifyUrl = getCentralNotifyCustomerUrl(order);
+
+  const handlePrimary = async () => {
+    if (!primary || busy) return;
+    if (bloqueadoMotoboy) return;
+    setBusy(true);
+    const r = await executeCentralPrimaryAction({
+      token,
+      order,
+      action: primary,
+      motoboyId: needsMotoboy ? Number(motoboyId) : undefined,
+    });
+    setBusy(false);
+    if (!r.ok) {
+      alert(r.error || 'Não foi possível concluir a ação.');
+      return;
+    }
+    onActionDone();
+  };
+
+  const handleQuickPayment = async () => {
+    if (busyQuickAction) return;
+    setBusyQuickAction('payment');
+    const r = await executeCentralConfirmPayment({ token, order });
+    setBusyQuickAction(null);
+    if (!r.ok) {
+      alert(r.error || 'Não foi possível confirmar o pagamento.');
+      return;
+    }
+    onActionDone();
+  };
+
+  const handleQuickPrint = async (document: 'cupom' | 'comprovante') => {
+    if (busyQuickAction) return;
+    setBusyQuickAction(document);
+    const r = await executeCentralPrintAction({ token, order, document });
+    setBusyQuickAction(null);
+    if (!r.ok) {
+      alert(r.error || 'Não foi possível abrir a impressão.');
+    }
+  };
+
+  const openExternalUrl = (url: string | null) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <Card className={`!shadow-none !rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+      urgent
+        ? 'ring-1 ring-red-200/80 border-red-200 dark:ring-red-500/20 dark:border-red-500/30'
+        : 'hover:border-zinc-300 dark:hover:border-zinc-600'
+    }`}>
+      <div className={compactMode ? 'p-2.5' : 'p-3.5'}>
+        <button
+          type="button"
+          onClick={onOpenDetail}
+          className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50"
+        >
+          {compactMode ? (
+            <>
+              {(urgent || paymentPending || withoutMotoboy || isQrPending) && (
+                <div className="mb-1.5 flex flex-wrap gap-1">
+                  {urgent && (
+                    <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
+                      {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
+                    </span>
+                  )}
+                  {paymentPending && (
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+                      Pix pendente
+                    </span>
+                  )}
+                  {withoutMotoboy && (
+                    <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200">
+                      Sem motoboy
+                    </span>
+                  )}
+                  {isQrPending && mesaReference && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200">
+                      <QrCode size={10} />
+                      Mesa {mesaReference}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="min-w-0 truncate text-[12px] font-black leading-tight tracking-tight text-zinc-900 dark:text-zinc-100">
+                      {getOrderNumberLine(order)}
+                    </p>
+                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${badge.className}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                    {getClienteLine(order)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-black tabular-nums ${elapsed.tone}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${elapsed.dot}`} />
+                    {elapsed.label}
+                  </span>
+                  <p className="mt-1 text-[14px] font-black tabular-nums text-zinc-900 dark:text-zinc-50">
+                    {formatMoney(order.total_amount)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span
+                  className={`min-w-0 inline-flex flex-1 items-center rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide leading-tight ${statusTone}`}
+                  title={statusRaw}
+                >
+                  <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação' : statusRaw}</span>
+                </span>
+                {paymentBadge && (
+                  <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border ${paymentBadge.className}`}>
+                    {paymentPending ? 'Pendente' : 'Pago'}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {(urgent || paymentPending || withoutMotoboy) && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {urgent && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
+                      {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
+                    </span>
+                  )}
+                  {paymentPending && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+                      Pagamento pendente
+                    </span>
+                  )}
+                  {withoutMotoboy && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200">
+                      Sem motoboy
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  {isQrPending && mesaReference && (
+                    <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200">
+                      <QrCode size={11} />
+                      Mesa {mesaReference}
+                    </div>
+                  )}
+                  <p className="text-[13px] font-black text-zinc-900 dark:text-zinc-100 truncate leading-tight tracking-tight">
+                    {getOrderNumberLine(order)}
+                  </p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500 mt-1">Cliente</p>
+                  <p className="text-sm mt-0.5 font-semibold text-zinc-700 dark:text-zinc-200 truncate">
+                    {getClienteLine(order)}
+                  </p>
+                </div>
+                <div className="flex items-start gap-2 shrink-0">
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black tabular-nums ${elapsed.tone}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${elapsed.dot}`} />
+                    <Clock size={10} />
+                    {elapsed.label}
+                  </span>
+                  <ChevronRight size={16} className="shrink-0 text-zinc-300 dark:text-zinc-600 mt-1" />
+                </div>
+              </div>
+
+              <div className="mt-2 w-full min-w-0">
+                <span
+                  className={`inline-flex w-full max-w-full items-center rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide leading-tight ${statusTone}`}
+                  title={statusRaw}
+                >
+                  <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação da mesa' : statusRaw}</span>
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${badge.className}`}>
+                  {badge.label}
+                </span>
+                {paymentBadge && (
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${paymentBadge.className}`}>
+                    {paymentBadge.label}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 px-3 py-2.5 rounded-xl bg-zinc-50/90 dark:bg-zinc-800/60">
+                <div className="flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-[0.18em]">Total</p>
+                  </div>
+                  <p className="text-base font-black text-zinc-900 dark:text-zinc-50 tabular-nums">
+                    {formatMoney(order.total_amount)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">Detalhes</span>
+                <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">Abrir pedido</span>
+              </div>
+            </>
+          )}
+        </button>
+
+        {(canConfirmPayment || canPrintCupom || canPrintProof || canCentralOpenMaps(order) || canCentralNotifyCustomer(order) || primary) && (
+          <div
+            className={`${compactMode ? 'mt-2 pt-2 space-y-1.5' : 'mt-3 pt-3 space-y-2'} border-t border-zinc-100 dark:border-zinc-800`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {compactMode && !needsMotoboy ? (
+              <div className="flex items-center gap-1.5">
+                {(canConfirmPayment || canPrintCupom || canPrintProof || mapsUrl || notifyUrl) && (
+                  <div className="flex flex-wrap gap-1">
+                    {canConfirmPayment && (
+                      <button
+                        type="button"
+                        title="Confirmar pagamento"
+                        aria-label="Confirmar pagamento"
+                        onClick={() => void handleQuickPayment()}
+                        disabled={busyQuickAction !== null}
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200"
+                      >
+                        <BadgeCheck size={14} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
+                      </button>
+                    )}
+                    {canPrintCupom && (
+                      <button
+                        type="button"
+                        title="Imprimir cupom"
+                        aria-label="Imprimir cupom"
+                        onClick={() => void handleQuickPrint('cupom')}
+                        disabled={busyQuickAction !== null}
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                      >
+                        <Printer size={14} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
+                      </button>
+                    )}
+                    {canPrintProof && (
+                      <button
+                        type="button"
+                        title="Imprimir comprovante"
+                        aria-label="Imprimir comprovante"
+                        onClick={() => void handleQuickPrint('comprovante')}
+                        disabled={busyQuickAction !== null}
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                      >
+                        <ReceiptText size={14} className={busyQuickAction === 'comprovante' ? 'animate-pulse' : ''} />
+                      </button>
+                    )}
+                    {mapsUrl && (
+                      <button
+                        type="button"
+                        title="Ver mapa"
+                        aria-label="Ver mapa"
+                        onClick={() => openExternalUrl(mapsUrl)}
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
+                      >
+                        <MapPinned size={14} />
+                      </button>
+                    )}
+                    {notifyUrl && (
+                      <button
+                        type="button"
+                        title="Avisar cliente"
+                        aria-label="Avisar cliente"
+                        onClick={() => openExternalUrl(notifyUrl)}
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200"
+                      >
+                        <MessageCircle size={14} />
+                      </button>
+                    )}
+                  </div>
+                )}
+                {primary && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={busy || bloqueadoMotoboy}
+                    className="!min-h-[34px] !py-1.5 !px-3 !text-[11px] !font-black shadow-sm flex-1"
+                    onClick={() => void handlePrimary()}
+                  >
+                    <ChevronRight size={13} className={busy ? 'animate-pulse' : ''} />
+                    {bloqueadoMotoboy ? 'Selecione o motoboy' : primary.label}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+            {(canConfirmPayment || canPrintCupom || canPrintProof || mapsUrl || notifyUrl) && (
+              <div className="flex flex-wrap gap-1.5">
+                {canConfirmPayment && (
+                  <button
+                    type="button"
+                    title="Confirmar pagamento"
+                    aria-label="Confirmar pagamento"
+                    onClick={() => void handleQuickPayment()}
+                    disabled={busyQuickAction !== null}
+                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200`}
+                  >
+                    <BadgeCheck size={15} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
+                  </button>
+                )}
+                {canPrintCupom && (
+                  <button
+                    type="button"
+                    title="Imprimir cupom"
+                    aria-label="Imprimir cupom"
+                    onClick={() => void handleQuickPrint('cupom')}
+                    disabled={busyQuickAction !== null}
+                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+                  >
+                    <Printer size={15} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
+                  </button>
+                )}
+                {canPrintProof && (
+                  <button
+                    type="button"
+                    title="Imprimir comprovante"
+                    aria-label="Imprimir comprovante"
+                    onClick={() => void handleQuickPrint('comprovante')}
+                    disabled={busyQuickAction !== null}
+                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+                  >
+                    <ReceiptText size={15} className={busyQuickAction === 'comprovante' ? 'animate-pulse' : ''} />
+                  </button>
+                )}
+                {mapsUrl && (
+                  <button
+                    type="button"
+                    title="Ver mapa"
+                    aria-label="Ver mapa"
+                    onClick={() => openExternalUrl(mapsUrl)}
+                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200`}
+                  >
+                    <MapPinned size={15} />
+                  </button>
+                )}
+                {notifyUrl && (
+                  <button
+                    type="button"
+                    title="Avisar cliente"
+                    aria-label="Avisar cliente"
+                    onClick={() => openExternalUrl(notifyUrl)}
+                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200`}
+                  >
+                    <MessageCircle size={15} />
+                  </button>
+                )}
+              </div>
+            )}
+            {needsMotoboy && (
+              <select
+                value={motoboyId}
+                onChange={(e) => setMotoboyId(e.target.value ? Number(e.target.value) : '')}
+                className={`w-full text-xs px-2.5 ${compactMode ? 'py-1.5 min-h-[36px]' : 'py-2 min-h-[40px]'} rounded-xl border bg-white dark:bg-zinc-800 dark:border-zinc-700 ${
+                  bloqueadoMotoboy ? 'border-amber-400 dark:border-amber-500/50 bg-amber-50 dark:bg-amber-500/10' : ''
+                }`}
+              >
+                <option value="">Motoboy…</option>
+                {motoboys.length === 0 ? (
+                  <option value="" disabled>
+                    Nenhum motoboy cadastrado
+                  </option>
+                ) : (
+                  motoboys.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nome}
+                    </option>
+                  ))
+                )}
+              </select>
+            )}
+            <Button
+              type="button"
+              variant="primary"
+              disabled={busy || bloqueadoMotoboy}
+              className={`${compactMode ? '!min-h-[38px] !py-2' : '!min-h-[42px] !py-2.5'} !w-full !text-xs !font-black shadow-sm`}
+              onClick={() => void handlePrimary()}
+            >
+              <ChevronRight size={14} className={busy ? 'animate-pulse' : ''} />
+              {bloqueadoMotoboy ? 'Selecione o motoboy' : primary.label}
+            </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function OrderDetailModal({
+  order,
+  token,
+  onClose,
+  onRefresh,
+  onOrderPatch,
+}: {
+  order: Order;
+  token: string;
+  onClose: () => void;
+  onRefresh: () => void;
+  onOrderPatch: (patch: Partial<Order>) => void;
+}) {
+  const badge = channelBadgeMeta(order);
+  const pag = getPagamentoLine(order);
+  const [busyPayment, setBusyPayment] = useState(false);
+  const [busyPrint, setBusyPrint] = useState<'cupom' | 'comprovante' | null>(null);
+  const canConfirmPayment = canCentralConfirmPayment(order);
+  const canPrintProof = canCentralPrintProof(order);
+
+  const handleConfirmPayment = async () => {
+    if (busyPayment) return;
+    setBusyPayment(true);
+    const result = await executeCentralConfirmPayment({ token, order });
+    setBusyPayment(false);
+    if (!result.ok) {
+      alert(result.error || 'Não foi possível confirmar o pagamento.');
+      return;
+    }
+    onOrderPatch({ pagamento_status: 'pago' } as Partial<Order>);
+    onRefresh();
+  };
+
+  const handlePrint = async (document: 'cupom' | 'comprovante') => {
+    if (busyPrint) return;
+    setBusyPrint(document);
+    const result = await executeCentralPrintAction({ token, order, document });
+    setBusyPrint(null);
+    if (!result.ok) {
+      alert(result.error || 'Não foi possível abrir a impressão.');
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 24, opacity: 0 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        className="w-full sm:max-w-lg max-h-[90dvh] overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 px-4 py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Pedido</p>
+            <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 truncate">{getOrderNumberLine(order)}</p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${badge.className}`}>
+                {badge.label}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600">
+                {String(order.status || '—')}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Fechar"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase">Cliente</p>
+              <p className="font-semibold text-zinc-900 dark:text-zinc-100 break-words">{getClienteLine(order)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase">Criado</p>
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">
+                {new Date(order.created_at.includes('T') ? order.created_at : order.created_at.replace(' ', 'T')).toLocaleString('pt-BR')}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase">Tempo</p>
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">{formatElapsed(order.created_at)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase">Total</p>
+              <p className="font-black text-zinc-900 dark:text-zinc-100">{formatMoney(order.total_amount)}</p>
+            </div>
+          </div>
+
+          {pag && (
+            <div>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase">Pagamento</p>
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{pag}</p>
+            </div>
+          )}
+
+          <div>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Ações operacionais</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="!justify-start !px-3 !text-xs"
+                onClick={() => void handlePrint('cupom')}
+                disabled={busyPrint !== null}
+              >
+                <Printer size={14} className={busyPrint === 'cupom' ? 'animate-pulse' : ''} />
+                Imprimir cupom
+              </Button>
+              {canPrintProof && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!justify-start !px-3 !text-xs"
+                  onClick={() => void handlePrint('comprovante')}
+                  disabled={busyPrint !== null}
+                >
+                  <ReceiptText size={14} className={busyPrint === 'comprovante' ? 'animate-pulse' : ''} />
+                  Imprimir comprovante
+                </Button>
+              )}
+              {canConfirmPayment && (
+                <Button
+                  type="button"
+                  variant="success"
+                  className="!justify-start !px-3 !text-xs sm:col-span-2"
+                  onClick={() => void handleConfirmPayment()}
+                  disabled={busyPayment}
+                >
+                  <BadgeCheck size={14} className={busyPayment ? 'animate-pulse' : ''} />
+                  Confirmar pagamento
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Itens — mesma lista que OrdersScreen usa em conceito */}
+          <div>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Itens</p>
+            <ul className="space-y-2">
+              {(order.items || []).map((it, idx) => (
+                <li
+                  key={`${it.product_id}-${idx}`}
+                  className="flex justify-between gap-3 text-sm border-b border-zinc-100 dark:border-zinc-800 pb-2 last:border-0"
+                >
+                  <span className="text-zinc-700 dark:text-zinc-300 min-w-0">
+                    {it.name || (it as { product_name?: string }).product_name || 'Item'} × {it.quantity}
+                  </span>
+                  <span className="text-zinc-900 dark:text-zinc-100 font-semibold tabular-nums shrink-0">
+                    {formatMoney(Number(it.price_at_time) * Number(it.quantity))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {(order.items || []).length === 0 && (
+              <p className="text-sm text-zinc-400">Sem itens na lista.</p>
+            )}
+          </div>
+
+          {order.observation && String(order.observation).trim() && (
+            <div>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase">Observação</p>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">{order.observation}</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}

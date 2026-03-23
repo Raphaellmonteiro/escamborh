@@ -134,17 +134,32 @@ router.get('/', async (req: Request, res) => {
 
   router.put('/:id', async (req: Request, res) => {
     try {
-      const { nome, unidade, estoque_minimo, custo_unitario, fornecedor, codigo_barras } = req.body;
-      const current = await q1<{ codigo_barras?: string | null }>(
-        'SELECT codigo_barras FROM ingredientes WHERE id=? AND tenant_id=?',
+      const { nome, unidade, estoque_minimo, estoque_atual, custo_unitario, fornecedor, codigo_barras } = req.body;
+      const current = await q1<{ codigo_barras?: string | null; estoque_atual?: number | null }>(
+        'SELECT codigo_barras, estoque_atual FROM ingredientes WHERE id=? AND tenant_id=?',
         [req.params.id, req.tenantId]
       );
+      if (!current) return res.status(404).json({ error: 'Ingrediente não encontrado' });
       const normalizedBarcode = normalizeBarcode(codigo_barras);
       if (normalizedBarcode !== normalizeBarcode(current?.codigo_barras)) {
         await ensureBarcodeAvailable(req.tenantId, normalizedBarcode, Number(req.params.id));
       }
-      await qRun('UPDATE ingredientes SET nome=?,unidade=?,estoque_minimo=?,custo_unitario=?,fornecedor=?,codigo_barras=? WHERE id=? AND tenant_id=?',
-        [nome, unidade, estoque_minimo||0, custo_unitario||0, fornecedor||null, normalizedBarcode, req.params.id, req.tenantId]);
+      const novoEstoque = req.body.estoque_atual != null ? Math.max(0, Number(req.body.estoque_atual)) : undefined;
+      if (novoEstoque !== undefined) {
+        const antigoEstoque = Number(current?.estoque_atual ?? 0);
+        const diff = novoEstoque - antigoEstoque;
+        if (diff !== 0) {
+          const tipo = diff > 0 ? 'entrada' : 'saida';
+          const quantidade = Math.abs(diff);
+          await qRun('INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,?,?,?,?)',
+            [req.params.id, tipo, quantidade, 'Ajuste manual (edição)', req.tenantId]);
+        }
+        await qRun('UPDATE ingredientes SET nome=?,unidade=?,estoque_minimo=?,estoque_atual=?,custo_unitario=?,fornecedor=?,codigo_barras=? WHERE id=? AND tenant_id=?',
+          [nome, unidade, estoque_minimo||0, novoEstoque, custo_unitario||0, fornecedor||null, normalizedBarcode, req.params.id, req.tenantId]);
+      } else {
+        await qRun('UPDATE ingredientes SET nome=?,unidade=?,estoque_minimo=?,custo_unitario=?,fornecedor=?,codigo_barras=? WHERE id=? AND tenant_id=?',
+          [nome, unidade, estoque_minimo||0, custo_unitario||0, fornecedor||null, normalizedBarcode, req.params.id, req.tenantId]);
+      }
       res.json({ success: true });
     } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
   });
@@ -168,6 +183,7 @@ router.get('/', async (req: Request, res) => {
     try {
       const { tipo, quantidade, motivo } = req.body;
       if (!tipo || !quantidade) return res.status(400).json({ error: 'tipo e quantidade obrigatórios' });
+      if (!motivo || String(motivo).trim().length === 0) return res.status(400).json({ error: 'motivo obrigatório' });
       const ing = await q1('SELECT * FROM ingredientes WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       if (!ing) return res.status(404).json({ error: 'Ingrediente não encontrado' });
       const novoEstoque = tipo === 'entrada'

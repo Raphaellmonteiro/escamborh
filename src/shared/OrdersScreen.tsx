@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Trash2,
   Bike,
@@ -16,7 +16,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../types';
 import { getSegCfg } from '../config/segmentos';
 import { Card, Button, Input } from '../components/ui/Card';
-import { resolveRequiresPreparation } from '../utils/preparation';
+import { EmptyState } from '../components/ui/EmptyState';
+import { getNonDeliveryNextStatus, normalizeStatusForPipeline, ORDER_PIPELINE_STEPS } from '../utils/orderNonDeliveryNextStatus';
 import { openPrintPreview, ensurePrintableHtmlDocument, isPrintableHtmlDocument } from '../utils/print';
 
 type OrderWithRefund = Order & {
@@ -95,6 +96,48 @@ export default function OrdersScreen({
   const [filters, setFilters] = useState({
     day: '', month: (new Date().getMonth() + 1).toString(), year: new Date().getFullYear().toString()
   });
+
+  const pdvDeeplinkOrderIdRef = useRef<number | null>(null);
+
+  // Deeplink admin → aba Pedidos e rolar até o pedido (quando estiver na lista)
+  useEffect(() => {
+    if (!token) return;
+    try {
+      const raw = localStorage.getItem('flowpdv_orders_deeplink') || sessionStorage.getItem('flowpdv_orders_deeplink');
+      if (!raw) return;
+      localStorage.removeItem('flowpdv_orders_deeplink');
+      sessionStorage.removeItem('flowpdv_orders_deeplink');
+      const o = JSON.parse(raw) as { orderId?: number; tab?: 'active' | 'receipts'; orderCreatedAt?: string };
+      const oid = Number(o.orderId);
+      if (!Number.isFinite(oid)) return;
+      pdvDeeplinkOrderIdRef.current = oid;
+      const tab = o.tab === 'receipts' ? 'receipts' : 'active';
+      setActiveTab(tab);
+      if (tab === 'receipts' && o.orderCreatedAt) {
+        const d = new Date(o.orderCreatedAt);
+        setFilters({
+          day: String(d.getDate()),
+          month: String(d.getMonth() + 1),
+          year: String(d.getFullYear()),
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [token]);
+
+  useEffect(() => {
+    const oid = pdvDeeplinkOrderIdRef.current;
+    if (oid == null) return;
+    const found = orders.some((o) => Number(o.id) === oid);
+    if (!found) return;
+    const t = window.setTimeout(() => {
+      const el = document.querySelector(`[data-pdv-order-id="${oid}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      pdvDeeplinkOrderIdRef.current = null;
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [orders]);
 
   // Decode JWT to get slug for KDS link
   const kdsSlug = React.useMemo(() => {
@@ -504,16 +547,6 @@ const handleConfirmOrder = async (id: number) => {
     }
   };
 
-  const PIPELINE = ['Criado', 'Em Preparo', 'Pronto', 'Entregue'];
-  // Mapa de normalização delivery → pipeline padrão
-  const STATUS_NORM_OS: Record<string,string> = {
-    'Pedido Recebido': 'Criado',
-    'Pronto para Entrega': 'Pronto',
-    'Saiu para Entrega': 'Pronto',
-    'Entregue': 'Entregue',
-  };
-  const normalizeStatus = (s: string) => STATUS_NORM_OS[s] || s;
-
   const STATUS_CONFIG: Record<string, { color: string; bg: string; dot: string; emoji: string }> = {
     'Aguardando confirmação': { color: '#0369a1', bg: '#e0f2fe', dot: '#0ea5e9', emoji: '🔔' },
     'Criado':          { color: '#3b82f6', bg: '#eff6ff', dot: '#3b82f6', emoji: '🆕' },
@@ -615,35 +648,14 @@ const handleConfirmOrder = async (id: number) => {
   };
 
   const activeOrders = orders.filter((order) => !isFinalOrderStatus(order.status));
-  const nextStatus = (current: string) => {
-    const norm = normalizeStatus(current);
-    const idx = PIPELINE.indexOf(norm);
-    if (idx >= 0 && idx < PIPELINE.length - 1) return PIPELINE[idx + 1];
-    return null;
-  };
-  const orderHasPreparationItems = (order: Order) =>
-    (order.items || []).some((item) => {
-      const orderItem = item as OrderScreenItem;
-        return resolveRequiresPreparation({
-          name: orderItem.name || orderItem.product_name,
-          category: orderItem.product_category,
-          requires_preparation: orderItem.requires_preparation,
-          production_type: orderItem.production_type,
-        });
-      });
-  const getNextActionStatus = (order: Order) => {
-    const next = nextStatus(order.status);
-    if (next !== 'Em Preparo') return next;
-    return orderHasPreparationItems(order) ? next : 'Pronto';
-  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h2 className="text-2xl font-black text-zinc-900">{cfg.tituloPedidos}</h2>
-          <p className="text-zinc-400 text-sm">Acompanhe e gerencie os pedidos do dia</p>
+          <h2 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{cfg.tituloPedidos}</h2>
+          <p className="text-zinc-400 dark:text-zinc-500 text-sm">Consulta detalhada e histórico — a fila ao vivo está em Operação</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
 
@@ -728,26 +740,34 @@ const handleConfirmOrder = async (id: number) => {
       {activeTab === 'active' && (
         <div className="space-y-3">
           {activeOrders.length === 0 && (
-            <div className="text-center py-20 bg-zinc-50 rounded-3xl border-2 border-dashed border-zinc-200">
-              <span className="text-5xl block mb-3">🍽️</span>
-              <p className="text-zinc-400 font-medium">Nenhum pedido ativo</p>
-              <p className="text-zinc-300 text-sm mt-1">Os pedidos aparecerão aqui em tempo real</p>
+            <div className="rounded-3xl border-2 border-dashed border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <EmptyState
+                icon={UtensilsCrossed}
+                title="Nenhum pedido ativo"
+                description="Os pedidos aparecerão aqui em tempo real."
+              />
             </div>
           )}
           {activeOrders.map(order => {
             const orderWithRefund = order as OrderWithRefund;
             const sc = getStatusCfg(order.status);
-            const next = getNextActionStatus(order);
-            const pipeIdx = PIPELINE.indexOf(normalizeStatus(order.status));
             const isLevar = (order as any).tipo_retirada === 'levar';
             const channelMeta = getOrderChannelMeta(order);
             const ChannelIcon = channelMeta.icon;
             const isDelivery = channelMeta.kind === 'delivery';
+            const next = isDelivery ? null : getNonDeliveryNextStatus(order);
+            const pipeIdx = (ORDER_PIPELINE_STEPS as readonly string[]).indexOf(
+              normalizeStatusForPipeline(order.status)
+            );
             const elapsed = Math.max(0, Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000));
             const refundMeta = getRefundMeta(orderWithRefund);
             const orderReference = getOrderReference(order, isDelivery);
             return (
-              <div key={order.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isDelivery ? 'border-orange-200' : 'border-zinc-100'}`}>
+              <div
+                key={order.id}
+                data-pdv-order-id={order.id}
+                className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isDelivery ? 'border-orange-200' : 'border-zinc-100'}`}
+              >
                 {/* Top stripe — laranja para delivery */}
                 <div className="h-1.5" style={{ background: isDelivery ? '#f97316' : sc.dot }} />
                 {/* Banner delivery */}
@@ -951,7 +971,7 @@ const handleConfirmOrder = async (id: number) => {
 
                   {/* Pipeline progress */}
                   <div className="mt-3 flex items-center gap-1">
-                    {PIPELINE.map((step, i) => (
+                    {ORDER_PIPELINE_STEPS.map((step, i) => (
                       <React.Fragment key={step}>
                         <div className="flex flex-col items-center gap-0.5">
                           <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black transition-all"
@@ -962,7 +982,7 @@ const handleConfirmOrder = async (id: number) => {
                           </div>
                           <span className="text-[8px] font-medium whitespace-nowrap" style={{ color: i <= pipeIdx ? sc.color : '#d1d5db' }}>{step}</span>
                         </div>
-                        {i < PIPELINE.length - 1 && (
+                        {i < ORDER_PIPELINE_STEPS.length - 1 && (
                           <div className="flex-1 h-0.5 mb-3 transition-all" style={{ background: i < pipeIdx ? sc.dot : '#f0f0f0' }} />
                         )}
                       </React.Fragment>
@@ -1046,9 +1066,12 @@ const handleConfirmOrder = async (id: number) => {
       {activeTab === 'receipts' && (
         <div className="space-y-2">
           {orders.length === 0 && (
-            <div className="text-center py-20 bg-zinc-50 rounded-3xl border-2 border-dashed border-zinc-200">
-              <Clock size={40} className="mx-auto text-zinc-300 mb-3" />
-              <p className="text-zinc-400">Nenhum pedido encontrado</p>
+            <div className="rounded-3xl border-2 border-dashed border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <EmptyState
+                icon={Clock}
+                title="Nenhum pedido encontrado"
+                description="Ajuste o período ou os filtros para ver outros resultados."
+              />
             </div>
           )}
           {orders.map(order => {
@@ -1059,7 +1082,7 @@ const handleConfirmOrder = async (id: number) => {
             const ChannelIcon = channelMeta.icon;
             const refundMeta = getRefundMeta(orderWithRefund);
             return (
-              <div key={order.id} className="bg-white rounded-xl border border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+              <div key={order.id} data-pdv-order-id={order.id} className="bg-white rounded-xl border border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-black text-sm"
                   style={{ background: sc.bg, color: sc.color }}>
                   {(() => {

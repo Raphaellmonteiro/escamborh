@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../hooks/useDebounce';
+import { usePaginatedList } from '../hooks/usePaginatedList';
 import {
   Plus, Minus, Trash2, FileText, Lock, AlertCircle,
   History, ArrowUpCircle, ArrowDownCircle, Search,
   BarChart2, ChevronDown, ChevronUp, X, Package,
   TrendingDown, DollarSign, Filter, BookOpen, Link2, RefreshCw,
+  SlidersHorizontal, RotateCcw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type {
@@ -11,6 +14,8 @@ import type {
   RelatorioConsumo, Product, LegacyFallbackAuditReport,
 } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Spinner } from '../components/ui/Spinner';
 
 // ─── helpers ────────────────────────────────────────────────────
 const toNumber = (value: unknown, fallback = 0) => {
@@ -65,6 +70,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
 
   // ── filtros / busca ──────────────────────────────────────────
   const [busca, setBusca]                     = useState('');
+  const debouncedBusca                        = useDebounce(busca, 250);
   const [filtroStatus, setFiltroStatus]       = useState<Filtro>('todos');
   const [ordem, setOrdem]                     = useState<Ordem>('nome');
   const [ordemAsc, setOrdemAsc]               = useState(true);
@@ -75,8 +81,8 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
 
   // ── modais ───────────────────────────────────────────────────
   const [editing, setEditing]                 = useState<Partial<Ingrediente> | null>(null);
-  const [showMovModal, setShowMovModal]       = useState<{ id: number; tipo: 'entrada' | 'saida' } | null>(null);
-  const [movForm, setMovForm]                 = useState({ quantidade: '', motivo: 'Uso do dia' });
+  const [showMovModal, setShowMovModal]       = useState<{ id: number; tipo: 'entrada' | 'saida' | 'ajustar' | 'zerar' } | null>(null);
+  const [movForm, setMovForm]                 = useState({ quantidade: '', motivo: 'Uso do dia', novoValor: '' });
   const [showHistorico, setShowHistorico]     = useState<Ingrediente | null>(null);
   const [historico, setHistorico]             = useState<MovimentacaoEstoque[]>([]);
   const [showAddFicha, setShowAddFicha]       = useState(false);
@@ -92,6 +98,41 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const jHdrs = { ...hdrs, 'Content-Type': 'application/json' };
 
   // ── carga inicial ────────────────────────────────────────────
+  // Deeplink admin → Ficha técnica: só aplica depois que `produtos` carrega; senão o <select>
+  // fica com value sem <option> correspondente e o browser mostra o primeiro item da lista.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('flowpdv_estoque_deeplink') || sessionStorage.getItem('flowpdv_estoque_deeplink');
+      if (!raw) return;
+      const o = JSON.parse(raw) as { tab?: string; productId?: unknown };
+      if (o.tab !== 'ficha') return;
+      const pid = Number(o.productId);
+      if (!Number.isFinite(pid)) {
+        localStorage.removeItem('flowpdv_estoque_deeplink');
+        sessionStorage.removeItem('flowpdv_estoque_deeplink');
+        return;
+      }
+      if (produtos.length === 0) return;
+      const match = produtos.some((p) => Number(p.id) === pid);
+      if (!match) {
+        localStorage.removeItem('flowpdv_estoque_deeplink');
+        sessionStorage.removeItem('flowpdv_estoque_deeplink');
+        return;
+      }
+      setTab('ficha');
+      setFichaProduto(pid);
+      localStorage.removeItem('flowpdv_estoque_deeplink');
+      sessionStorage.removeItem('flowpdv_estoque_deeplink');
+    } catch {
+      try {
+        localStorage.removeItem('flowpdv_estoque_deeplink');
+        sessionStorage.removeItem('flowpdv_estoque_deeplink');
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [produtos]);
+
   useEffect(() => { fetchIngredientes(); fetchProdutos(); }, []);
   useEffect(() => { if (tab === 'movimentacoes') fetchMovimentacoes(); }, [tab, periodoInicio, periodoFim]);
   useEffect(() => { if (tab === 'relatorio') fetchRelatorio(); }, [tab, periodoInicio, periodoFim]);
@@ -288,16 +329,45 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const handleMovimentacao = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showMovModal) return;
-    const qtd = parseFloat(movForm.quantidade);
-    if (!qtd || qtd <= 0) { alert('Informe uma quantidade válida.'); return; }
+    const motivo = (movForm.motivo || '').trim();
+    if (!motivo) { alert('Informe o motivo (obrigatório).'); return; }
+
+    const ing = ingredientes.find(i => i.id === showMovModal.id);
+    if (!ing) return;
+
+    let tipo: 'entrada' | 'saida';
+    let quantidade: number;
+
+    if (showMovModal.tipo === 'zerar') {
+      tipo = 'saida';
+      quantidade = Math.max(0, toNumber(ing.estoque_atual));
+      if (quantidade === 0) { alert('Estoque já está zerado.'); return; }
+    } else if (showMovModal.tipo === 'ajustar') {
+      const novoValor = parseFloat(movForm.novoValor);
+      if (Number.isNaN(novoValor) || novoValor < 0) { alert('Informe um valor válido para o novo estoque.'); return; }
+      const antigo = toNumber(ing.estoque_atual);
+      const diff = novoValor - antigo;
+      if (diff === 0) { alert('O valor informado é igual ao estoque atual.'); return; }
+      tipo = diff > 0 ? 'entrada' : 'saida';
+      quantidade = Math.abs(diff);
+    } else {
+      const qtd = parseFloat(movForm.quantidade);
+      if (!qtd || qtd <= 0) { alert('Informe uma quantidade válida.'); return; }
+      tipo = showMovModal.tipo;
+      quantidade = qtd;
+    }
+
     try {
       const r = await fetch(`/api/estoque/${showMovModal.id}/movimentacao`, {
         method: 'POST', headers: jHdrs,
-        body: JSON.stringify({ tipo: showMovModal.tipo, quantidade: qtd, motivo: movForm.motivo })
+        body: JSON.stringify({ tipo, quantidade, motivo })
       });
       const d = await r.json();
-      if (d.success) { setShowMovModal(null); setMovForm({ quantidade: '', motivo: 'Uso do dia' }); fetchIngredientes(); }
-      else alert(d.message || 'Erro ao registrar.');
+      if (d.success) {
+        setShowMovModal(null);
+        setMovForm({ quantidade: '', motivo: 'Uso do dia', novoValor: '' });
+        fetchIngredientes();
+      } else alert(d.message || d.error || 'Erro ao registrar.');
     } catch { alert('Erro de conexão.'); }
   };
 
@@ -376,8 +446,8 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   // ── lista filtrada e ordenada ─────────────────────────────────
   const ingredientesFiltrados = useMemo(() => {
     let list = [...ingredientes];
-    if (busca) {
-      const q = busca.toLowerCase();
+    if (debouncedBusca) {
+      const q = debouncedBusca.toLowerCase();
       list = list.filter(i => i.nome.toLowerCase().includes(q) || (i.fornecedor || '').toLowerCase().includes(q));
     }
     if (filtroStatus !== 'todos') list = list.filter(i => i.status === filtroStatus);
@@ -392,7 +462,11 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
       return 0;
     });
     return list;
-  }, [ingredientes, busca, filtroStatus, ordem, ordemAsc]);
+  }, [ingredientes, debouncedBusca, filtroStatus, ordem, ordemAsc]);
+
+  const { visibleItems: ingredientesVisiveis, hasMore: hasMoreIngredientes, loadMore: loadMoreIngredientes, totalCount: totalIngredientes } = usePaginatedList(ingredientesFiltrados, { pageSize: 30 });
+
+  const { visibleItems: movimentacoesVisiveis, hasMore: hasMoreMovimentacoes, loadMore: loadMoreMovimentacoes, totalCount: totalMovimentacoes } = usePaginatedList(movimentacoes, { pageSize: 30 });
 
   const safePadronizacaoItems = useMemo(
     () => (Array.isArray(padronizacao?.items) ? padronizacao.items : []).filter(
@@ -413,6 +487,8 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     [padronizacao]
   );
 
+  const { visibleItems: padronizacaoItemsVisiveis, hasMore: hasMorePadronizacao, loadMore: loadMorePadronizacao, totalCount: totalPadronizacao } = usePaginatedList(padronizacaoItems, { pageSize: 30 });
+
   const padronizacaoSummary = useMemo(() => ({
     totalPendingProducts: padronizacaoItems.length,
     activePendingProducts: padronizacaoItems.filter(item => item.productActive).length,
@@ -431,6 +507,10 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     () => Array.isArray(relatorio?.consumo) ? relatorio.consumo : [],
     [relatorio]
   );
+
+  const { visibleItems: relatorioConsumoVisiveis, hasMore: hasMoreRelatorioConsumo, loadMore: loadMoreRelatorioConsumo, totalCount: totalRelatorioConsumo } = usePaginatedList(relatorioConsumo, { pageSize: 30 });
+
+  const { visibleItems: historicoVisiveis, hasMore: hasMoreHistorico, loadMore: loadMoreHistorico, totalCount: totalHistorico } = usePaginatedList(historico, { pageSize: 30 });
 
   // ── custo do produto selecionado na ficha ────────────────────
   const custoProduto = fichaItens.reduce(
@@ -480,7 +560,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col bg-zinc-50">
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-zinc-200 px-6 py-5 flex-shrink-0">
+      <div className="bg-white border-b border-zinc-200 px-4 sm:px-6 py-4 sm:py-5 flex-shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-black text-zinc-900">{tituloTela}</h2>
@@ -492,7 +572,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Tabs */}
-            <div className="flex bg-zinc-100 p-1 rounded-xl gap-0.5">
+            <div className="flex bg-zinc-100 p-1 rounded-xl gap-0.5 overflow-x-auto max-w-full">
               {([
                 { key: 'ingredientes',  label: 'Ingredientes', icon: <Package size={14}/> },
                 { key: 'movimentacoes', label: 'Movimentações', icon: <History size={14}/> },
@@ -501,7 +581,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                 { key: 'ficha',         label: 'Ficha Técnica', icon: <BookOpen size={14}/> },
               ] as { key: Tab; label: string; icon: React.ReactNode }[]).map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+                  className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
                   {t.icon}{t.label}
                 </button>
               ))}
@@ -515,7 +595,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
       </div>
 
       {/* ── Conteúdo ── */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto overflow-x-auto p-4 sm:p-6 min-w-0">
 
         {/* ═══ ABA: INGREDIENTES ═══ */}
         {tab === 'ingredientes' && (
@@ -586,102 +666,95 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   {ordemAsc ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                 </button>
               </div>
-              <span className="text-xs text-zinc-400">{ingredientesFiltrados.length} item(s)</span>
+              <span className="text-xs text-zinc-400">{totalIngredientes} item(s)</span>
             </div>
 
             {/* Grid de cards */}
             {loading ? (
-              <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-700 rounded-full animate-spin"/></div>
-            ) : ingredientesFiltrados.length === 0 ? (
-              <div className="text-center py-16 text-zinc-400">
-                <Package size={48} className="mx-auto mb-3 opacity-20"/>
-                <p className="font-semibold">{busca ? 'Nenhum item encontrado' : 'Nenhum ingrediente cadastrado'}</p>
+              <div className="flex justify-center py-16" role="status" aria-label="Carregando ingredientes">
+                <Spinner className="h-8 w-8" />
               </div>
+            ) : ingredientesVisiveis.length === 0 ? (
+              <EmptyState
+                icon={Package}
+                title={debouncedBusca ? 'Nenhum item encontrado' : 'Nenhum ingrediente cadastrado'}
+                description={debouncedBusca ? 'Ajuste a busca ou os filtros.' : 'Adicione ingredientes para controlar compras e fichas técnicas.'}
+              />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {ingredientesFiltrados.map(ing => (
-                  <div key={ing.id} className={`rounded-2xl border-2 p-5 transition-all ${getStatusCls(ing.status)}`}>
-                    {/* Header do card */}
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{ingredienteEmoji(ing.nome)}</span>
-                        <div>
-                          <h3 className="font-black text-zinc-900 text-sm leading-tight">{ing.nome}</h3>
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase">{ing.unidade}</p>
-                          {ing.fornecedor && <p className="text-[10px] text-zinc-400">📦 {ing.fornecedor}</p>}
+              <>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {ingredientesVisiveis.map(ing => (
+                  <div key={ing.id} className={`rounded-xl border p-2 transition-all ${getStatusCls(ing.status)}`}>
+                    {/* Linha 1: Header + ícones */}
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-lg shrink-0">{ingredienteEmoji(ing.nome)}</span>
+                        <div className="min-w-0">
+                          <h3 className="font-black text-zinc-900 text-sm leading-tight truncate">{ing.nome}</h3>
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase">{ing.unidade}{ing.fornecedor ? ` · ${ing.fornecedor}` : ''}</p>
                         </div>
                       </div>
-                      <div className="flex gap-0.5">
-                        <button onClick={() => setEditing(ing)} className="p-1.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all" title="Editar">
-                          <FileText size={14}/>
+                      <div className="flex gap-0.5 shrink-0">
+                        <button onClick={() => setEditing(ing)} className="p-0.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded" title="Editar"><FileText size={11}/></button>
+                        <button onClick={() => fetchHistoricoItem(ing)} className="p-0.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded" title="Histórico"><History size={11}/></button>
+                        <button onClick={() => handleDeleteClick(ing.id)} className="p-0.5 hover:bg-red-50 text-zinc-400 hover:text-red-500 rounded" title="Excluir"><Trash2 size={11}/></button>
+                      </div>
+                    </div>
+
+                    {/* Linha 2: Atual/Mín inline + Barra + % */}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] text-zinc-500 shrink-0"><span className="font-black text-zinc-900">{ing.estoque_atual}</span>/<span className="font-black text-zinc-900">{ing.estoque_minimo}</span> {ing.unidade}</span>
+                      <div className="flex-1 min-w-[50px] flex items-center gap-1">
+                        <div className="flex-1 h-1 bg-zinc-100 rounded-full overflow-hidden">
+                          <motion.div initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, (ing.estoque_atual / (ing.estoque_minimo * 3 || 1)) * 100)}%` }}
+                            className={`h-full rounded-full ${ing.status === 'esgotado' ? 'bg-red-500' : ing.status === 'baixo' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          />
+                        </div>
+                        <span className="text-[9px] font-bold text-zinc-400 w-6">{Math.round(Math.min(100, (ing.estoque_atual / (ing.estoque_minimo * 3 || 1)) * 100))}%</span>
+                      </div>
+                    </div>
+
+                    {/* Linha 3: Uso hoje + Custo + Botões */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-[9px] shrink-0">
+                        <span className="text-red-500 font-bold"><ArrowDownCircle size={8}/> {ing.usado_hoje || 0}</span>
+                        <span className="text-emerald-600 font-bold"><ArrowUpCircle size={8}/> +{ing.recebido_hoje || 0}</span>
+                      </div>
+                      {(ing.custo_unitario || 0) > 0 && (
+                        <span className="text-[9px] text-zinc-500 px-1 py-0.5 bg-zinc-50 rounded border border-zinc-100 shrink-0">{fmt(ing.custo_unitario || 0)}/{ing.unidade}</span>
+                      )}
+                      <div className="flex-1 grid grid-cols-2 gap-1 min-w-0">
+                        <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'entrada' }); setMovForm({ quantidade: '', motivo: 'Compra', novoValor: '' }); }}
+                          className="flex items-center justify-center gap-0.5 py-1 bg-emerald-600 text-white rounded font-bold text-[10px] hover:bg-emerald-700 transition-all active:scale-95">
+                          <Plus size={9}/> Entrada
                         </button>
-                        <button onClick={() => fetchHistoricoItem(ing)} className="p-1.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all" title="Histórico">
-                          <History size={14}/>
+                        <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'saida' }); setMovForm({ quantidade: '', motivo: 'Uso do dia', novoValor: '' }); }}
+                          className="flex items-center justify-center gap-0.5 py-1 bg-zinc-800 text-white rounded font-bold text-[10px] hover:bg-zinc-900 transition-all active:scale-95">
+                          <Minus size={9}/> Saída
                         </button>
-                        <button onClick={() => handleDeleteClick(ing.id)} className="p-1.5 hover:bg-red-50 text-zinc-400 hover:text-red-500 rounded-lg transition-all" title="Excluir">
-                          <Trash2 size={14}/>
+                        <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'ajustar' }); setMovForm({ quantidade: '', motivo: 'Ajuste/Inventário', novoValor: String(ing.estoque_atual ?? 0) }); }}
+                          className="flex items-center justify-center gap-0.5 py-1 bg-amber-600 text-white rounded font-bold text-[10px] hover:bg-amber-700 transition-all active:scale-95">
+                          <SlidersHorizontal size={9}/> Ajustar
+                        </button>
+                        <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'zerar' }); setMovForm({ quantidade: '', motivo: 'Zeramento manual', novoValor: '' }); }}
+                          className="flex items-center justify-center gap-0.5 py-1 bg-red-600 text-white rounded font-bold text-[10px] hover:bg-red-700 transition-all active:scale-95">
+                          <RotateCcw size={9}/> Zerar
                         </button>
                       </div>
-                    </div>
-
-                    {/* Estoque atual/mínimo */}
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      <div className="bg-white/70 rounded-xl p-2.5 border border-zinc-100">
-                        <p className="text-[9px] font-bold text-zinc-400 uppercase mb-0.5">Atual</p>
-                        <p className="text-lg font-black text-zinc-900">{ing.estoque_atual} <span className="text-[10px] font-normal text-zinc-400">{ing.unidade}</span></p>
-                      </div>
-                      <div className="bg-white/70 rounded-xl p-2.5 border border-zinc-100">
-                        <p className="text-[9px] font-bold text-zinc-400 uppercase mb-0.5">Mínimo</p>
-                        <p className="text-lg font-black text-zinc-900">{ing.estoque_minimo} <span className="text-[10px] font-normal text-zinc-400">{ing.unidade}</span></p>
-                      </div>
-                    </div>
-
-                    {/* Barra de nível */}
-                    <div className="mb-3">
-                      <div className="flex justify-between text-[9px] font-bold text-zinc-400 uppercase mb-1">
-                        <span>Nível</span>
-                        <span>{Math.round(Math.min(100, (ing.estoque_atual / (ing.estoque_minimo * 3 || 1)) * 100))}%</span>
-                      </div>
-                      <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
-                        <motion.div initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, (ing.estoque_atual / (ing.estoque_minimo * 3 || 1)) * 100)}%` }}
-                          className={`h-full rounded-full ${ing.status === 'esgotado' ? 'bg-red-500' : ing.status === 'baixo' ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Custo + uso hoje */}
-                    <div className="flex justify-between items-center mb-3 text-[10px]">
-                      <div className="flex items-center gap-1 text-red-500 font-bold">
-                        <ArrowDownCircle size={12}/> {ing.usado_hoje || 0} {ing.unidade} hoje
-                      </div>
-                      <div className="flex items-center gap-1 text-emerald-600 font-bold">
-                        <ArrowUpCircle size={12}/> +{ing.recebido_hoje || 0} {ing.unidade}
-                      </div>
-                    </div>
-
-                    {/* Custo unitário */}
-                    {(ing.custo_unitario || 0) > 0 && (
-                      <div className="mb-3 px-2.5 py-1.5 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between text-[11px]">
-                        <span className="text-zinc-500">Custo unit.</span>
-                        <span className="font-black text-zinc-800">{fmt(ing.custo_unitario || 0)} / {ing.unidade}</span>
-                      </div>
-                    )}
-
-                    {/* Botões */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'entrada' }); setMovForm({ quantidade: '', motivo: 'Compra' }); }}
-                        className="flex items-center justify-center gap-1.5 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all active:scale-95">
-                        <Plus size={12}/> Entrada
-                      </button>
-                      <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'saida' }); setMovForm({ quantidade: '', motivo: 'Uso do dia' }); }}
-                        className="flex items-center justify-center gap-1.5 py-2 bg-zinc-800 text-white rounded-xl font-bold text-xs hover:bg-zinc-900 transition-all active:scale-95">
-                        <Minus size={12}/> Saída
-                      </button>
                     </div>
                   </div>
                 ))}
               </div>
+              {hasMoreIngredientes && (
+                <div className="flex justify-center pt-6">
+                  <button onClick={loadMoreIngredientes}
+                    className="px-6 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-sm transition-all active:scale-95">
+                    Carregar mais (+30)
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </div>
         )}
@@ -713,6 +786,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
               ) : movimentacoes.length === 0 ? (
                 <div className="text-center py-16 text-zinc-400"><History size={40} className="mx-auto mb-3 opacity-20"/><p>Nenhuma movimentação no período</p></div>
               ) : (
+                <>
                 <table className="w-full text-left">
                   <thead className="bg-zinc-50 border-b border-zinc-200">
                     <tr>
@@ -722,7 +796,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-50">
-                    {movimentacoes.map((m, i) => (
+                    {movimentacoesVisiveis.map((m, i) => (
                       <tr key={i} className="hover:bg-zinc-50 transition-colors">
                         <td className="px-5 py-3 text-xs text-zinc-500 whitespace-nowrap">
                           {new Date(m.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
@@ -741,6 +815,15 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     ))}
                   </tbody>
                 </table>
+                {hasMoreMovimentacoes && (
+                  <div className="flex justify-center py-4 border-t border-zinc-100">
+                    <button onClick={loadMoreMovimentacoes}
+                      className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-sm transition-all">
+                      Carregar mais (+30) — {movimentacoesVisiveis.length} de {totalMovimentacoes}
+                    </button>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </div>
@@ -806,7 +889,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-50">
-                      {relatorioConsumo.map(r => (
+                      {relatorioConsumoVisiveis.map(r => (
                         <tr key={r.id} className={`hover:bg-zinc-50 transition-colors ${r.total_saida === 0 && r.total_entrada === 0 ? 'opacity-40' : ''}`}>
                           <td className="px-5 py-3 text-sm font-bold text-zinc-900">
                             {ingredienteEmoji(r.nome)} {r.nome}
@@ -828,6 +911,14 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                       ))}
                     </tbody>
                   </table>
+                  {hasMoreRelatorioConsumo && (
+                    <div className="flex justify-center py-4 border-t border-zinc-100">
+                      <button onClick={loadMoreRelatorioConsumo}
+                        className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-sm transition-all">
+                        Carregar mais (+30) — {relatorioConsumoVisiveis.length} de {totalRelatorioConsumo}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             ) : null}
@@ -949,7 +1040,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-50">
-                          {padronizacaoItems.map(item => (
+                          {padronizacaoItemsVisiveis.map(item => (
                             <tr key={item.productId} className="align-top hover:bg-zinc-50 transition-colors">
                               <td className="px-5 py-4">
                                 <p className="text-sm font-black text-zinc-900">{item.productName}</p>
@@ -1049,6 +1140,14 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                         </tbody>
                       </table>
                     </div>
+                    {hasMorePadronizacao && (
+                      <div className="flex justify-center py-4 border-t border-zinc-100">
+                        <button onClick={loadMorePadronizacao}
+                          className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-sm transition-all">
+                          Carregar mais (+30) — {padronizacaoItemsVisiveis.length} de {totalPadronizacao}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -1185,15 +1284,19 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   </div>
                 </div>
 
-                {/* Estoque inicial (só criação) */}
-                {!editing.id && (
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Estoque inicial</label>
-                    <input type="number" step="0.01" min="0" value={editing.estoque_atual ?? 0}
-                      onChange={e => setEditing(p => ({...p, estoque_atual: parseFloat(e.target.value)}))}
-                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
-                  </div>
-                )}
+                {/* Estoque atual (ou inicial na criação) */}
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">
+                    {editing.id ? 'Estoque atual' : 'Estoque inicial'}
+                  </label>
+                  <input type="number" step="0.01" min="0" value={editing.estoque_atual ?? 0}
+                    onChange={e => setEditing(p => ({...p, estoque_atual: parseFloat(e.target.value) || 0}))}
+                    placeholder="0"
+                    className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
+                  {editing.id && (
+                    <p className="text-[10px] text-zinc-400 mt-1">Ajuste direto. Para auditoria, use movimentações (entrada/saída).</p>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   {/* Custo unitário */}
@@ -1233,62 +1336,73 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         )}
       </AnimatePresence>
 
-      {/* Modal: Movimentação */}
+      {/* Modal: Movimentação (Entrada, Saída, Ajustar, Zerar) */}
       <AnimatePresence>
-        {showMovModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h3 className="text-xl font-black text-zinc-900">
-                    {showMovModal.tipo === 'entrada' ? '📥 Registrar Entrada' : '📤 Registrar Saída'}
-                  </h3>
-                  <p className="text-sm text-zinc-400 mt-0.5">{ingredientes.find(i => i.id === showMovModal.id)?.nome}</p>
-                </div>
-                <button onClick={() => setShowMovModal(null)} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
-              </div>
-              <form onSubmit={handleMovimentacao} className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Quantidade</label>
-                  <input type="number" step="0.01" min="0.01" value={movForm.quantidade} autoFocus
-                    onChange={e => setMovForm(f => ({...f, quantidade: e.target.value}))}
-                    className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400" required/>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Motivo</label>
-                  <select value={movForm.motivo} onChange={e => setMovForm(f => ({...f, motivo: e.target.value}))}
-                    className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none">
-                    {showMovModal.tipo === 'entrada' ? (
-                      <>
-                        <option>Compra</option>
-                        <option>Devolução</option>
-                        <option>Ajuste/Inventário</option>
-                        <option>Transferência</option>
-                      </>
-                    ) : (
-                      <>
-                        <option>Uso do dia</option>
-                        <option>Perda/Desperdício</option>
-                        <option>Vencimento</option>
-                        <option>Ajuste/Inventário</option>
-                        <option>Transferência</option>
-                      </>
+        {showMovModal && (() => {
+          const ing = ingredientes.find(i => i.id === showMovModal.id);
+          const titulos: Record<string, string> = {
+            entrada: '📥 Registrar Entrada',
+            saida: '📤 Registrar Saída',
+            ajustar: '⚙️ Ajustar Estoque',
+            zerar: '🔄 Zerar Estoque',
+          };
+          const btnCls: Record<string, string> = {
+            entrada: 'bg-emerald-600 hover:bg-emerald-700',
+            saida: 'bg-zinc-900 hover:bg-zinc-800',
+            ajustar: 'bg-amber-600 hover:bg-amber-700',
+            zerar: 'bg-red-600 hover:bg-red-700',
+          };
+          return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+              <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
+                className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h3 className="text-xl font-black text-zinc-900">{titulos[showMovModal.tipo]}</h3>
+                    <p className="text-sm text-zinc-400 mt-0.5">{ing?.nome} {ing && <span className="text-zinc-500">({ing.unidade})</span>}</p>
+                    {showMovModal.tipo === 'zerar' && ing && (
+                      <p className="text-xs text-amber-600 font-bold mt-1">Atual: {fmtN(ing.estoque_atual, ing.unidade)} → 0</p>
                     )}
-                  </select>
+                  </div>
+                  <button onClick={() => setShowMovModal(null)} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
                 </div>
-                <div className="flex gap-3 pt-1">
-                  <button type="button" onClick={() => setShowMovModal(null)}
-                    className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold">Cancelar</button>
-                  <button type="submit"
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold transition-all ${showMovModal.tipo === 'entrada' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-zinc-900 hover:bg-zinc-800'}`}>
-                    Confirmar
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
+                <form onSubmit={handleMovimentacao} className="space-y-4">
+                  {showMovModal.tipo === 'ajustar' && (
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Novo valor (em {ing?.unidade || 'unidade'})</label>
+                      <input type="number" step="0.01" min="0" value={movForm.novoValor} autoFocus
+                        onChange={e => setMovForm(f => ({...f, novoValor: e.target.value}))}
+                        placeholder="0"
+                        className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400" required/>
+                    </div>
+                  )}
+                  {(showMovModal.tipo === 'entrada' || showMovModal.tipo === 'saida') && (
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Quantidade ({ing?.unidade || 'unidade'})</label>
+                      <input type="number" step="0.01" min="0.01" value={movForm.quantidade} autoFocus
+                        onChange={e => setMovForm(f => ({...f, quantidade: e.target.value}))}
+                        className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400" required/>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Motivo *</label>
+                    <input type="text" value={movForm.motivo}
+                      onChange={e => setMovForm(f => ({...f, motivo: e.target.value}))}
+                      placeholder="ex: Compra, Ajuste inventário, Perda..."
+                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400" required/>
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button type="button" onClick={() => setShowMovModal(null)}
+                      className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold">Cancelar</button>
+                    <button type="submit" className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold transition-all ${btnCls[showMovModal.tipo]}`}>
+                      Confirmar
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* Modal: Histórico */}
@@ -1300,7 +1414,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <h3 className="text-xl font-black text-zinc-900">Histórico — {showHistorico.nome}</h3>
-                  <p className="text-sm text-zinc-400">Últimas 30 movimentações</p>
+                  <p className="text-sm text-zinc-400">{historico.length === 0 ? 'Nenhuma movimentação' : `${totalHistorico} movimentação(ões)`}</p>
                 </div>
                 <button onClick={() => setShowHistorico(null)} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
               </div>
@@ -1316,7 +1430,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   <tbody className="divide-y divide-zinc-50">
                     {historico.length === 0 ? (
                       <tr><td colSpan={4} className="py-10 text-center text-zinc-400 italic">Nenhuma movimentação registrada</td></tr>
-                    ) : historico.map((h, i) => (
+                    ) : historicoVisiveis.map((h, i) => (
                       <tr key={i} className="hover:bg-zinc-50">
                         <td className="py-3 pr-4 text-xs text-zinc-500">{new Date(h.created_at).toLocaleString('pt-BR')}</td>
                         <td className="py-3 pr-4">
@@ -1330,6 +1444,14 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     ))}
                   </tbody>
                 </table>
+                {hasMoreHistorico && (
+                  <div className="flex justify-center py-4 border-t border-zinc-100">
+                    <button onClick={loadMoreHistorico}
+                      className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-xl text-sm transition-all">
+                      Carregar mais (+30) — {historicoVisiveis.length} de {totalHistorico}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="mt-5 pt-5 border-t border-zinc-100">
                 <button onClick={() => setShowHistorico(null)} className="w-full py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">Fechar</button>

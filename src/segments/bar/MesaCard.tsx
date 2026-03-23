@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   Plus,
   Clock,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { openPrintPreviewFromUrl } from '../../utils/print';
 
-export default function MesaCard({
+function MesaCard({
   mesa,
   onOpen,
   onClose,
@@ -16,9 +16,9 @@ export default function MesaCard({
 }: {
   key?: React.Key;
   mesa: any;
-  onOpen: () => void;
-  onClose: () => void;
-  onClick: () => void;
+  onOpen: (m: any) => void;
+  onClose: (m: any) => void;
+  onClick: (m: any) => void;
   token: string;
 }) {
   const isOpen = mesa.status === 'aberta';
@@ -49,65 +49,65 @@ export default function MesaCard({
 
   return (
     <div
-      className={`relative rounded-2xl border-2 overflow-hidden transition-all group ${
+      className={`relative rounded-xl border overflow-hidden transition-all duration-200 hover:scale-[1.02] hover:shadow-lg group ${
         isOpen
-          ? 'border-emerald-200 bg-white shadow-md shadow-emerald-50'
-          : 'border-zinc-200 bg-zinc-50'
+          ? 'border-l-4 border-l-red-400 bg-red-50/50 hover:bg-red-50/80'
+          : 'border-l-4 border-l-emerald-400 bg-emerald-50/50 hover:bg-emerald-50/80'
       }`}
     >
       <div
-        className={`absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-          isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'
+        className={`absolute top-2 right-2 flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
+          isOpen ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'
         }`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'}`} />
-        {isOpen ? 'ABERTA' : 'LIVRE'}
+        <span className={`w-1 h-1 rounded-full shrink-0 ${isOpen ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+        {isOpen ? 'Ocupada' : 'Livre'}
       </div>
 
       <button
-        onClick={onClick}
+        onClick={() => onClick(mesa)}
         disabled={!isOpen}
-        className={`w-full pt-7 pb-4 px-4 flex flex-col items-center transition-all ${
-          isOpen ? 'hover:bg-emerald-50 active:scale-95 cursor-pointer' : 'cursor-default'
+        className={`w-full pt-5 pb-2 px-3 flex flex-col items-center transition-all active:scale-[0.98] ${
+          isOpen ? 'hover:bg-red-100/50 cursor-pointer' : 'cursor-default'
         }`}
       >
-        <span className="text-4xl font-black text-zinc-900 leading-none">{mesa.numero}</span>
-        <span className="text-[11px] font-semibold text-zinc-400 mt-1 uppercase tracking-wider">Mesa</span>
+        <span className="text-2xl font-black text-zinc-900 leading-none">{mesa.numero}</span>
+        <span className="text-[10px] font-bold text-zinc-500 mt-0.5 uppercase tracking-wider">Mesa</span>
 
         {isOpen && (
-          <div className="mt-3 w-full space-y-1">
+          <div className="mt-2 w-full space-y-0.5">
             {mesa.total_itens > 0 ? (
               <>
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-[11px]">
                   <span className="text-zinc-400">{mesa.total_itens} item(s)</span>
-                  <span className={`font-black ${hasExtras ? 'text-zinc-500' : 'text-emerald-700'}`}>R$ {subtotal.toFixed(2)}</span>
+                  <span className={`font-black ${hasExtras ? 'text-zinc-600' : 'text-zinc-900'}`}>R$ {subtotal.toFixed(2)}</span>
                 </div>
                 {valorTaxa > 0 && (
-                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[9px] text-zinc-400">
                     <span>Taxa</span>
                     <span>R$ {valorTaxa.toFixed(2)}</span>
                   </div>
                 )}
                 {valorCouvert > 0 && (
-                  <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[9px] text-zinc-400">
                     <span>Couvert</span>
                     <span>R$ {valorCouvert.toFixed(2)}</span>
                   </div>
                 )}
                 {hasExtras && (
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-emerald-100">
+                  <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-zinc-200">
                     <span className="font-semibold text-zinc-500">Total</span>
-                    <span className="font-black text-emerald-700">R$ {Number(mesa.total_valor).toFixed(2)}</span>
+                    <span className="font-black text-zinc-900">R$ {Number(mesa.total_valor).toFixed(2)}</span>
                   </div>
                 )}
               </>
             ) : (
-              <p className="text-[11px] text-zinc-400 text-center">Vazia</p>
+              <p className="text-[10px] text-zinc-400 text-center">Vazia</p>
             )}
 
             {mesa.opened_at && (
-              <div className="flex items-center justify-center gap-1 text-[10px] text-zinc-400">
-                <Clock size={9} />
+              <div className="flex items-center justify-center gap-0.5 text-[9px] text-zinc-500 mt-0.5">
+                <Clock size={8} />
                 {new Date(
                   mesa.opened_at + (mesa.opened_at.includes('Z') ? '' : '-03:00')
                 ).toLocaleTimeString('pt-BR', {
@@ -121,24 +121,24 @@ export default function MesaCard({
         )}
       </button>
 
-      <div className={`px-3 pb-3 flex gap-2 ${!isOpen ? 'pt-3' : ''}`}>
+      <div className={`px-2 pb-2 flex gap-1.5 ${!isOpen ? 'pt-2' : ''}`}>
         {isOpen ? (
           <>
             <button
               onClick={handlePrint}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-xs font-bold text-zinc-600 transition-all"
+              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-lg text-[10px] font-bold text-zinc-600 transition-all"
             >
-              <Printer size={13} />
+              <Printer size={11} />
               Imprimir
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onClose();
+                onClose(mesa);
               }}
-              className="flex-1 flex items-center justify-center gap-1 py-2 bg-red-50 hover:bg-red-100 rounded-xl text-xs font-bold text-red-600 transition-all"
+              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-red-100 hover:bg-red-200 rounded-lg text-[10px] font-bold text-red-600 transition-all"
             >
-              <X size={13} />
+              <X size={11} />
               Fechar
             </button>
           </>
@@ -146,11 +146,11 @@ export default function MesaCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onOpen();
+              onOpen(mesa);
             }}
-            className="w-full flex items-center justify-center gap-1 py-2 bg-zinc-900 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all"
+            className="w-full flex items-center justify-center gap-0.5 py-1.5 bg-zinc-900 hover:bg-zinc-700 text-white rounded-lg text-[10px] font-bold transition-all active:scale-95"
           >
-            <Plus size={13} />
+            <Plus size={11} />
             Abrir Mesa
           </button>
         )}
@@ -158,3 +158,5 @@ export default function MesaCard({
     </div>
   );
 }
+
+export default memo(MesaCard);

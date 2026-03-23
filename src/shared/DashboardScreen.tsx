@@ -97,10 +97,10 @@ export default function DashboardScreen({
   useEffect(() => { fetchAll(); }, [filterType, selectedDate, selectedMonth, selectedYear]);
 
   if (loading) return (
-    <div className="h-full flex items-center justify-center">
+    <div className="h-full flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-10 h-10 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin" />
-        <p className="text-sm text-zinc-400 font-medium">Carregando dashboard...</p>
+        <div className="w-10 h-10 border-2 border-zinc-300 dark:border-zinc-700 border-t-zinc-900 dark:border-t-zinc-400 rounded-full animate-spin" />
+        <p className="text-sm text-zinc-500 font-medium">Carregando dashboard...</p>
       </div>
     </div>
   );
@@ -121,23 +121,23 @@ export default function DashboardScreen({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="h-full overflow-y-auto bg-zinc-50"
+      className="h-full overflow-y-auto bg-zinc-100 dark:bg-zinc-950"
     >
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-zinc-900">Dashboard</h1>
-            <p className="text-sm text-zinc-400 mt-0.5 capitalize">{periodoLabel}</p>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Dashboard</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5 capitalize font-medium">{periodoLabel}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Filtro tipo */}
-            <div className="flex bg-white border border-zinc-200 rounded-xl p-1 gap-0.5">
+            <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 gap-0.5 shadow-sm">
               {(['day','month','year'] as const).map(t => (
                 <button key={t}
                   onClick={() => setFilterType(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === t ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filterType === t ? 'bg-zinc-900 dark:bg-zinc-700 text-white dark:text-zinc-100 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                 >
                   {t === 'day' ? 'Dia' : t === 'month' ? 'Mês' : 'Ano'}
                 </button>
@@ -146,29 +146,29 @@ export default function DashboardScreen({
 
             {filterType === 'day' && (
               <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
-                className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+                className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600" />
             )}
             {filterType === 'month' && (
               <div className="flex gap-2">
                 <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
-                  className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 focus:outline-none">
+                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none">
                   {meses.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
                 </select>
                 <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-                  className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 focus:outline-none">
+                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none">
                   {anos.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
             )}
             {filterType === 'year' && (
               <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-                className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium text-zinc-700 focus:outline-none">
+                className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none">
                 {anos.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             )}
 
             <button onClick={() => fetchAll(true)}
-              className={`p-2 bg-white border border-zinc-200 rounded-xl text-zinc-400 hover:text-zinc-700 transition-all ${refreshing ? 'animate-spin' : ''}`}>
+              className={`p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all ${refreshing ? 'animate-spin' : ''}`}>
               <RefreshCw size={16} />
             </button>
           </div>
@@ -180,9 +180,10 @@ export default function DashboardScreen({
             label="Receita Operacional"
             value={fmtShort(receitaOperacional)}
             sub={`${stats?.totalPedidos || 0} pedidos`}
-            icon={<DollarSign size={20} />}
+            icon={<DollarSign size={22} />}
             color="emerald"
             trend={null}
+            highlight
           />
           <KpiCard
             label="Receita Líquida"
@@ -214,9 +215,9 @@ export default function DashboardScreen({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Métodos de pagamento */}
-          <div className="bg-white rounded-2xl border border-zinc-200 p-5">
-            <h2 className="text-sm font-black text-zinc-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <CreditCard size={15} className="text-zinc-400" />
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <CreditCard size={16} className="text-zinc-500" />
               Formas de Pagamento
             </h2>
             <div className="space-y-3">
@@ -230,38 +231,38 @@ export default function DashboardScreen({
                 return (
                   <div key={label}>
                     <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 text-zinc-600 text-xs font-medium">
-                        <span className="text-zinc-400">{icon}</span>
+                      <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-xs font-medium">
+                        <span className="text-zinc-500">{icon}</span>
                         {label}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-800">{fmt(value)}</span>
-                        <span className="text-[10px] text-zinc-400 w-8 text-right">{pct.toFixed(0)}%</span>
+                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{fmt(value)}</span>
+                        <span className="text-[10px] text-zinc-500 w-8 text-right">{pct.toFixed(0)}%</span>
                       </div>
                     </div>
-                    <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
               })}
-              <div className="pt-2 border-t border-zinc-100 flex justify-between">
-                <span className="text-xs font-bold text-zinc-500">Total recebido</span>
-                <span className="text-sm font-black text-zinc-900">{fmt(cashReport?.total || 0)}</span>
+              <div className="pt-3 mt-1 border-t-2 border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Total recebido</span>
+                <span className="text-base font-black text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(cashReport?.total || 0)}</span>
               </div>
             </div>
           </div>
 
           {/* Top produtos */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-zinc-200 p-5">
-            <h2 className="text-sm font-black text-zinc-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Package size={15} className="text-zinc-400" />
+          <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Package size={16} className="text-zinc-500" />
               Produtos Mais Vendidos
             </h2>
             {(stats?.productSales || []).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-zinc-300">
-                <BarChart2 size={40} />
-                <p className="text-sm mt-2 text-zinc-400">Nenhuma venda no período</p>
+              <div className="flex flex-col items-center justify-center py-10 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700">
+                <BarChart2 size={36} className="text-zinc-400 dark:text-zinc-500" />
+                <p className="text-sm mt-2 text-zinc-500 dark:text-zinc-400 font-medium">Nenhuma venda no período</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -271,16 +272,16 @@ export default function DashboardScreen({
                   const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500'];
                   return (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="w-5 text-[10px] font-black text-zinc-400 text-right">{i+1}</span>
+                      <span className="w-5 text-[10px] font-black text-zinc-500 text-right">{i+1}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-xs font-semibold text-zinc-700 truncate">{item.name}</span>
+                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">{item.name}</span>
                           <div className="flex items-center gap-3 ml-2 shrink-0">
-                            <span className="text-[10px] text-zinc-400">{item.quantity} un</span>
-                            <span className="text-xs font-bold text-zinc-800">{fmt(item.total || 0)}</span>
+                            <span className="text-[10px] text-zinc-500">{item.quantity} un</span>
+                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{fmt(item.total || 0)}</span>
                           </div>
                         </div>
-                        <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                           <div className={`h-full ${colors[i % colors.length]} rounded-full`} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -296,8 +297,8 @@ export default function DashboardScreen({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* DRE simplificado */}
-          <div className="bg-white rounded-2xl border border-zinc-200 p-5">
-            <h2 className="text-sm font-black text-zinc-800 uppercase tracking-wider mb-4">Resultado do Período</h2>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-4">Resultado do Período</h2>
             <div className="space-y-2">
               <DreRow label="Receita Operacional" value={receitaOperacional} type="positive" />
               {totalRefunded > 0 && (
@@ -308,41 +309,41 @@ export default function DashboardScreen({
               {(stats?.totalRepassesPagos || 0) > 0 && (
                 <DreRow label="(-) Repasses" value={-(stats?.totalRepassesPagos || 0)} type="negative" />
               )}
-              <div className="border-t border-zinc-200 pt-2 mt-1">
+              <div className="border-t-2 border-zinc-200 dark:border-zinc-700 pt-3 mt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-black text-zinc-900">Lucro Líquido</span>
-                  <span className={`text-lg font-black ${lucro >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <span className="text-sm font-black text-zinc-800 dark:text-zinc-200">Lucro Líquido</span>
+                  <span className={`text-xl font-black tabular-nums ${lucro >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                     {fmt(lucro)}
                   </span>
                 </div>
-                <div className="mt-1 h-2 bg-zinc-100 rounded-full overflow-hidden">
+                <div className="mt-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full ${lucro >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
                     style={{ width: `${Math.min(100, Math.abs(margem))}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-zinc-400 mt-1">{margem.toFixed(1)}% de margem</p>
+                <p className="text-[10px] text-zinc-500 mt-1">{margem.toFixed(1)}% de margem</p>
               </div>
             </div>
           </div>
 
           {/* Comparativo dia/semana/mês + Gráfico 7 dias */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-zinc-200 p-5">
-            <h2 className="text-sm font-black text-zinc-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <BarChart2 size={15} className="text-zinc-400" />
+          <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <h2 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <BarChart2 size={16} className="text-zinc-500" />
               Vendas — Últimos 7 Dias
             </h2>
 
             {/* Mini KPIs */}
             <div className="grid grid-cols-3 gap-3 mb-5">
               {[
-                { label: 'Hoje',        value: stats?.today || 0, color: '#3b82f6' },
-                { label: 'Esta Semana', value: stats?.week  || 0, color: '#8b5cf6' },
-                { label: 'Este Mês',    value: stats?.month || 0, color: '#10b981' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="bg-zinc-50 rounded-xl p-3 text-center border border-zinc-100">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">{label}</p>
-                  <p className="text-base font-black text-zinc-900 mt-1">{fmtShort(value)}</p>
+                { label: 'Hoje',        value: stats?.today || 0, active: false },
+                { label: 'Esta Semana', value: stats?.week  || 0, active: false },
+                { label: 'Este Mês',    value: stats?.month || 0, active: true },
+              ].map(({ label, value, active }) => (
+                <div key={label} className={`rounded-xl p-3 text-center bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 ${active ? 'ring-2 ring-emerald-400/40' : ''}`}>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">{label}</p>
+                  <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 mt-1 tabular-nums">{fmtShort(value)}</p>
                 </div>
               ))}
             </div>
@@ -350,50 +351,49 @@ export default function DashboardScreen({
             {/* Gráfico de barras — SVG puro, sem dependência */}
             {weeklyData.length > 0 && weeklyData.some(d => d.total > 0) ? (() => {
               const maxVal = Math.max(...weeklyData.map(d => d.total), 1);
-              const H = 130; // altura útil das barras
+              const H = 130;
               return (
-                <div className="w-full" style={{ height: 170 }}>
+                <div className="w-full bg-zinc-50 dark:bg-zinc-900 rounded-xl p-4 border border-zinc-100 dark:border-zinc-800" style={{ height: 170 }}>
                   <svg width="100%" height="100%" viewBox={`0 0 ${weeklyData.length * 52} ${H + 36}`} preserveAspectRatio="xMidYMid meet">
                     {weeklyData.map((d, i) => {
-                      const barH   = Math.max(4, Math.round((d.total / maxVal) * H));
+                      const barH   = Math.max(6, Math.round((d.total / maxVal) * H));
                       const x      = i * 52 + 6;
                       const y      = H - barH;
                       const isHoje = i === weeklyData.length - 1;
                       const isMax  = d.total === maxVal && d.total > 0;
-                      const fill   = isHoje ? '#3b82f6' : isMax ? '#10b981' : '#e2e8f0';
+                      const fill   = isHoje ? '#3b82f6' : isMax ? '#059669' : '#94a3b8';
                       return (
                         <g key={i}>
-                          <rect x={x} y={y} width={40} height={barH} rx={5} fill={fill} />
+                          <rect x={x} y={y} width={40} height={barH} rx={6} fill={fill} opacity={isHoje || isMax ? 1 : 0.85} />
                           {d.total > 0 && (
-                            <text x={x + 20} y={y - 5} textAnchor="middle" fontSize={9} fill="#94a3b8">
+                            <text x={x + 20} y={y - 6} textAnchor="middle" fontSize={10} fill="#a1a1aa" fontWeight={600}>
                               {d.total >= 1000 ? `${(d.total/1000).toFixed(1)}k` : `${d.total.toFixed(0)}`}
                             </text>
                           )}
-                          <text x={x + 20} y={H + 16} textAnchor="middle" fontSize={9} fill={isHoje ? '#3b82f6' : '#94a3b8'} fontWeight={isHoje ? 700 : 400}>
+                          <text x={x + 20} y={H + 18} textAnchor="middle" fontSize={10} fill={isHoje ? '#60a5fa' : '#71717a'} fontWeight={isHoje ? 700 : 500}>
                             {d.label}
                           </text>
                         </g>
                       );
                     })}
-                    {/* linha base */}
-                    <line x1={0} y1={H} x2={weeklyData.length * 52} y2={H} stroke="#f1f5f9" strokeWidth={1} />
+                    <line x1={0} y1={H} x2={weeklyData.length * 52} y2={H} stroke="#3f3f46" strokeWidth={1.5} />
                   </svg>
                 </div>
               );
             })() : (
-              <div className="h-[160px] flex flex-col items-center justify-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
-                <BarChart2 size={28} className="text-zinc-200 mb-2" />
-                <p className="text-xs text-zinc-400">Nenhuma venda nos últimos 7 dias</p>
+              <div className="h-[160px] flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700">
+                <BarChart2 size={32} className="text-zinc-400 dark:text-zinc-500 mb-2" />
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Nenhuma venda nos últimos 7 dias</p>
               </div>
             )}
 
             {/* Alerta se sem vendas no período filtrado */}
             {(stats?.filteredTotal || 0) === 0 && (
-              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
-                <AlertTriangle size={15} className="text-amber-500 shrink-0" />
+              <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 shadow-sm">
+                <AlertTriangle size={18} className="text-amber-500 dark:text-amber-400 shrink-0" />
                 <div className="flex-1">
-                  <p className="text-xs font-bold text-amber-700">Nenhuma venda neste período</p>
-                  <p className="text-[11px] text-amber-600">Registre vendas no balcão para ver as métricas.</p>
+                  <p className="text-xs font-bold text-amber-700 dark:text-amber-300">Nenhuma venda neste período</p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400/80">Registre vendas no balcão para ver as métricas.</p>
                 </div>
                 <button onClick={onGoToPOS}
                   className="shrink-0 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-all">
@@ -411,35 +411,38 @@ export default function DashboardScreen({
 
 // ─── Componentes auxiliares ───────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, color, trend }: {
+function KpiCard({ label, value, sub, icon, color, trend, highlight }: {
   label: string; value: string; sub: string;
   icon: React.ReactNode; color: 'emerald' | 'red' | 'blue' | 'amber';
   trend: number | null;
+  highlight?: boolean;
 }) {
   const colorMap = {
-    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', ring: 'ring-emerald-200' },
-    red:     { bg: 'bg-red-50',     text: 'text-red-600',     ring: 'ring-red-200'     },
-    blue:    { bg: 'bg-blue-50',    text: 'text-blue-600',    ring: 'ring-blue-200'    },
-    amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   ring: 'ring-amber-200'   },
+    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
+    red:     { bg: 'bg-red-500/10',     text: 'text-red-400'     },
+    blue:    { bg: 'bg-blue-500/10',    text: 'text-blue-400'    },
+    amber:   { bg: 'bg-amber-500/10',   text: 'text-amber-400'   },
   };
   const c = colorMap[color];
   return (
-    <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+    <div className={`bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-sm border transition-shadow hover:shadow-md ${
+      highlight ? 'border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-500/5' : 'border-zinc-200 dark:border-zinc-800'
+    }`}>
       <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 ${c.bg} rounded-xl flex items-center justify-center ${c.text}`}>
+        <div className={`w-11 h-11 ${c.bg} rounded-xl flex items-center justify-center ${c.text}`}>
           {icon}
         </div>
         {trend !== null && (
-          <span className={`flex items-center gap-0.5 text-xs font-bold ${trend >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+          <span className={`flex items-center gap-0.5 text-xs font-bold ${trend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
             {trend >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
             {Math.abs(trend).toFixed(1)}%
           </span>
         )}
       </div>
-      <p className="text-2xl font-black text-zinc-900">{value}</p>
-      <div className="flex items-center justify-between mt-1">
-        <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">{label}</p>
-        <p className="text-[10px] text-zinc-400">{sub}</p>
+      <p className={`font-black tabular-nums ${highlight ? 'text-3xl text-zinc-900 dark:text-zinc-100' : 'text-2xl text-zinc-900 dark:text-zinc-100'}`}>{value}</p>
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wide">{label}</p>
+        <p className="text-[10px] text-zinc-500">{sub}</p>
       </div>
     </div>
   );
@@ -449,7 +452,7 @@ function DreRow({ label, value, type }: { label: string; value: number; type: 'p
   return (
     <div className="flex items-center justify-between py-1.5">
       <span className="text-xs text-zinc-500">{label}</span>
-      <span className={`text-sm font-bold ${type === 'positive' ? 'text-zinc-900' : 'text-red-500'}`}>
+      <span className={`text-sm font-bold ${type === 'positive' ? 'text-zinc-800 dark:text-zinc-200' : 'text-red-600 dark:text-red-400'}`}>
         {type === 'positive' ? '' : ''}{`R$ ${Math.abs(value).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`}
       </span>
     </div>
@@ -458,20 +461,20 @@ function DreRow({ label, value, type }: { label: string; value: number; type: 'p
 
 export function StatCard({ label, value, icon, color, highlight = false }: any) {
   return (
-    <div className={`bg-white border border-zinc-200 p-5 rounded-2xl flex items-center gap-4 ${highlight ? 'ring-2 ring-emerald-400' : ''}`}>
+    <div className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl flex items-center gap-4 ${highlight ? 'ring-2 ring-emerald-400' : ''}`}>
       <div className={`w-11 h-11 ${color} rounded-xl flex items-center justify-center shrink-0`}>{icon}</div>
       <div>
-        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p>
-        <p className="text-xl font-black text-zinc-900">{value}</p>
+        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{label}</p>
+        <p className="text-xl font-black text-zinc-900 dark:text-zinc-100">{value}</p>
       </div>
     </div>
   );
 }
 export function CashRow({ label, value }: any) {
   return (
-    <div className="flex justify-between items-center py-2 border-b border-zinc-50">
-      <span className="text-zinc-600">{label}</span>
-      <span className="font-bold text-zinc-900">R$ {(value || 0).toFixed(2)}</span>
+    <div className="flex justify-between items-center py-2 border-b border-zinc-100 dark:border-zinc-800">
+      <span className="text-zinc-600 dark:text-zinc-400">{label}</span>
+      <span className="font-bold text-zinc-900 dark:text-zinc-100">R$ {(value || 0).toFixed(2)}</span>
     </div>
   );
 }

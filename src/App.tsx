@@ -8,16 +8,19 @@ import {
   LayoutDashboard, ShoppingCart, Package, LogOut, Archive,
   Settings, Monitor, UtensilsCrossed,
   DollarSign, Clock, History, BarChart2, FileText, Users, Lock, Bell, Bike,
+  Menu, LayoutGrid, List,
 } from 'lucide-react';
 
 import type { Product, Caixa, Order } from './types';
 import NavItem from './components/ui/NavItem';
 import { getSegCfg, getOperationalSegment } from './config/segmentos';
+import { FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY } from './utils/orderCentralBoard';
 
 // ── Telas compartilhadas (todos os segmentos) ─────────────────────
 import LoginScreen           from './shared/LoginScreen';
 import POSScreen             from './shared/POSScreen';
 import OrdersScreen          from './shared/OrdersScreen';
+import CentralPedidosScreen  from './shared/CentralPedidosScreen';
 import DashboardScreen       from './shared/DashboardScreen';
 import FinanceScreen         from './shared/FinanceScreen';
 import EstoqueScreen         from './shared/EstoqueScreen';
@@ -55,7 +58,7 @@ import { useFlowAI }         from './hooks/useFlowAI';
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [estabelecimentoSegmento, setEstabelecimentoSegmento] = useState('Restaurante/Food');
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery'>('pos')
+  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery'>('pos')
   const [floatPos, setFloatPos]   = React.useState(() => {
     const saved = localStorage.getItem('orders_float_pos');
     return saved ? JSON.parse(saved) : { x: window.innerWidth - 80, y: window.innerHeight - 120 };
@@ -98,6 +101,7 @@ export default function App() {
   } = useFlowAI(token);
 
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Gera avisos ao logar e a cada 30 minutos — com fallback silencioso
   useEffect(() => {
@@ -115,14 +119,33 @@ export default function App() {
     return () => { clearTimeout(init); clearInterval(iv); };
   }, [token]);
 
+  // Após login como cliente (admin): abre Estoque ou Pedidos para deeplink
+  useEffect(() => {
+    if (!token) return;
+    try {
+      const nav = localStorage.getItem('flowpdv_initial_nav_tab') || sessionStorage.getItem('flowpdv_initial_nav_tab');
+      if (nav === 'estoque' && podeVer('estoque')) {
+        localStorage.removeItem('flowpdv_initial_nav_tab');
+        sessionStorage.removeItem('flowpdv_initial_nav_tab');
+        setActiveTab('estoque');
+      } else if (nav === 'orders' && podeVer('orders')) {
+        localStorage.removeItem('flowpdv_initial_nav_tab');
+        sessionStorage.removeItem('flowpdv_initial_nav_tab');
+        setActiveTab('orders');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [token]);
+
   // ── Injeta/remove tema escuro no <html> ──────────────────────────────────
   useEffect(() => {
     const el = document.documentElement;
     if (darkMode) {
-      el.classList.add('flowpdv-dark');
+      el.classList.add('flowpdv-dark', 'dark');
       localStorage.setItem('dark_mode', 'true');
     } else {
-      el.classList.remove('flowpdv-dark');
+      el.classList.remove('flowpdv-dark', 'dark');
       localStorage.setItem('dark_mode', 'false');
     }
   }, [darkMode]);
@@ -253,12 +276,7 @@ export default function App() {
       .flowpdv-dark ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
       .flowpdv-dark ::-webkit-scrollbar-thumb:hover { background: #555; }
 
-      /* bg-zinc-900 usado em divs/containers não-botão — fica claro (ex: sidebar active item label) */
-      .flowpdv-dark .bg-zinc-900:not(button):not(a) { background-color: #f0f0f0 !important; }
-
-      /* Texto sobre fundo zinc-900 não-botão */
-      .flowpdv-dark .bg-zinc-900:not(button):not(a) span,
-      .flowpdv-dark .bg-zinc-900:not(button):not(a) svg { color: #111 !important; }
+      /* dark: usa Tailwind nativo; não sobrescrever bg-zinc-900 de cards/containers */
     `;
     document.head.appendChild(style);
   }, []);
@@ -314,7 +332,7 @@ React.useEffect(() => {
       }
       (window as any).__travaFlowPDV = agora;
 
-      if (activeTab === 'orders') { document.title = 'FlowPDV'; return; }
+      if (activeTab === 'orders' || activeTab === 'central') { document.title = 'FlowPDV'; return; }
       
       try {
         // 🔥 QUEBRA-CACHE: O '&v=agora' força o navegador a nunca usar requisições repetidas
@@ -438,7 +456,11 @@ const fetchProducts = async () => {
   };
 
   const handleTabChange = (tab: any) => {
-    if (!podeVer(tab)) return; // sem permissão
+    if (tab === 'central') {
+      if (!podeVer('orders')) return;
+    } else if (!podeVer(tab)) {
+      return;
+    }
     if (tab === 'abrir-caixa' || tab === 'fechar-caixa') {
       setPendingTab(tab);
       setShowAuthModal(true);
@@ -446,6 +468,7 @@ const fetchProducts = async () => {
       return;
     }
     setActiveTab(tab);
+    setMobileNavOpen(false);
   };
 
 const handleAuth = async (e: React.FormEvent) => {
@@ -544,9 +567,25 @@ const handleAuth = async (e: React.FormEvent) => {
   }
 
   return (
-    <div className="flex h-screen bg-zinc-50 overflow-hidden">
+    <div className="flex h-screen bg-zinc-50 overflow-hidden flex-col lg:flex-row">
+      {mobileNavOpen && (
+        <button
+          type="button"
+          aria-label="Fechar menu"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
 
-      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col h-screen" style={{ zIndex: 2, position: 'relative' }}>
+      <aside
+        className={`
+          fixed lg:static inset-y-0 left-0 z-50
+          w-64 max-w-[85vw] bg-white border-r border-zinc-200 flex flex-col h-screen shrink-0
+          transition-transform duration-200 ease-out
+          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0
+        `}
+      >
         <div className="p-6 border-b border-zinc-100 flex items-center gap-3">
           {/* Logo clicável — abre input de upload */}
           <label className="cursor-pointer group relative" title="Clique para trocar a logo">
@@ -642,6 +681,22 @@ const handleAuth = async (e: React.FormEvent) => {
      <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
           {(() => { return (<> 
             {podeVer('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
+            {podeVer('orders') && (
+              <>
+                <NavItem
+                  active={activeTab === 'central'}
+                  onClick={() => handleTabChange('central')}
+                  icon={<LayoutGrid size={20} />}
+                  label="Operação"
+                />
+                <NavItem
+                  active={activeTab === 'orders'}
+                  onClick={() => handleTabChange('orders')}
+                  icon={<List size={20} />}
+                  label="Consulta de pedidos"
+                />
+              </>
+            )}
             {podeVer('delivery') && permiteDelivery && (
               <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon={<Bike size={20} />} label="Delivery" />
             )}
@@ -653,7 +708,8 @@ const handleAuth = async (e: React.FormEvent) => {
           </>); })()}
           {podeVer('nfse') && (
             <a href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer"
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
+              onClick={() => setMobileNavOpen(false)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 min-h-[44px]">
               <FileText size={20} />
               <span className="font-medium">NFS-e</span>
             </a>
@@ -662,7 +718,7 @@ const handleAuth = async (e: React.FormEvent) => {
           {podeVer('finance')      && <NavItem active={activeTab === 'finance'}      onClick={() => handleTabChange('finance')}      icon={<DollarSign size={20} />}      label="Financeiro" />}
           {podeVer('funcionarios') && <NavItem active={activeTab === 'funcionarios'} onClick={() => handleTabChange('funcionarios')} icon={<Users size={20} />}           label="RH" />}
           {podeVer('logs')         && <NavItem active={activeTab === 'logs'}         onClick={() => handleTabChange('logs')}         icon={<History size={20} />}         label="Logs" />}
-          {podeVer('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => setActiveTab('configuracoes')}  icon={<Settings size={20} />}        label="Configurações" />}
+          {podeVer('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => { setActiveTab('configuracoes'); setMobileNavOpen(false); }}  icon={<Settings size={20} />}        label="Configurações" />}
         </nav>
 
         <div className="p-4 border-t border-zinc-100 flex-shrink-0">
@@ -717,9 +773,26 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
       </aside>
 
-      {/* Botão flutuante — Histórico de Pedidos */}
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden lg:min-h-0">
+        <header className="lg:hidden flex items-center gap-3 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] border-b border-zinc-200 bg-white shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="p-2.5 rounded-xl border border-zinc-200 text-zinc-800 min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 active:bg-zinc-100"
+            aria-label="Abrir menu"
+          >
+            <Menu size={22} strokeWidth={2} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-zinc-900 truncate leading-tight">{estabelecimentoNome}</p>
+            <p className="text-[10px] text-zinc-400 uppercase tracking-widest">Sistema POS</p>
+          </div>
+        </header>
+
+      {/* Botão flutuante — atalho para Operação (visão ao vivo) */}
       {podeVer('orders') && (
         <div
+          title="Operação — visão ao vivo (atalho)"
           style={{ position: 'fixed', left: floatPos.x, top: floatPos.y, zIndex: 999, cursor: floatDrag.current.dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
           onMouseDown={(e) => {
             floatDrag.current = { dragging: true, ox: e.clientX - floatPos.x, oy: e.clientY - floatPos.y, hasDragged: false };
@@ -741,11 +814,11 @@ const handleAuth = async (e: React.FormEvent) => {
           }}
           onClick={() => {
             // hasDragged garante que um drag longo não abre a tela ao soltar
-            if (!floatDrag.current.hasDragged) handleTabChange('orders');
+            if (!floatDrag.current.hasDragged) handleTabChange('central');
             floatDrag.current.hasDragged = false;
           }}
         >
-          <div className={`w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-2xl transition-all hover:scale-110 active:scale-95 ${activeTab === 'orders' ? 'bg-zinc-900' : 'bg-white border border-zinc-200'}`}>
+          <div className={`w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-2xl transition-all hover:scale-110 active:scale-95 ${activeTab === 'orders' || activeTab === 'central' ? 'bg-zinc-900' : 'bg-white border border-zinc-200'}`}>
             🕐
           </div>
         </div>
@@ -758,14 +831,14 @@ const handleAuth = async (e: React.FormEvent) => {
 
         {/* ── Banner senha padrão ───────────────────────────────────── */}
         {senhaPadrao && userCargo === 'dono' && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-3 shrink-0">
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
             <span className="text-amber-600 shrink-0">⚠️</span>
             <p className="text-xs text-amber-800 font-medium flex-1">
               <strong>Senha padrão detectada.</strong> Acesse <strong>Configurações → Alterar senhas</strong> para proteger o sistema.
             </p>
             <button
-              onClick={() => setActiveTab('configuracoes')}
-              className="text-[11px] font-black text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1 rounded-lg transition-all shrink-0"
+              onClick={() => { setActiveTab('configuracoes'); setMobileNavOpen(false); }}
+              className="text-[11px] font-black text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-2 rounded-lg transition-all shrink-0 self-start sm:self-auto min-h-[40px]"
             >
               Alterar agora →
             </button>
@@ -775,10 +848,21 @@ const handleAuth = async (e: React.FormEvent) => {
         <AnimatePresence mode="wait">
           {activeTab === 'pos' && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
           {activeTab === 'orders'    && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
+          {activeTab === 'central'   && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
           {activeTab === 'dashboard' && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => setActiveTab('pos')} />}
           {activeTab === 'products'  && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
           {activeTab === 'estoque'   && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'delivery'  && permiteDelivery && <DeliveryScreen token={token} slug={slugAtual} />}
+          {activeTab === 'delivery'  && permiteDelivery && (
+            <DeliveryScreen
+              token={token}
+              slug={slugAtual}
+              onOpenCentralBalcao={() => {
+                sessionStorage.setItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, 'balcao');
+                handleTabChange('central');
+                setMobileNavOpen(false);
+              }}
+            />
+          )}
           {activeTab === 'mesas' && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
           {activeTab === 'finance' && <FinanceScreen token={token} segmento={segmentoOperacional} />}
           {activeTab === 'funcionarios' && <RHScreen token={token} />}
@@ -789,12 +873,12 @@ const handleAuth = async (e: React.FormEvent) => {
         {/* Modal de Autenticação para Áreas Restritas */}
         <AnimatePresence>
           {showAuthModal && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl"
+                className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl max-h-[min(90dvh,560px)] overflow-y-auto my-auto"
               >
                 <div className="w-16 h-16 bg-zinc-100 text-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <Lock size={32} />
@@ -869,6 +953,7 @@ const handleAuth = async (e: React.FormEvent) => {
             onAcao={(rota) => {
               const tab = rota.replace('/', '') as any;
               setActiveTab(tab);
+              setMobileNavOpen(false);
               if (avisoAtivo) { marcarLido(avisoAtivo.id); proximoAviso(); }
             }}
           />
@@ -888,9 +973,11 @@ const handleAuth = async (e: React.FormEvent) => {
           const tab = rota.replace('/', '') as any;
           setActiveTab(tab);
           setNotifCenterOpen(false);
+          setMobileNavOpen(false);
         }}
         onRefresh={() => buscarHistorico(100, 0)}
       />
+      </div>
     </div>
   );
 }

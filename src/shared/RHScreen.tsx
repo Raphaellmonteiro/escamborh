@@ -58,16 +58,16 @@ export default function RHScreen({ token }: { token: string }) {
 
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full overflow-y-auto bg-zinc-50">
-      <div className="max-w-7xl mx-auto p-6 space-y-5">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
         <div>
           <h1 className="text-2xl font-black text-zinc-900">RH / Funcionários</h1>
           <p className="text-sm text-zinc-400 mt-0.5">Controle de ponto, presença e folha de pagamento</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-white border border-zinc-200 rounded-xl p-1 gap-0.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2 flex-wrap">
+          <div className="flex bg-white border border-zinc-200 rounded-xl p-1 gap-0.5 overflow-x-auto w-full sm:w-auto">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key as any)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`}>
+                className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`}>
                 {t.icon}{t.label}
               </button>
             ))}

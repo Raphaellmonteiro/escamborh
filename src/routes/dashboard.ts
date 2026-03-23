@@ -265,16 +265,15 @@ export function createDashboardRouter() {
 
   const closeCaixaHandler = async (req: Request, res: any) => {
     const { valor_contado, observacao } = req.body;
-    const dateStr = getTodayDateInTimeZone();
 
-    const caixa = await q1("SELECT * FROM caixa WHERE data=? AND status='aberto' AND tenant_id=?", [dateStr, req.tenantId]);
+    const caixa = await getOpenCaixa(req);
     if (!caixa) return res.status(400).json({ success: false, message: 'Nenhum caixa aberto encontrado.' });
 
     const vd = await q1(
       `SELECT COALESCE(SUM(amount_paid-change_given),0) as total
        FROM pagamentos
        WHERE method='Dinheiro' AND (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`,
-      [dateStr, req.tenantId]
+      [caixa.data, req.tenantId]
     );
     const totalVD = Number(vd?.total || 0);
     const fundo = Number(caixa.fundo_inicial || 0);
