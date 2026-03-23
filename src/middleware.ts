@@ -6,6 +6,8 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { pool, q1 } from './db';
+import { type PlanFeature } from './config/planFeatures';
+import { getTenantFeatures } from './services/tenantPlan';
 
 type AuthenticatedSession =
   | {
@@ -206,6 +208,60 @@ function applyAuthenticatedSession(req: Request, session: Extract<AuthenticatedS
   req.userCargo = session.userCargo;
   req.userPermissoes = session.userPermissoes;
   req.userName = session.userName;
+}
+
+function normalizeCargo(value?: string | null) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isFullAccessSession(req: Request) {
+  const cargo = normalizeCargo(req.userCargo);
+  if (!cargo && (req.userPermissoes === undefined || req.userPermissoes === null)) return true;
+  if (cargo === 'dono') return true;
+  return req.userPermissoes === null;
+}
+
+export function hasModulePermission(req: Request, permission: string) {
+  if (!permission) return true;
+  if (isFullAccessSession(req)) return true;
+  if (!Array.isArray(req.userPermissoes)) return false;
+  return req.userPermissoes.includes(permission);
+}
+
+export function requireAnyPermission(...permissions: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (permissions.length === 0 || permissions.some((permission) => hasModulePermission(req, permission))) {
+      return next();
+    }
+
+    return res.status(403).json({
+      error: 'Acesso negado',
+      required_permissions: permissions,
+    });
+  };
+}
+
+export function requirePlanFeature(feature: PlanFeature) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenantId) {
+        return res.status(401).json({ error: 'Tenant não identificado' });
+      }
+
+      const features = await getTenantFeatures(req.tenantId);
+      if (features.includes(feature)) {
+        return next();
+      }
+
+      return res.status(403).json({
+        error: 'Plano não inclui este recurso',
+        feature,
+      });
+    } catch (err: any) {
+      console.error('[requirePlanFeature] erro:', err?.message || err);
+      return res.status(500).json({ error: 'Erro ao validar plano do tenant' });
+    }
+  };
 }
 
 export async function resolveAuthenticatedSession(req: Request, tokenOverride?: string): Promise<AuthenticatedSession> {

@@ -49,18 +49,20 @@ function MesaCard({
 
   return (
     <div
-      className={`relative rounded-xl border overflow-hidden transition-all duration-200 hover:scale-[1.02] hover:shadow-lg group ${
+      className={`mesa-card-shell relative rounded-xl border overflow-hidden transition-all duration-200 hover:scale-[1.02] hover:shadow-lg group ${
         isOpen
-          ? 'border-l-4 border-l-red-400 bg-red-50/50 hover:bg-red-50/80'
-          : 'border-l-4 border-l-emerald-400 bg-emerald-50/50 hover:bg-emerald-50/80'
+          ? 'border-l-4 border-l-red-400 border-red-400/35 bg-zinc-900 hover:bg-zinc-900/95 shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
+          : 'border-l-4 border-l-emerald-400 border-emerald-400/35 bg-zinc-900 hover:bg-zinc-900/95 shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
       }`}
     >
       <div
-        className={`absolute top-2 right-2 flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
-          isOpen ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'
+        className={`absolute top-2 right-2 flex items-center gap-1 text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-[0.18em] shadow-sm ${
+          isOpen
+            ? 'border border-red-400/45 bg-red-400/18 text-red-50'
+            : 'border border-emerald-400/45 bg-emerald-400/18 text-emerald-50'
         }`}
       >
-        <span className={`w-1 h-1 rounded-full shrink-0 ${isOpen ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOpen ? 'bg-red-300 animate-pulse' : 'bg-emerald-200'}`} />
         {isOpen ? 'Ocupada' : 'Livre'}
       </div>
 
@@ -68,45 +70,45 @@ function MesaCard({
         onClick={() => onClick(mesa)}
         disabled={!isOpen}
         className={`w-full pt-5 pb-2 px-3 flex flex-col items-center transition-all active:scale-[0.98] ${
-          isOpen ? 'hover:bg-red-100/50 cursor-pointer' : 'cursor-default'
+          isOpen ? 'hover:bg-white/[0.03] cursor-pointer' : 'cursor-default'
         }`}
       >
-        <span className="text-2xl font-black text-zinc-900 leading-none">{mesa.numero}</span>
-        <span className="text-[10px] font-bold text-zinc-500 mt-0.5 uppercase tracking-wider">Mesa</span>
+        <span className="text-3xl font-black text-zinc-100 leading-none drop-shadow-[0_1px_0_rgba(255,255,255,0.08)]">{mesa.numero}</span>
+        <span className="text-[11px] font-extrabold text-zinc-200/80 mt-1 uppercase tracking-[0.22em]">Mesa</span>
 
         {isOpen && (
           <div className="mt-2 w-full space-y-0.5">
             {mesa.total_itens > 0 ? (
               <>
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">{mesa.total_itens} item(s)</span>
-                  <span className={`font-black ${hasExtras ? 'text-zinc-600' : 'text-zinc-900'}`}>R$ {subtotal.toFixed(2)}</span>
+                  <span className="text-zinc-200/85">{mesa.total_itens} item(s)</span>
+                  <span className={`font-black ${hasExtras ? 'text-zinc-100' : 'text-white'}`}>R$ {subtotal.toFixed(2)}</span>
                 </div>
                 {valorTaxa > 0 && (
-                  <div className="flex items-center justify-between text-[9px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[9px] text-zinc-200/70">
                     <span>Taxa</span>
                     <span>R$ {valorTaxa.toFixed(2)}</span>
                   </div>
                 )}
                 {valorCouvert > 0 && (
-                  <div className="flex items-center justify-between text-[9px] text-zinc-400">
+                  <div className="flex items-center justify-between text-[9px] text-zinc-200/70">
                     <span>Couvert</span>
                     <span>R$ {valorCouvert.toFixed(2)}</span>
                   </div>
                 )}
                 {hasExtras && (
-                  <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-zinc-200">
-                    <span className="font-semibold text-zinc-500">Total</span>
-                    <span className="font-black text-zinc-900">R$ {Number(mesa.total_valor).toFixed(2)}</span>
+                  <div className="flex items-center justify-between text-[11px] pt-1 mt-1 border-t border-zinc-800">
+                    <span className="font-semibold text-zinc-200/85">Total</span>
+                    <span className="font-black text-zinc-100">R$ {Number(mesa.total_valor).toFixed(2)}</span>
                   </div>
                 )}
               </>
             ) : (
-              <p className="text-[10px] text-zinc-400 text-center">Vazia</p>
+              <p className="text-[11px] text-zinc-200/80 text-center font-medium">Vazia</p>
             )}
 
             {mesa.opened_at && (
-              <div className="flex items-center justify-center gap-0.5 text-[9px] text-zinc-500 mt-0.5">
+              <div className="flex items-center justify-center gap-0.5 text-[10px] text-zinc-200/80 mt-1">
                 <Clock size={8} />
                 {new Date(
                   mesa.opened_at + (mesa.opened_at.includes('Z') ? '' : '-03:00')
@@ -126,7 +128,7 @@ function MesaCard({
           <>
             <button
               onClick={handlePrint}
-              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-lg text-[10px] font-bold text-zinc-600 transition-all"
+              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-[10px] font-bold text-zinc-100 transition-all"
             >
               <Printer size={11} />
               Imprimir
@@ -136,7 +138,7 @@ function MesaCard({
                 e.stopPropagation();
                 onClose(mesa);
               }}
-              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-red-100 hover:bg-red-200 rounded-lg text-[10px] font-bold text-red-600 transition-all"
+              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 rounded-lg text-[10px] font-bold text-red-200 transition-all"
             >
               <X size={11} />
               Fechar
@@ -148,7 +150,7 @@ function MesaCard({
               e.stopPropagation();
               onOpen(mesa);
             }}
-            className="w-full flex items-center justify-center gap-0.5 py-1.5 bg-zinc-900 hover:bg-zinc-700 text-white rounded-lg text-[10px] font-bold transition-all active:scale-95"
+            className="w-full flex items-center justify-center gap-1 py-2 bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-lg text-[11px] font-black transition-all active:scale-95 shadow-[0_6px_18px_rgba(16,185,129,0.28)] ring-1 ring-emerald-200/10"
           >
             <Plus size={11} />
             Abrir Mesa

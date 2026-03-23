@@ -33,6 +33,7 @@ export interface CreateOrderInput {
   observation?: string;
   total_amount?: number;
   total?: number;
+  taxa_total?: number;
   tipo_retirada?: string;
   status?: OrderStatus;
 }
@@ -74,6 +75,7 @@ export interface GetOrdersFilters {
   status?: string;
   canal?: string;
   excludeCanal?: string;
+  activeOnly?: boolean;
   from?: string;
   to?: string;
   day?: string;

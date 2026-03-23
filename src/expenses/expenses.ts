@@ -1,6 +1,6 @@
 // src/routes/expenses.ts
 import { Router, Request, Response } from 'express';
-import { q1, qAll, qInsert } from '../db';
+import { q1, qAll, qInsert, qRun } from '../db';
 
 type TenantRequest = Request & {
   tenantId: number | string;
@@ -57,6 +57,36 @@ export function createExpensesRouter() {
       res.json({ success: true, expense });
     } catch (e: any) {
       console.error('POST /expenses erro:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // EXCLUIR DESPESA
+  router.delete('/:id', async (req: TenantRequest, res: Response) => {
+    try {
+      const expenseId = Number(req.params.id);
+
+      if (!Number.isInteger(expenseId) || expenseId <= 0) {
+        return res.status(400).json({ success: false, error: 'Despesa inválida' });
+      }
+
+      const expense = await q1(
+        'SELECT id FROM despesas WHERE id=? AND tenant_id=?',
+        [expenseId, req.tenantId]
+      );
+
+      if (!expense) {
+        return res.status(404).json({ success: false, error: 'Despesa não encontrada' });
+      }
+
+      await qRun(
+        'DELETE FROM despesas WHERE id=? AND tenant_id=?',
+        [expenseId, req.tenantId]
+      );
+
+      res.json({ success: true, message: 'Despesa excluída com sucesso' });
+    } catch (e: any) {
+      console.error('DELETE /expenses/:id erro:', e.message);
       res.status(500).json({ success: false, error: e.message });
     }
   });

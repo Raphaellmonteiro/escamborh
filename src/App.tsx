@@ -8,13 +8,17 @@ import {
   LayoutDashboard, ShoppingCart, Package, LogOut, Archive,
   Settings, Monitor, UtensilsCrossed,
   DollarSign, Clock, History, BarChart2, FileText, Users, Lock, Bell, Bike,
-  Menu, LayoutGrid, List,
+  Menu, LayoutGrid, List, Volume2, VolumeX,
 } from 'lucide-react';
 
 import type { Product, Caixa, Order } from './types';
 import NavItem from './components/ui/NavItem';
+import PlanBadge from './components/ui/PlanBadge';
 import { getSegCfg, getOperationalSegment } from './config/segmentos';
-import { FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY } from './utils/orderCentralBoard';
+import { isKnownPlanFeature, type PlanFeature } from './config/planFeatures';
+import { FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, mapOrderToCentralColumn } from './utils/orderCentralBoard';
+import type { PlanProfileInfo } from './utils/planStatus';
+import { playNewOrderSound } from './utils/sound';
 
 // ── Telas compartilhadas (todos os segmentos) ─────────────────────
 import LoginScreen           from './shared/LoginScreen';
@@ -56,6 +60,7 @@ import { useFlowAI }         from './hooks/useFlowAI';
 
 
 export default function App() {
+  const OPERATIONAL_ALERT_SOUND_KEY = 'flowpdv_operational_alert_sound';
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [estabelecimentoSegmento, setEstabelecimentoSegmento] = useState('Restaurante/Food');
   const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery'>('pos')
@@ -89,8 +94,42 @@ export default function App() {
     try { const p = localStorage.getItem('user_permissoes'); return p ? JSON.parse(p) : null; } catch { return null; }
   });
   const [userName, setUserName] = useState<string>(() => localStorage.getItem('user_nome') || '');
+  const [estabelecimentoNome, setEstabelecimentoNome] = useState('FlowPDV');
+  const [planFeatures, setPlanFeatures] = useState<PlanFeature[] | null>(null);
+  const [planProfile, setPlanProfile] = useState<PlanProfileInfo | null>(null);
+  const [operationalAlertCount, setOperationalAlertCount] = useState(0);
+  const [operationalNeedsAttention, setOperationalNeedsAttention] = useState(false);
+  const [operationalSoundEnabled, setOperationalSoundEnabled] = useState(
+    () => localStorage.getItem(OPERATIONAL_ALERT_SOUND_KEY) !== 'false'
+  );
+  const operationalAlertSnapshotRef = React.useRef('');
+  const operationalAlertLoadedRef = React.useRef(false);
+  const operationalSoundPlayedAtRef = React.useRef(0);
 
-  const podeVer = (tab: string): boolean => !userPermissoes || userPermissoes.includes(tab);
+  const userAllows = (tab: string): boolean => !userPermissoes || userPermissoes.includes(tab);
+  const normalizeAccessFeature = (tab: string): string => (tab === 'central' ? 'orders' : tab);
+  const planAllows = (tab: string): boolean => {
+    if (planFeatures === null) return true;
+    const feature = normalizeAccessFeature(tab);
+    if (!isKnownPlanFeature(feature)) return true;
+    return planFeatures.includes(feature);
+  };
+  const canAccess = (tab: string): boolean => {
+    const feature = normalizeAccessFeature(tab);
+    return planAllows(feature) && userAllows(feature);
+  };
+  const aiEnabled = planFeatures !== null && canAccess('ai');
+  const userRoleLabel =
+    userCargo === 'dono' ? 'Proprietário' : userCargo === 'gerente' ? 'Gerente' : 'Atendente';
+  const userDisplayName = userName || 'Sessão ativa';
+  const userSecondaryLine = userRoleLabel || 'Painel operacional';
+  const estabelecimentoMonogram = estabelecimentoNome
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((chunk) => chunk[0]?.toUpperCase())
+    .join('') || 'FP';
 
   // ── FlowAI ────────────────────────────────────────────────────────────────
   const {
@@ -98,7 +137,7 @@ export default function App() {
     historico, historicoTotal, carregandoHist,
     buscarAvisos, marcarLido, marcarTodosLidos,
     gerarAvisos, proximoAviso, buscarHistorico,
-  } = useFlowAI(token);
+  } = useFlowAI(aiEnabled ? token : null);
 
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -124,11 +163,11 @@ export default function App() {
     if (!token) return;
     try {
       const nav = localStorage.getItem('flowpdv_initial_nav_tab') || sessionStorage.getItem('flowpdv_initial_nav_tab');
-      if (nav === 'estoque' && podeVer('estoque')) {
+      if (nav === 'estoque' && canAccess('estoque')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
         setActiveTab('estoque');
-      } else if (nav === 'orders' && podeVer('orders')) {
+      } else if (nav === 'orders' && canAccess('orders')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
         setActiveTab('orders');
@@ -136,7 +175,7 @@ export default function App() {
     } catch {
       /* ignore */
     }
-  }, [token]);
+  }, [token, userPermissoes, planFeatures]);
 
   // ── Injeta/remove tema escuro no <html> ──────────────────────────────────
   useEffect(() => {
@@ -228,8 +267,8 @@ export default function App() {
       .flowpdv-dark .shadow-2xl { box-shadow: 0 24px 64px rgba(0,0,0,.8) !important; }
 
       /* Sidebar link active */
-      .flowpdv-dark .bg-zinc-900 span,
-      .flowpdv-dark .bg-zinc-900 svg { color: #111 !important; }
+      .flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) span,
+      .flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) svg { color: #111 !important; }
 
       /* Amber / yellow tones (keep warm) */
       .flowpdv-dark .bg-amber-50  { background-color: #1e1800 !important; }
@@ -282,7 +321,6 @@ export default function App() {
   }, []);
   const [showSolicitacao, setShowSolicitacao] = useState(false);
   const [licenseError, setLicenseError] = useState<'bloqueado' | 'trial_expirado' | null>(null);
-  const [estabelecimentoNome, setEstabelecimentoNome] = useState('FlowPDV');
   const [taxasPagamento, setTaxasPagamento] = useState({ debito: 0, credito: 0, pix: 0 });
   const [senhaPadrao, setSenhaPadrao]       = useState(false);
   const path = window.location.pathname;
@@ -316,43 +354,84 @@ export default function App() {
   const segCfg = getSegCfg(segmentoOperacional);
   const permiteMesas = segmentoOperacional === 'Restaurante/Food' || segmentoOperacional === 'Bar/Pub';
   const permiteDelivery = permiteMesas;
+  const isOperationTab = activeTab === 'orders' || activeTab === 'central';
 
-  // ── Título dinâmico — notifica pedidos novos ─────────────────────────────
-  // Intervalo fixo de 30s, independente de mudanças de aba.
-  // activeTab NÃO entra nas dependências para não recriar o intervalo a cada troca de aba.
+  // ── Título dinâmico + alerta operacional incremental ─────────────────────
 React.useEffect(() => {
     if (!token || isAdmin) return;
 
-    const fetchPedidosNovos = async () => {
-      const agora = Date.now();
-      
-      // 🔥 TRAVA ABSOLUTA: O objeto 'window' sobrevive aos recarregamentos invisíveis do Vite!
-      if ((window as any).__travaFlowPDV && agora - (window as any).__travaFlowPDV < 3000) {
-        return; 
-      }
-      (window as any).__travaFlowPDV = agora;
+    const fetchOperationalAlerts = async () => {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const from = `${yyyy}-${mm}-${dd} 00:00:00`;
+      const to = `${yyyy}-${mm}-${dd} 23:59:59`;
 
-      if (activeTab === 'orders' || activeTab === 'central') { document.title = 'FlowPDV'; return; }
-      
       try {
-        // 🔥 QUEBRA-CACHE: O '&v=agora' força o navegador a nunca usar requisições repetidas
-        const res = await fetch(`/api/orders?status=Criado&limit=1&v=${agora}`, {
+        const qs = new URLSearchParams({ from, to, limit: '250' });
+        const res = await fetch(`/api/orders?${qs.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;
         const data = await res.json();
-        const count = Array.isArray(data) ? data.filter((o: any) => o.status === 'Criado').length : 0;
-        document.title = count > 0
-          ? `🔥 ${count} novo${count > 1 ? 's' : ''} pedido${count > 1 ? 's' : ''} — FlowPDV`
+        const orders = Array.isArray(data) ? data : [];
+        const actionableOrders = orders.filter((order: Order) => {
+          const column = mapOrderToCentralColumn(order, { segmentFinalStatus: segCfg.statusConcluido });
+          return column === 'a_confirmar' || column === 'entrada';
+        });
+        const actionableIds = actionableOrders
+          .map((order: Order) => Number(order.id))
+          .filter((id) => Number.isFinite(id))
+          .sort((a, b) => a - b);
+        const previousIds = new Set(
+          operationalAlertSnapshotRef.current
+            .split(',')
+            .map((value) => Number(value))
+            .filter((id) => Number.isFinite(id))
+        );
+        const hasNewOperationalItem =
+          operationalAlertLoadedRef.current && actionableIds.some((id) => !previousIds.has(id));
+
+        operationalAlertSnapshotRef.current = actionableIds.join(',');
+        operationalAlertLoadedRef.current = true;
+        setOperationalAlertCount(actionableOrders.length);
+
+        if (isOperationTab) {
+          setOperationalNeedsAttention(false);
+          document.title = 'FlowPDV';
+          return;
+        }
+
+        if (hasNewOperationalItem) {
+          setOperationalNeedsAttention(true);
+          const currentTime = Date.now();
+          if (operationalSoundEnabled && currentTime - operationalSoundPlayedAtRef.current > 3000) {
+            operationalSoundPlayedAtRef.current = currentTime;
+            playNewOrderSound();
+          }
+        }
+
+        document.title = actionableOrders.length > 0
+          ? `Operação (${actionableOrders.length}) — FlowPDV`
           : 'FlowPDV';
       } catch {}
     };
 
-    fetchPedidosNovos();
-    const id = setInterval(fetchPedidosNovos, 30000);
+    fetchOperationalAlerts();
+    const id = setInterval(fetchOperationalAlerts, 30000);
     return () => clearInterval(id);
-    
-  }, [token, isAdmin, activeTab]);
+  }, [token, isAdmin, isOperationTab, operationalSoundEnabled, segCfg.statusConcluido]);
+
+  useEffect(() => {
+    if (isOperationTab) {
+      setOperationalNeedsAttention(false);
+    }
+  }, [isOperationTab]);
+
+  useEffect(() => {
+    localStorage.setItem(OPERATIONAL_ALERT_SOUND_KEY, String(operationalSoundEnabled));
+  }, [operationalSoundEnabled]);
   
   // ── Rotas públicas — Tela Cliente ────────────────────────────────────────────
   // /delivery/:slug/pedido/:id → rastreamento do pedido pelo cliente
@@ -397,6 +476,13 @@ const fetchPerfil = async () => {
         const data = await res.json();
         if (data.nome_estabelecimento) setEstabelecimentoNome(data.nome_estabelecimento);
         if (data.segmento) setEstabelecimentoSegmento(getOperationalSegment(data.segmento));
+        setPlanFeatures(Array.isArray(data.plan_features) ? data.plan_features : null);
+        setPlanProfile({
+          plano: data.plano || 'completo',
+          trial_ativo: !!data.trial_ativo,
+          trial_fim: data.trial_fim || null,
+          vencimento: data.vencimento || null,
+        });
         setTaxasPagamento({
           debito:  data.taxa_debito  || 0,
           credito: data.taxa_credito || 0,
@@ -456,9 +542,7 @@ const fetchProducts = async () => {
   };
 
   const handleTabChange = (tab: any) => {
-    if (tab === 'central') {
-      if (!podeVer('orders')) return;
-    } else if (!podeVer(tab)) {
+    if (!canAccess(tab)) {
       return;
     }
     if (tab === 'abrir-caixa' || tab === 'fechar-caixa') {
@@ -470,6 +554,17 @@ const fetchProducts = async () => {
     setActiveTab(tab);
     setMobileNavOpen(false);
   };
+
+  useEffect(() => {
+    if (!token) return;
+    if (canAccess(activeTab)) return;
+
+    const fallbackTabs = ['pos', 'orders', 'dashboard', 'products', 'configuracoes'];
+    const fallback = fallbackTabs.find((tab) => canAccess(tab));
+    if (fallback) {
+      setActiveTab(fallback as typeof activeTab);
+    }
+  }, [token, activeTab, userPermissoes, planFeatures]);
 
 const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -512,12 +607,46 @@ const handleAuth = async (e: React.FormEvent) => {
     setUserCargo('dono');
     setUserPermissoes(null);
     setUserName('');
+    setPlanFeatures(null);
+    setPlanProfile(null);
     setToken(null);
   };
-  // ── Interceptor global: 401 → logout automático ───────────────────────────
-  // Quando o JWT expira, todas as chamadas retornam 401. Em vez de o app
-  // continuar "logado" visualmente com ações falhando em silêncio, fazemos
-  // logout imediato para que o usuário saiba que precisa entrar novamente.
+
+  const isProtectedApiUrl = (url: string) =>
+    url.includes('/api/')
+    && !url.includes('/api/login')
+    && !url.includes('/api/admin');
+
+  const isSessionInvalidResponse = async (response: Response) => {
+    if (response.status === 401) return true;
+    if (response.status !== 403) return false;
+
+    try {
+      const cloned = response.clone();
+      const contentType = cloned.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json')
+        ? await cloned.json()
+        : { error: await cloned.text() };
+      const message = String(payload?.error || payload?.message || '').trim().toLowerCase();
+
+      return (
+        message.includes('token inválido')
+        || message.includes('token invalido')
+        || message.includes('token expirado')
+        || message.includes('sessão inválida')
+        || message.includes('sessao invalida')
+        || message.includes('sessão expirada')
+        || message.includes('sessao expirada')
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // ── Interceptor global: sessão inválida → logout automático ───────────────
+  // O backend pode responder 401 ou 403 para token inválido/expirado.
+  // Fazemos logout apenas quando a resposta indica de fato sessão inválida,
+  // sem derrubar o usuário em 403 de regra de negócio (ex.: bloqueio/trial).
   useEffect(() => {
     // Guard contra registro duplo (React StrictMode monta/desmonta duas vezes em dev)
     const INTERCEPTED = Symbol.for('flowpdv_fetch_intercepted');
@@ -526,18 +655,11 @@ const handleAuth = async (e: React.FormEvent) => {
     const originalFetch = window.fetch;
     const intercepted = async (...args: Parameters<typeof fetch>) => {
       const response = await originalFetch(...args);
-      if (response.status === 401) {
-        // Clona antes de consumir — o chamador original ainda pode ler o body
-        const cloned = response.clone();
-        try {
-          const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
-          // Não faz logout em rotas públicas (sem token) nem nas de autenticação
-          if (!url.includes('/api/login') && !url.includes('/api/admin') && !url.includes('/api/public/')) {
-            await cloned.json(); // consome para confirmar que é JSON válido
-            console.warn('[Auth] 401 detectado — sessão expirada, fazendo logout.');
-            handleLogout();
-          }
-        } catch { /* ignora erros de parse */ }
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+
+      if (isProtectedApiUrl(url) && await isSessionInvalidResponse(response)) {
+        console.warn('[Auth] Sessão inválida detectada — fazendo logout automático.');
+        handleLogout();
       }
       return response;
     };
@@ -586,52 +708,59 @@ const handleAuth = async (e: React.FormEvent) => {
           lg:translate-x-0
         `}
       >
-        <div className="p-6 border-b border-zinc-100 flex items-center gap-3">
-          {/* Logo clicável — abre input de upload */}
-          <label className="cursor-pointer group relative" title="Clique para trocar a logo">
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const formData = new FormData();
-                formData.append('logo', file);
-                const res = await fetch('/api/settings/logo', {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${token}` },
-                  body: formData
-                });
-                const data = await res.json();
-                if (data.success) setLogoUrl(data.logo_url + '?t=' + Date.now()); // cache bust
-              }}
-            />
-            {logoUrl ? (
-              <div className="w-14 h-14 rounded-xl overflow-hidden ring-2 ring-transparent group-hover:ring-zinc-400 transition-all">
-                <img
-                  src={logoUrl}
-                  alt="Logo"
-                  className="w-full h-full object-cover"
-                />
+        <div className="border-b border-zinc-100 bg-zinc-50 p-5">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+            <label className="cursor-pointer group relative" title="Clique para trocar a logo">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const formData = new FormData();
+                  formData.append('logo', file);
+                  const res = await fetch('/api/settings/logo', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                  });
+                  const data = await res.json();
+                  if (data.success) setLogoUrl(data.logo_url + '?t=' + Date.now()); // cache bust
+                }}
+              />
+              {logoUrl ? (
+                <div className="h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-transparent transition-all group-hover:ring-zinc-400">
+                  <img
+                    src={logoUrl}
+                    alt="Logo"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 text-sm font-black uppercase tracking-[0.18em] text-white transition-colors group-hover:bg-zinc-700">
+                  {estabelecimentoMonogram}
+                </div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
               </div>
-            ) : (
-              <div className="w-14 h-14 bg-zinc-900 rounded-xl flex items-center justify-center text-white font-black text-xl group-hover:bg-zinc-700 transition-colors">
-                S
-              </div>
-            )}
-            {/* Ícone de câmera ao hover */}
-            <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+            </label>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Seu painel</p>
+              <h1 className="mt-1 truncate text-lg font-black leading-tight text-zinc-900">{estabelecimentoNome}</h1>
+              <p className="mt-2 truncate text-sm font-semibold text-zinc-700">{userDisplayName}</p>
+              <p className="mt-1 text-xs text-zinc-500">{userSecondaryLine}</p>
             </div>
-          </label>
-          <div>
-            <h1 className="font-bold text-zinc-900 leading-none">{estabelecimentoNome}</h1>
-            <p className="text-[10px] text-zinc-400 uppercase tracking-widest mt-1">Sistema POS</p>
+          </div>
+            <div className="mt-4">
+              <PlanBadge profile={planProfile} compact />
+            </div>
           </div>
         </div>
 
@@ -680,11 +809,13 @@ const handleAuth = async (e: React.FormEvent) => {
 
      <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
           {(() => { return (<> 
-            {podeVer('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
-            {podeVer('orders') && (
+            {canAccess('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
+            {canAccess('orders') && (
               <>
                 <NavItem
                   active={activeTab === 'central'}
+                  attention={operationalNeedsAttention}
+                  badgeCount={operationalAlertCount > 0 ? operationalAlertCount : undefined}
                   onClick={() => handleTabChange('central')}
                   icon={<LayoutGrid size={20} />}
                   label="Operação"
@@ -697,16 +828,16 @@ const handleAuth = async (e: React.FormEvent) => {
                 />
               </>
             )}
-            {podeVer('delivery') && permiteDelivery && (
+            {canAccess('delivery') && permiteDelivery && (
               <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon={<Bike size={20} />} label="Delivery" />
             )}
-            {permiteMesas && podeVer('mesas') && (
+            {permiteMesas && canAccess('mesas') && (
               <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon={<UtensilsCrossed size={20} />} label="Mesas" />
             )}
-            {podeVer('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={segCfg.labelSidebarProdutos} />}
-            {podeVer('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon={<Archive size={20} />}  label="Estoque" />}
+            {canAccess('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={segCfg.labelSidebarProdutos} />}
+            {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon={<Archive size={20} />}  label="Estoque" />}
           </>); })()}
-          {podeVer('nfse') && (
+          {canAccess('nfse') && (
             <a href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer"
               onClick={() => setMobileNavOpen(false)}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 min-h-[44px]">
@@ -714,42 +845,53 @@ const handleAuth = async (e: React.FormEvent) => {
               <span className="font-medium">NFS-e</span>
             </a>
           )}
-          {podeVer('dashboard')    && <NavItem active={activeTab === 'dashboard'}    onClick={() => handleTabChange('dashboard')}    icon={<LayoutDashboard size={20} />} label="Dashboard" />}
-          {podeVer('finance')      && <NavItem active={activeTab === 'finance'}      onClick={() => handleTabChange('finance')}      icon={<DollarSign size={20} />}      label="Financeiro" />}
-          {podeVer('funcionarios') && <NavItem active={activeTab === 'funcionarios'} onClick={() => handleTabChange('funcionarios')} icon={<Users size={20} />}           label="RH" />}
-          {podeVer('logs')         && <NavItem active={activeTab === 'logs'}         onClick={() => handleTabChange('logs')}         icon={<History size={20} />}         label="Logs" />}
-          {podeVer('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => { setActiveTab('configuracoes'); setMobileNavOpen(false); }}  icon={<Settings size={20} />}        label="Configurações" />}
+          {canAccess('dashboard')    && <NavItem active={activeTab === 'dashboard'}    onClick={() => handleTabChange('dashboard')}    icon={<LayoutDashboard size={20} />} label="Dashboard" />}
+          {canAccess('finance')      && <NavItem active={activeTab === 'finance'}      onClick={() => handleTabChange('finance')}      icon={<DollarSign size={20} />}      label="Financeiro" />}
+          {canAccess('funcionarios') && <NavItem active={activeTab === 'funcionarios'} onClick={() => handleTabChange('funcionarios')} icon={<Users size={20} />}           label="RH" />}
+          {canAccess('logs')         && <NavItem active={activeTab === 'logs'}         onClick={() => handleTabChange('logs')}         icon={<History size={20} />}         label="Logs" />}
+          {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon={<Settings size={20} />}        label="Configurações" />}
         </nav>
 
-        <div className="p-4 border-t border-zinc-100 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-black text-zinc-800 truncate">{userName || 'Usuário'}</p>
-              <p className="text-[10px] text-zinc-400">
-                {userCargo === 'dono' ? '👑 Dono' : userCargo === 'gerente' ? '🔑 Gerente' : '🪪 Atendente'}
-              </p>
-            </div>
-            {/* Sino de notificações */}
+        <div className="border-t border-zinc-100 p-4 flex-shrink-0 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Utilitários</p>
+            <p className="text-[10px] text-zinc-400">Tema, alertas e sessão</p>
+          </div>
+          <div className={`grid gap-2 ${canAccess('ai') ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            {canAccess('ai') && (
+              <button
+                onClick={() => setNotifCenterOpen(true)}
+                title="Central de Notificações"
+                className="relative flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+              >
+                <Bell size={16} />
+                <span>Alertas</span>
+                {avisosNaoLidos > 0 && (
+                  <span className="absolute right-2 top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black leading-none text-white">
+                    {avisosNaoLidos > 9 ? '9+' : avisosNaoLidos}
+                  </span>
+                )}
+              </button>
+            )}
             <button
-              onClick={() => setNotifCenterOpen(true)}
-              title="Central de Notificações"
-              className="relative p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-all flex-shrink-0"
+              onClick={() => setOperationalSoundEnabled((value) => !value)}
+              title={operationalSoundEnabled ? 'Desativar som da Operação' : 'Ativar som da Operação'}
+              className={`flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border px-3 text-xs font-semibold transition-all ${
+                operationalSoundEnabled
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100'
+                  : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900'
+              }`}
             >
-              <Bell size={18} />
-              {avisosNaoLidos > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {avisosNaoLidos > 9 ? '9+' : avisosNaoLidos}
-                </span>
-              )}
+              {operationalSoundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              <span>{operationalSoundEnabled ? 'Som Operação' : 'Som mudo'}</span>
             </button>
-            {/* Toggle modo escuro */}
             <button
               onClick={() => setDarkMode(v => !v)}
               title={darkMode ? 'Modo claro' : 'Modo escuro'}
-              className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-all flex-shrink-0"
+              className="flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
             >
               {darkMode ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="5"/>
                   <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
                   <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
@@ -757,17 +899,19 @@ const handleAuth = async (e: React.FormEvent) => {
                   <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
                 </svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
                 </svg>
               )}
+              <span>{darkMode ? 'Tema claro' : 'Tema escuro'}</span>
             </button>
             <button
               onClick={handleLogout}
               title="Sair do sistema"
-              className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex-shrink-0"
+              className="flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600"
             >
-              <LogOut size={18} />
+              <LogOut size={16} />
+              <span>Sair</span>
             </button>
           </div>
         </div>
@@ -785,12 +929,12 @@ const handleAuth = async (e: React.FormEvent) => {
           </button>
           <div className="min-w-0 flex-1">
             <p className="font-bold text-zinc-900 truncate leading-tight">{estabelecimentoNome}</p>
-            <p className="text-[10px] text-zinc-400 uppercase tracking-widest">Sistema POS</p>
+            <p className="text-[11px] text-zinc-500 truncate">{`${userDisplayName} · ${userSecondaryLine}`}</p>
           </div>
         </header>
 
       {/* Botão flutuante — atalho para Operação (visão ao vivo) */}
-      {podeVer('orders') && (
+      {canAccess('orders') && (
         <div
           title="Operação — visão ao vivo (atalho)"
           style={{ position: 'fixed', left: floatPos.x, top: floatPos.y, zIndex: 999, cursor: floatDrag.current.dragging ? 'grabbing' : 'grab', userSelect: 'none' }}
@@ -818,8 +962,21 @@ const handleAuth = async (e: React.FormEvent) => {
             floatDrag.current.hasDragged = false;
           }}
         >
-          <div className={`w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-2xl transition-all hover:scale-110 active:scale-95 ${activeTab === 'orders' || activeTab === 'central' ? 'bg-zinc-900' : 'bg-white border border-zinc-200'}`}>
-            🕐
+          <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl border shadow-xl transition-all hover:scale-110 active:scale-95 ${
+            activeTab === 'orders' || activeTab === 'central'
+              ? 'border-zinc-900 bg-zinc-900 text-white'
+              : operationalNeedsAttention
+                ? 'border-amber-300 bg-amber-50 text-amber-900'
+                : 'border-zinc-200 bg-white text-zinc-700'
+          }`}>
+            {operationalAlertCount > 0 && (
+              <span className={`absolute -right-1 -top-1 min-w-[20px] rounded-full px-1 py-0.5 text-center text-[10px] font-black leading-none ${
+                operationalNeedsAttention ? 'bg-amber-500 text-white animate-pulse' : 'bg-zinc-900 text-white'
+              }`}>
+                {operationalAlertCount > 99 ? '99+' : operationalAlertCount}
+              </span>
+            )}
+            <LayoutGrid size={22} strokeWidth={2.2} />
           </div>
         </div>
       )}
@@ -837,7 +994,7 @@ const handleAuth = async (e: React.FormEvent) => {
               <strong>Senha padrão detectada.</strong> Acesse <strong>Configurações → Alterar senhas</strong> para proteger o sistema.
             </p>
             <button
-              onClick={() => { setActiveTab('configuracoes'); setMobileNavOpen(false); }}
+              onClick={() => handleTabChange('configuracoes')}
               className="text-[11px] font-black text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-2 rounded-lg transition-all shrink-0 self-start sm:self-auto min-h-[40px]"
             >
               Alterar agora →
@@ -846,13 +1003,13 @@ const handleAuth = async (e: React.FormEvent) => {
         )}
 
         <AnimatePresence mode="wait">
-          {activeTab === 'pos' && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
-          {activeTab === 'orders'    && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
-          {activeTab === 'central'   && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'dashboard' && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => setActiveTab('pos')} />}
-          {activeTab === 'products'  && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
-          {activeTab === 'estoque'   && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'delivery'  && permiteDelivery && (
+          {activeTab === 'pos' && canAccess('pos') && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
+          {activeTab === 'orders' && canAccess('orders') && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
+          {activeTab === 'central' && canAccess('orders') && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
+          {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => handleTabChange('pos')} />}
+          {activeTab === 'products' && canAccess('products') && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
+          {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
+          {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
             <DeliveryScreen
               token={token}
               slug={slugAtual}
@@ -863,11 +1020,11 @@ const handleAuth = async (e: React.FormEvent) => {
               }}
             />
           )}
-          {activeTab === 'mesas' && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
-          {activeTab === 'finance' && <FinanceScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'funcionarios' && <RHScreen token={token} />}
-          {activeTab === 'logs'         && <SystemLogsScreen token={token} />}
-          {activeTab === 'configuracoes' && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
+          {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
+          {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
+          {activeTab === 'funcionarios' && canAccess('funcionarios') && <RHScreen token={token} />}
+          {activeTab === 'logs' && canAccess('logs') && <SystemLogsScreen token={token} />}
+          {activeTab === 'configuracoes' && canAccess('configuracoes') && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
         </AnimatePresence>
 
         {/* Modal de Autenticação para Áreas Restritas */}
@@ -946,14 +1103,13 @@ const handleAuth = async (e: React.FormEvent) => {
 
       {/* ── FlowAI Popup proativo ─────────────────────────────────────────── */}
       <AnimatePresence>
-        {avisoAtivo && (
+        {canAccess('ai') && avisoAtivo && (
           <FlowAIPopup
             aviso={avisoAtivo}
             onDismiss={(id) => { marcarLido(id); proximoAviso(); }}
             onAcao={(rota) => {
               const tab = rota.replace('/', '') as any;
-              setActiveTab(tab);
-              setMobileNavOpen(false);
+              handleTabChange(tab);
               if (avisoAtivo) { marcarLido(avisoAtivo.id); proximoAviso(); }
             }}
           />
@@ -961,22 +1117,23 @@ const handleAuth = async (e: React.FormEvent) => {
       </AnimatePresence>
 
       {/* ── Central de Notificações ───────────────────────────────────────── */}
-      <NotificationCenter
-        open={notifCenterOpen}
-        onClose={() => setNotifCenterOpen(false)}
-        historico={historico}
-        carregandoHist={carregandoHist}
-        avisosNaoLidos={avisosNaoLidos}
-        onMarcarLido={marcarLido}
-        onMarcarTodosLidos={marcarTodosLidos}
-        onAcao={(rota) => {
-          const tab = rota.replace('/', '') as any;
-          setActiveTab(tab);
-          setNotifCenterOpen(false);
-          setMobileNavOpen(false);
-        }}
-        onRefresh={() => buscarHistorico(100, 0)}
-      />
+      {canAccess('ai') && (
+        <NotificationCenter
+          open={notifCenterOpen}
+          onClose={() => setNotifCenterOpen(false)}
+          historico={historico}
+          carregandoHist={carregandoHist}
+          avisosNaoLidos={avisosNaoLidos}
+          onMarcarLido={marcarLido}
+          onMarcarTodosLidos={marcarTodosLidos}
+          onAcao={(rota) => {
+            const tab = rota.replace('/', '') as any;
+            handleTabChange(tab);
+            setNotifCenterOpen(false);
+          }}
+          onRefresh={() => buscarHistorico(100, 0)}
+        />
+      )}
       </div>
     </div>
   );

@@ -45,6 +45,24 @@ import { Spinner } from '../components/ui/Spinner';
 
 type AdminActionPayloadField = { type: 'number' | 'text' | 'textarea'; label: string; required: boolean };
 
+const PLAN_OPTIONS = [
+  { value: 'basico', label: 'Basico' },
+  { value: 'basico_delivery', label: 'Basico + Delivery' },
+  { value: 'completo', label: 'Completo' },
+] as const;
+
+function normalizeAdminPlanValue(plan?: string | null) {
+  const value = String(plan || '').trim().toLowerCase();
+  return PLAN_OPTIONS.some((option) => option.value === value) ? value : 'completo';
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().split('T')[0];
+}
+
 export default function AdminPanel() {
   const pendingEstoqueDeeplinkRef = useRef<number | null>(null);
   const pendingPedidoPdvRef = useRef<{ orderId: number; tab: 'active' | 'receipts'; orderCreatedAt?: string } | null>(null);
@@ -67,6 +85,7 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(false);
   const [loginForm, setLoginForm] = useState({ usuario: '', senha: '' });
   const [showCreds, setShowCreds] = useState<any>(null);
+  const [approvalDraft, setApprovalDraft] = useState<any>(null);
   const [filter, setFilter] = useState('todas');
   const [showSenha, setShowSenha] = useState<Record<number, boolean>>({});
   const [editPlano, setEditPlano] = useState<any>(null);
@@ -564,18 +583,50 @@ export default function AdminPanel() {
     }
   };
 
-  const handleAprovar = async (id: number) => {
-    if (!confirm("Deseja aprovar esta solicitação?")) return;
-    const res = await fetch(`/api/admin/solicitacoes/${id}/aprovar`, {
+  const openApprovalModal = (solicitacao: any) => {
+    setApprovalDraft({
+      id: solicitacao.id,
+      nome_estabelecimento: solicitacao.nome_estabelecimento,
+      segmento: solicitacao.segmento || 'Restaurante/Food',
+      plano: 'basico',
+      trial_dias: 7,
+    });
+  };
+
+  const buildEditPlanoDraft = (cliente: any) => ({
+    ...cliente,
+    plano: normalizeAdminPlanValue(cliente?.plano),
+    valor_plano: Number(cliente?.valor_plano || 0),
+    vencimento: toDateInputValue(cliente?.vencimento),
+    trial_inicio: toDateInputValue(cliente?.trial_inicio),
+    trial_fim: toDateInputValue(cliente?.trial_fim),
+  });
+
+  const openEditPlano = (cliente: any) => {
+    setEditPlano(buildEditPlanoDraft(cliente));
+    setShowAcoesMenu(false);
+  };
+
+  const handleAprovar = async () => {
+    if (!approvalDraft) return;
+    const res = await fetch(`/api/admin/solicitacoes/${approvalDraft.id}/aprovar`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        plano: approvalDraft.plano,
+        trial_dias: Number(approvalDraft.trial_dias || 0),
+        segmento: approvalDraft.segmento,
+      }),
     });
     const data = await res.json();
     if (data.success) {
+      setApprovalDraft(null);
       setShowCreds(data);
       fetchSolicitacoes();
       fetchClientes();
       fetchStats();
+    } else {
+      alert(data.error || 'Erro ao aprovar solicitação.');
     }
   };
 
@@ -611,7 +662,14 @@ const handleUpdatePlano = async (e: React.FormEvent) => {
       const res = await fetch(`/api/admin/clientes/${editPlano.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(editPlano)
+        body: JSON.stringify({
+          ...editPlano,
+          plano: normalizeAdminPlanValue(editPlano.plano),
+          valor_plano: Number(editPlano.valor_plano || 0),
+          vencimento: editPlano.vencimento || null,
+          trial_inicio: editPlano.trial_inicio || null,
+          trial_fim: editPlano.trial_fim || null,
+        })
       });
 
       if (res.ok) {
@@ -755,7 +813,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                 <>
                   <div className="fixed inset-0 z-[60]" onClick={() => setShowAcoesMenu(false)} />
                   <div className="absolute left-0 right-0 sm:left-auto sm:right-0 top-full mt-2 w-full sm:w-56 max-h-[min(70dvh,520px)] overflow-y-auto bg-zinc-900 rounded-xl shadow-xl border border-zinc-800 py-2 z-[70]">
-                    <button onClick={() => { setEditPlano(cliente); setShowAcoesMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
+                    <button onClick={() => openEditPlano(cliente)} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
                       <Pencil size={16} /> Editar cliente
                     </button>
                     <button onClick={() => { setEditSenha(cliente); setNovaSenha(''); setNovaSenhaAdmin(cliente.senha_admin || '123321'); setNovaSenhaCaixa(cliente.senha_caixa || '123321'); setShowAcoesMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
@@ -1449,13 +1507,19 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                           <td className="px-3 sm:px-6 py-4">
                             <div className="space-y-1">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                c.plano === 'basico' ? 'bg-zinc-800 text-zinc-200' :
+                                c.plano === 'basico_delivery' ? 'bg-cyan-900 text-cyan-300' :
+                                c.plano === 'completo' ? 'bg-emerald-900 text-emerald-300' :
                                 c.plano === 'trial' ? 'bg-purple-900 text-purple-300' :
-                                c.plano === 'anual' ? 'bg-blue-900 text-blue-300' :
-                                c.plano === 'trimestral' ? 'bg-amber-900 text-amber-300' :
                                 'bg-zinc-800 text-zinc-300'
                               }`}>
-                                {c.plano || 'Trial'}
+                                {c.plano || 'Completo'}
                               </span>
+                              {c.trial_fim && new Date(c.trial_fim).getTime() >= Date.now() && (
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-400">
+                                  Trial ativo ate {new Date(c.trial_fim).toLocaleDateString('pt-BR')}
+                                </p>
+                              )}
                               <p className="text-xs font-bold text-zinc-400">R$ {c.valor_plano ? c.valor_plano.toFixed(2) : '0.00'}</p>
                             </div>
                           </td>
@@ -1488,7 +1552,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                               <button type="button" onClick={() => { setSubUsersCliente(c); fetchSubUsers(c.id); }} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-zinc-400 rounded-lg hover:bg-zinc-500/20 transition-colors" title="Sub-usuários">
                                 <Users2 size={16} />
                               </button>
-                              <button type="button" onClick={() => setEditPlano(c)} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-blue-400 rounded-lg hover:bg-blue-500/20 transition-colors" title="Editar">
+                              <button type="button" onClick={() => openEditPlano(c)} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-blue-400 rounded-lg hover:bg-blue-500/20 transition-colors" title="Editar">
                                 <Pencil size={16} />
                               </button>
                               <button type="button" onClick={() => { setEditSenha(c); setNovaSenha(''); setNovaSenhaAdmin(c.senha_admin || '123321'); setNovaSenhaCaixa(c.senha_caixa || '123321'); }} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-violet-400 rounded-lg hover:bg-violet-500/20 transition-colors" title="Senhas">
@@ -1570,7 +1634,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                       <td className="px-3 sm:px-6 py-4">
                         {s.status === 'pendente' && (
                           <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => handleAprovar(s.id)} className="p-2.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center bg-emerald-900 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="Aprovar">
+                            <button type="button" onClick={() => openApprovalModal(s)} className="p-2.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center bg-emerald-900 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="Aprovar">
                               <UserCheck size={16} />
                             </button>
                             <button type="button" onClick={() => handleRecusar(s.id)} className="p-2.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center bg-red-900 text-red-400 rounded-lg hover:bg-red-800 transition-colors" title="Recusar">
@@ -1875,7 +1939,10 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                         </div>
                         <div className="flex gap-2 mt-3">
                           <button 
-                            onClick={() => setEditPlano(clientes.find(c => c.nome_estabelecimento === v.nome_estabelecimento))}
+                            onClick={() => {
+                              const cliente = clientes.find(c => c.nome_estabelecimento === v.nome_estabelecimento);
+                              if (cliente) openEditPlano(cliente);
+                            }}
                             className="flex-1 py-2 bg-zinc-900 text-white rounded-lg text-xs font-bold hover:bg-zinc-800 transition-colors"
                           >
                             Renovar
@@ -2470,6 +2537,46 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
             </motion.div>
           </div>
         )}
+        {approvalDraft && (
+          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto bg-zinc-950/80 backdrop-blur-md">
+            <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} className="bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+              <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-zinc-800">
+                <h3 className="text-xl font-bold text-white">Aprovar Cliente</h3>
+                <p className="text-sm text-zinc-400 mt-1">{approvalDraft.nome_estabelecimento}</p>
+              </div>
+              <div className="p-6 sm:p-8 space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Plano</label>
+                  <select
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"
+                    value={approvalDraft.plano}
+                    onChange={(e) => setApprovalDraft({ ...approvalDraft, plano: e.target.value })}
+                  >
+                    {PLAN_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Dias de Trial</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"
+                    value={approvalDraft.trial_dias}
+                    onChange={(e) => setApprovalDraft({ ...approvalDraft, trial_dias: Number(e.target.value || 0) })}
+                  />
+                  <p className="text-xs text-zinc-500">Durante o trial o tenant recebe acesso completo temporariamente.</p>
+                </div>
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-6 sm:px-8 sm:pb-8 pt-4 border-t border-zinc-800 bg-zinc-900">
+                <Button onClick={handleAprovar} className="flex-1 min-h-[44px]">Aprovar e criar acesso</Button>
+                <Button variant="secondary" type="button" onClick={() => setApprovalDraft(null)} className="min-h-[44px] sm:min-w-[120px]">Cancelar</Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         {editPlano && (
           <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto bg-zinc-950/80 backdrop-blur-md">
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-zinc-900 rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[min(92dvh,100svh)] sm:max-h-[90vh] flex flex-col min-h-0 overflow-hidden">
@@ -2557,10 +2664,9 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                         value={editPlano.plano}
                         onChange={e => setEditPlano({...editPlano, plano: e.target.value})}
                       >
-                        <option value="trial">Trial</option>
-                        <option value="mensal">Mensal</option>
-                        <option value="trimestral">Trimestral</option>
-                        <option value="anual">Anual</option>
+                        {PLAN_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
                       </select>
                     </div>
                     <div className="space-y-1.5">
@@ -2570,7 +2676,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                         step="0.01"
                         className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"
                         value={editPlano.valor_plano}
-                        onChange={e => setEditPlano({...editPlano, valor_plano: parseFloat(e.target.value)})}
+                        onChange={e => setEditPlano({...editPlano, valor_plano: Number(e.target.value || 0)})}
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -2578,8 +2684,28 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                       <input 
                         type="date"
                         className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"
-                        value={editPlano.vencimento ? new Date(editPlano.vencimento).toISOString().split('T')[0] : ''}
+                        value={editPlano.vencimento || ''}
                         onChange={e => setEditPlano({...editPlano, vencimento: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Trial Início</label>
+                      <input
+                        type="date"
+                        className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"
+                        value={editPlano.trial_inicio || ''}
+                        onChange={e => setEditPlano({...editPlano, trial_inicio: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Trial Fim</label>
+                      <input
+                        type="date"
+                        className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"
+                        value={editPlano.trial_fim || ''}
+                        onChange={e => setEditPlano({...editPlano, trial_fim: e.target.value})}
                       />
                     </div>
                   </div>
@@ -2690,8 +2816,12 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                   <p className="font-mono font-bold text-white">{showCreds.senha}</p>
                 </div>
                 <div className="bg-zinc-800 p-4 rounded-2xl border border-zinc-800">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Período de Teste — Expira em</p>
-                  <p className="font-bold text-white">{new Date(showCreds.vencimento ?? showCreds.trial_fim).toLocaleDateString('pt-BR')}</p>
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Trial / Expiração</p>
+                  <p className="font-bold text-white">
+                    {showCreds.trial_fim || showCreds.vencimento
+                      ? new Date(showCreds.trial_fim ?? showCreds.vencimento).toLocaleDateString('pt-BR')
+                      : 'Sem trial definido'}
+                  </p>
                 </div>
               </div>
 
@@ -2699,8 +2829,10 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                 <Button 
                   className="flex-1 min-h-[44px]"
                   onClick={() => {
-                    const expira = new Date(showCreds.vencimento ?? showCreds.trial_fim).toLocaleDateString('pt-BR');
-                    const text = `FlowPDV - Credenciais de Acesso\n\nUsuário: ${showCreds.usuario}\nSenha: ${showCreds.senha}\nExpira em: ${expira}`;
+                    const expira = showCreds.trial_fim || showCreds.vencimento
+                      ? new Date(showCreds.trial_fim ?? showCreds.vencimento).toLocaleDateString('pt-BR')
+                      : 'Sem trial definido';
+                    const text = `FlowPDV - Credenciais de Acesso\n\nPlano: ${showCreds.plano}\nUsuário: ${showCreds.usuario}\nSenha: ${showCreds.senha}\nExpira em: ${expira}`;
                     navigator.clipboard.writeText(text);
                     alert("Copiado para a área de transferência!");
                   }}

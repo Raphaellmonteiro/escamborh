@@ -9,6 +9,7 @@ import {
   updateOrderStatus,
   confirmQrOrder,
 } from '../services/ordersService';
+import { requireAnyPermission } from '../middleware';
 
 type TenantRequest = Request & {
   tenantId: number | string;
@@ -33,16 +34,27 @@ function getStringQueryValue(value: unknown) {
   return typeof value === 'string' ? value : undefined;
 }
 
+function getBooleanQueryValue(value: unknown) {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true') return true;
+  if (normalized === '0' || normalized === 'false') return false;
+  return undefined;
+}
+
 export function createOrdersRouter() {
   const router = Router();
 
   router.post(
     '/',
+    requireAnyPermission('pos', 'orders'),
     asyncHandler(async (req, res) => {
       const result = await createOrder(req.body, req.tenantId);
       res.json({ success: true, ...result });
     })
   );
+
+  router.use(requireAnyPermission('orders'));
 
   router.get(
     '/',
@@ -52,6 +64,7 @@ export function createOrdersRouter() {
         status: getStringQueryValue(req.query.status),
         canal: getStringQueryValue(req.query.canal),
         excludeCanal: getStringQueryValue(req.query.excludeCanal),
+        activeOnly: getBooleanQueryValue(req.query.activeOnly),
         from: getStringQueryValue(req.query.from),
         to: getStringQueryValue(req.query.to),
         day: getStringQueryValue(req.query.day),

@@ -2,6 +2,7 @@
 import { Router, Request } from 'express';
 import net from 'net';
 import { q1, qAll } from '../db';
+import { requireAnyPermission } from '../middleware';
 import { buildMesaFinanceSnapshot, buildMesaReceiptTotals } from '../utils/mesaFinance';
 import { getProfilePaperColumns, getProfilePaperWidthMm } from '../utils/printProfiles';
 import { resolveRequiresPreparation } from '../utils/preparation';
@@ -470,7 +471,7 @@ export function createPrintRouter() {
     }
   });
 
-  router.post('/teste', async (req: Request, res) => {
+  router.post('/teste', requireAnyPermission('configuracoes'), async (req: Request, res) => {
     try {
       const row = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
       if (!row?.printer_config) return res.json({ success: false, message: 'Impressora nao configurada' });

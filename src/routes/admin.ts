@@ -7,11 +7,47 @@ import { loginRateLimiter, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '.
 import { generatePublicId } from '../utils/publicIds';
 
 const TZ = 'America/Sao_Paulo';
+const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
+type AdminManagedPlan = (typeof ADMIN_PLAN_OPTIONS)[number];
 
 function getTodayDateInTimeZone(): string {
   const today = new Date().toLocaleString('en-US', { timeZone: TZ }).split(',')[0];
   const date = new Date(today);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function normalizeAdminPlan(rawPlan?: unknown): AdminManagedPlan {
+  const plan = String(rawPlan || '').trim().toLowerCase();
+  if (ADMIN_PLAN_OPTIONS.includes(plan as AdminManagedPlan)) {
+    return plan as AdminManagedPlan;
+  }
+  return 'completo';
+}
+
+function parseTrialDays(rawValue: unknown, fallback = 7): number {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(365, Math.floor(parsed)));
+}
+
+function buildTrialWindow(days: number) {
+  if (days <= 0) {
+    return {
+      trialInicio: null,
+      trialFim: null,
+      vencimento: null,
+    };
+  }
+
+  const trialInicio = new Date();
+  const trialFim = new Date(trialInicio);
+  trialFim.setDate(trialFim.getDate() + days);
+
+  return {
+    trialInicio: trialInicio.toISOString(),
+    trialFim: trialFim.toISOString(),
+    vencimento: trialFim.toISOString(),
+  };
 }
 
 type DiagnosticProblem = {
@@ -168,15 +204,33 @@ export function createAdminRouter() {
       const sol = await q1('SELECT * FROM solicitacoes WHERE id=?', [req.params.id]);
       if (!sol) return res.status(404).json({ success: false });
       const segmentoFinal = req.body?.segmento || sol.segmento || 'Restaurante/Food';
+      const planoFinal = normalizeAdminPlan(req.body?.plano);
+      const trialDays = parseTrialDays(req.body?.trial_dias, 7);
       const usuario = sol.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
       const senha   = Math.random().toString(36).slice(-8);
       const hash    = bcrypt.hashSync(senha, 10);
-      const venc    = new Date(); venc.setDate(venc.getDate() + 7);
+      const trialWindow = buildTrialWindow(trialDays);
 
       const clienteId = await withTx(async (client) => {
         const cid = await txInsert(client,
-          `INSERT INTO clientes (nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,usuario,senha,status,vencimento,segmento) VALUES (?,?,?,?,?,?,?,?,?,?,'ativo',?,?)`,
-          [sol.nome_estabelecimento,sol.razao_social,sol.documento_tipo,sol.documento_numero,sol.nome_responsavel,sol.email,sol.whatsapp,sol.cidade,usuario,hash,venc.toISOString(),segmentoFinal]
+          `INSERT INTO clientes (nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,usuario,senha,status,vencimento,segmento,plano,trial_inicio,trial_fim) VALUES (?,?,?,?,?,?,?,?,?,?,'ativo',?,?,?,?,?)`,
+          [
+            sol.nome_estabelecimento,
+            sol.razao_social,
+            sol.documento_tipo,
+            sol.documento_numero,
+            sol.nome_responsavel,
+            sol.email,
+            sol.whatsapp,
+            sol.cidade,
+            usuario,
+            hash,
+            trialWindow.vencimento,
+            segmentoFinal,
+            planoFinal,
+            trialWindow.trialInicio,
+            trialWindow.trialFim,
+          ]
         );
         await txRun(client, "UPDATE solicitacoes SET status='aprovado', segmento=? WHERE id=?", [segmentoFinal, sol.id]);
         await txRun(client,
@@ -187,7 +241,16 @@ export function createAdminRouter() {
         await txRun(client, "INSERT INTO produtos (public_id,name,price,category,active,tenant_id) VALUES (?, 'Produto Exemplo',10.00,'Geral',1,?)", [generatePublicId('prd'), cid]);
         return cid;
       });
-      res.json({ success: true, usuario, senha, vencimento: venc.toISOString(), segmento: segmentoFinal });
+      res.json({
+        success: true,
+        usuario,
+        senha,
+        segmento: segmentoFinal,
+        plano: planoFinal,
+        trial_inicio: trialWindow.trialInicio,
+        trial_fim: trialWindow.trialFim,
+        vencimento: trialWindow.vencimento,
+      });
     } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
   });
 
@@ -211,15 +274,36 @@ export function createAdminRouter() {
 
   admin.put('/clientes/:id', async (req, res) => {
     try {
-      const { nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,plano,valor_plano,vencimento,status,segmento } = req.body;
+      const {
+        nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,
+        plano,valor_plano,vencimento,status,segmento,trial_inicio,trial_fim,
+      } = req.body;
+      const planoFinal = normalizeAdminPlan(plano);
       const ant = await q1('SELECT vencimento,plano FROM clientes WHERE id=?', [req.params.id]);
       await qRun(
-        `UPDATE clientes SET nome_estabelecimento=?,razao_social=?,documento_tipo=?,documento_numero=?,nome_responsavel=?,email=?,whatsapp=?,cidade=?,plano=?,valor_plano=?,vencimento=?,status=?,segmento=? WHERE id=?`,
-        [nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,plano,valor_plano,vencimento,status,segmento||'Restaurante/Food',req.params.id]
+        `UPDATE clientes SET nome_estabelecimento=?,razao_social=?,documento_tipo=?,documento_numero=?,nome_responsavel=?,email=?,whatsapp=?,cidade=?,plano=?,valor_plano=?,vencimento=?,status=?,segmento=?,trial_inicio=?,trial_fim=? WHERE id=?`,
+        [
+          nome_estabelecimento,
+          razao_social,
+          documento_tipo,
+          documento_numero,
+          nome_responsavel,
+          email,
+          whatsapp,
+          cidade,
+          planoFinal,
+          valor_plano,
+          vencimento || null,
+          status,
+          segmento || 'Restaurante/Food',
+          trial_inicio || null,
+          trial_fim || null,
+          req.params.id,
+        ]
       );
-      if (vencimento !== ant?.vencimento || plano !== ant?.plano)
+      if (vencimento !== ant?.vencimento || planoFinal !== ant?.plano)
         await qRun('INSERT INTO renovacoes (cliente_id,plano,valor,vencimento_anterior,novo_vencimento) VALUES (?,?,?,?,?)',
-          [req.params.id,plano,valor_plano,ant?.vencimento,vencimento]);
+          [req.params.id,planoFinal,valor_plano,ant?.vencimento,vencimento]);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -293,15 +377,15 @@ export function createAdminRouter() {
     try {
       const TZ = 'America/Sao_Paulo';
       const [mrr, ativos, proxVenc, fatMensal, pagantes] = await Promise.all([
-        q1("SELECT SUM(valor_plano) as total FROM clientes WHERE status='ativo' AND plano!='trial'", []),
-        q1("SELECT COUNT(*) as total FROM clientes WHERE status='ativo' AND plano!='trial'", []),
+        q1("SELECT SUM(valor_plano) as total FROM clientes WHERE status='ativo' AND (trial_fim IS NULL OR trial_fim < NOW())", []),
+        q1("SELECT COUNT(*) as total FROM clientes WHERE status='ativo' AND (trial_fim IS NULL OR trial_fim < NOW())", []),
         qAll(`SELECT nome_estabelecimento,plano,valor_plano,vencimento,whatsapp,
                EXTRACT(DAY FROM (vencimento - NOW())) as dias
                FROM clientes WHERE status='ativo' AND vencimento IS NOT NULL
                AND vencimento <= NOW() + INTERVAL '7 days' ORDER BY vencimento ASC`, []),
         qAll(`SELECT TO_CHAR(data_pagamento AT TIME ZONE '${TZ}', 'MM/YYYY') as mes, SUM(valor) as total
               FROM renovacoes GROUP BY mes ORDER BY MIN(data_pagamento) DESC LIMIT 6`, []),
-        qAll("SELECT nome_estabelecimento,plano,valor_plano,vencimento,ultimo_acesso FROM clientes WHERE plano!='trial' ORDER BY vencimento ASC", []),
+        qAll("SELECT nome_estabelecimento,plano,valor_plano,vencimento,ultimo_acesso FROM clientes WHERE (trial_fim IS NULL OR trial_fim < NOW()) ORDER BY vencimento ASC", []),
       ]);
       res.json({
         mrr: mrr?.total||0, arr: (mrr?.total||0)*12,

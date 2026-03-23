@@ -119,15 +119,15 @@ function labelStatusPedidoCliente(status: string): string {
 function badgeClassStatusPedido(status: string): string {
   const k = String(status || '').toLowerCase();
   if (k.includes('cancel')) return 'bg-red-100 text-red-800 border border-red-200';
-  if (k.includes('entregue') || k.includes('conclu')) return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+  if (k.includes('entregue') || k.includes('conclu')) return 'bg-sky-100 text-sky-800 border border-sky-200';
   if (k.includes('saiu')) return 'bg-orange-100 text-orange-800 border border-orange-200';
   if (k.includes('pronto')) return 'bg-purple-100 text-purple-800 border border-purple-200';
   if (k.includes('preparo')) return 'bg-amber-100 text-amber-800 border border-amber-200';
   return 'bg-zinc-100 text-zinc-700 border border-zinc-200';
 }
 
-const STATUS_COR: Record<string,string> = { 'Criado':'bg-blue-100 text-blue-700 border border-blue-200','Pedido Recebido':'bg-blue-100 text-blue-700 border border-blue-200','Em Preparo':'bg-amber-100 text-amber-700 border border-amber-200','Pronto':'bg-purple-100 text-purple-700 border border-purple-200','Pronto para Entrega':'bg-purple-100 text-purple-700 border border-purple-200','Saiu para Entrega':'bg-orange-100 text-orange-700 border border-orange-200','Entregue':'bg-emerald-100 text-emerald-700 border border-emerald-200','Concluído':'bg-emerald-100 text-emerald-700 border border-emerald-200','Cancelado':'bg-red-100 text-red-700 border border-red-200' };
-const STATUS_TXT: Record<string,string> = { 'Criado':'Recebido','Pedido Recebido':'Recebido','Em Preparo':'Em Preparo','Pronto':'Pronto','Pronto para Entrega':'Pronto','Saiu para Entrega':'A caminho 🛵','Entregue':'Entregue ✓','Concluído':'Concluído','Cancelado':'Cancelado' };
+const STATUS_COR: Record<string,string> = { 'Criado':'bg-blue-100 text-blue-700 border border-blue-200','Pedido Recebido':'bg-blue-100 text-blue-700 border border-blue-200','Em Preparo':'bg-amber-100 text-amber-700 border border-amber-200','Pronto':'bg-purple-100 text-purple-700 border border-purple-200','Pronto para Entrega':'bg-purple-100 text-purple-700 border border-purple-200','Saiu para Entrega':'bg-orange-100 text-orange-700 border border-orange-200','Entregue':'bg-sky-100 text-sky-700 border border-sky-200','Concluído':'bg-sky-100 text-sky-700 border border-sky-200','Cancelado':'bg-red-100 text-red-700 border border-red-200' };
+const STATUS_TXT: Record<string,string> = { 'Criado':'Recebido','Pedido Recebido':'Recebido','Em Preparo':'Em preparo','Pronto':'Pronto','Pronto para Entrega':'Pronto','Saiu para Entrega':'A caminho','Entregue':'Entregue','Concluído':'Concluído','Cancelado':'Cancelado' };
 
 function describeFirstCustomerDiscountConfig(config: Config) {
   const tipo = config.desconto_primeiro_cliente_tipo || 'percentual';
@@ -229,7 +229,7 @@ function ResumoComercialLinhas({
         <span className="font-semibold text-zinc-700">{fmt(resumo.subtotal)}</span>
       </div>
       {tipoAtendimento === 'retirada' ? (
-        <div className="flex justify-between text-sm text-emerald-600">
+        <div className="flex justify-between text-sm text-cyan-700">
           <span className="font-semibold">Atendimento</span>
           <span className="font-bold">Retirar no local</span>
         </div>
@@ -239,13 +239,13 @@ function ResumoComercialLinhas({
           <span className="font-semibold text-zinc-700">{fmt(taxaEntrega)}</span>
         </div>
       ) : (
-        <div className="flex justify-between text-sm text-emerald-600">
+        <div className="flex justify-between text-sm text-cyan-700">
           <span className="font-semibold">Taxa de entrega</span>
           <span className="font-bold">Gratis</span>
         </div>
       )}
       {resumo.desconto_pix > 0 && (
-        <div className="flex justify-between text-sm text-emerald-600">
+        <div className="flex justify-between text-sm text-cyan-700">
           <span className="font-semibold">Desconto Pix{descontoPixPercentual ? ` (${descontoPixPercentual}%)` : ''}</span>
           <span className="font-bold">-{fmt(resumo.desconto_pix)}</span>
         </div>
@@ -262,7 +262,7 @@ function ResumoComercialLinhas({
         </div>
       )}
       {resumo.cupom_aplicado && resumo.desconto_cupom > 0 && (
-        <div className="flex justify-between text-sm text-emerald-600">
+        <div className="flex justify-between text-sm text-cyan-700">
           <span className="font-semibold">Cupom ({resumo.cupom_aplicado.codigo})</span>
           <span className="font-bold">-{fmt(resumo.desconto_cupom)}</span>
         </div>
@@ -274,7 +274,7 @@ function ResumoComercialLinhas({
       )}
       <div className="border-t border-zinc-100 pt-2 flex justify-between font-black text-zinc-900">
         <span>{totalLabel}</span>
-        <span className="text-emerald-600 text-xl">{fmt(Math.max(0, resumo.total))}</span>
+        <span className="text-cyan-700 text-xl">{fmt(Math.max(0, resumo.total))}</span>
       </div>
     </>
   );
@@ -290,7 +290,7 @@ function TelaEscolhaAtendimento({
   onBack?: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       {onBack && (
         <div className="p-4">
           <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full transition-colors">
@@ -301,7 +301,7 @@ function TelaEscolhaAtendimento({
       <div className="flex-1 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-xl space-y-4">
         <div className="text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-600">FlowPDV</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-700">FlowPDV</p>
           <h1 className="mt-3 text-3xl font-black text-zinc-900">{nome || 'Cardápio online'}</h1>
           <p className="mt-2 text-sm text-zinc-500">Escolha como você quer receber seu pedido antes de continuar.</p>
         </div>
@@ -320,9 +320,9 @@ function TelaEscolhaAtendimento({
 
           <button
             onClick={() => onSelect('retirada')}
-            className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            className="rounded-3xl border border-cyan-200 bg-cyan-50 p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
           >
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-600 text-white flex items-center justify-center mb-4">
               <Package size={22} />
             </div>
             <p className="text-lg font-black text-zinc-900">Retirar no local</p>
@@ -652,7 +652,7 @@ export default function DeliveryCardapio() {
   if (loading||authLoad) return (
     <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-10 h-10 border-2 border-zinc-100 border-t-emerald-500 rounded-full animate-spin"/>
+        <div className="w-10 h-10 border-2 border-zinc-100 border-t-cyan-600 rounded-full animate-spin"/>
         <p className="text-zinc-400 text-sm">Carregando cardápio...</p>
       </div>
     </div>
@@ -735,7 +735,7 @@ export default function DeliveryCardapio() {
   if (tela==='checkout') return <TelaCheckout slug={slug} cart={cart} config={config} cliToken={cliToken} cliente={cliente!} tipoAtendimento={tipoAtendimento || 'entrega'} onBack={()=>setTela('cart')} onSuccess={onPedidoOk} />;
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8]">
+    <div className="min-h-screen bg-zinc-50">
       {/* Header */}
       <header className="bg-white border-b border-zinc-100 sticky top-0 z-40 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
@@ -745,21 +745,21 @@ export default function DeliveryCardapio() {
               <span className="flex items-center gap-1 text-xs text-zinc-500"><Clock size={11}/>{config.tempo_preparo||40}–{(config.tempo_preparo||40)+10}min</span>
               {config.taxa_entrega>0
                 ? <span className="flex items-center gap-1 text-xs text-zinc-500"><Bike size={11}/>{fmt(config.taxa_entrega)}</span>
-                : <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold"><Bike size={11}/>Entrega grátis</span>}
-              <span className={`flex items-center gap-1 text-xs font-semibold ${ativo?'text-emerald-600':'text-red-500'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${ativo?'bg-emerald-500 animate-pulse':'bg-red-500'}`}/>
+                : <span className="flex items-center gap-1 text-xs text-cyan-700 font-semibold"><Bike size={11}/>Entrega grátis</span>}
+              <span className={`flex items-center gap-1 text-xs font-semibold ${ativo?'text-cyan-700':'text-red-500'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${ativo?'bg-cyan-500 animate-pulse':'bg-red-500'}`}/>
                 {ativo?'Aberto agora':'Fechado'}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={()=>setTela(cliente?'conta':'identificar')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-bold transition-all ${cliente?'bg-emerald-500 text-white hover:bg-emerald-600':'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}>
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-bold transition-all ${cliente?'bg-cyan-600 text-white hover:bg-cyan-700':'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}>
               <User size={14}/>{cliente?cliente.nome.split(' ')[0]:'Entrar'}
             </button>
             <button onClick={()=>setTela('cart')} className="relative p-2.5 bg-zinc-900 rounded-full text-white hover:bg-zinc-700 transition-all active:scale-95">
               <ShoppingCart size={16}/>
-              {totalItens>0&&<motion.span initial={{scale:0}} animate={{scale:1}} className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full text-[10px] font-black flex items-center justify-center">{totalItens}</motion.span>}
+              {totalItens>0&&<motion.span initial={{scale:0}} animate={{scale:1}} className="absolute -top-1 -right-1 w-5 h-5 bg-cyan-500 rounded-full text-[10px] font-black flex items-center justify-center">{totalItens}</motion.span>}
             </button>
           </div>
         </div>
@@ -774,7 +774,7 @@ export default function DeliveryCardapio() {
 
       {/* Banner cliente */}
       {cliente && (
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
+        <div className="bg-gradient-to-r from-zinc-900 via-zinc-800 to-cyan-700 text-white">
           <div className="max-w-2xl mx-auto px-4 py-2.5 flex items-center justify-between">
             <p className="text-sm font-medium">Olá, {cliente.nome.split(' ')[0]}! 👋 Bem-vindo de volta.</p>
             <button onClick={()=>setTela('conta')} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full font-bold transition-all">Minha conta →</button>
@@ -787,7 +787,7 @@ export default function DeliveryCardapio() {
         <div className="relative">
           <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar no cardápio..."
-            className="w-full pl-11 pr-10 py-3.5 bg-white border border-zinc-200 rounded-2xl text-sm shadow-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50 transition-all"/>
+            className="w-full pl-11 pr-10 py-3.5 bg-white border border-zinc-200 rounded-2xl text-sm shadow-sm focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-50 transition-all"/>
           {search&&<button onClick={()=>setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-zinc-600 rounded-full"><X size={14}/></button>}
         </div>
 
@@ -839,7 +839,7 @@ export default function DeliveryCardapio() {
                     placeholder="(11) 99999-9999"
                     value={mpPhone}
                     onChange={(e) => setMpPhone(e.target.value)}
-                    className="flex-1 min-w-0 px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400"
+                    className="flex-1 min-w-0 px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400"
                   />
                   <button
                     type="button"
@@ -862,7 +862,7 @@ export default function DeliveryCardapio() {
                     key={p.id}
                     type="button"
                     onClick={() => void abrirDetalheMeusPedidos(p.id)}
-                    className="w-full text-left bg-white rounded-2xl border border-zinc-200 p-4 shadow-sm hover:border-emerald-300 transition-colors"
+                    className="w-full text-left bg-white rounded-2xl border border-zinc-200 p-4 shadow-sm hover:border-cyan-300 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -877,7 +877,7 @@ export default function DeliveryCardapio() {
                         {labelStatusPedidoCliente(p.status)}
                       </span>
                     </div>
-                    <p className="text-sm font-black text-emerald-600 mt-2">{fmt(p.total)}</p>
+                    <p className="text-sm font-black text-cyan-700 mt-2">{fmt(p.total)}</p>
                   </button>
                 ))}
               </div>
@@ -912,12 +912,12 @@ export default function DeliveryCardapio() {
                     : calcPrecoMinimo(p);
                   const temPrecoVariavel = precoMinimo > p.price || temVariacoes;
                   return (
-                    <div key={p.id} className={`bg-white rounded-2xl overflow-hidden shadow-sm border-2 transition-all ${qty>0?'border-emerald-300':'border-transparent hover:border-zinc-100 hover:shadow-md'}`}>
+                    <div key={p.id} className={`bg-white rounded-2xl overflow-hidden shadow-sm border-2 transition-all ${qty>0?'border-cyan-300 shadow-cyan-100/40':'border-transparent hover:border-zinc-100 hover:shadow-md'}`}>
                       <div className="flex items-stretch">
                         {p.photo_url && (
                           <div className="w-[90px] relative flex-shrink-0 overflow-hidden cursor-pointer" onClick={()=>handleAddProduto(p)}>
                             <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/>
-                            {qty>0&&<div className="absolute bottom-1.5 left-1.5 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-black shadow">{qty}</div>}
+                            {qty>0&&<div className="absolute bottom-1.5 left-1.5 w-6 h-6 bg-cyan-600 rounded-full flex items-center justify-center text-white text-xs font-black shadow">{qty}</div>}
                           </div>
                         )}
                         <div className="flex-1 p-3.5 flex flex-col justify-between min-w-0">
@@ -937,15 +937,15 @@ export default function DeliveryCardapio() {
                               {temVariacoes ? (
                                 <div>
                                   <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wide">A partir de</span>
-                                  <p className="font-black text-emerald-600 text-base leading-tight mt-0.5">{fmt(precoMinimo)}</p>
+                                  <p className="font-black text-cyan-700 text-base leading-tight mt-0.5">{fmt(precoMinimo)}</p>
                                 </div>
                               ) : temPrecoVariavel ? (
                                 <div>
                                   <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wide">A partir de</span>
-                                  <p className="font-black text-emerald-600 text-base leading-tight mt-0.5">{fmt(precoMinimo)}</p>
+                                  <p className="font-black text-cyan-700 text-base leading-tight mt-0.5">{fmt(precoMinimo)}</p>
                                 </div>
                               ) : (
-                                <p className="font-black text-emerald-600 text-base leading-tight">{fmt(p.price)}</p>
+                                <p className="font-black text-cyan-700 text-base leading-tight">{fmt(p.price)}</p>
                               )}
                             </div>
                             {/* Se tem variações ou opções: botão "Adicionar" abre modal */}
@@ -963,7 +963,7 @@ export default function DeliveryCardapio() {
                               <div className="flex items-center gap-1.5 bg-zinc-100 rounded-full p-0.5">
                                 <button onClick={()=>removeCart(`${p.id}_`)} className="w-7 h-7 bg-white rounded-full shadow-sm flex items-center justify-center text-zinc-700 hover:text-red-500 transition-colors active:scale-95"><Minus size={11}/></button>
                                 <span className="w-5 text-center font-black text-sm text-zinc-900">{qty}</span>
-                                <button onClick={()=>handleAddProduto(p)} className="w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center text-white hover:bg-emerald-600 transition-colors active:scale-95"><Plus size={11}/></button>
+                                <button onClick={()=>handleAddProduto(p)} className="w-7 h-7 bg-cyan-600 rounded-full flex items-center justify-center text-white hover:bg-cyan-700 transition-colors active:scale-95"><Plus size={11}/></button>
                               </div>
                             )}
                           </div>
@@ -1013,7 +1013,7 @@ export default function DeliveryCardapio() {
               </div>
               <div className="p-5 border-t border-zinc-100 flex justify-between items-center bg-zinc-50">
                 <span className="font-black text-zinc-900">Total</span>
-                <span className="text-lg font-black text-emerald-600">{fmt(mpDetalhe.total)}</span>
+                <span className="text-lg font-black text-cyan-700">{fmt(mpDetalhe.total)}</span>
               </div>
             </motion.div>
           </motion.div>
@@ -1029,7 +1029,7 @@ export default function DeliveryCardapio() {
                 <ShoppingCart size={16}/>
                 <span className="bg-white/20 px-2.5 py-1 rounded-xl text-sm font-black">{totalItens} {totalItens===1?'item':'itens'}</span>
               </span>
-              <span className="text-emerald-400">{fmt(subtotal)}</span>
+              <span className="text-cyan-300">{fmt(subtotal)}</span>
               <span className="font-bold">Ver pedido</span>
             </button>
           </motion.div>
@@ -1231,7 +1231,7 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
                   <div className="flex items-center gap-2 shrink-0">
                     {g.obrigatorio && (
                       <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
-                        completo ? 'bg-emerald-500 text-white' : 'bg-red-100 text-red-700'
+                        completo ? 'bg-cyan-600 text-white' : 'bg-red-100 text-red-700'
                       }`}>
                         {completo ? '✓ OK' : 'OBRIGATÓRIO'}
                       </span>
@@ -1253,7 +1253,7 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
                     return (
                       <div key={item.id}
                         className={`pl-5 pr-4 py-3.5 flex items-center gap-4 transition-colors cursor-pointer ${
-                          selecionado ? 'bg-emerald-50' : 'hover:bg-zinc-50'
+                          selecionado ? 'bg-cyan-50' : 'hover:bg-zinc-50'
                         }`}
                         onClick={()=>{
                           if (g.tipo==='radio') toggleRadio(g.id, item.id);
@@ -1262,10 +1262,10 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
                       >
                         {/* Conteúdo do item */}
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-semibold leading-snug ${selecionado?'text-emerald-800':'text-zinc-800'}`}>
+                          <p className={`text-sm font-semibold leading-snug ${selecionado?'text-cyan-950':'text-zinc-800'}`}>
                             {item.nome}
                           </p>
-                          <p className={`text-xs mt-0.5 font-bold ${item.preco_adicional>0?'text-emerald-600':'text-zinc-400'}`}>
+                          <p className={`text-xs mt-0.5 font-bold ${item.preco_adicional>0?'text-cyan-700':'text-zinc-400'}`}>
                             {g.modo_preco === 'final'
                               ? item.preco_adicional > 0 ? fmt(item.preco_adicional) : 'Incluso'
                               : item.preco_adicional > 0 ? `+${fmt(item.preco_adicional)}` : 'Incluso'
@@ -1276,14 +1276,14 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
                         {/* Controle por tipo */}
                         {g.tipo === 'radio' && (
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                            selecionado ? 'border-emerald-500 bg-emerald-500' : 'border-zinc-300'
+                            selecionado ? 'border-cyan-600 bg-cyan-600' : 'border-zinc-300'
                           }`}>
                             {selecionado && <div className="w-2 h-2 rounded-full bg-white"/>}
                           </div>
                         )}
                         {g.tipo === 'checkbox' && (
                           <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${
-                            selecionado ? 'border-emerald-500 bg-emerald-500' : 'border-zinc-300'
+                            selecionado ? 'border-cyan-600 bg-cyan-600' : 'border-zinc-300'
                           }`}>
                             {selecionado && <span className="text-white text-[10px] font-black leading-none">✓</span>}
                           </div>
@@ -1315,7 +1315,7 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
             <p className="text-sm font-bold text-zinc-700 mb-2">Alguma observação?</p>
             <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2}
               placeholder="Ex: Sem cebola, ponto bem passado..."
-              className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:border-emerald-400"/>
+              className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm resize-none focus:outline-none focus:border-cyan-400"/>
           </div>
         </div>
 
@@ -1341,7 +1341,7 @@ function ModalOpcoes({ produto, onClose, onAdicionar }: {
             </div>
             {/* Botão adicionar */}
             <button onClick={validarEAdicionar}
-              className="flex-1 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black transition-all active:scale-[0.98] flex items-center justify-between px-4">
+              className="flex-1 py-3.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl font-black transition-all active:scale-[0.98] flex items-center justify-between px-4">
               <span>Adicionar {qty > 1 ? `(${qty}x)` : ''}</span>
               <span>{fmt(precoTotal)}</span>
             </button>
@@ -1459,7 +1459,7 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddS
       });
   }, [slug, cliToken, cart, tipoAtendimento]);
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
         <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <div><p className="text-lg font-black text-zinc-900">Seu Carrinho</p><p className="text-xs text-zinc-400">{cart.reduce((a,i)=>a+i.qty,0)} itens</p></div>
@@ -1472,13 +1472,13 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddS
             <div className="flex-1 min-w-0">
               <p className="font-bold text-zinc-900 text-sm">{item.name}</p>
               {item.obs_opcoes && <p className="text-[11px] text-zinc-500 mt-0.5">{item.obs_opcoes}</p>}
-              <p className="text-emerald-600 font-black text-base mt-1">{fmt(item.preco_final*item.qty)}</p>
+              <p className="text-cyan-700 font-black text-base mt-1">{fmt(item.preco_final*item.qty)}</p>
               {item.preco_final!==item.price && <p className="text-xs text-zinc-400">{fmt(item.preco_final)} un.</p>}
             </div>
             <div className="flex items-center gap-1.5 bg-zinc-100 rounded-full p-0.5 shrink-0">
               <button onClick={()=>onRemove(item.cart_key)} className="w-8 h-8 bg-white rounded-full shadow-sm flex items-center justify-center text-zinc-700 hover:text-red-500 transition-colors"><Minus size={13}/></button>
               <span className="w-6 text-center font-black text-sm">{item.qty}</span>
-              <button onClick={()=>onAdd({...item,qty:1})} className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white hover:bg-emerald-600 transition-colors"><Plus size={13}/></button>
+              <button onClick={()=>onAdd({...item,qty:1})} className="w-8 h-8 bg-cyan-600 rounded-full flex items-center justify-center text-white hover:bg-cyan-700 transition-colors"><Plus size={13}/></button>
             </div>
           </div>
         ))}
@@ -1507,7 +1507,7 @@ function TelaCart({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddS
                       {item.category && (
                         <p className="text-[11px] text-zinc-500 truncate">{item.category}</p>
                       )}
-                      <p className="text-xs font-black text-emerald-600 mt-0.5">{fmt(Number(item.price || 0))}</p>
+                      <p className="text-xs font-black text-cyan-700 mt-0.5">{fmt(Number(item.price || 0))}</p>
                     </div>
                   </div>
                   <button
@@ -1645,7 +1645,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const bairroResumo = (resumoAtual.bairro_entrega || bairroAtual || '').trim();
   const tot = resumoAtual.total;
   const descontoPixPercentual = Number(config.desconto_pix || 0);
-  const inp = "w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50 transition-all";
+  const inp = "w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-50 transition-all";
 
   useEffect(()=>{
     if (!cliToken||!slug) return;
@@ -1787,7 +1787,7 @@ const finalizar = async () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
         <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <div><p className="text-lg font-black text-zinc-900">Finalizar Pedido</p><p className="text-xs text-zinc-400">{fmt(sub)}</p></div>
@@ -1807,20 +1807,20 @@ const finalizar = async () => {
           ))}
         </div>
         {/* Cliente */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-          <div className="w-9 h-9 bg-emerald-500 rounded-full flex items-center justify-center text-white font-black text-sm shrink-0">{cliente.nome[0]}</div>
-          <div><p className="font-bold text-emerald-900 text-sm">{cliente.nome}</p><p className="text-xs text-emerald-600">{cliente.telefone}</p></div>
+        <div className="flex items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-600 text-sm font-black text-white">{cliente.nome[0]}</div>
+          <div><p className="text-sm font-bold text-sky-950">{cliente.nome}</p><p className="text-xs text-sky-700">{cliente.telefone}</p></div>
         </div>
 
         {/* Endereço */}
         {tipoAtendimento === 'retirada' && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <p className="font-black text-zinc-900 mb-2 flex items-center gap-2"><Package size={15} className="text-emerald-500"/>Retirar no local</p>
+            <p className="font-black text-zinc-900 mb-2 flex items-center gap-2"><Package size={15} className="text-cyan-600"/>Retirar no local</p>
             <p className="text-sm text-zinc-500">Nao vamos pedir endereco neste pedido. Assim que ficar pronto, a retirada acontece diretamente no estabelecimento.</p>
           </div>
         )}
         <div className={`bg-white rounded-2xl p-4 shadow-sm ${tipoAtendimento === 'retirada' ? 'hidden' : ''}`}> 
-          <p className="font-black text-zinc-900 mb-3 flex items-center gap-2"><MapPin size={15} className="text-emerald-500"/>Endereço de entrega</p>
+          <p className="font-black text-zinc-900 mb-3 flex items-center gap-2"><MapPin size={15} className="text-cyan-600"/>Endereço de entrega</p>
           {temZonas && (
             <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[12px] text-blue-700">
               Nesta fase a taxa e calculada por bairro com valor fixo. Se o bairro nao casar com um cadastro, usamos a taxa padrao de {fmt(config.taxa_entrega||0)}.
@@ -1830,26 +1830,26 @@ const finalizar = async () => {
             <div className="space-y-2 mb-2">
               {enderecos.map(e=>(
                 <button key={e.id} onClick={()=>setEndSel(e.id)}
-                  className={`w-full text-left p-3 rounded-xl border-2 transition-all ${endSel===e.id?'border-emerald-400 bg-emerald-50':'border-zinc-100 bg-zinc-50 hover:border-zinc-200'}`}>
-                  <p className={`text-sm font-bold ${endSel===e.id?'text-emerald-700':'text-zinc-700'}`}>
+                  className={`w-full text-left p-3 rounded-xl border-2 transition-all ${endSel===e.id?'border-cyan-400 bg-cyan-50':'border-zinc-100 bg-zinc-50 hover:border-zinc-200'}`}>
+                  <p className={`text-sm font-bold ${endSel===e.id?'text-cyan-800':'text-zinc-700'}`}>
                     {e.label}
-                    {e.principal===1&&<span className="ml-1 text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full">Principal</span>}
+                    {e.principal===1&&<span className="ml-1 text-[10px] bg-cyan-100 text-cyan-700 px-1.5 py-0.5 rounded-full">Principal</span>}
                   </p>
                   <p className="text-xs text-zinc-500 mt-0.5">{e.logradouro}{e.numero?', '+e.numero:''}{e.bairro?' • '+e.bairro:''}</p>
                   {/* Mostra a taxa detectada para este endereço */}
                   {temZonas && e.bairro && (() => {
                     const z = detectarZona(e.bairro);
                     return z ? (
-                      <p className={`text-[11px] font-bold mt-1 ${z.taxa===0?'text-emerald-600':'text-zinc-500'}`}>
-                        {z.taxa===0 ? '🎉 Entrega grátis neste bairro' : `🛵 Taxa de entrega: ${fmt(z.taxa)}`}
+                      <p className={`text-[11px] font-bold mt-1 ${z.taxa===0?'text-cyan-700':'text-zinc-500'}`}>
+                        {z.taxa===0 ? 'Entrega grátis neste bairro' : `Taxa de entrega: ${fmt(z.taxa)}`}
                       </p>
                     ) : null;
                   })()}
                 </button>
               ))}
               <button onClick={()=>setEndSel('novo')}
-                className={`w-full text-left p-3 rounded-xl border-2 transition-all ${endSel==='novo'?'border-emerald-400 bg-emerald-50':'border-dashed border-zinc-200'}`}>
-                <p className="text-sm font-bold text-emerald-600">+ Usar outro endereço</p>
+                className={`w-full text-left p-3 rounded-xl border-2 transition-all ${endSel==='novo'?'border-cyan-400 bg-cyan-50':'border-dashed border-zinc-200'}`}>
+                <p className="text-sm font-bold text-cyan-700">+ Usar outro endereço</p>
               </button>
             </div>
           )}
@@ -1870,7 +1870,7 @@ const finalizar = async () => {
           {temZonas && zonaDetectada && (
             <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold ${
               zonaDetectada.taxa === 0
-                ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                ? 'bg-cyan-50 border border-cyan-200 text-cyan-700'
                 : 'bg-zinc-50 border border-zinc-200 text-zinc-600'
             }`}>
               <Bike size={14}/>
@@ -1894,27 +1894,27 @@ const finalizar = async () => {
         <div className="space-y-2">
           {/* PIX — destaque principal */}
           <button onClick={()=>setPag('pix')}
-            className={`w-full rounded-2xl border-2 transition-all overflow-hidden ${pag==='pix'?'border-emerald-400':'border-zinc-200 hover:border-zinc-300'}`}>
+            className={`w-full rounded-2xl border-2 transition-all overflow-hidden ${pag==='pix'?'border-cyan-400':'border-zinc-200 hover:border-zinc-300'}`}>
             {/* Banner de desconto se configurado */}
             {descontoPix > 0 && (
-              <div className="bg-emerald-500 px-4 py-1.5 flex items-center justify-between">
-                <span className="text-white text-xs font-black">🎉 Pague com Pix e economize {descontoPixPercentual}%</span>
+              <div className="bg-cyan-600 px-4 py-1.5 flex items-center justify-between">
+                <span className="text-white text-xs font-black">Desconto Pix de {descontoPixPercentual}%</span>
                 <span className="text-white text-xs font-black bg-white/20 px-2 py-0.5 rounded-full">-{fmt(descontoPix)}</span>
               </div>
             )}
-            <div className={`p-4 flex items-center justify-between ${pag==='pix'?'bg-emerald-50':'bg-white'}`}>
+            <div className={`p-4 flex items-center justify-between ${pag==='pix'?'bg-cyan-50':'bg-white'}`}>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pag==='pix'?'bg-emerald-500':'bg-zinc-100'}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${pag==='pix'?'bg-cyan-600':'bg-zinc-100'}`}>
                   <Smartphone size={18} className={pag==='pix'?'text-white':'text-zinc-500'}/>
                 </div>
                 <div className="text-left">
-                  <p className={`font-black text-sm ${pag==='pix'?'text-emerald-900':'text-zinc-800'}`}>Pix</p>
-                  <p className={`text-[11px] ${pag==='pix'?'text-emerald-600':'text-zinc-400'}`}>
+                  <p className={`font-black text-sm ${pag==='pix'?'text-cyan-950':'text-zinc-800'}`}>Pix</p>
+                  <p className={`text-[11px] ${pag==='pix'?'text-cyan-700':'text-zinc-400'}`}>
                     {descontoPixPercentual > 0 ? `${descontoPixPercentual}% de desconto • Pague agora` : 'Pague agora via Pix Copia e Cola'}
                   </p>
                 </div>
               </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${pag==='pix'?'border-emerald-500 bg-emerald-500':'border-zinc-300'}`}>
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${pag==='pix'?'border-cyan-600 bg-cyan-600':'border-zinc-300'}`}>
                 {pag==='pix'&&<div className="w-2 h-2 rounded-full bg-white"/>}
               </div>
             </div>
@@ -1967,7 +1967,7 @@ const finalizar = async () => {
                       />
                     </div>
                     {troco && parseFloat(troco.replace(',','.')) > tot && (
-                      <p className="text-xs text-emerald-600 font-semibold mt-1.5">
+                      <p className="text-xs text-cyan-700 font-semibold mt-1.5">
                         Troco: {fmt(parseFloat(troco.replace(',','.'))-tot)}
                       </p>
                     )}
@@ -2001,16 +2001,16 @@ const finalizar = async () => {
             🏷️ Cupom de desconto <span className="text-zinc-400 font-normal text-xs">(opcional)</span>
           </p>
           {cupomValido ? (
-            <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-              <CheckCircle2 size={16} className="text-emerald-600 shrink-0"/>
+            <div className="flex items-center gap-3 p-3 bg-cyan-50 border border-cyan-200 rounded-xl">
+              <CheckCircle2 size={16} className="text-cyan-700 shrink-0"/>
               <div className="flex-1">
-                <p className="text-sm font-black text-emerald-700">{cupomValido.cupom.codigo}</p>
-                <p className="text-xs text-emerald-600">
+                <p className="text-sm font-black text-cyan-800">{cupomValido.cupom.codigo}</p>
+                <p className="text-xs text-cyan-700">
                   {cupomValido.cupom.tipo==='frete_gratis' ? 'Frete grátis!' : `-${fmt(cupomValido.desconto)} de desconto`}
                 </p>
               </div>
               <button onClick={()=>{ setCupomValido(null); setCupomInput(''); setCupomErro(''); atualizarResumo(''); }}
-                className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-600">
+                className="p-1 hover:bg-cyan-100 rounded-lg text-cyan-700">
                 <X size={14}/>
               </button>
             </div>
@@ -2019,7 +2019,7 @@ const finalizar = async () => {
               <input value={cupomInput} onChange={e=>setCupomInput(e.target.value.toUpperCase())}
                 onKeyDown={e=>e.key==='Enter'&&validarCupom()}
                 placeholder="CÓDIGO DO CUPOM"
-                className="flex-1 px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:border-emerald-400 uppercase"/>
+                className="flex-1 px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:border-cyan-400 uppercase"/>
               <button onClick={validarCupom} disabled={validandoCupom||!cupomInput.trim()}
                 className="px-4 py-3 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 disabled:opacity-50 transition-all whitespace-nowrap">
                 {validandoCupom ? '...' : 'Aplicar'}
@@ -2190,8 +2190,8 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
   const waMsgOperacao = isRetirada ? null : waMsgEntrega;
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8]">
-      <div className={`${pixPago||!isPix?'bg-emerald-500':'bg-amber-500'} px-4 pt-12 pb-8 text-center`}>
+    <div className="min-h-screen bg-zinc-50">
+      <div className={`${pixPago||!isPix?'bg-zinc-900':'bg-amber-500'} px-4 pt-12 pb-8 text-center`}>
         <motion.div initial={{scale:0}} animate={{scale:1}} transition={{delay:0.1,type:'spring'}}
           className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
           {pixPago||!isPix ? <CheckCircle2 size={36} className="text-white"/> : <Smartphone size={36} className="text-white"/>}
@@ -2258,7 +2258,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Valor</span>
-                  <span className="font-black text-emerald-600">{fmt(pedidoOk.total)}</span>
+                  <span className="font-black text-cyan-700">{fmt(pedidoOk.total)}</span>
                 </div>
                 {pxConf.pix_nome && (
                   <div className="flex justify-between text-sm">
@@ -2268,14 +2268,14 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
                 )}
               </div>
               <button onClick={copiar}
-                className={`w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${copiado?'bg-emerald-500 text-white':'bg-zinc-900 hover:bg-zinc-800 text-white'}`}>
+                className={`w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${copiado?'bg-cyan-600 text-white':'bg-zinc-900 hover:bg-zinc-800 text-white'}`}>
                 {copiado ? '✓ Código copiado!' : '📋 Copiar código Pix'}
               </button>
             </div>
 
             <button onClick={confirmarPagamento} disabled={confirmando}
               className={`w-full py-4 rounded-2xl font-black text-base transition-all flex items-center justify-center gap-2 shadow-lg ${
-                copiado ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-200' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
+                copiado ? 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-cyan-200' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
               }`}>
               {confirmando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <CheckCircle2 size={20}/>}
               {confirmando ? 'Confirmando...' : 'Já fiz o pagamento ✓'}
@@ -2294,9 +2294,9 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
         {/* ── PIX CONFIRMADO ── */}
         {isPix && pixPago && (
           <div className="space-y-3">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 text-center">
-              <p className="font-black text-emerald-800 text-lg">Pagamento confirmado! ✓</p>
-              <p className="text-emerald-600 text-sm mt-1">Seu pedido foi registrado e está sendo preparado</p>
+            <div className="bg-cyan-50 border border-cyan-200 rounded-2xl p-5 text-center">
+              <p className="font-black text-cyan-900 text-lg">Pagamento confirmado! ✓</p>
+              <p className="text-cyan-700 text-sm mt-1">Seu pedido foi registrado e está sendo preparado</p>
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
               <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0"><Clock size={20} className="text-amber-500"/></div>
@@ -2323,7 +2323,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
                 {pedidoOk.pagamento_tipo==='dinheiro' ? <Banknote size={20} className="text-zinc-500 shrink-0"/> : <CreditCard size={20} className="text-zinc-500 shrink-0"/>}
                 <div>
                   <p className="text-xs text-zinc-400">{isRetirada ? 'Pagamento na retirada' : 'Pagamento na entrega'}</p>
-                  <p className="font-bold text-zinc-800">{pedidoOk.pagamento_tipo==='dinheiro'?'Dinheiro':'Cartão'} — <span className="text-emerald-600">{fmt(pedidoOk.total)}</span></p>
+                  <p className="font-bold text-zinc-800">{pedidoOk.pagamento_tipo==='dinheiro'?'Dinheiro':'Cartão'} — <span className="text-cyan-700">{fmt(pedidoOk.total)}</span></p>
                 </div>
               </div>
             </div>
@@ -2366,7 +2366,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
                 </div>
                 <div className="flex justify-between font-black text-zinc-900 text-base pt-1 border-t border-zinc-100">
                   <span>Total</span>
-                  <span className="text-emerald-600">{fmt(pedidoOk.total)}</span>
+                  <span className="text-cyan-700">{fmt(pedidoOk.total)}</span>
                 </div>
               </div>
             </div>
@@ -2393,7 +2393,7 @@ function TelaIdentificar({ slug, tipoAtendimento, onSuccess, onBack }: { slug:st
   const [load, setLoad] = useState(false);
   const [erro, setErro] = useState('');
   const [telNorm, setTelNorm] = useState('');
-  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50 transition-all";
+  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-50 transition-all";
 
   const verificarTel=async()=>{
     setErro('');setLoad(true);
@@ -2432,7 +2432,7 @@ function TelaIdentificar({ slug, tipoAtendimento, onSuccess, onBack }: { slug:st
         {etapa==='tel'?(
           <>
             <div className="text-center">
-              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-200"><Smartphone size={28} className="text-white"/></div>
+              <div className="w-16 h-16 bg-cyan-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-cyan-200"><Smartphone size={28} className="text-white"/></div>
               <h3 className="text-xl font-black text-zinc-900">Qual é o seu número?</h3>
               <p className="text-sm text-zinc-400 mt-1">Para identificar sua conta e enviar atualizações</p>
             </div>
@@ -2448,24 +2448,24 @@ function TelaIdentificar({ slug, tipoAtendimento, onSuccess, onBack }: { slug:st
           </>
         ):(
           <>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center"><Smartphone size={14} className="text-white"/></div>
-              <div><p className="text-xs text-zinc-500">Número</p><p className="font-black text-emerald-700">{telNorm}</p></div>
+            <div className="bg-cyan-50 border border-cyan-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 bg-cyan-600 rounded-full flex items-center justify-center"><Smartphone size={14} className="text-white"/></div>
+              <div><p className="text-xs text-zinc-500">Número</p><p className="font-black text-cyan-700">{telNorm}</p></div>
             </div>
             {/* Dados pessoais */}
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-              <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><User size={14} className="text-emerald-500"/>Dados pessoais</p>
+              <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><User size={14} className="text-cyan-600"/>Dados pessoais</p>
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nome completo *</label><input value={nome} onChange={e=>setNome(e.target.value)} placeholder="João Silva" className={inp}/></div>
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">E-mail (opcional)</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="joao@email.com" type="email" className={inp}/></div>
             </div>
             {/* Endereço */}
             {tipoAtendimento === 'retirada' && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-sm text-emerald-700">
+              <div className="bg-cyan-50 border border-cyan-200 rounded-2xl px-4 py-3 text-sm text-cyan-700">
                 Retirada no local selecionada. O cadastro segue sem pedir endereco.
               </div>
             )}
             <div className={`bg-white rounded-2xl p-4 shadow-sm space-y-3 ${tipoAtendimento === 'retirada' ? 'hidden' : ''}`}> 
-              <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><MapPin size={14} className="text-emerald-500"/>Endereço de entrega *</p>
+              <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><MapPin size={14} className="text-cyan-600"/>Endereço de entrega *</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2"><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Rua / Avenida *</label><input value={endLogradouro} onChange={e=>setEndLogradouro(e.target.value)} placeholder="Rua das Flores" className={inp}/></div>
                 <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nº</label><input value={endNumero} onChange={e=>setEndNumero(e.target.value)} placeholder="123" className={inp}/></div>
@@ -2487,15 +2487,15 @@ function TelaIdentificar({ slug, tipoAtendimento, onSuccess, onBack }: { slug:st
 function TelaConta({ slug, token, cliente, onLogout, onBack, onHistorico, onEnderecos, onEditarPerfil }: { slug:string;token:string|null;cliente:ClienteAuth|null;onLogout:()=>void;onBack:()=>void;onHistorico:()=>void;onEnderecos:()=>void;onEditarPerfil:()=>void }) {
   if(!cliente) return <div className="min-h-screen bg-white flex items-center justify-center"><button onClick={onBack} className="px-4 py-2 bg-zinc-100 rounded-xl text-sm">Voltar</button></div>;
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
         <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <p className="text-lg font-black text-zinc-900">Minha Conta</p>
       </header>
       <div className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-3">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-6 text-white flex items-center gap-4 shadow-lg shadow-emerald-200">
+        <div className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-cyan-700 rounded-3xl p-6 text-white flex items-center gap-4 shadow-lg shadow-cyan-200">
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl font-black">{cliente.nome[0].toUpperCase()}</div>
-          <div className="flex-1 min-w-0"><p className="font-black text-xl truncate">{cliente.nome}</p><p className="text-emerald-100 text-sm">{cliente.telefone}</p>{cliente.email&&<p className="text-emerald-200 text-xs mt-0.5">{cliente.email}</p>}</div>
+          <div className="flex-1 min-w-0"><p className="font-black text-xl truncate">{cliente.nome}</p><p className="text-cyan-100 text-sm">{cliente.telefone}</p>{cliente.email&&<p className="text-cyan-200 text-xs mt-0.5">{cliente.email}</p>}</div>
           <button onClick={onEditarPerfil} className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"><Pencil size={15}/></button>
         </div>
         {[
@@ -2522,7 +2522,7 @@ function TelaEditarPerfil({ slug, token, cliente, onSaved, onBack }: { slug:stri
   const [email, setEmail]=useState(cliente?.email||'');
   const [load, setLoad]=useState(false);
   const [erro, setErro]=useState('');
-  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 transition-all";
+  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 transition-all";
   const salvar=async()=>{
     if(!nome.trim()){setErro('Nome obrigatório');return;}
     setLoad(true);
@@ -2530,7 +2530,7 @@ function TelaEditarPerfil({ slug, token, cliente, onSaved, onBack }: { slug:stri
     catch{setErro('Erro de conexão');}finally{setLoad(false);}
   };
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
         <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <p className="text-lg font-black text-zinc-900">Editar Perfil</p>
@@ -2583,7 +2583,7 @@ function TelaHistorico({ slug, token, onBack, onRepetir, categorias }: { slug:st
           <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2"><span className="font-mono font-black text-zinc-800">#{p.order_number}</span><span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${STATUS_COR[p.status]||'bg-zinc-100 text-zinc-500'}`}>{STATUS_TXT[p.status]||p.status}</span></div>
             <p className="text-sm text-zinc-500 line-clamp-2 mb-2">{p.resumo_itens}</p>
-            <div className="flex items-center justify-between"><span className="text-xs text-zinc-400">{fd(p.created_at)}</span><span className="font-black text-emerald-600">{fmt(p.total_amount)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-xs text-zinc-400">{fd(p.created_at)}</span><span className="font-black text-cyan-700">{fmt(p.total_amount)}</span></div>
             {p.status==='Entregue'&&Array.isArray(p.itens)&&p.itens.length>0&&<button onClick={()=>repetir(p)} className="w-full mt-3 py-2.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 rounded-xl text-xs font-bold transition-all">🔄 Repetir pedido</button>}
           </div>
         ))}
@@ -2599,7 +2599,7 @@ function TelaEnderecos({ slug, token, onBack, onNovo }: { slug:string;token:stri
   useEffect(()=>{load_();},[load_]);
   const del=async(id:number)=>{if(!confirm('Remover?'))return;await fetch(`/public/delivery/${slug}/cliente/enderecos/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});load_();};
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3"><button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button><p className="text-lg font-black text-zinc-900">Meus Endereços</p></div>
         <button onClick={onNovo} className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 text-white rounded-full text-sm font-bold hover:bg-zinc-800 transition-all"><Plus size={14}/>Adicionar</button>
@@ -2611,7 +2611,7 @@ function TelaEnderecos({ slug, token, onBack, onNovo }: { slug:string;token:stri
           <div key={e.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-start gap-3">
             <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center shrink-0"><Home size={18} className="text-orange-500"/></div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-zinc-900 flex items-center gap-2">{e.label}{e.principal===1&&<span className="text-[10px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-bold">Principal</span>}</p>
+              <p className="font-bold text-zinc-900 flex items-center gap-2">{e.label}{e.principal===1&&<span className="text-[10px] bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full font-bold">Principal</span>}</p>
               <p className="text-sm text-zinc-500 mt-0.5">{e.logradouro}{e.numero?', '+e.numero:''}{e.complemento?' — '+e.complemento:''}</p>
               {e.bairro&&<p className="text-xs text-zinc-400">{e.bairro}</p>}
               {e.referencia&&<p className="text-xs text-zinc-400 italic">Ref: {e.referencia}</p>}
@@ -2628,7 +2628,7 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
   const [form, setForm]=useState({label:'Casa',logradouro:'',numero:'',complemento:'',bairro:'',referencia:'',principal:false});
   const [saving, setSaving]=useState(false);
   const [erro, setErro]=useState('');
-  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-emerald-400 transition-all";
+  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 transition-all";
   const set=(k:string)=>(e:React.ChangeEvent<HTMLInputElement>)=>setForm(f=>({...f,[k]:e.target.value}));
   const salvar=async()=>{
     if(!form.logradouro.trim()){setErro('Informe o logradouro');return;}
@@ -2637,21 +2637,21 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
     catch{setErro('Erro de conexão');}finally{setSaving(false);}
   };
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
+    <div className="min-h-screen bg-zinc-50 flex flex-col">
       <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
         <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <p className="text-lg font-black text-zinc-900">Novo Endereço</p>
       </header>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full pb-8">
         <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2">Identificação</label>
-        <div className="flex gap-2 flex-wrap">{['Casa','Trabalho','Familiar','Outro'].map(l=><button key={l} onClick={()=>setForm(f=>({...f,label:l}))} className={`px-4 py-2 rounded-full text-sm font-bold border-2 transition-all ${form.label===l?'border-emerald-400 bg-emerald-50 text-emerald-700':'border-zinc-200 bg-white text-zinc-500'}`}>{l}</button>)}</div></div>
+        <div className="flex gap-2 flex-wrap">{['Casa','Trabalho','Familiar','Outro'].map(l=><button key={l} onClick={()=>setForm(f=>({...f,label:l}))} className={`px-4 py-2 rounded-full text-sm font-bold border-2 transition-all ${form.label===l?'border-cyan-400 bg-cyan-50 text-cyan-700':'border-zinc-200 bg-white text-zinc-500'}`}>{l}</button>)}</div></div>
         <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
           {[{k:'logradouro',l:'Rua / Avenida *',p:'Rua das Flores'},{k:'numero',l:'Número',p:'123'},{k:'complemento',l:'Complemento',p:'Apto 12'},{k:'bairro',l:'Bairro',p:'Centro'},{k:'referencia',l:'Referência',p:'Próximo ao mercado...'}].map(f=>(
             <div key={f.k}><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">{f.l}</label><input value={(form as any)[f.k]} onChange={set(f.k)} placeholder={f.p} className={inp}/></div>
           ))}
         </div>
         <label className="flex items-center gap-3 cursor-pointer bg-white rounded-2xl p-4 shadow-sm">
-          <div onClick={()=>setForm(f=>({...f,principal:!f.principal}))} className={`w-12 h-6 rounded-full relative transition-all ${form.principal?'bg-emerald-500':'bg-zinc-300'}`}>
+          <div onClick={()=>setForm(f=>({...f,principal:!f.principal}))} className={`w-12 h-6 rounded-full relative transition-all ${form.principal?'bg-cyan-600':'bg-zinc-300'}`}>
             <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow transition-all ${form.principal?'left-6':'left-0.5'}`}/>
           </div>
           <span className="text-sm font-semibold text-zinc-700">Definir como principal</span>

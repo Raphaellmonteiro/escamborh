@@ -5,14 +5,17 @@ import fs from 'fs';
 import path from 'path';
 import { pool, q1, qAll, qRun } from '../db';
 import { uploadLogo, checkMagicBytes } from '../middleware';
+import { getCompletePlanFeatures } from '../config/planFeatures';
+import { getTenantPlanContext } from '../services/tenantPlan';
 
 export function createSettingsRouter() {
   const router = Router();
 
   const profileHandler = async (req: Request, res: any) => {
     try {
-      const cliente = await q1('SELECT nome_estabelecimento, senha_admin, senha_caixa, segmento, taxa_debito, taxa_credito, taxa_pix FROM clientes WHERE id=?', [req.tenantId]);
+      const cliente = await q1('SELECT nome_estabelecimento, senha_admin, senha_caixa, segmento, taxa_debito, taxa_credito, taxa_pix, vencimento FROM clientes WHERE id=?', [req.tenantId]);
       const usuario = await q1('SELECT cargo, permissoes, nome FROM usuarios WHERE username=?', [(req as any).user?.username || '']);
+      const planContext = await getTenantPlanContext(req.tenantId || 0);
       const cargo      = (req as any).userCargo      || usuario?.cargo      || 'dono';
       const permissoes = (req as any).userPermissoes || (usuario?.permissoes ? JSON.parse(usuario.permissoes) : null);
       const nomeUsuario= (req as any).userName       || usuario?.nome       || '';
@@ -24,10 +27,29 @@ export function createSettingsRouter() {
         taxa_debito:  cliente?.taxa_debito  || 0,
         taxa_credito: cliente?.taxa_credito || 0,
         taxa_pix:     cliente?.taxa_pix     || 0,
+        plano: planContext.plan,
+        plan_features: planContext.features,
+        trial_ativo: planContext.isTrialActive,
+        trial_fim: planContext.trialFim,
+        vencimento: cliente?.vencimento || null,
         cargo, permissoes, nome_usuario: nomeUsuario,
       });
     } catch {
-      res.json({ nome_estabelecimento: 'FlowPDV', senha_padrao: true, segmento: 'Restaurante/Food', taxa_debito: 0, taxa_credito: 0, taxa_pix: 0, cargo: 'dono', permissoes: null });
+      res.json({
+        nome_estabelecimento: 'FlowPDV',
+        senha_padrao: true,
+        segmento: 'Restaurante/Food',
+        taxa_debito: 0,
+        taxa_credito: 0,
+        taxa_pix: 0,
+        plano: 'completo',
+        plan_features: getCompletePlanFeatures(),
+        trial_ativo: false,
+        trial_fim: null,
+        vencimento: null,
+        cargo: 'dono',
+        permissoes: null,
+      });
     }
   };
 

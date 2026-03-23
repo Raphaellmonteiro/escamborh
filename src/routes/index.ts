@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { q1, qAll, qInsert, qRun } from '../db';
-import { authenticateToken, publicRateLimit, resolveAuthenticatedSession } from '../middleware';
+import { authenticateToken, publicRateLimit, requireAnyPermission, requirePlanFeature, resolveAuthenticatedSession } from '../middleware';
 import { AppError } from '../utils/errors';
 import { createExpensesRouter } from '../expenses/expenses';
 import { createAdminRouter } from './admin';
@@ -188,22 +188,22 @@ export function createApiRouter() {
 
   protectedRouter.use(authenticateToken);
   protectedRouter.use('/products', createProductsRouter());
-  protectedRouter.use('/settings', createSettingsRouter());
-  protectedRouter.use('/categories', createCategoriesRouter());
+  protectedRouter.use('/settings', requireAnyPermission('configuracoes'), createSettingsRouter());
+  protectedRouter.use('/categories', requireAnyPermission('products'), createCategoriesRouter());
   protectedRouter.use('/print', createPrintRouter());
   protectedRouter.use('/orders', createOrdersRouter());
-  protectedRouter.use('/expenses', createExpensesRouter());
-  protectedRouter.use('/dashboard', createDashboardRouter());
-  protectedRouter.use('/caixa', createDashboardRouter());
-  protectedRouter.use('/estoque', createEstoqueRouter());
-  protectedRouter.use('/delivery', createDeliveryRouter());
-  protectedRouter.use('/ai', createAiRouter());
-  protectedRouter.use('/logs', createLogsRouter());
-  protectedRouter.use('/usuarios', createUsuariosRouter());
-  protectedRouter.use('/funcionarios', createRhRouter());
-  protectedRouter.use('/funcionarios', createAcessoFuncRouter());
-  protectedRouter.use('/mesas', createMesasRouter());
-  protectedRouter.use('/pontos', createPontosRouter());
+  protectedRouter.use('/expenses', requirePlanFeature('finance'), requireAnyPermission('finance'), createExpensesRouter());
+  protectedRouter.use('/dashboard', requirePlanFeature('dashboard'), requireAnyPermission('dashboard'), createDashboardRouter());
+  protectedRouter.use('/caixa', requireAnyPermission('finance'), createDashboardRouter());
+  protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
+  protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
+  protectedRouter.use('/ai', requirePlanFeature('ai'), createAiRouter());
+  protectedRouter.use('/logs', requirePlanFeature('logs'), requireAnyPermission('logs'), createLogsRouter());
+  protectedRouter.use('/usuarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createUsuariosRouter());
+  protectedRouter.use('/funcionarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createRhRouter());
+  protectedRouter.use('/funcionarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createAcessoFuncRouter());
+  protectedRouter.use('/mesas', requireAnyPermission('mesas'), createMesasRouter());
+  protectedRouter.use('/pontos', requireAnyPermission('funcionarios'), createPontosRouter());
 
   router.use(protectedRouter);
 

@@ -1,6 +1,7 @@
 // src/routes/delivery.ts — rotas autenticadas do painel delivery
 import { Router, Request } from 'express';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
+import { requireAnyPermission } from '../middleware';
 
 const TZ = 'America/Sao_Paulo';
 const ACTIVE_CUSTOMER_DAYS = 30;
@@ -94,6 +95,14 @@ async function touchDeliveryCustomerPurchase(params: {
 export function createDeliveryRouter() {
   const router = Router();
 
+  router.use((req, res, next) => {
+    if (req.method === 'GET' && req.path === '/motoboys') {
+      return requireAnyPermission('delivery', 'orders')(req, res, next);
+    }
+
+    return requireAnyPermission('delivery')(req, res, next);
+  });
+
   router.get('/config', async (req: Request, res) => {
     try {
       const row = await q1('SELECT delivery_ativo, delivery_config FROM clientes WHERE id=?', [req.tenantId]);
@@ -159,9 +168,20 @@ router.get('/pedidos', async (req: Request, res) => {
       }
 
       const { status, motoboy_id } = req.body;
+      const normalizedMotoboyId = motoboy_id == null || motoboy_id === ''
+        ? null
+        : Number(motoboy_id);
+
+      if (status === 'Saiu para Entrega' && (!Number.isInteger(normalizedMotoboyId) || normalizedMotoboyId <= 0)) {
+        return res.status(400).json({ error: 'Motoboy é obrigatório para enviar o pedido para entrega' });
+      }
+
       const updates: string[] = ['status=?'];
       const params: any[] = [status];
-      if (motoboy_id) { updates.push('motoboy_id=?'); params.push(motoboy_id); }
+      if (Number.isInteger(normalizedMotoboyId) && normalizedMotoboyId > 0) {
+        updates.push('motoboy_id=?');
+        params.push(normalizedMotoboyId);
+      }
       if (status === 'Saiu para Entrega') { updates.push('saiu_entrega_at=NOW()'); }
       if (status === 'Entregue')          { updates.push('entregue_at=NOW()'); }
       params.push(req.params.id, req.tenantId);

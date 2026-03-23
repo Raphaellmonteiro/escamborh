@@ -2,7 +2,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import { q1, qAll, qRun, qInsert } from '../db';
-import { upload, uploadFotoFunc, checkMagicBytes } from '../middleware';
+import { upload, uploadFotoFunc, checkMagicBytes, requireAnyPermission } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
@@ -12,6 +12,21 @@ const REPORT_TZ = 'America/Sao_Paulo';
 
 export function createProductsRouter() {
   const router = Router();
+
+  router.use((req, res, next) => {
+    const canReadOperationalProducts = req.method === 'GET'
+      && (
+        req.path === '/'
+        || req.path.startsWith('/barcode/')
+        || /\/variacoes-vendaveis(?:\/|$)/.test(req.path)
+      );
+
+    if (canReadOperationalProducts) {
+      return requireAnyPermission('products', 'pos', 'estoque')(req, res, next);
+    }
+
+    return requireAnyPermission('products')(req, res, next);
+  });
 
   async function ensureBarcodeAvailable(
     tenantId: number,

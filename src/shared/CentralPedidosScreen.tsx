@@ -27,6 +27,7 @@ import {
   getCentralOrderKind,
   getOrderAgeMinutes,
   groupOrdersByCentralColumn,
+  isOrderFullyPaid,
   isOrderWithoutAssignedMotoboy,
   isPaymentPendingOrder,
   isPendingQrMesaOrder,
@@ -36,6 +37,7 @@ import {
 } from '../utils/orderCentralBoard';
 
 const TZ = 'America/Sao_Paulo';
+const CENTRAL_ORDERS_LIMIT = 300;
 
 function getTodayRangeQuery(): { from: string; to: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -137,23 +139,46 @@ function getMesaReference(order: Order) {
 }
 
 function getPagamentoLine(order: Order) {
-  const tipo = (order as { pagamento_tipo?: string | null }).pagamento_tipo;
-  const status = (order as { pagamento_status?: string | null }).pagamento_status;
+  const tipo = order.pagamento_tipo;
+  const status = order.pagamento_status;
   const t = String(tipo || '').trim();
   const s = String(status || '').trim();
+  const totalPaid = Number(order.payment_total_paid || 0);
+  const totalAmount = Number(order.total_amount || 0);
+  if (isOrderFullyPaid(order)) {
+    if (totalPaid > 0) return t ? `${t} · pago (${formatMoney(totalPaid)})` : `Pago (${formatMoney(totalPaid)})`;
+    return t ? `${t} · pago` : 'Pago';
+  }
+  if (totalPaid > 0 && totalAmount > 0) {
+    return `${t || 'Pagamento'} · ${formatMoney(totalPaid)} de ${formatMoney(totalAmount)}`;
+  }
   if (!t && !s) return null;
   if (t && s) return `${t} · ${s}`;
   return t || s;
 }
 
 function getPaymentBadgeMeta(order: Order): { label: string; className: string } | null {
-  const tipo = String((order as { pagamento_tipo?: string | null }).pagamento_tipo || '').trim();
-  const status = String((order as { pagamento_status?: string | null }).pagamento_status || '').trim().toLowerCase();
-  if (!tipo && !status) return null;
-  if (status === 'pago') {
+  const tipo = String(order.pagamento_tipo || '').trim();
+  const status = String(order.pagamento_status || '').trim().toLowerCase();
+  const fullyPaid = isOrderFullyPaid(order);
+  const totalPaid = Number(order.payment_total_paid || 0);
+  const totalAmount = Number(order.total_amount || 0);
+  if (!tipo && !status && !fullyPaid) return null;
+  if (fullyPaid) {
     return {
-      label: tipo ? `${tipo} pago` : 'Pago',
+      label:
+        totalPaid > 0
+          ? `${tipo ? `${tipo} · ` : ''}${formatMoney(totalPaid)} pago`
+          : tipo
+            ? `${tipo} pago`
+            : 'Pago',
       className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
+    };
+  }
+  if (totalPaid > 0 && totalPaid + 0.01 < totalAmount) {
+    return {
+      label: `Parcial · ${formatMoney(totalPaid)} / ${formatMoney(totalAmount)}`,
+      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
     };
   }
   if (status) {
@@ -245,7 +270,7 @@ const COLUMN_DEF: { id: CentralColumnId; title: string; hint?: string }[] = [
 
 const FILTERS: { id: CentralChannelFilter; label: string }[] = [
   { id: 'todos', label: 'Todos' },
-  { id: 'balcao', label: 'Balcão' },
+  { id: 'balcao', label: 'Presencial' },
   { id: 'delivery', label: 'Delivery' },
   { id: 'retirada', label: 'Retirada' },
 ];
@@ -301,7 +326,7 @@ export default function CentralPedidosScreen({
     setLoading(true);
     try {
       const { from, to } = getTodayRangeQuery();
-      const qs = new URLSearchParams({ from, to, limit: '100' });
+      const qs = new URLSearchParams({ from, to, limit: String(CENTRAL_ORDERS_LIMIT) });
       const res = await fetch(`/api/orders?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -375,7 +400,7 @@ export default function CentralPedidosScreen({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider hidden sm:inline">
-              Até 100 pedidos (hoje)
+              Até {CENTRAL_ORDERS_LIMIT} pedidos (hoje)
             </span>
             <Button
               type="button"
@@ -571,6 +596,11 @@ function OrderCard({
   const withoutMotoboy = isOrderWithoutAssignedMotoboy(order);
   const ageMinutes = getOrderAgeMinutes(order);
   const statusRaw = String(order.status || '').trim() || '—';
+  const paymentPendingLabel = Number(order.payment_total_paid || 0) > 0
+    ? 'Pagamento parcial'
+    : String(order.pagamento_tipo || '').trim().toLowerCase() === 'pix'
+      ? 'Pix pendente'
+      : 'Pagamento pendente';
   const statusTone =
     columnId === 'a_confirmar'
       ? 'border-cyan-200 bg-cyan-50/90 text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-100'
@@ -665,7 +695,7 @@ function OrderCard({
                   )}
                   {paymentPending && (
                     <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
-                      Pix pendente
+                      {paymentPendingLabel}
                     </span>
                   )}
                   {withoutMotoboy && (
@@ -716,7 +746,7 @@ function OrderCard({
                 </span>
                 {paymentBadge && (
                   <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border ${paymentBadge.className}`}>
-                    {paymentPending ? 'Pendente' : 'Pago'}
+                    {paymentBadge.label}
                   </span>
                 )}
               </div>
@@ -732,7 +762,7 @@ function OrderCard({
                   )}
                   {paymentPending && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
-                      Pagamento pendente
+                      {paymentPendingLabel}
                     </span>
                   )}
                   {withoutMotoboy && (

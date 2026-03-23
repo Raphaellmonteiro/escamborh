@@ -201,8 +201,22 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
 
   const handleDelete = async (id: number) => {
     if (!confirm('Excluir esta despesa?')) return;
-    await fetch(`/api/expenses/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-    fetchExpenses();
+    try {
+      const response = await fetch(`/api/expenses/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        alert(error?.error || 'Não foi possível excluir a despesa.');
+        return;
+      }
+
+      fetchExpenses();
+    } catch {
+      alert('Erro de conexão ao excluir a despesa.');
+    }
   };
 
   const filterByDate = <T extends { created_at: string }>(list: T[], range = dateFilter) => {

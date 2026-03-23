@@ -1,5 +1,5 @@
 // src/routes/kiosk.ts — quiosque de ponto, KDS público e cardápio público
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
@@ -21,6 +21,70 @@ function buildActiveKdsOrderClause(alias?: string) {
 function buildOperationalKdsOrderClause(alias?: string) {
   const prefix = alias ? `${alias}.` : '';
   return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'entregue' AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado' AND LOWER(COALESCE(${prefix}status,'')) NOT LIKE 'conclu%'`;
+}
+
+function getPublicSlugOrReject(res: Response, slug: unknown) {
+  if (typeof slug !== 'string') {
+    res.status(400).json({ error: 'Slug inválido' });
+    return null;
+  }
+
+  const normalized = slug.trim();
+  if (!normalized || normalized.length > 120 || !/^[a-z0-9_-]+$/i.test(normalized)) {
+    res.status(400).json({ error: 'Slug inválido' });
+    return null;
+  }
+
+  return normalized;
+}
+
+function isDatabaseConnectivityError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? '').toLowerCase();
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '').toUpperCase()
+      : '';
+
+  return (
+    [
+      'connection terminated due to connection timeout',
+      'connection terminated unexpectedly',
+      'terminating connection',
+      'connection timeout',
+      'timeout expired',
+      'could not connect',
+      'econnrefused',
+      'etimedout',
+      'socket hang up',
+    ].some((snippet) => message.includes(snippet)) ||
+    ['08000', '08001', '08003', '08006', '57P01', '57P02', '57P03', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'].includes(code)
+  );
+}
+
+function handlePublicRouteError(res: Response, route: string, slug: string | undefined, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? 'Erro desconhecido');
+  const stack = error instanceof Error ? error.stack : undefined;
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : undefined;
+  const isDbUnavailable = isDatabaseConnectivityError(error);
+
+  console.error(`[kiosk] ${route} failed`, {
+    slug,
+    code,
+    message,
+    stack,
+  });
+
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+
+  res.status(isDbUnavailable ? 503 : 500).json({
+    error: isDbUnavailable ? 'Serviço temporariamente indisponível. Tente novamente.' : 'Erro interno do servidor',
+  });
 }
 
 async function syncMesaOrderVisibility(
@@ -380,10 +444,13 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
 
   // ── API pública do quiosque ───────────────────────────────────────────────
   router.post('/public/ponto/:slug/login-func', loginKioskLimit, async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
       const { username, password } = req.body;
       if (!username||!password) return res.status(400).json({ error:'Usuário e senha obrigatórios' });
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Estabelecimento não encontrado' });
       const user = await q1('SELECT * FROM usuarios WHERE username=? AND cliente_id=? AND ativo=1', [username, tenant.id]);
       if (!user) return res.status(401).json({ error:'Usuário não encontrado' });
@@ -393,35 +460,50 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const func = await q1("SELECT id,nome,cargo,foto_url,face_descriptor FROM funcionarios WHERE tenant_id=? AND nome=? AND status='ativo'", [tenant.id, user.nome]);
       if (!func) return res.status(404).json({ error:'Funcionário não encontrado no RH' });
       res.json({ funcionario:{ id:func.id, nome:func.nome, cargo:func.cargo, foto_url:func.foto_url||null, face_descriptor:func.face_descriptor?JSON.parse(func.face_descriptor):null } });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'POST /public/ponto/:slug/login-func', slug, error);
+    }
   });
 
   router.post('/public/ponto/:slug/save-face', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
       const { func_id, descriptor } = req.body;
       if (!func_id||!descriptor||!Array.isArray(descriptor)) return res.status(400).json({ error:'Dados inválidos' });
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       await qRun('UPDATE funcionarios SET face_descriptor=? WHERE id=? AND tenant_id=?', [JSON.stringify(descriptor), func_id, tenant.id]);
       res.json({ success:true });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'POST /public/ponto/:slug/save-face', slug, error);
+    }
   });
 
   router.get('/public/ponto/:slug/proximo-tipo/:func_id', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       const data = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
       const hoje = await qAll('SELECT tipo FROM func_pontos WHERE funcionario_id=? AND tenant_id=? AND data=? ORDER BY id ASC', [req.params.func_id, tenant.id, data]);
       const temEnt = hoje.some((p:any)=>p.tipo==='entrada');
       const temSai = hoje.some((p:any)=>p.tipo==='saida');
       res.json({ tipo: temEnt&&!temSai ? 'saida' : 'entrada', completo: temEnt&&temSai });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'GET /public/ponto/:slug/proximo-tipo/:func_id', slug, error);
+    }
   });
 
   router.get('/public/ponto/:slug/espelho/:func_id', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       const func = await q1('SELECT * FROM funcionarios WHERE id=? AND tenant_id=?', [req.params.func_id, tenant.id]);
       if (!func) return res.status(404).json({ error:'Funcionário não encontrado' });
@@ -466,22 +548,32 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       }
       const vd=func.salario_base/(func.dias_trabalho_mes||26);
       res.json({ dias, resumo:{diasTrabalhados:dTrab,totalFaltas:tFaltas,diasFolga:dFolga,diasAtestado:dAtestado,totalAtrasoMin:tAtrasos,descontoFaltas:tFaltas*vd,descontoAtrasos:(tAtrasos/60)*(vd/cargaHoras),totalDescontos:(tFaltas*vd)+((tAtrasos/60)*(vd/cargaHoras))} });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'GET /public/ponto/:slug/espelho/:func_id', slug, error);
+    }
   });
 
   router.get('/public/ponto/:slug', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       const funcs = await qAll("SELECT id,nome,cargo,pin,foto_url FROM funcionarios WHERE tenant_id=? AND status='ativo' ORDER BY nome", [tenant.id]);
       res.json({ estabelecimento:tenant.nome_estabelecimento, funcionarios:funcs });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'GET /public/ponto/:slug', slug, error);
+    }
   });
 
   router.post('/public/ponto/:slug/registrar', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
       const { pin, func_id, metodo } = req.body;
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       const func = await q1("SELECT * FROM funcionarios WHERE id=? AND tenant_id=? AND status='ativo'", [func_id, tenant.id]);
       if (!func) return res.status(404).json({ error:'Funcionário não encontrado' });
@@ -508,14 +600,19 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       }
       await qRun('INSERT INTO func_pontos (tenant_id,funcionario_id,data,hora,tipo,ip) VALUES (?,?,?,?,?,?)', [tenant.id, func.id, data, hora, tipo, 'kiosk']);
       res.json({ success:true, tipo, hora, nome:func.nome });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'POST /public/ponto/:slug/registrar', slug, error);
+    }
   });
 
   // ── KDS público ───────────────────────────────────────────────────────────
   router.get('/public/kds/:slug', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
-      if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug:req.params.slug });
+      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
+      if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug });
       const allOrders = await qAll(`SELECT * FROM pedidos WHERE tenant_id=? AND ${buildOperationalKdsOrderClause()} ORDER BY created_at ASC`, [tenant.id]);
       // Deduplica pedidos de mesa (agrupa pelo label da mesa)
       const seen = new Map<string,any>();
@@ -546,24 +643,43 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
         if (prepItems.length > 0) orders.push({ ...o, items: prepItems });
       }
       res.json({ estabelecimento:tenant.nome_estabelecimento, orders });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'GET /public/kds/:slug', slug, error);
+    }
   });
 
   // ── KDS SSE (keep-alive) ──────────────────────────────────────────────────
   router.get('/public/kds/:slug/events', async (req, res) => {
-    const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [req.params.slug]);
-    if (!tenant) return res.status(404).end();
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-    const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), 30000);
-    req.on('close', () => clearInterval(ping));
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
+    try {
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
+      if (!tenant) return res.status(404).end();
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      const ping = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write('event: ping\ndata: {}\n\n');
+        }
+      }, 30000);
+
+      req.on('close', () => clearInterval(ping));
+    } catch (error) {
+      handlePublicRouteError(res, 'GET /public/kds/:slug/events', slug, error);
+    }
   });
 
   router.patch('/public/kds/:slug/orders/:id/advance', kdsAdvanceLimit, async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [req.params.slug, 'ativo']);
+      const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [slug, 'ativo']);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       const order = await q1('SELECT status, cancelado_at FROM pedidos WHERE id=? AND tenant_id=?', [req.params.id, tenant.id]);
       if (!order) return res.status(404).json({ error:'Pedido não encontrado' });
@@ -573,25 +689,35 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       if (!next) return res.json({ success:true, message:'Já no status final' });
       await qRun('UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?', [next, req.params.id, tenant.id]);
       res.json({ success:true, newStatus:next });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'PATCH /public/kds/:slug/orders/:id/advance', slug, error);
+    }
   });
 
   // ── Cardápio público ──────────────────────────────────────────────────────
   router.get('/public/cardapio/:slug', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [req.params.slug]);
+      const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado' });
       const prods = await qAll('SELECT id,name,price,category,photo_url,color FROM produtos WHERE tenant_id=? AND active=1 ORDER BY category ASC, name ASC', [tenant.id]);
       const byCat: Record<string,any[]> = {};
       for (const p of prods) { const c=p.category||'Geral'; if (!byCat[c]) byCat[c]=[]; byCat[c].push(p); }
       res.json({ estabelecimento:tenant.nome_estabelecimento, categorias:Object.entries(byCat).map(([nome,itens])=>({nome,itens})) });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'GET /public/cardapio/:slug', slug, error);
+    }
   });
 
   // ── Mesa QR code ──────────────────────────────────────────────────────────
   router.post('/public/mesa/:slug/:numero/pedir', async (req, res) => {
+    const slug = getPublicSlugOrReject(res, req.params.slug);
+    if (!slug) return;
+
     try {
-      const { slug, numero } = req.params;
+      const { numero } = req.params;
       const { itens } = req.body;
       if (!itens||!itens.length) return res.status(400).json({ error:'Carrinho vazio' });
       const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
@@ -621,7 +747,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
         }))
       );
       res.json({ success:true });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch (error) {
+      handlePublicRouteError(res, 'POST /public/mesa/:slug/:numero/pedir', slug, error);
+    }
   });
 
   return router;

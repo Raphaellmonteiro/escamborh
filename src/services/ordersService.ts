@@ -81,6 +81,7 @@ type NormalizedCreateOrderInput = {
   payments: NormalizedPayment[];
   observation?: string;
   total_amount: number;
+  taxa_total: number;
   tipo_retirada: string;
   canal: string;
   status: string;
@@ -92,6 +93,8 @@ type OrderRow = {
   status: string;
   canal?: string | null;
   total_amount: number;
+  pagamento_tipo?: string | null;
+  pagamento_status?: string | null;
   observation?: string | null;
   receipt_text?: string | null;
   created_at: string;
@@ -145,6 +148,14 @@ type PaymentRow = {
   change_given: number | string | null;
 };
 
+type OrderPaymentAggregateRow = {
+  order_id: number | string;
+  payment_total_received: number | string | null;
+  payment_total_change: number | string | null;
+  payment_total_paid: number | string | null;
+  payment_count: number | string | null;
+};
+
 type OrderHistoryEventRow = {
   id: number;
   tipo: string;
@@ -159,6 +170,7 @@ type OrderHistoryEventRow = {
 };
 
 const MONEY_TOLERANCE_CENTS = 1;
+const MAX_GET_ORDERS_LIMIT = 500;
 
 function isCanceledStatus(status?: string | null) {
   return String(status || '').trim().toLowerCase() === 'cancelado';
@@ -262,6 +274,7 @@ function ensureFinancialConsistency(input: {
   items: NormalizedOrderItem[];
   payments: NormalizedPayment[];
   total_amount: number;
+  taxa_total: number;
 }) {
   const itemsTotalCents = input.items.reduce(
     (sum, item) => sum + toMoneyCents(Number(item.quantity) * Number(item.price_at_time)),
@@ -272,12 +285,15 @@ function ensureFinancialConsistency(input: {
     0
   );
   const orderTotalCents = toMoneyCents(input.total_amount);
+  const feeTotalCents = toMoneyCents(input.taxa_total);
+  const expectedOrderTotalCents = itemsTotalCents + feeTotalCents;
+  const expectedPaymentsTotalCents = paymentsTotalCents + feeTotalCents;
 
-  if (Math.abs(itemsTotalCents - orderTotalCents) > MONEY_TOLERANCE_CENTS) {
+  if (Math.abs(expectedOrderTotalCents - orderTotalCents) > MONEY_TOLERANCE_CENTS) {
     throw new AppError('Total do pedido divergente da soma dos itens', 400);
   }
 
-  if (Math.abs(paymentsTotalCents - orderTotalCents) > MONEY_TOLERANCE_CENTS) {
+  if (Math.abs(expectedPaymentsTotalCents - orderTotalCents) > MONEY_TOLERANCE_CENTS) {
     throw new AppError('Total do pedido divergente da soma dos pagamentos', 400);
   }
 }
@@ -292,9 +308,14 @@ function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrde
   }
 
   const totalAmount = Number(data.total_amount ?? data.total);
+  const taxaTotal = Number(data.taxa_total ?? 0);
 
   if (!Number.isFinite(totalAmount) || totalAmount < 0) {
     throw new AppError('Valor total inválido', 400);
+  }
+
+  if (!Number.isFinite(taxaTotal) || taxaTotal < 0) {
+    throw new AppError('Taxa total inválida', 400);
   }
 
   const status = data.status?.trim() || 'Criado';
@@ -308,6 +329,7 @@ function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrde
     payments: data.payments.map(normalizePayment),
     observation: data.observation?.trim() || undefined,
     total_amount: totalAmount,
+    taxa_total: taxaTotal,
     tipo_retirada: data.tipo_retirada?.trim() || 'local',
     canal: deriveOrderChannel(data.tipo_retirada),
     status,
@@ -826,6 +848,13 @@ function buildOrderFilters(filters: GetOrdersFilters) {
   if (filters.excludeCanal) {
     clauses.push("COALESCE(canal, '')<>?");
     params.push(filters.excludeCanal);
+  }
+
+  if (filters.activeOnly) {
+    clauses.push('cancelado_at IS NULL');
+    clauses.push("LOWER(COALESCE(status,'')) <> 'entregue'");
+    clauses.push("LOWER(COALESCE(status,'')) <> 'cancelado'");
+    clauses.push("LOWER(COALESCE(status,'')) NOT LIKE 'conclu%'");
   }
 
   if (filters.from) {
@@ -1373,7 +1402,7 @@ export async function getOrders(filters: GetOrdersFilters) {
     if (filters.limit !== undefined && filters.limit !== '') {
       const parsedLimit = Number(filters.limit);
       const safeLimit = Number.isFinite(parsedLimit)
-        ? Math.min(Math.max(parsedLimit, 1), 100)
+        ? Math.min(Math.max(parsedLimit, 1), MAX_GET_ORDERS_LIMIT)
         : 20;
 
       sql += ` LIMIT ${safeLimit}`;
@@ -1396,8 +1425,23 @@ export async function getOrders(filters: GetOrdersFilters) {
        ORDER BY ip.id ASC`,
       orderIds
     );
+    const paymentAggRows = await qAll<OrderPaymentAggregateRow>(
+      `SELECT order_id,
+              COALESCE(SUM(amount_paid), 0) AS payment_total_received,
+              COALESCE(SUM(change_given), 0) AS payment_total_change,
+              COALESCE(SUM(amount_paid - change_given), 0) AS payment_total_paid,
+              COUNT(*) AS payment_count
+       FROM pagamentos
+       WHERE order_id IN (${orderIds.map(() => '?').join(',')})
+       GROUP BY order_id`,
+      orderIds
+    );
 
     const itemsByOrder = new Map<number, OrderItemRow[]>();
+    const paymentsByOrder = new Map<
+      number,
+      { totalReceived: number; totalChange: number; totalPaid: number; count: number }
+    >();
 
     for (const item of items) {
       const bucket = itemsByOrder.get(Number(item.order_id)) || [];
@@ -1405,9 +1449,22 @@ export async function getOrders(filters: GetOrdersFilters) {
       itemsByOrder.set(Number(item.order_id), bucket);
     }
 
+    for (const payment of paymentAggRows) {
+      paymentsByOrder.set(Number(payment.order_id), {
+        totalReceived: Number(payment.payment_total_received || 0),
+        totalChange: Number(payment.payment_total_change || 0),
+        totalPaid: Number(payment.payment_total_paid || 0),
+        count: Number(payment.payment_count || 0),
+      });
+    }
+
     return orders.map((order) => ({
       ...order,
       estoque_reposto: Boolean(Number(order.estoque_reposto || 0)),
+      payment_total_received: paymentsByOrder.get(Number(order.id))?.totalReceived || 0,
+      payment_total_change: paymentsByOrder.get(Number(order.id))?.totalChange || 0,
+      payment_total_paid: paymentsByOrder.get(Number(order.id))?.totalPaid || 0,
+      payment_count: paymentsByOrder.get(Number(order.id))?.count || 0,
       items: (itemsByOrder.get(Number(order.id)) || []).map((item) => ({
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),

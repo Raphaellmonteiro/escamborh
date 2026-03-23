@@ -56,6 +56,12 @@ export interface Order {
   status: string;
   canal?: string | null;
   total_amount: number;
+  pagamento_tipo?: string | null;
+  pagamento_status?: string | null;
+  payment_total_received?: number;
+  payment_total_change?: number;
+  payment_total_paid?: number;
+  payment_count?: number;
   observation?: string;
   receipt_text?: string;
   created_at: string;

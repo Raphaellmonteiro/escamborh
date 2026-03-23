@@ -80,10 +80,47 @@ export function isUrgentOrder(order: Order): boolean {
   return getOrderAgeMinutes(order) >= 25;
 }
 
-export function isPaymentPendingOrder(order: Order): boolean {
-  const status = String((order as { pagamento_status?: string | null }).pagamento_status || '')
+function getPaymentStatusKey(order: Order): string {
+  return String(order.pagamento_status || '')
     .trim()
     .toLowerCase();
+}
+
+function usesDeliveryPaymentConfirmation(order: Order): boolean {
+  return getCentralOrderKind(order) === 'delivery';
+}
+
+function getOrderRecordedPaidAmount(order: Order): number {
+  return Number(order.payment_total_paid || 0);
+}
+
+function hasRecordedPayments(order: Order): boolean {
+  return (
+    Number(order.payment_count || 0) > 0 ||
+    Number((order as { payment_total_received?: number }).payment_total_received || 0) > 0 ||
+    Number((order as { payment_total_change?: number }).payment_total_change || 0) > 0 ||
+    getOrderRecordedPaidAmount(order) > 0
+  );
+}
+
+export function isOrderFullyPaid(order: Order): boolean {
+  if (usesDeliveryPaymentConfirmation(order)) {
+    return getPaymentStatusKey(order) === 'pago';
+  }
+  if (getPaymentStatusKey(order) === 'pago') return true;
+  if (!hasRecordedPayments(order)) return false;
+  return getOrderRecordedPaidAmount(order) + 0.01 >= Number(order.total_amount || 0);
+}
+
+export function isPaymentPendingOrder(order: Order): boolean {
+  const status = getPaymentStatusKey(order);
+  if (usesDeliveryPaymentConfirmation(order)) {
+    return Boolean(status) && status !== 'pago';
+  }
+  if (isOrderFullyPaid(order)) return false;
+  if (hasRecordedPayments(order)) {
+    return getOrderRecordedPaidAmount(order) + 0.01 < Number(order.total_amount || 0);
+  }
   return Boolean(status) && status !== 'pago';
 }
 
@@ -149,7 +186,7 @@ export function mapOrderToCentralColumn(order: Order, opts: MapCentralColumnOpti
 export function passesCentralChannelFilter(order: Order, filter: CentralChannelFilter): boolean {
   const kind = getCentralOrderKind(order);
   if (filter === 'todos') return true;
-  if (filter === 'balcao') return kind === 'balcao';
+  if (filter === 'balcao') return kind === 'balcao' || kind === 'mesa' || kind === 'other';
   if (filter === 'delivery') return kind === 'delivery';
   if (filter === 'retirada') return kind === 'retirada';
   return true;

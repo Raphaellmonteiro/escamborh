@@ -1,6 +1,7 @@
 // src/routes/estoque.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import { pool, q1, qAll, qRun, qInsert, withTx } from '../db';
+import { requireAnyPermission } from '../middleware';
 import {
   auditLegacyNameFallbackProducts,
   applyManualPendingInventoryFixes,
@@ -14,6 +15,14 @@ const TZ = 'America/Sao_Paulo';
 
 export function createEstoqueRouter() {
   const router = Router();
+
+  router.use((req, res, next) => {
+    if (req.method === 'GET' && req.path === '/') {
+      return requireAnyPermission('estoque', 'products')(req, res, next);
+    }
+
+    return requireAnyPermission('estoque')(req, res, next);
+  });
 
   async function ensureBarcodeAvailable(
     tenantId: number,
@@ -186,12 +195,26 @@ router.get('/', async (req: Request, res) => {
       if (!motivo || String(motivo).trim().length === 0) return res.status(400).json({ error: 'motivo obrigatório' });
       const ing = await q1('SELECT * FROM ingredientes WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       if (!ing) return res.status(404).json({ error: 'Ingrediente não encontrado' });
+      if (tipo !== 'entrada' && tipo !== 'saida') {
+        return res.status(400).json({ error: 'tipo inválido' });
+      }
+
+      const quantidadeMovimentada = Number(quantidade);
+      if (!Number.isFinite(quantidadeMovimentada) || quantidadeMovimentada <= 0) {
+        return res.status(400).json({ error: 'quantidade inválida' });
+      }
+
+      const estoqueAtual = Number((ing as any).estoque_atual ?? 0);
+      if (!Number.isFinite(estoqueAtual)) {
+        return res.status(500).json({ error: 'Estoque atual inválido' });
+      }
+
       const novoEstoque = tipo === 'entrada'
-        ? ing.estoque_atual + Number(quantidade)
-        : Math.max(0, ing.estoque_atual - Number(quantidade));
+        ? estoqueAtual + quantidadeMovimentada
+        : Math.max(0, estoqueAtual - quantidadeMovimentada);
       await qRun('UPDATE ingredientes SET estoque_atual=? WHERE id=? AND tenant_id=?', [novoEstoque, req.params.id, req.tenantId]);
       await qRun('INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,?,?,?,?)',
-        [req.params.id, tipo, quantidade, motivo||null, req.tenantId]);
+        [req.params.id, tipo, quantidadeMovimentada, motivo || null, req.tenantId]);
       res.json({ success: true, estoque_atual: novoEstoque });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

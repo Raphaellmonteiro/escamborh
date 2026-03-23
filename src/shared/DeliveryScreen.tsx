@@ -267,6 +267,7 @@ export default function DeliveryScreen({
 // ABA PAINEL — com SSE + som + reimprimir
 // ═══════════════════════════════════════════════════════════════════════════════
 function TabPainel({ token }: { token: string }) {
+  const DELIVERY_POLLING_INTERVAL_MS = 10000;
   const [pedidos, setPedidos]           = useState<Pedido[]>([]);
   const [motoboys, setMotoboys]         = useState<Motoboy[]>([]);
   const [dash, setDash]                 = useState<Dashboard | null>(null);
@@ -277,37 +278,65 @@ function TabPainel({ token }: { token: string }) {
   const [somAtivo, setSomAtivo]         = useState(() => localStorage.getItem('delivery_som') !== 'false');
   const esRef                           = useRef<EventSource | null>(null);
   const reconnRef                       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFetchingRef                   = useRef(false);
+  const hasLoadedPedidosRef             = useRef(false);
   const pedidosRef                      = useRef<Pedido[]>([]);
+  const selectedPedidoRef               = useRef<Pedido | null>(null);
   pedidosRef.current                    = pedidos;
+  selectedPedidoRef.current             = selectedPedido;
   const hdrs = { Authorization: `Bearer ${token}` };
 
   const fetchAll = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const [pRes, mRes, dRes] = await Promise.all([
         fetch('/api/delivery/pedidos', { headers: hdrs }),
         fetch('/api/delivery/motoboys', { headers: hdrs }),
         fetch('/api/delivery/dashboard', { headers: hdrs }),
       ]);
-      if (pRes.ok) { const d = await pRes.json(); if (Array.isArray(d)) setPedidos(d); }
+      if (pRes.ok) {
+        const d = await pRes.json();
+        if (Array.isArray(d)) {
+          const previousIds = new Set(pedidosRef.current.map((pedido) => Number(pedido.id)));
+          const hasLoadedBefore = hasLoadedPedidosRef.current;
+          const hasNewOrder = hasLoadedBefore && d.some((pedido) => !previousIds.has(Number(pedido.id)));
+          setPedidos(d);
+          if (selectedPedidoRef.current) {
+            const updatedSelectedPedido = d.find((pedido) => Number(pedido.id) === Number(selectedPedidoRef.current?.id));
+            if (updatedSelectedPedido) setSelectedPedido(updatedSelectedPedido);
+          }
+          hasLoadedPedidosRef.current = true;
+          if (hasNewOrder && somAtivo && localStorage.getItem('delivery_som') !== 'false') {
+            playNewOrderSound();
+          }
+        }
+      }
       if (mRes.ok) { const d = await mRes.json(); if (Array.isArray(d)) setMotoboys(d); }
       if (dRes.ok) { const d = await dRes.json(); setDash(d); }
     } catch {}
-    setLoading(false);
-  }, [token]);
+    finally {
+      isFetchingRef.current = false;
+      setLoading(false);
+    }
+  }, [token, somAtivo]);
 
-  // ── SSE ───────────────────────────────────────────────────────────────────
+  // ── SSE complementar: hoje serve como keep-alive/aceleração quando houver
+  // eventos úteis, mas o polling continua sendo a fonte confiável do painel.
   const connectSSE = useCallback(() => {
     if (esRef.current) esRef.current.close();
     const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`);
     esRef.current = es;
     es.addEventListener('connected', () => setSseConectado(true));
-    es.addEventListener('ping', () => {});
+    es.addEventListener('ping', () => setSseConectado(true));
     es.addEventListener('novo_pedido', (e) => {
       setSseConectado(true);
       fetchAll();
-      if (somAtivo && localStorage.getItem('delivery_som') !== 'false') playNewOrderSound();
     });
-    es.addEventListener('status_pedido', () => { fetchAll(); });
+    es.addEventListener('status_pedido', () => {
+      setSseConectado(true);
+      fetchAll();
+    });
     es.onerror = () => {
       setSseConectado(false);
       es.close(); esRef.current = null;
@@ -318,14 +347,14 @@ function TabPainel({ token }: { token: string }) {
   useEffect(() => {
     fetchAll();
     connectSSE();
-    // Fallback polling a cada 30s caso SSE falhe
-    const iv = setInterval(fetchAll, 30000);
+    // Polling principal para manter o painel confiável mesmo sem eventos úteis.
+    const iv = setInterval(fetchAll, DELIVERY_POLLING_INTERVAL_MS);
     return () => {
       clearInterval(iv);
       if (esRef.current) esRef.current.close();
       if (reconnRef.current) clearTimeout(reconnRef.current);
     };
-  }, [fetchAll, connectSSE]);
+  }, [fetchAll, connectSSE, DELIVERY_POLLING_INTERVAL_MS]);
 
   const toggleSom = () => {
     const novo = !somAtivo;
@@ -400,7 +429,7 @@ function TabPainel({ token }: { token: string }) {
         <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end shrink-0">
           <div className={`flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold ${sseConectado?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sseConectado?'bg-emerald-500 animate-pulse':'bg-zinc-400'}`}/>
-            {sseConectado?'Ao vivo':'Polling'}
+            {`Polling ${Math.floor(DELIVERY_POLLING_INTERVAL_MS / 1000)}s${sseConectado ? ' + SSE' : ''}`}
           </div>
           <button type="button" onClick={toggleSom} title={somAtivo?'Desativar som':'Ativar som'}
             className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-xs font-bold transition-all ${somAtivo?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>

@@ -61,6 +61,8 @@ type OrderChannelMeta = {
   detailClassName: string;
 };
 
+const ACTIVE_ORDERS_LIMIT = 200;
+
 export default function OrdersScreen({
   token, segmento: _segmento, displaySlug, onShowQR, channelFilter = 'all',
 }: {
@@ -159,6 +161,12 @@ export default function OrdersScreen({
       if (filters.day) q.append('day', filters.day);
       if (filters.month) q.append('month', filters.month);
       if (filters.year) q.append('year', filters.year);
+      url += '?' + q.toString();
+    } else {
+      const q = new URLSearchParams({
+        activeOnly: '1',
+        limit: String(ACTIVE_ORDERS_LIMIT),
+      });
       url += '?' + q.toString();
     }
     try {

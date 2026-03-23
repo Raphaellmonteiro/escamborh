@@ -1,11 +1,13 @@
 // src/routes/delivery-public.ts - rotas publicas sem autenticacao de tenant
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
 import { publicRateLimit, authDeliveryCliente } from '../middleware';
+import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
+import { getTenantFeaturesBySlug } from '../services/tenantPlan';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 
@@ -566,7 +568,29 @@ export function createDeliveryPublicRouter() {
     return q1('SELECT * FROM clientes WHERE usuario=? AND status=?', [slug, 'ativo']);
   }
 
-  router.get('/:slug/cardapio', publicRateLimit, async (req, res) => {
+  function requireSlugPlanFeature(feature: PlanFeature) {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const features = await getTenantFeaturesBySlug(String(req.params.slug || ''));
+        if (!features) {
+          return res.status(404).json({ error: 'Loja nao encontrada' });
+        }
+
+        if (features.includes(feature)) {
+          return next();
+        }
+
+        return res.status(403).json({ error: 'Plano não inclui este recurso', feature });
+      } catch (e: any) {
+        return res.status(500).json({ error: e.message || 'Erro ao validar plano do tenant' });
+      }
+    };
+  }
+
+  const requireDeliveryPublicPlan = requireSlugPlanFeature('delivery_public');
+  const requireDeliveryTrackingPlan = requireSlugPlanFeature('delivery_tracking');
+
+  router.get('/:slug/cardapio', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -649,7 +673,7 @@ export function createDeliveryPublicRouter() {
   }
 
   /** Lista pedidos do cliente por telefone (sem login) — delivery/retirada do tenant */
-  router.get('/:slug/orders', publicRateLimit, async (req, res) => {
+  router.get('/:slug/orders', publicRateLimit, requireDeliveryTrackingPlan, async (req, res) => {
     try {
       const tel = normalizeDeliveryPhonePublic(req.query.phone);
       if (tel.length < 10) {
@@ -695,7 +719,7 @@ export function createDeliveryPublicRouter() {
   });
 
   /** Detalhe de um pedido — exige o mesmo telefone da listagem */
-  router.get('/:slug/orders/:orderId', publicRateLimit, async (req, res) => {
+  router.get('/:slug/orders/:orderId', publicRateLimit, requireDeliveryTrackingPlan, async (req, res) => {
     try {
       const tel = normalizeDeliveryPhonePublic(req.query.phone);
       if (tel.length < 10) {
@@ -765,7 +789,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.get('/:slug/pedido/:id', async (req, res) => {
+  router.get('/:slug/pedido/:id', requireDeliveryTrackingPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -808,7 +832,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/cupom/validar', publicRateLimit, async (req, res) => {
+  router.post('/:slug/cupom/validar', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -825,7 +849,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/pedido/resumo', async (req, res) => {
+  router.post('/:slug/pedido/resumo', requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -853,7 +877,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/auth/identificar', publicRateLimit, async (req, res) => {
+  router.post('/:slug/auth/identificar', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -883,7 +907,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/auth/cadastrar', publicRateLimit, async (req, res) => {
+  router.post('/:slug/auth/cadastrar', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -916,7 +940,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.get('/:slug/cliente/perfil', authDeliveryCliente, async (req: any, res) => {
+  router.get('/:slug/cliente/perfil', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       const cliente = await q1('SELECT id,nome,telefone,email,favoritos FROM delivery_clientes WHERE id=? AND tenant_id=?', [req.clienteId, req.tenantId]);
       if (!cliente) return res.status(404).json({ error: 'Cliente nao encontrado' });
@@ -926,7 +950,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.put('/:slug/cliente/perfil', authDeliveryCliente, async (req: any, res) => {
+  router.put('/:slug/cliente/perfil', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       const { nome, email } = req.body;
       await qRun('UPDATE delivery_clientes SET nome=?,email=? WHERE id=? AND tenant_id=?', [nome?.trim() || '', email || null, req.clienteId, req.tenantId]);
@@ -936,7 +960,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.put('/:slug/cliente/favoritos', authDeliveryCliente, async (req: any, res) => {
+  router.put('/:slug/cliente/favoritos', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       await qRun('UPDATE delivery_clientes SET favoritos=? WHERE id=? AND tenant_id=?', [JSON.stringify(req.body.favoritos || []), req.clienteId, req.tenantId]);
       res.json({ success: true });
@@ -945,7 +969,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.get('/:slug/cliente/enderecos', authDeliveryCliente, async (req: any, res) => {
+  router.get('/:slug/cliente/enderecos', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       res.json(await qAll('SELECT * FROM delivery_enderecos WHERE cliente_id=? AND tenant_id=? ORDER BY principal DESC, id DESC', [req.clienteId, req.tenantId]));
     } catch (e: any) {
@@ -953,7 +977,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/cliente/enderecos', authDeliveryCliente, async (req: any, res) => {
+  router.post('/:slug/cliente/enderecos', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       const { label, logradouro, numero, complemento, bairro, referencia, principal } = req.body;
       if (!logradouro?.trim()) return res.status(400).json({ error: 'Logradouro obrigatorio' });
@@ -968,7 +992,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.delete('/:slug/cliente/enderecos/:id', authDeliveryCliente, async (req: any, res) => {
+  router.delete('/:slug/cliente/enderecos/:id', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       await qRun('DELETE FROM delivery_enderecos WHERE id=? AND cliente_id=? AND tenant_id=?', [req.params.id, req.clienteId, req.tenantId]);
       res.json({ success: true });
@@ -977,7 +1001,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.get('/:slug/cliente/pedidos', authDeliveryCliente, async (req: any, res) => {
+  router.get('/:slug/cliente/pedidos', requireDeliveryTrackingPlan, authDeliveryCliente, async (req: any, res) => {
     try {
       const rows = await qAll(
         `SELECT p.*,
@@ -993,7 +1017,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/pedido', async (req: any, res) => {
+  router.post('/:slug/pedido', requireDeliveryPublicPlan, async (req: any, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1175,7 +1199,7 @@ export function createDeliveryPublicRouter() {
       }
     });
 
-  router.post('/:slug/pedido/:pedidoId/confirmar-pix', async (req, res) => {
+  router.post('/:slug/pedido/:pedidoId/confirmar-pix', requireDeliveryTrackingPlan, async (req, res) => {
     try {
       const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [req.params.slug, 'ativo']);
       if (!tenant) return res.status(404).json({ error: 'Estabelecimento nao encontrado' });
@@ -1193,7 +1217,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/suggestions', publicRateLimit, async (req, res) => {
+  router.post('/:slug/suggestions', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });

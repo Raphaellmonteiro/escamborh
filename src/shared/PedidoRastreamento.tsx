@@ -25,11 +25,11 @@ interface PedidoData {
 
 // Pipeline de status (ordem dos passos)
 const STEPS = [
-  { key: 'Criado',              label: 'Recebido',         emoji: '🧾', desc: 'Seu pedido foi recebido pelo restaurante.' },
-  { key: 'Em Preparo',          label: 'Em preparo',       emoji: '👨‍🍳', desc: 'A cozinha está preparando seu pedido.' },
-  { key: 'Pronto para Entrega', label: 'Pronto',           emoji: '📦', desc: 'Pedido pronto! Aguardando motoboy.' },
-  { key: 'Saiu para Entrega',   label: 'Saiu para entrega',emoji: '🛵', desc: 'Seu pedido está a caminho!' },
-  { key: 'Entregue',            label: 'Entregue',         emoji: '✅', desc: 'Pedido entregue. Bom apetite!' },
+  { key: 'Criado',              label: 'Recebido',          emoji: '01', desc: 'Seu pedido foi recebido pelo restaurante.' },
+  { key: 'Em Preparo',          label: 'Em preparo',        emoji: '02', desc: 'A cozinha está preparando seu pedido.' },
+  { key: 'Pronto para Entrega', label: 'Pronto',            emoji: '03', desc: 'Pedido pronto e aguardando envio.' },
+  { key: 'Saiu para Entrega',   label: 'Saiu para entrega', emoji: '04', desc: 'Seu pedido está a caminho.' },
+  { key: 'Entregue',            label: 'Entregue',          emoji: '05', desc: 'Pedido entregue.' },
 ];
 
 // Compatibiliza nomes de status antigos
@@ -99,7 +99,7 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
   if (error && !pedido) return (
     <div style={s.root}>
       <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <div style={{ fontSize: 64, marginBottom: 16 }}>⚠️</div>
+        <div style={{ ...s.badgeBox, width: 64, height: 64, margin: '0 auto 16px', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em' }}>PDV</div>
         <p style={{ color: '#ef4444', fontSize: 18, fontWeight: 700 }}>Pedido não encontrado</p>
         <p style={{ color: '#64748b', marginTop: 8, fontSize: 14 }}>Verifique o número do pedido.</p>
         <a href={`/delivery/${slug}`} style={{ display:'inline-block', marginTop:24, padding:'12px 28px', background:'#06b6d4', color:'#fff', borderRadius:12, fontWeight:700, textDecoration:'none' }}>
@@ -157,27 +157,27 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
               #{pedido.order_number}
             </div>
             {pedido.cliente_nome && (
-              <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Olá, {pedido.cliente_nome.split(' ')[0]}! 👋</div>
+              <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Olá, {pedido.cliente_nome.split(' ')[0]}.</div>
             )}
           </div>
 
           {/* Status atual em destaque */}
           {isCancelado ? (
             <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 16, padding: '20px', textAlign: 'center', marginBottom: 24 }}>
-              <div style={{ fontSize: 40 }}>❌</div>
+              <div style={{ ...s.badgeBox, width: 48, height: 48, margin: '0 auto', fontSize: 11, fontWeight: 800 }}>PDV</div>
               <div style={{ color: '#f87171', fontWeight: 900, fontSize: 20, marginTop: 8 }}>Pedido Cancelado</div>
               <div style={{ color: '#94a3b8', fontSize: 13, marginTop: 6 }}>Entre em contato com o restaurante.</div>
             </div>
           ) : (
             <div style={{
-              background: isEntregue ? 'rgba(52,211,153,0.1)' : 'rgba(6,182,212,0.08)',
-              border: `1px solid ${isEntregue ? 'rgba(52,211,153,0.3)' : 'rgba(6,182,212,0.2)'}`,
+              background: isEntregue ? 'rgba(56,189,248,0.12)' : 'rgba(6,182,212,0.08)',
+              border: `1px solid ${isEntregue ? 'rgba(56,189,248,0.3)' : 'rgba(6,182,212,0.2)'}`,
               borderRadius: 16, padding: '24px 20px', textAlign: 'center', marginBottom: 24,
             }}>
-              <div style={{ fontSize: 48, marginBottom: 10, animation: isEntregue ? 'none' : 'pulse 2s infinite' }}>
-                {step.emoji}
+              <div style={{ ...s.badgeBox, width: 56, height: 56, margin: '0 auto 10px', animation: isEntregue ? 'none' : 'pulse 2s infinite' }}>
+                <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '0.08em' }}>{step.emoji}</span>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: isEntregue ? '#34d399' : '#06b6d4', marginBottom: 6 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: isEntregue ? '#38bdf8' : '#06b6d4', marginBottom: 6 }}>
                 {step.label}
               </div>
               <div style={{ fontSize: 14, color: '#94a3b8' }}>{step.desc}</div>
@@ -198,21 +198,22 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
                       <div style={{
                         width: 28, height: 28, borderRadius: '50%',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: done ? 14 : 16,
-                        background: done ? '#34d399' : current ? '#06b6d4' : 'rgba(255,255,255,0.06)',
-                        border: `2px solid ${done ? '#34d399' : current ? '#06b6d4' : 'rgba(255,255,255,0.1)'}`,
+                        fontSize: done ? 11 : 11,
+                        fontWeight: 800,
+                        background: done ? '#38bdf8' : current ? '#06b6d4' : 'rgba(255,255,255,0.06)',
+                        border: `2px solid ${done ? '#38bdf8' : current ? '#06b6d4' : 'rgba(255,255,255,0.1)'}`,
                         transition: 'all 0.4s ease',
                         flexShrink: 0,
                       }}>
-                        {done ? '✓' : st.emoji}
+                        {done ? 'OK' : st.emoji}
                       </div>
                       {i < STEPS.length - 1 && (
-                        <div style={{ width: 2, flex: 1, minHeight: 24, background: done ? '#34d399' : 'rgba(255,255,255,0.08)', margin: '3px 0' }} />
+                        <div style={{ width: 2, flex: 1, minHeight: 24, background: done ? '#38bdf8' : 'rgba(255,255,255,0.08)', margin: '3px 0' }} />
                       )}
                     </div>
                     {/* Conteúdo */}
                     <div style={{ paddingTop: 4, paddingBottom: i < STEPS.length - 1 ? 20 : 4 }}>
-                      <div style={{ fontSize: 14, fontWeight: current ? 700 : 500, color: done ? '#34d399' : current ? '#f0f4ff' : '#475569' }}>
+                      <div style={{ fontSize: 14, fontWeight: current ? 700 : 500, color: done ? '#38bdf8' : current ? '#f0f4ff' : '#475569' }}>
                         {st.label}
                       </div>
                       {current && !isEntregue && (
@@ -227,7 +228,7 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
                         <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{fmtHora(pedido.saiu_entrega_at)}</div>
                       )}
                       {i === 4 && pedido.entregue_at && (
-                        <div style={{ fontSize: 11, color: '#34d399', marginTop: 2 }}>🎉 {fmtHora(pedido.entregue_at)}</div>
+                        <div style={{ fontSize: 11, color: '#38bdf8', marginTop: 2 }}>{fmtHora(pedido.entregue_at)}</div>
                       )}
                     </div>
                   </div>
@@ -238,7 +239,7 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
 
           {/* Resumo do pedido */}
           <div style={s.section}>
-            <div style={s.sectionTitle}>🛍️ Seu Pedido</div>
+              <div style={s.sectionTitle}>Seu pedido</div>
             {pedido.resumo_itens && (
               <div style={{ color: '#cbd5e1', fontSize: 14, lineHeight: 1.6 }}>
                 {pedido.resumo_itens.split(', ').map((item, i) => (
@@ -261,29 +262,29 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
           {/* Endereço */}
           {pedido.endereco && (
             <div style={{ ...s.section, marginTop: 12 }}>
-              <div style={s.sectionTitle}>📍 Endereço de entrega</div>
+              <div style={s.sectionTitle}>Endereço de entrega</div>
               <div style={{ color: '#94a3b8', fontSize: 14 }}>{pedido.endereco}</div>
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pedido.endereco)}`}
                 target="_blank" rel="noreferrer"
                 style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, fontSize:12, fontWeight:700, color:'#60a5fa', textDecoration:'none' }}
               >
-                🗺️ Ver no Maps
+                Ver no Maps
               </a>
             </div>
           )}
 
           {/* Pagamento */}
           <div style={{ ...s.section, marginTop: 12 }}>
-            <div style={s.sectionTitle}>💳 Pagamento</div>
+            <div style={s.sectionTitle}>Pagamento</div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ color:'#94a3b8', fontSize:14 }}>
                 {{ pix:'PIX', dinheiro:'Dinheiro', cartao:'Cartão' }[pedido.pagamento_tipo||''] || pedido.pagamento_tipo}
               </span>
               <span style={{
                 padding:'3px 10px', borderRadius:100, fontSize:11, fontWeight:700,
-                background: pedido.pagamento_status==='pago' ? 'rgba(52,211,153,0.15)' : 'rgba(251,191,36,0.15)',
-                color:       pedido.pagamento_status==='pago' ? '#34d399' : '#fbbf24',
+                background: pedido.pagamento_status==='pago' ? 'rgba(56,189,248,0.15)' : 'rgba(251,191,36,0.15)',
+                color:       pedido.pagamento_status==='pago' ? '#38bdf8' : '#fbbf24',
               }}>
                 {pedido.pagamento_status==='pago' ? '✓ Pago' : 'Aguardando'}
               </span>
@@ -292,12 +293,12 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
 
           {/* Botão refazer pedido */}
           <a href={`/delivery/${slug}`} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:24, padding:'14px', background:'rgba(6,182,212,0.12)', border:'1px solid rgba(6,182,212,0.25)', borderRadius:14, color:'#06b6d4', fontWeight:700, fontSize:14, textDecoration:'none', transition:'all .2s' }}>
-            🍽️ Fazer novo pedido
+            Fazer novo pedido
           </a>
         </div>
 
         {/* Rodapé */}
-        <div style={{ textAlign:'center', color:'#1e293b', fontSize:11, padding:'16px 0 32px' }}>
+        <div style={{ textAlign:'center', color:'#94a3b8', fontSize:11, padding:'16px 0 32px' }}>
           Atualização automática a cada 5 segundos · FlowPDV
         </div>
       </div>
@@ -308,15 +309,15 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
 // ── Estilos ──────────────────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
   root: {
-    background: '#080c14',
+    background: '#090e17',
     minHeight: '100vh',
     fontFamily: "'DM Sans', system-ui, sans-serif",
     color: '#f0f4ff',
   },
   header: {
-    background: 'rgba(13,18,32,0.95)',
+    background: 'rgba(9,14,23,0.96)',
     backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(255,255,255,0.07)',
+    borderBottom: '1px solid rgba(148,163,184,0.12)',
     padding: '14px 20px',
     display: 'flex',
     alignItems: 'center',
@@ -338,23 +339,32 @@ const s: Record<string, React.CSSProperties> = {
     padding: '24px 16px',
   },
   card: {
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(15,23,42,0.52)',
+    border: '1px solid rgba(148,163,184,0.12)',
     borderRadius: 24,
     padding: '28px 24px',
   },
   section: {
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.07)',
+    background: 'rgba(15,23,42,0.4)',
+    border: '1px solid rgba(148,163,184,0.1)',
     borderRadius: 14,
     padding: '16px',
   },
   sectionTitle: {
     fontSize: 11,
     fontWeight: 800,
-    color: '#475569',
+    color: '#94a3b8',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     marginBottom: 10,
+  },
+  badgeBox: {
+    background: 'rgba(6,182,212,0.1)',
+    border: '1px solid rgba(6,182,212,0.24)',
+    borderRadius: 18,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#e0f2fe',
   },
 };

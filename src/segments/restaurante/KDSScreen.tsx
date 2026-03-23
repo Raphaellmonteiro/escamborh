@@ -8,9 +8,9 @@ interface KDSOrder {
 
 const PIPELINE = ['Criado', 'Em Preparo', 'Pronto', 'Entregue'];
 const STATUS: Record<string, { label: string; emoji: string; color: string; bg: string; border: string; glow: string; }> = {
-  'Criado':     { label: 'AGUARDANDO', emoji: '🆕', color: '#60a5fa', bg: 'rgba(59,130,246,0.06)',  border: 'rgba(59,130,246,0.25)', glow: 'transparent' },
-  'Em Preparo': { label: 'EM PREPARO', emoji: '🔥', color: '#fbbf24', bg: 'rgba(251,191,36,0.07)',  border: 'rgba(251,191,36,0.35)', glow: 'rgba(251,191,36,0.15)' },
-  'Pronto':     { label: 'PRONTO',     emoji: '✅', color: '#34d399', bg: 'rgba(52,211,153,0.07)',  border: 'rgba(52,211,153,0.35)', glow: 'rgba(52,211,153,0.2)' },
+  'Criado':     { label: 'AGUARDANDO', emoji: '•', color: '#60a5fa', bg: 'rgba(59,130,246,0.06)',  border: 'rgba(59,130,246,0.25)', glow: 'transparent' },
+  'Em Preparo': { label: 'EM PREPARO', emoji: '•', color: '#fbbf24', bg: 'rgba(251,191,36,0.07)',  border: 'rgba(251,191,36,0.35)', glow: 'rgba(251,191,36,0.15)' },
+  'Pronto':     { label: 'PRONTO',     emoji: '•', color: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.35)', glow: 'rgba(34,211,238,0.16)' },
 };
 const COLS = ['Criado', 'Em Preparo', 'Pronto'];
 
@@ -18,9 +18,9 @@ function elapsedMin(created_at: string) {
   return Math.floor((Date.now() - new Date(created_at).getTime()) / 60000);
 }
 function tipoInfo(order: KDSOrder) {
-  if (order.tipo_retirada === 'levar') return { label: 'VIAGEM', emoji: '🛍️', color: '#fb923c' };
-  if ((order.observation || '').startsWith('Mesa ')) return { label: order.observation.toUpperCase(), emoji: '🪑', color: '#a78bfa' };
-  return { label: 'BALCÃO', emoji: '🏠', color: '#38bdf8' };
+  if (order.tipo_retirada === 'levar') return { label: 'VIAGEM', emoji: '•', color: '#fb923c' };
+  if ((order.observation || '').startsWith('Mesa ')) return { label: order.observation.toUpperCase(), emoji: '•', color: '#a78bfa' };
+  return { label: 'BALCÃO', emoji: '•', color: '#38bdf8' };
 }
 
 export default function KDSScreen({ slug }: { slug: string }) {
@@ -66,12 +66,18 @@ export default function KDSScreen({ slug }: { slug: string }) {
 
   React.useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
+  // Polling base sempre ativo para garantir sincronização,
+  // mesmo quando o SSE estiver conectado mas sem eventos úteis.
+  React.useEffect(() => {
+    const pollId = setInterval(fetchOrders, 10000);
+    return () => clearInterval(pollId);
+  }, [fetchOrders]);
+
   // ── SSE: recebe eventos do servidor instantaneamente ─────────────────────
   // A rota /public/kds não usa JWT — slug identifica o tenant.
   // Conectamos ao SSE público separado para o KDS.
   React.useEffect(() => {
     let es: EventSource | null = null;
-    let fallbackId: ReturnType<typeof setInterval> | null = null;
     let retryTimeout: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
 
@@ -81,21 +87,18 @@ export default function KDSScreen({ slug }: { slug: string }) {
 
       es.addEventListener('new_order',    () => fetchOrders());
       es.addEventListener('status_change', () => fetchOrders());
+      es.addEventListener('ping', () => {});
 
       es.onerror = () => {
         es?.close();
-        // Fallback: polling a cada 30s enquanto SSE estiver indisponível
-        if (!fallbackId) fallbackId = setInterval(fetchOrders, 30000);
         // Tenta reconectar em 5s
         retryTimeout = setTimeout(() => {
-          if (fallbackId) { clearInterval(fallbackId); fallbackId = null; }
           connect();
         }, 5000);
       };
 
       es.onopen = () => {
-        // SSE conectado — cancela o fallback de polling se estava ativo
-        if (fallbackId) { clearInterval(fallbackId); fallbackId = null; }
+        void fetchOrders();
       };
     };
 
@@ -103,7 +106,6 @@ export default function KDSScreen({ slug }: { slug: string }) {
     return () => {
       closed = true;
       es?.close();
-      if (fallbackId) clearInterval(fallbackId);
       if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, [slug, fetchOrders]);
@@ -120,7 +122,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
   if (loading) return (
     <div style={{ ...S.root, alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', color: '#334155' }}>
-        <div style={{ fontSize: 56, marginBottom: 16 }}>🍽️</div>
+        <div style={{ ...S.logoBox, width: 56, height: 56, margin: '0 auto 16px', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em' }}>KDS</div>
         <p style={{ fontFamily: 'monospace', letterSpacing: 2 }}>Conectando à cozinha...</p>
       </div>
     </div>
@@ -129,7 +131,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
   if (!data) return (
     <div style={{ ...S.root, alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 56, marginBottom: 16 }}>⚠️</div>
+        <div style={{ ...S.logoBox, width: 56, height: 56, margin: '0 auto 16px', fontSize: 14, fontWeight: 800 }}>KDS</div>
         <p style={{ color: '#ef4444', fontFamily: 'monospace' }}>Restaurante não encontrado — slug: {slug}</p>
       </div>
     </div>
@@ -143,7 +145,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
       {/* ── HEADER ──────────────────────────────────────────────── */}
       <header style={S.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={S.logoBox}>🍽️</div>
+          <div style={{ ...S.logoBox, fontSize: 11, fontWeight: 800, letterSpacing: '0.18em' }}>KDS</div>
           <div>
             <div style={S.hTitle}>{data.estabelecimento}</div>
             <div style={S.hSub}>TELA DA COZINHA — KDS</div>
@@ -170,7 +172,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
       {/* ── EMPTY ───────────────────────────────────────────────── */}
       {orders.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontSize: 80, marginBottom: 20 }}>✅</div>
+          <div style={{ ...S.logoBox, width: 72, height: 72, marginBottom: 20, fontSize: 14, fontWeight: 800, letterSpacing: '0.18em' }}>KDS</div>
           <p style={{ fontSize: 28, fontWeight: 900, color: '#1e293b' }}>Tudo em dia!</p>
           <p style={{ fontSize: 14, color: '#334155', marginTop: 8 }}>Nenhum pedido pendente no momento</p>
         </div>
@@ -203,9 +205,9 @@ export default function KDSScreen({ slug }: { slug: string }) {
                     return (
                       <div key={order.id} style={{
                         ...S.card,
-                        background: col === 'Pronto' ? 'rgba(52,211,153,0.06)' : sc.bg,
+                        background: col === 'Pronto' ? 'rgba(34,211,238,0.08)' : sc.bg,
                         borderColor: urgent ? '#ef4444' : sc.border,
-                        boxShadow:   urgent ? '0 0 24px rgba(239,68,68,0.25)' : col === 'Pronto' ? '0 0 28px rgba(52,211,153,0.15)' : 'none',
+                        boxShadow:   urgent ? '0 0 24px rgba(239,68,68,0.25)' : col === 'Pronto' ? '0 0 28px rgba(34,211,238,0.16)' : 'none',
                       }}>
 
                         {/* topo: senha + tipo + tempo */}
@@ -276,7 +278,9 @@ export default function KDSScreen({ slug }: { slug: string }) {
                             <div style={{ fontSize: 18, fontWeight: 900, color: urgent ? '#ef4444' : '#64748b', fontFamily: 'monospace', lineHeight: 1 }}>
                               {Math.max(0, min)}
                             </div>
-                            <div style={{ fontSize: 9, color: urgent ? '#ef4444' : '#475569', fontWeight: 600, letterSpacing: 0.5 }}>MIN{urgent ? ' ⚠️' : ''}</div>
+                            <div style={{ fontSize: 9, color: urgent ? '#ef4444' : '#475569', fontWeight: 600, letterSpacing: 0.5 }}>
+                              {urgent ? 'ATRASO' : 'MIN'}
+                            </div>
                           </div>
                         </div>
 
@@ -306,7 +310,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
                             borderRadius: 8, padding: '5px 10px', fontSize: 11, color: '#94a3b8',
                             fontStyle: 'italic', marginBottom: 10,
                           }}>
-                            📝 {order.observation}
+                            Obs.: {order.observation}
                           </div>
                         )}
 
@@ -316,20 +320,20 @@ export default function KDSScreen({ slug }: { slug: string }) {
                             width: '100%', padding: '10px 0', borderRadius: 10, border: 'none',
                             cursor: isAdv ? 'wait' : 'pointer',
                             background: isAdv ? '#1e293b' : sc.color,
-                            color: '#000', fontWeight: 900, fontSize: 13,
+                            color: '#020617', fontWeight: 900, fontSize: 13,
                             opacity: isAdv ? 0.5 : 1, transition: 'all 0.2s', letterSpacing: 0.5,
                           }}>
-                            {isAdv ? '...' : `→ ${next}`}
+                            {isAdv ? '...' : `Avançar para ${next}`}
                           </button>
                         )}
                         {col === 'Pronto' && (
                           <button onClick={() => advance(order.id)} disabled={isAdv} style={{
                             width: '100%', padding: '10px 0', borderRadius: 10, border: 'none',
                             cursor: isAdv ? 'wait' : 'pointer',
-                            background: isAdv ? '#1e293b' : '#34d399',
-                            color: '#000', fontWeight: 900, fontSize: 13, opacity: isAdv ? 0.5 : 1,
+                            background: isAdv ? '#1e293b' : '#22d3ee',
+                            color: '#020617', fontWeight: 900, fontSize: 13, opacity: isAdv ? 0.5 : 1,
                           }}>
-                            {isAdv ? '...' : '✅ Marcar como Entregue'}
+                            {isAdv ? '...' : 'Marcar como entregue'}
                           </button>
                         )}
                       </div>
@@ -345,29 +349,29 @@ export default function KDSScreen({ slug }: { slug: string }) {
       {/* ── FOOTER ──────────────────────────────────────────────── */}
       <footer style={S.footer}>
         <span>FlowPDV · Tela da Cozinha</span>
-        <span style={{ color: '#1e293b' }}>·</span>
+        <span style={{ color: '#475569' }}>·</span>
         <span>Atualização a cada 10 segundos</span>
-        <span style={{ color: '#1e293b' }}>·</span>
-        <span style={{ color: '#ef4444', fontWeight: 600 }}>⚠️ vermelho = acima de 15 min</span>
+        <span style={{ color: '#475569' }}>·</span>
+        <span style={{ color: '#f87171', fontWeight: 600 }}>Vermelho = acima de 15 min</span>
       </footer>
     </div>
   );
 }
 
 const S: Record<string, React.CSSProperties> = {
-  root:    { background: '#080c14', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#f0f4ff', userSelect: 'none' },
-  header:  { background: 'rgba(13,18,32,0.98)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, gap: 12 },
-  logoBox: { width: 38, height: 38, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
+  root:    { background: '#090e17', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#f0f4ff', userSelect: 'none' },
+  header:  { background: 'rgba(9,14,23,0.97)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(148,163,184,0.12)', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, gap: 12 },
+  logoBox: { width: 38, height: 38, background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(34,211,238,0.18)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
   hTitle:  { fontSize: '0.9rem', fontWeight: 800, color: '#f0f4ff' },
-  hSub:    { fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.12em', color: '#334155', textTransform: 'uppercase' },
-  sep:     { width: 1, height: 30, background: 'rgba(255,255,255,0.08)', margin: '0 4px' },
+  hSub:    { fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.12em', color: '#94a3b8', textTransform: 'uppercase' },
+  sep:     { width: 1, height: 30, background: 'rgba(148,163,184,0.16)', margin: '0 4px' },
   pill:    { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 10, border: '1px solid' },
   clock:   { fontFamily: 'monospace', fontSize: '1.3rem', fontWeight: 900, color: '#f0f4ff', letterSpacing: '-0.02em' },
   colGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', overflow: 'hidden' },
-  col:     { borderRight: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '3px solid transparent' },
-  colHead: { display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid', background: 'rgba(255,255,255,0.02)', flexShrink: 0 },
+  col:     { borderRight: '1px solid rgba(148,163,184,0.08)', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '3px solid transparent' },
+  colHead: { display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid', background: 'rgba(15,23,42,0.45)', flexShrink: 0 },
   cardArea:{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 },
-  card:    { borderRadius: 14, border: '1px solid', padding: 14, transition: 'all 0.3s ease' },
-  emptyCol:{ textAlign: 'center', color: '#1e293b', fontSize: '0.8rem', padding: '32px 0', fontStyle: 'italic' },
-  footer:  { borderTop: '1px solid rgba(255,255,255,0.05)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.68rem', color: '#334155', background: 'rgba(13,18,32,0.9)', flexShrink: 0 },
+  card:    { borderRadius: 14, border: '1px solid', padding: 14, transition: 'all 0.3s ease', background: 'rgba(15,23,42,0.55)' },
+  emptyCol:{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem', padding: '32px 0', fontStyle: 'italic' },
+  footer:  { borderTop: '1px solid rgba(148,163,184,0.1)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.68rem', color: '#94a3b8', background: 'rgba(9,14,23,0.94)', flexShrink: 0 },
 };
