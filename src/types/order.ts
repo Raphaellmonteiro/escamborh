@@ -18,6 +18,9 @@ export interface OrderItemInput {
   price_at_time?: number;
   unitPrice?: number;
   variation_id?: number | null;
+  /** Observação / resumo de opções e adicionais do item (cardápio envia como `obs_opcoes`). */
+  observation?: string;
+  obs_opcoes?: string;
 }
 
 export interface PaymentInput {

@@ -103,13 +103,22 @@ function hasRecordedPayments(order: Order): boolean {
   );
 }
 
+function getRecordedPaymentCoverageTarget(order: Order): number {
+  const kind = getCentralOrderKind(order);
+  const subtotal = Number(order.subtotal || 0);
+  if ((kind === 'balcao' || kind === 'retirada' || kind === 'other') && subtotal > 0) {
+    return subtotal;
+  }
+  return Number(order.total_amount || 0);
+}
+
 export function isOrderFullyPaid(order: Order): boolean {
   if (usesDeliveryPaymentConfirmation(order)) {
     return getPaymentStatusKey(order) === 'pago';
   }
   if (getPaymentStatusKey(order) === 'pago') return true;
   if (!hasRecordedPayments(order)) return false;
-  return getOrderRecordedPaidAmount(order) + 0.01 >= Number(order.total_amount || 0);
+  return getOrderRecordedPaidAmount(order) + 0.01 >= getRecordedPaymentCoverageTarget(order);
 }
 
 export function isPaymentPendingOrder(order: Order): boolean {
@@ -119,7 +128,7 @@ export function isPaymentPendingOrder(order: Order): boolean {
   }
   if (isOrderFullyPaid(order)) return false;
   if (hasRecordedPayments(order)) {
-    return getOrderRecordedPaidAmount(order) + 0.01 < Number(order.total_amount || 0);
+    return getOrderRecordedPaidAmount(order) + 0.01 < getRecordedPaymentCoverageTarget(order);
   }
   return Boolean(status) && status !== 'pago';
 }

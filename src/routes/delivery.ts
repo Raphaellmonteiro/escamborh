@@ -124,7 +124,22 @@ router.get('/pedidos', async (req: Request, res) => {
       const { status, limit = 100 } = req.query;
       let q = `SELECT p.*, dc.nome as motoboy_nome,
         (SELECT STRING_AGG(pr.name || ' x' || ip.quantity::text, ', ')
-         FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens
+         FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id AND pr.tenant_id=ip.tenant_id WHERE ip.order_id=p.id AND ip.tenant_id=p.tenant_id) as resumo_itens,
+        (SELECT COALESCE(
+          JSON_AGG(
+            json_build_object(
+              'product_id', ip.product_id,
+              'product_name', pr.name,
+              'quantity', ip.quantity,
+              'price_at_time', ip.price_at_time,
+              'observation', ip.observation
+            ) ORDER BY ip.id ASC
+          ),
+          '[]'::json
+        )
+        FROM itens_pedido ip
+        INNER JOIN produtos pr ON pr.id=ip.product_id AND pr.tenant_id=ip.tenant_id
+        WHERE ip.order_id=p.id AND ip.tenant_id=p.tenant_id) as itens
         FROM pedidos p LEFT JOIN delivery_motoboys dc ON dc.id=p.motoboy_id AND dc.tenant_id=p.tenant_id
         WHERE p.tenant_id=? AND p.canal='delivery'`;
       const params: any[] = [req.tenantId];
@@ -150,11 +165,25 @@ router.get('/pedidos', async (req: Request, res) => {
       q += ' ORDER BY p.created_at DESC LIMIT ?'; params.push(Number(limit));
 
       const rows = await qAll(q, params);
-      res.json(rows.map((p: any) => ({
-        ...p,
-        total_amount: Number(p.total_amount || 0),
-        taxa_entrega: Number(p.taxa_entrega || 0)
-      })));
+      res.json(
+        rows.map((p: any) => {
+          let itens = p.itens;
+          if (typeof itens === 'string') {
+            try {
+              itens = JSON.parse(itens || '[]');
+            } catch {
+              itens = [];
+            }
+          }
+          if (!Array.isArray(itens)) itens = [];
+          return {
+            ...p,
+            itens,
+            total_amount: Number(p.total_amount || 0),
+            taxa_entrega: Number(p.taxa_entrega || 0),
+          };
+        })
+      );
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -501,8 +530,19 @@ router.get('/clientes', async (req: Request, res) => {
         [on, total_amount, taxa_entrega||0, observation||null, req.tenantId, cliente_nome||null, clienteTelNormalizado||null, endereco||null, pagamento_tipo||'dinheiro', pagamento_tipo==='pix'?'aguardando_confirmacao':'pendente', 'Pedido Recebido', deliveryClienteId]
       );
       for (const item of (items||[])) {
-        await qRun('INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id) VALUES (?,?,?,?,?,?)',
-          [orderId, item.product_id, item.quantity, 'Delivery', item.price_at_time, req.tenantId]);
+        const lineObsRaw = item?.obs_opcoes ?? item?.observation;
+        const lineObs =
+          lineObsRaw === undefined || lineObsRaw === null
+            ? null
+            : (() => {
+                const s = String(lineObsRaw).trim();
+                if (!s) return null;
+                return s.length > 4000 ? s.slice(0, 4000) : s;
+              })();
+        await qRun(
+          'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,observation) VALUES (?,?,?,?,?,?,?)',
+          [orderId, item.product_id, item.quantity, 'Delivery', item.price_at_time, req.tenantId, lineObs]
+        );
       }
       if (deliveryClienteId) {
         await touchDeliveryCustomerPurchase({

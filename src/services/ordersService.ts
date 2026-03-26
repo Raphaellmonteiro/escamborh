@@ -62,13 +62,18 @@ const ALLOWED_PAYMENT_METHODS = new Set([
 
 type TenantId = number | string;
 
+const MAX_ITEM_OBSERVATION_LEN = 4000;
+
 type NormalizedOrderItem = {
   product_id: number;
   quantity: number;
   type?: string;
   price_at_time: number;
   variation_id: number | null;
+  observation: string | null;
 };
+
+type StockAdjustmentItem = Pick<NormalizedOrderItem, 'product_id' | 'quantity' | 'variation_id'>;
 
 type NormalizedPayment = {
   method: string;
@@ -93,6 +98,7 @@ type OrderRow = {
   status: string;
   canal?: string | null;
   total_amount: number;
+  subtotal?: number | null;
   pagamento_tipo?: string | null;
   pagamento_status?: string | null;
   observation?: string | null;
@@ -119,6 +125,7 @@ type OrderItemRow = {
   type?: string | null;
   price_at_time: number;
   variation_id?: number | null;
+  observation?: string | null;
   product_name?: string | null;
   product_category?: string | null;
   production_type?: string | null;
@@ -192,6 +199,16 @@ function parseOrderId(orderId: number | string) {
   return parsed;
 }
 
+function normalizeItemObservationField(item: OrderItemInput): string | null {
+  const raw = item.observation ?? item.obs_opcoes;
+  if (raw === undefined || raw === null) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  return trimmed.length > MAX_ITEM_OBSERVATION_LEN
+    ? trimmed.slice(0, MAX_ITEM_OBSERVATION_LEN)
+    : trimmed;
+}
+
 function normalizeOrderItem(item: OrderItemInput, index: number): NormalizedOrderItem {
   const productId = Number(item.product_id);
   const quantity = Number(item.quantity);
@@ -218,6 +235,7 @@ function normalizeOrderItem(item: OrderItemInput, index: number): NormalizedOrde
     type: item.type?.trim() || undefined,
     price_at_time: priceAtTime,
     variation_id,
+    observation: normalizeItemObservationField(item),
   };
 }
 
@@ -268,6 +286,26 @@ function toMoneyCents(value: number) {
 
 function centsToMoney(cents: number) {
   return cents / 100;
+}
+
+function summarizePaymentMethod(payments: NormalizedPayment[]): string | null {
+  const uniqueMethods = Array.from(
+    new Set(
+      payments
+        .map((payment) => String(payment.method || '').trim())
+        .filter(Boolean)
+    )
+  );
+  if (uniqueMethods.length === 0) return null;
+  if (uniqueMethods.length === 1) return uniqueMethods[0];
+  return 'Misto';
+}
+
+function calculateItemsSubtotal(items: NormalizedOrderItem[]): number {
+  return items.reduce(
+    (sum, item) => sum + Number(item.quantity) * Number(item.price_at_time),
+    0
+  );
 }
 
 function ensureFinancialConsistency(input: {
@@ -436,8 +474,17 @@ async function insertOrderItems(
   for (const item of items) {
     await txRun(
       client,
-      'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id) VALUES (?,?,?,?,?,?,?)',
-      [orderId, item.product_id, item.quantity, item.type, item.price_at_time, tenantId, item.variation_id]
+      'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation) VALUES (?,?,?,?,?,?,?,?)',
+      [
+        orderId,
+        item.product_id,
+        item.quantity,
+        item.type,
+        item.price_at_time,
+        tenantId,
+        item.variation_id,
+        item.observation,
+      ]
     );
   }
 }
@@ -514,7 +561,7 @@ async function applyIngredientStockChange(
 
 async function adjustStockForItem(
   client: PoolClient,
-  item: NormalizedOrderItem,
+  item: StockAdjustmentItem,
   tenantId: TenantId,
   direction: 'saida' | 'entrada',
   failOnMissingProduct = true,
@@ -663,8 +710,6 @@ async function restoreStockForOrder(
       {
         product_id: Number(item.product_id),
         quantity: Number(item.quantity),
-        type: item.type || undefined,
-        price_at_time: Number(item.price_at_time || 0),
         variation_id: Number.isInteger(vid) && vid > 0 ? vid : null,
       },
       tenantId,
@@ -812,6 +857,7 @@ async function generateReceipt(
       qtd: item.quantity,
       nome: productMap[item.product_id] || 'Produto',
       valor: Number(item.price_at_time) * Number(item.quantity),
+      obs: item.observation || undefined,
     })),
     totais: [{ label: 'TOTAL', valor: total_amount, destaque: true }],
     pagamentos: payments.map((payment) => ({
@@ -896,13 +942,15 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
     return await withTx(async (client) => {
       const { nextNumber, orderNumber } = await generateOrderNumber(client, tenantId);
       const senhaPedido = nextNumber;
+      const paymentMethod = summarizePaymentMethod(input.payments);
+      const subtotal = calculateItemsSubtotal(input.items);
 
       const orderId = Number(
         await txInsert(
           client,
           `INSERT INTO pedidos
-            (order_number,status,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal)
-           VALUES (?,?,?,?,?,?,?,?)`,
+            (order_number,status,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal,pagamento_tipo,pagamento_status,subtotal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
           [
             orderNumber,
             input.status,
@@ -912,6 +960,9 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
             senhaPedido,
             input.tipo_retirada,
             input.canal,
+            paymentMethod,
+            'pago',
+            subtotal,
           ]
         )
       );
@@ -1417,6 +1468,7 @@ export async function getOrders(filters: GetOrdersFilters) {
     const orderIds = orders.map((order) => order.id);
     const items = await qAll<OrderItemRow>(
       `SELECT ip.order_id, ip.product_id, ip.quantity, ip.type, ip.price_at_time,
+              ip.observation,
               p.name AS product_name, p.category AS product_category,
               p.production_type, p.requires_preparation
        FROM itens_pedido ip
@@ -1458,25 +1510,39 @@ export async function getOrders(filters: GetOrdersFilters) {
       });
     }
 
-    return orders.map((order) => ({
-      ...order,
-      estoque_reposto: Boolean(Number(order.estoque_reposto || 0)),
-      payment_total_received: paymentsByOrder.get(Number(order.id))?.totalReceived || 0,
-      payment_total_change: paymentsByOrder.get(Number(order.id))?.totalChange || 0,
-      payment_total_paid: paymentsByOrder.get(Number(order.id))?.totalPaid || 0,
-      payment_count: paymentsByOrder.get(Number(order.id))?.count || 0,
-      items: (itemsByOrder.get(Number(order.id)) || []).map((item) => ({
-        product_id: Number(item.product_id),
-        quantity: Number(item.quantity),
-        type: item.type || undefined,
-        price_at_time: Number(item.price_at_time || 0),
-        product_name: item.product_name || 'Produto',
-        product_category: item.product_category || null,
-        production_type: item.production_type || null,
-        requires_preparation: item.requires_preparation ?? null,
-        name: item.product_name || 'Produto',
-      })),
-    }));
+    return orders.map((order) => {
+      const orderItems = (itemsByOrder.get(Number(order.id)) || []).map((item) => {
+        const obs = String(item.observation || '').trim() || undefined;
+        return {
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity),
+          type: item.type || undefined,
+          price_at_time: Number(item.price_at_time || 0),
+          product_name: item.product_name || 'Produto',
+          product_category: item.product_category || null,
+          production_type: item.production_type || null,
+          requires_preparation: item.requires_preparation ?? null,
+          name: item.product_name || 'Produto',
+          observation: obs,
+          obs_opcoes: obs,
+        };
+      });
+      const derivedSubtotal = orderItems.reduce(
+        (sum, item) => sum + Number(item.quantity) * Number(item.price_at_time || 0),
+        0
+      );
+
+      return {
+        ...order,
+        estoque_reposto: Boolean(Number(order.estoque_reposto || 0)),
+        subtotal: Number(order.subtotal || 0) > 0 ? Number(order.subtotal) : derivedSubtotal,
+        payment_total_received: paymentsByOrder.get(Number(order.id))?.totalReceived || 0,
+        payment_total_change: paymentsByOrder.get(Number(order.id))?.totalChange || 0,
+        payment_total_paid: paymentsByOrder.get(Number(order.id))?.totalPaid || 0,
+        payment_count: paymentsByOrder.get(Number(order.id))?.count || 0,
+        items: orderItems,
+      };
+    });
   } catch (error) {
     logError('ordersService.getOrders', error, {
       tenantId: filters.tenantId,

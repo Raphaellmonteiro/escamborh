@@ -3,14 +3,13 @@
 // Como usar: chamar no início da função POSScreen e passar os callbacks
 //
 // Atalhos:
-//   F1 – F8      → acionar produto por índice (top 8 na ordem da lista)
-//   F9           → limpar carrinho
-//   F10          → abrir/fechar checkout
-//   Ctrl + F     → focar campo de busca
-//   Ctrl + B     → scanner de código de barras (focar campo de código)
-//   Escape       → cancelar pendência (fechar modal de tipo, etc.)
-//   Numpad+      → aumentar qty último item do carrinho
-//   Numpad-      → diminuir qty último item do carrinho
+//   F1 – F8         → adicionar produto rápido (top 8)
+//   Ctrl + F        → focar busca
+//   Ctrl + Enter    → finalizar/abrir fluxo de fechamento
+//   Ctrl + Shift+C  → abrir/fechar carrinho no mobile
+//   Alt + ↑ / ↓     → ajustar quantidade do item selecionado
+//   Ctrl + Backspace→ pedir limpeza do carrinho
+//   Escape          → fechar modal/overlay atual
 
 import { useEffect, useRef } from 'react';
 
@@ -18,57 +17,96 @@ interface UsePOSKeyboardOptions {
   products:          Array<{ id: number; name: string; price: number }>;
   onAddProduct:      (product: any) => void;
   onClearCart:       () => void;
-  onToggleCheckout:  () => void;
   onFocusSearch:     () => void;
-  onFocusBarcode?:   () => void;
   onEscape?:         () => void;
+  onFinalize?:       () => void;
   onQtyIncrease?:    () => void;
   onQtyDecrease?:    () => void;
-  /** Se false, os atalhos ficam desativados (ex: quando modal está aberto) */
+  onToggleCart?:     () => void;
+  hasBlockingModal?: boolean;
   enabled?:          boolean;
+}
+
+function isEditableElement(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
 export function usePOSKeyboard({
   products,
   onAddProduct,
   onClearCart,
-  onToggleCheckout,
   onFocusSearch,
-  onFocusBarcode,
   onEscape,
+  onFinalize,
   onQtyIncrease,
   onQtyDecrease,
+  onToggleCart,
+  hasBlockingModal = false,
   enabled = true,
 }: UsePOSKeyboardOptions) {
   // Refs para callbacks estáveis (evita re-registro do listener a cada render)
-  const refs = useRef({ products, onAddProduct, onClearCart, onToggleCheckout, onFocusSearch, onFocusBarcode, onEscape, onQtyIncrease, onQtyDecrease });
-  refs.current = { products, onAddProduct, onClearCart, onToggleCheckout, onFocusSearch, onFocusBarcode, onEscape, onQtyIncrease, onQtyDecrease };
+  const refs = useRef({
+    products,
+    onAddProduct,
+    onClearCart,
+    onFocusSearch,
+    onEscape,
+    onFinalize,
+    onQtyIncrease,
+    onQtyDecrease,
+    onToggleCart,
+    hasBlockingModal,
+  });
+  refs.current = {
+    products,
+    onAddProduct,
+    onClearCart,
+    onFocusSearch,
+    onEscape,
+    onFinalize,
+    onQtyIncrease,
+    onQtyDecrease,
+    onToggleCart,
+    hasBlockingModal,
+  };
 
   useEffect(() => {
     if (!enabled) return;
 
     const handler = (e: KeyboardEvent) => {
-      // Ignora quando foco está em input/textarea/select
-      const tag = (e.target as HTMLElement)?.tagName;
-      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (e.repeat) return;
 
-      const { products, onAddProduct, onClearCart, onToggleCheckout, onFocusSearch, onFocusBarcode, onEscape, onQtyIncrease, onQtyDecrease } = refs.current;
+      const inInput = isEditableElement(e.target);
+      const {
+        products,
+        onAddProduct,
+        onClearCart,
+        onFocusSearch,
+        onEscape,
+        onFinalize,
+        onQtyIncrease,
+        onQtyDecrease,
+        onToggleCart,
+        hasBlockingModal,
+      } = refs.current;
 
       // Ctrl+F → focar busca (funciona mesmo em input)
-      if (e.ctrlKey && e.key === 'f') {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f' && !hasBlockingModal) {
         e.preventDefault();
         onFocusSearch();
         return;
       }
 
-      // Ctrl+B → focar scanner de código de barras
-      if (e.ctrlKey && e.key === 'b') {
+      if (e.key === 'Escape') {
         e.preventDefault();
-        onFocusBarcode?.();
+        onEscape?.();
         return;
       }
 
-      if (inInput) return; // resto só fora de inputs
+      if (hasBlockingModal || inInput) return;
 
       // F1–F8 → adicionar produto por índice
       const fMatch = e.key.match(/^F([1-8])$/);
@@ -79,29 +117,35 @@ export function usePOSKeyboard({
         return;
       }
 
-      // F9 → limpar carrinho
-      if (e.key === 'F9') {
+      if (e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        onToggleCart?.();
+        return;
+      }
+
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === 'Enter') {
+        e.preventDefault();
+        onFinalize?.();
+        return;
+      }
+
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === 'Backspace') {
         e.preventDefault();
         onClearCart();
         return;
       }
 
-      // F10 → checkout
-      if (e.key === 'F10') {
+      if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'ArrowUp') {
         e.preventDefault();
-        onToggleCheckout();
+        onQtyIncrease?.();
         return;
       }
 
-      // Escape
-      if (e.key === 'Escape') {
-        onEscape?.();
+      if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'ArrowDown') {
+        e.preventDefault();
+        onQtyDecrease?.();
         return;
       }
-
-      // Numpad + / -
-      if (e.key === '+' || e.key === 'Add')      { e.preventDefault(); onQtyIncrease?.(); return; }
-      if (e.key === '-' || e.key === 'Subtract') { e.preventDefault(); onQtyDecrease?.(); return; }
     };
 
     window.addEventListener('keydown', handler);

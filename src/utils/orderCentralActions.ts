@@ -206,6 +206,21 @@ export function canCentralNotifyCustomer(order: Order): boolean {
   return isDeliveryOrder(order) && getCustomerPhone(order).length > 0;
 }
 
+/** Mínimo de dígitos para considerar telefone utilizável em links (ex.: wa.me), alinhado ao fluxo público do delivery. */
+const MIN_CUSTOMER_PHONE_DIGITS = 10;
+
+/** Abre conversa vazia com o cliente (útil p.ex. para Pix: pedir/comparar comprovante). Qualquer canal com telefone válido. */
+export function canCentralOpenCustomerWhatsApp(order: Order): boolean {
+  if (isOrderCanceledLike(order)) return false;
+  return getCustomerPhone(order).length >= MIN_CUSTOMER_PHONE_DIGITS;
+}
+
+export function getCentralCustomerWhatsAppChatUrl(order: Order): string | null {
+  const phone = getCustomerPhone(order);
+  if (phone.length < MIN_CUSTOMER_PHONE_DIGITS) return null;
+  return `https://wa.me/${phone}`;
+}
+
 export function getCentralNotifyCustomerUrl(order: Order): string | null {
   const phone = getCustomerPhone(order);
   if (!phone) return null;

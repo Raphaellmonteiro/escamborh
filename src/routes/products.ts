@@ -19,6 +19,7 @@ export function createProductsRouter() {
         req.path === '/'
         || req.path.startsWith('/barcode/')
         || /\/variacoes-vendaveis(?:\/|$)/.test(req.path)
+        || /\/opcoes(?:\/|$)/.test(req.path)
       );
 
     if (canReadOperationalProducts) {
@@ -52,6 +53,43 @@ export function createProductsRouter() {
       throw new Error('J\u00E1 existe um produto com este c\u00F3digo de barras.');
     }
   }
+
+function normalizeProductPromotionInput(
+  payload: { price?: unknown; em_promocao?: unknown; preco_original?: unknown },
+  current?: { price?: unknown; em_promocao?: unknown; preco_original?: unknown } | null
+) {
+  const hasPromotionFlag = Object.prototype.hasOwnProperty.call(payload, 'em_promocao');
+  const hasOriginalPrice = Object.prototype.hasOwnProperty.call(payload, 'preco_original');
+
+  const priceRaw = payload.price ?? current?.price;
+  const currentPrice = Number(priceRaw);
+
+  const promotionRaw = hasPromotionFlag ? payload.em_promocao : current?.em_promocao;
+  const promotionEnabled = promotionRaw === true || promotionRaw === 1 || String(promotionRaw) === '1';
+
+  const originalRaw = hasOriginalPrice ? payload.preco_original : current?.preco_original;
+  const originalPrice = originalRaw === null || originalRaw === undefined || originalRaw === ''
+    ? null
+    : Number(originalRaw);
+
+  if (!promotionEnabled) {
+    return { emPromocao: 0, precoOriginal: null as number | null };
+  }
+
+  if (!Number.isFinite(currentPrice) || currentPrice < 0) {
+    throw new Error('Preco atual invalido para ativar promocao.');
+  }
+
+  if (!Number.isFinite(originalPrice) || originalPrice === null) {
+    throw new Error('Informe um preco de antes valido para ativar promocao.');
+  }
+
+  if (originalPrice <= currentPrice) {
+    throw new Error('Preco de antes deve ser maior que o preco atual para ativar promocao.');
+  }
+
+  return { emPromocao: 1, precoOriginal: originalPrice };
+}
 
   router.get('/', async (req: Request, res) => {
     const { q, active, limit, offset } = req.query;
@@ -538,6 +576,8 @@ export function createProductsRouter() {
         descricao,
         custo,
         destaque,
+        em_promocao,
+        preco_original,
         disponivel_de,
         disponivel_ate,
         requires_preparation,
@@ -548,14 +588,18 @@ export function createProductsRouter() {
         { production_type, requires_preparation },
         { name, category }
       );
+      const normalizedPromotion = normalizeProductPromotionInput({ price, em_promocao, preco_original });
       await ensureBarcodeAvailable(req.tenantId, normalizedBarcode);
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.tenantId]
       );
       res.json({ id });
-    } catch (e: any) { res.status(e.message?.includes('c\u00F3digo de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: any) {
+      const errorMsg = String(e?.message || '');
+      res.status(errorMsg.includes('c\u00F3digo de barras') || errorMsg.toLowerCase().includes('promoc') || errorMsg.toLowerCase().includes('preco') ? 400 : 500).json({ error: e.message });
+    }
   });
 
   router.put('/reorder', async (req: Request, res) => {
@@ -580,6 +624,8 @@ export function createProductsRouter() {
         descricao,
         custo,
         destaque,
+        em_promocao,
+        preco_original,
         disponivel_de,
         disponivel_ate,
         requires_preparation,
@@ -591,8 +637,11 @@ export function createProductsRouter() {
         production_type?: string | null;
         name?: string | null;
         category?: string | null;
+        price?: number | null;
+        em_promocao?: number | null;
+        preco_original?: number | null;
       }>(
-        'SELECT codigo_barras, requires_preparation, production_type, name, category FROM produtos WHERE id=? AND tenant_id=?',
+        'SELECT codigo_barras, requires_preparation, production_type, name, category, price, em_promocao, preco_original FROM produtos WHERE id=? AND tenant_id=?',
         [req.params.id, req.tenantId]
       );
       const normalizedBarcode = normalizeBarcode(codigo_barras);
@@ -610,12 +659,19 @@ export function createProductsRouter() {
       if (normalizedBarcode !== normalizeBarcode(current?.codigo_barras)) {
         await ensureBarcodeAvailable(req.tenantId, normalizedBarcode, Number(req.params.id));
       }
+      const normalizedPromotion = normalizeProductPromotionInput(
+        { price, em_promocao, preco_original },
+        current
+      );
       await qRun(
-        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=? WHERE id=? AND tenant_id=?',
-        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.params.id, req.tenantId]
+        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,em_promocao=?,preco_original=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=? WHERE id=? AND tenant_id=?',
+        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.params.id, req.tenantId]
       );
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      const errorMsg = String(e?.message || '');
+      res.status(errorMsg.toLowerCase().includes('promoc') || errorMsg.toLowerCase().includes('preco') ? 400 : 500).json({ error: e.message });
+    }
   });
 
   router.post('/:id/duplicar', async (req: Request, res) => {
@@ -624,8 +680,8 @@ export function createProductsRouter() {
       if (!p) return res.status(404).json({ error: 'Produto n\u00E3o encontrado' });
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [`${p.name} (c\u00F3pia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, 0, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, p.requires_preparation ?? null, p.production_type ?? null, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), `${p.name} (c\u00F3pia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, 0, p.em_promocao ? 1 : 0, p.em_promocao ? p.preco_original ?? null : null, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, p.requires_preparation ?? null, p.production_type ?? null, req.tenantId]
       );
       res.json({ id, success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }

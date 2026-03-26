@@ -546,6 +546,10 @@ export function createMesasRouter() {
         }
 
         const troco = Math.max(0, totalPago - snapshot.total);
+        const paymentMethod =
+          Array.from(new Set(normalizedPayments.map((payment) => payment.method))).length === 1
+            ? normalizedPayments[0].method
+            : 'Misto';
         const orderNumber = `M${mesa.numero}-${Date.now()}`;
         const now = new Date().toLocaleString('pt-BR', {
           day:'2-digit',
@@ -585,12 +589,12 @@ export function createMesasRouter() {
           client,
            `INSERT INTO pedidos (
               order_number,status,total_amount,observation,receipt_text,tenant_id,canal,tipo_retirada,
-              mesa_id,comanda_id,subtotal,taxa_servico_ativa,taxa_servico_percentual,valor_taxa_servico,
+              pagamento_tipo,pagamento_status,mesa_id,comanda_id,subtotal,taxa_servico_ativa,taxa_servico_percentual,valor_taxa_servico,
               couvert_ativo,couvert_valor_unitario,couvert_quantidade_pessoas,valor_couvert,total_extras
             ) VALUES (
              ?,
              'Concluido',
-             ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?, ?
             )`,
           [
@@ -601,6 +605,8 @@ export function createMesasRouter() {
             req.tenantId,
             'mesa',
             'mesa',
+            paymentMethod,
+            'pago',
             mesa.id,
             openComanda.id,
             snapshot.subtotal,

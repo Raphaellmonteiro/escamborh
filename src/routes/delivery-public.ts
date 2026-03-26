@@ -43,6 +43,8 @@ type DeliveryConfig = {
   desconto_primeiro_cliente_tipo?: FirstCustomerDiscountType;
   desconto_primeiro_cliente_valor?: number;
   desconto_primeiro_cliente_min_pedido?: number;
+  /** Cardápio online: `dark_premium` (padrão) | `light_red` */
+  theme_mode?: string;
 };
 
 type DeliveryAddressRecord = {
@@ -82,6 +84,17 @@ type CheckoutSummary = {
   total: number;
   itensValidados: any[];
 };
+
+type DeliverySelections = Record<number, Record<number, number>>;
+
+const MAX_ITEM_OBSERVATION_LEN = 4000;
+
+function normalizeItemObservationForDb(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  return s.length > MAX_ITEM_OBSERVATION_LEN ? s.slice(0, MAX_ITEM_OBSERVATION_LEN) : s;
+}
 
 function parseDeliveryConfig(rawConfig?: string | null): DeliveryConfig {
   if (!rawConfig) return {};
@@ -269,7 +282,6 @@ async function validateDeliveryItems(tenantId: number, items: any[]) {
   for (const item of items) {
     const productId = Number(item?.product_id);
     const quantity = Number(item?.quantity);
-    const priceAtTime = Number(item?.price_at_time);
 
     if (!Number.isInteger(productId) || productId <= 0) {
       throw new AppError('Produto invalido', 400);
@@ -279,35 +291,204 @@ async function validateDeliveryItems(tenantId: number, items: any[]) {
       throw new AppError(`Quantidade invalida para o produto ${productId}`, 400);
     }
 
-    if (!Number.isFinite(priceAtTime) || priceAtTime < 0) {
-      throw new AppError(`Preco invalido para o produto ${productId}`, 400);
-    }
-
-    const prod = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=? AND active=1', [productId, tenantId]);
-    if (!prod) {
-      throw new AppError(`Produto ${productId} invalido`, 400);
-    }
-
     const vid = Number(item?.variation_id);
     const variation_id = Number.isInteger(vid) && vid > 0 ? vid : null;
-    if (variation_id !== null) {
-      const variacao = await q1(
-        'SELECT id FROM produto_variacoes_vendaveis WHERE id=? AND tenant_id=? AND produto_id=? AND ativo=1',
-        [variation_id, tenantId, productId]
-      );
-      if (!variacao) {
-        throw new AppError(
-          `Variacao ${variation_id} invalida ou nao pertence ao produto ${productId}`,
-          400
-        );
-      }
-    }
+    const resolvedItem = await resolveAuthoritativeDeliveryItem({
+      tenantId,
+      productId,
+      variationId: variation_id,
+      selecoes: item?.selecoes,
+    });
 
-    subtotal += priceAtTime * quantity;
-    itensValidados.push({ ...item, product_id: productId, quantity, price_at_time: priceAtTime, variation_id });
+    subtotal += resolvedItem.priceAtTime * quantity;
+    itensValidados.push({
+      ...item,
+      product_id: productId,
+      quantity,
+      price_at_time: resolvedItem.priceAtTime,
+      variation_id,
+      name: resolvedItem.name,
+      selecoes: resolvedItem.selecoes,
+    });
   }
 
   return { subtotal, itensValidados };
+}
+
+function normalizeDeliverySelections(raw: unknown): DeliverySelections {
+  if (!raw || typeof raw !== 'object') return {};
+
+  const normalized: DeliverySelections = {};
+  for (const [groupIdRaw, itemMap] of Object.entries(raw as Record<string, unknown>)) {
+    const groupId = Number(groupIdRaw);
+    if (!Number.isInteger(groupId) || groupId <= 0 || !itemMap || typeof itemMap !== 'object') continue;
+
+    const itemSelections: Record<number, number> = {};
+    for (const [itemIdRaw, qtyRaw] of Object.entries(itemMap as Record<string, unknown>)) {
+      const itemId = Number(itemIdRaw);
+      const qty = Number(qtyRaw);
+      if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isFinite(qty) || qty <= 0) continue;
+      itemSelections[itemId] = Math.floor(qty);
+    }
+
+    if (Object.keys(itemSelections).length > 0) {
+      normalized[groupId] = itemSelections;
+    }
+  }
+
+  return normalized;
+}
+
+async function resolveAuthoritativeDeliveryItem(params: {
+  tenantId: number;
+  productId: number;
+  variationId: number | null;
+  selecoes?: unknown;
+}) {
+  const product = await q1<{
+    id: number;
+    name: string;
+    price: number;
+    active: number;
+  }>(
+    'SELECT id, name, price, active FROM produtos WHERE id=? AND tenant_id=? AND active=1',
+    [params.productId, params.tenantId]
+  );
+  if (!product) {
+    throw new AppError(`Produto ${params.productId} invalido`, 400);
+  }
+
+  if (params.variationId !== null) {
+    const variation = await q1<{ id: number; nome: string; preco: number }>(
+      `SELECT id, nome, preco
+       FROM produto_variacoes_vendaveis
+       WHERE id=? AND tenant_id=? AND produto_id=? AND ativo=1`,
+      [params.variationId, params.tenantId, params.productId]
+    );
+    if (!variation) {
+      throw new AppError(
+        `Variacao ${params.variationId} invalida ou nao pertence ao produto ${params.productId}`,
+        400
+      );
+    }
+
+    return {
+      priceAtTime: Number(variation.preco || 0),
+      name: `${product.name} - ${variation.nome}`,
+      selecoes: {} as DeliverySelections,
+    };
+  }
+
+  const grupos = await qAll<{
+    id: number;
+    tipo: 'radio' | 'checkbox' | 'quantidade';
+    min_selecoes: number;
+    max_selecoes: number;
+    obrigatorio: number;
+    modo_preco?: 'adicional' | 'final' | null;
+  }>(
+    `SELECT id, tipo, min_selecoes, max_selecoes, obrigatorio, modo_preco
+     FROM produto_grupos_opcao
+     WHERE produto_id=? AND tenant_id=? AND ativo=1
+     ORDER BY ordem ASC, id ASC`,
+    [params.productId, params.tenantId]
+  );
+
+  if (!grupos.length) {
+    return {
+      priceAtTime: Number(product.price || 0),
+      name: product.name,
+      selecoes: {} as DeliverySelections,
+    };
+  }
+
+  const selecoes = normalizeDeliverySelections(params.selecoes);
+  let substitutoFinal = 0;
+  let temGrupoFinalComSelecao = false;
+  let somaAdicional = 0;
+  const selecoesValidadas: DeliverySelections = {};
+
+  for (const grupo of grupos) {
+    const itens = await qAll<{ id: number; preco_adicional: number }>(
+      `SELECT id, preco_adicional
+       FROM produto_opcao_itens
+       WHERE grupo_id=? AND tenant_id=? AND ativo=1
+       ORDER BY ordem ASC, id ASC`,
+      [grupo.id, params.tenantId]
+    );
+
+    const itemIds = new Set(itens.map((item) => Number(item.id)));
+    const itemSelections = selecoes[grupo.id] || {};
+    const normalizedGroupSelections: Record<number, number> = {};
+
+    for (const [itemIdRaw, qtyRaw] of Object.entries(itemSelections)) {
+      const itemId = Number(itemIdRaw);
+      const qty = Number(qtyRaw);
+      if (!itemIds.has(itemId)) {
+        throw new AppError(`Opcao invalida para o produto ${params.productId}`, 400);
+      }
+      if (!Number.isFinite(qty) || qty <= 0) {
+        continue;
+      }
+      if (grupo.tipo !== 'quantidade' && qty !== 1) {
+        throw new AppError(`Quantidade invalida nas opcoes do produto ${params.productId}`, 400);
+      }
+      normalizedGroupSelections[itemId] = qty;
+    }
+
+    const totalSelecionado = Object.values(normalizedGroupSelections).reduce((acc, qty) => acc + qty, 0);
+    const minSelecoes = Math.max(0, Number(grupo.min_selecoes || 0));
+    const maxSelecoes = Math.max(0, Number(grupo.max_selecoes || 0));
+
+    if (Number(grupo.obrigatorio) === 1 && totalSelecionado < minSelecoes) {
+      throw new AppError(`Selecao obrigatoria incompleta para o produto ${params.productId}`, 400);
+    }
+
+    if (maxSelecoes > 0 && totalSelecionado > maxSelecoes) {
+      throw new AppError(`Selecao acima do limite para o produto ${params.productId}`, 400);
+    }
+
+    if (grupo.tipo === 'radio' && totalSelecionado > 1) {
+      throw new AppError(`Selecao invalida para o produto ${params.productId}`, 400);
+    }
+
+    if (totalSelecionado > 0) {
+      selecoesValidadas[grupo.id] = normalizedGroupSelections;
+    }
+
+    if ((grupo.modo_preco || 'adicional') === 'final') {
+      let grupoSoma = 0;
+      let temSelNesteGrupo = false;
+      for (const item of itens) {
+        const qty = normalizedGroupSelections[item.id] || 0;
+        if (qty > 0) {
+          temSelNesteGrupo = true;
+          grupoSoma += Number(item.preco_adicional || 0) * qty;
+        }
+      }
+      if (temSelNesteGrupo) {
+        temGrupoFinalComSelecao = true;
+        substitutoFinal += grupoSoma;
+      }
+    } else {
+      for (const item of itens) {
+        const qty = normalizedGroupSelections[item.id] || 0;
+        if (qty > 0) {
+          somaAdicional += Number(item.preco_adicional || 0) * qty;
+        }
+      }
+    }
+  }
+
+  const priceAtTime = temGrupoFinalComSelecao
+    ? substitutoFinal + somaAdicional
+    : Number(product.price || 0) + somaAdicional;
+
+  return {
+    priceAtTime,
+    name: product.name,
+    selecoes: selecoesValidadas,
+  };
 }
 
 async function resolveDeliveryFee(params: {
@@ -617,7 +798,14 @@ export function createDeliveryPublicRouter() {
           gruposComItens.push({ ...g, itens });
         }
         const variacoes = await qAll('SELECT id, nome, preco FROM produto_variacoes_vendaveis WHERE produto_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC, nome ASC', [p.id, tenant.id]);
-        produtosComOpcoes.push({ ...p, grupos_opcao: gruposComItens, variacoes_vendaveis: variacoes });
+        produtosComOpcoes.push({
+          ...p,
+          description: p.descricao || null,
+          em_promocao: Number(p.em_promocao || 0),
+          preco_original: p.preco_original == null ? null : Number(p.preco_original),
+          grupos_opcao: gruposComItens,
+          variacoes_vendaveis: variacoes,
+        });
       }
 
       const logo = (() => {
@@ -659,6 +847,7 @@ export function createDeliveryPublicRouter() {
           desconto_primeiro_cliente_valor: dcfg.desconto_primeiro_cliente_valor ?? 0,
           desconto_primeiro_cliente_min_pedido: dcfg.desconto_primeiro_cliente_min_pedido ?? 0,
           zonas_entrega: Array.isArray(dcfg.zonas_entrega) ? dcfg.zonas_entrega : [],
+          theme_mode: dcfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium',
         },
         categorias,
         produtos: produtosComOpcoes,
@@ -1104,7 +1293,21 @@ export function createDeliveryPublicRouter() {
         );
 
           for (const item of itensValidados) {
-            await txRun(client, 'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id) VALUES (?,?,?,?,?,?,?)', [orderId, item.product_id, item.quantity, canalPedido === 'retirada' ? 'Retirada' : 'Delivery', item.price_at_time, tenant.id, item.variation_id ?? null]);
+            const lineObs = normalizeItemObservationForDb(item.obs_opcoes ?? item.observation);
+            await txRun(
+              client,
+              'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation) VALUES (?,?,?,?,?,?,?,?)',
+              [
+                orderId,
+                item.product_id,
+                item.quantity,
+                canalPedido === 'retirada' ? 'Retirada' : 'Delivery',
+                item.price_at_time,
+                tenant.id,
+                item.variation_id ?? null,
+                lineObs,
+              ]
+            );
             const resolution = await resolveProductInventoryTargets({
               client,
               tenantId: tenant.id,
@@ -1148,7 +1351,9 @@ export function createDeliveryPublicRouter() {
       const waNumber = (dcfg.whatsapp || tenant.whatsapp || '').replace(/\D/g, '');
       const listaItens = await Promise.all(itensValidados.map(async (item: any) => {
         const name = item.name || (await q1('SELECT name FROM produtos WHERE id=?', [item.product_id]))?.name || 'Produto';
-        return `- ${item.quantity}x ${name} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;
+        const det = normalizeItemObservationForDb(item.obs_opcoes ?? item.observation);
+        const detSuffix = det ? ` — ${det}` : '';
+        return `- ${item.quantity}x ${name}${detSuffix} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;
       }));
       const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao' };
       const mapsUrl = canalPedido === 'delivery'

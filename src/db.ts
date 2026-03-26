@@ -30,7 +30,8 @@ export async function runMigrations() {
         name TEXT, price REAL, category TEXT, active INTEGER DEFAULT 1,
         color TEXT DEFAULT 'zinc', photo_url TEXT, codigo_barras TEXT,
         marca TEXT, descricao TEXT, custo REAL DEFAULT 0,
-        destaque INTEGER DEFAULT 0, ordem INTEGER DEFAULT 0,
+        destaque INTEGER DEFAULT 0, em_promocao INTEGER DEFAULT 0, preco_original REAL,
+        ordem INTEGER DEFAULT 0,
         disponivel_de TEXT, disponivel_ate TEXT, tenant_id INTEGER DEFAULT 1
       );
       CREATE TABLE IF NOT EXISTS categorias (
@@ -382,8 +383,11 @@ export async function runMigrations() {
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS public_id TEXT;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS requires_preparation INTEGER;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS production_type TEXT;
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS em_promocao INTEGER DEFAULT 0;
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_original REAL;
       ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
       ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS variation_id INTEGER;
+      ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS observation TEXT;
       CREATE TABLE IF NOT EXISTS pedido_eventos (
         id SERIAL PRIMARY KEY,
         pedido_id INTEGER NOT NULL,

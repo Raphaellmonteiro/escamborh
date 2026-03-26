@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   Store,
   UtensilsCrossed,
+  ListTree,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../types';
@@ -19,6 +20,11 @@ import { Card, Button, Input } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { getNonDeliveryNextStatus, normalizeStatusForPipeline, ORDER_PIPELINE_STEPS } from '../utils/orderNonDeliveryNextStatus';
 import { openPrintPreview, ensurePrintableHtmlDocument, isPrintableHtmlDocument } from '../utils/print';
+import {
+  getOrderItemDetailText,
+  orderHasAnyItemCustomization,
+  splitOrderItemDetailLines,
+} from '../utils/orderItemDisplay';
 
 type OrderWithRefund = Order & {
   reembolso_status?: string | null;
@@ -46,6 +52,7 @@ type OrderScreenItem = OrderItem & {
   product_category?: string | null;
   production_type?: string | null;
   requires_preparation?: number | boolean | null;
+  obs_opcoes?: string | null;
 };
 
 type HistoryDetail = {
@@ -866,6 +873,15 @@ const handleConfirmOrder = async (id: number) => {
                               {refundMeta.label}
                             </span>
                           )}
+                          {orderHasAnyItemCustomization(order) && (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-800"
+                              title="Um ou mais itens têm observação ou adicionais"
+                            >
+                              <ListTree size={12} />
+                              Itens personalizados
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           <span className="text-xs font-bold text-zinc-500">{formatMoney(order.total_amount)}</span>
@@ -999,12 +1015,41 @@ const handleConfirmOrder = async (id: number) => {
 
                   {/* Itens */}
                   {(order.items || []).length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(order.items || []).map((item: any, i: number) => (
-                        <span key={i} className="text-[11px] px-2 py-1 rounded-lg bg-zinc-50 text-zinc-600 border border-zinc-100">
-                          {item.quantity}× {item.product_name}
-                        </span>
-                      ))}
+                    <div className="mt-2 space-y-2">
+                      {(order.items || []).map((item: OrderScreenItem, i: number) => {
+                        const detail = getOrderItemDetailText(item);
+                        const lines = splitOrderItemDetailLines(detail);
+                        const unit = Number(item.price_at_time || 0);
+                        const lineTotal = Number(item.quantity) * unit;
+                        return (
+                          <div
+                            key={i}
+                            className="rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2 text-left"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-[11px] font-bold text-zinc-800 min-w-0">
+                                {item.quantity}× {item.product_name}
+                              </p>
+                              <p className="text-[11px] font-bold text-zinc-900 tabular-nums shrink-0">
+                                {formatMoney(lineTotal)}
+                              </p>
+                            </div>
+                            {lines.length > 0 ? (
+                              <>
+                                <ul className="mt-1.5 ml-3 list-disc space-y-0.5 text-[11px] leading-snug text-zinc-600">
+                                  {lines.map((line, j) => (
+                                    <li key={j}>{line}</li>
+                                  ))}
+                                </ul>
+                                <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">
+                                  Valor ao lado é o total da linha; o preço unitário ({formatMoney(unit)}) já inclui
+                                  opções e adicionais indicados acima.
+                                </p>
+                              </>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -1115,6 +1160,15 @@ const handleConfirmOrder = async (id: number) => {
                       <ChannelIcon size={11} />
                       {channelMeta.label}
                     </span>
+                    {orderHasAnyItemCustomization(order) && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-800"
+                        title="Itens com observações ou adicionais"
+                      >
+                        <ListTree size={10} />
+                        Pers.
+                      </span>
+                    )}
                   </div>
                   {refundMeta && (
                     <span

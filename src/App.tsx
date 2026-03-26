@@ -346,8 +346,8 @@ export default function App() {
   else if (isPonto)     document.title = 'Sistema de Ponto — FlowPDV';
   else if (displayMatch)  document.title = 'Painel do Salão — FlowPDV';
   else if (mesaMatch)     document.title = 'Sua Mesa — FlowPDV';
-  else if (trackingMatch) document.title = 'Acompanhar Pedido — FlowPDV';
-  else if (deliveryMatch) document.title = 'Cardápio Online — FlowPDV';
+  else if (trackingMatch) document.title = 'Acompanhar Pedido Online — FlowPDV';
+  else if (deliveryMatch) document.title = 'Peça Online — FlowPDV';
   else                    document.title = 'FlowPDV';
 
   const segmentoOperacional = getOperationalSegment(estabelecimentoSegmento);

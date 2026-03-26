@@ -5,6 +5,29 @@ type Queryable = Pick<PoolClient, 'query'>;
 
 export { pool };
 
+export function isDatabaseConnectivityError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? '').toLowerCase();
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '').toUpperCase()
+      : '';
+
+  return (
+    [
+      'connection terminated due to connection timeout',
+      'connection terminated unexpectedly',
+      'terminating connection',
+      'connection timeout',
+      'timeout expired',
+      'could not connect',
+      'econnrefused',
+      'etimedout',
+      'socket hang up',
+    ].some((snippet) => message.includes(snippet)) ||
+    ['08000', '08001', '08003', '08006', '57P01', '57P02', '57P03', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'].includes(code)
+  );
+}
+
 export function toPg(sql: string): string {
   let i = 0;
   return sql.replace(/\?/g, () => `$${++i}`);

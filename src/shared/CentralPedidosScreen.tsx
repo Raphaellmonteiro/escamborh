@@ -1,10 +1,11 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode } from 'lucide-react';
+import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree } from 'lucide-react';
 import type { Order } from '../types';
 import { Card, Button } from '../components/ui/Card';
 import {
   canCentralNotifyCustomer,
+  canCentralOpenCustomerWhatsApp,
   canCentralOpenMaps,
   canCentralConfirmPayment,
   canCentralPrintCupom,
@@ -12,6 +13,7 @@ import {
   executeCentralConfirmPayment,
   executeCentralPrintAction,
   executeCentralPrimaryAction,
+  getCentralCustomerWhatsAppChatUrl,
   getCentralMapsUrl,
   getCentralNotifyCustomerUrl,
   getCentralPrimaryAction,
@@ -35,6 +37,11 @@ import {
   passesCentralQuickFilter,
   passesCentralChannelFilter,
 } from '../utils/orderCentralBoard';
+import {
+  getOrderItemDetailText,
+  orderHasAnyItemCustomization,
+  splitOrderItemDetailLines,
+} from '../utils/orderItemDisplay';
 
 const TZ = 'America/Sao_Paulo';
 const CENTRAL_ORDERS_LIMIT = 300;
@@ -122,10 +129,9 @@ function getOrderNumberLine(order: Order) {
 }
 
 function getClienteLine(order: Order) {
-  const raw = (order as { cliente_nome?: string | null }).cliente_nome;
-  const nome = String(raw || '').trim();
+  const nome = String(order.cliente_nome || '').trim();
   if (nome) return nome;
-  const tel = (order as { cliente_tel?: string | null }).cliente_tel;
+  const tel = order.cliente_tel;
   if (tel && String(tel).trim()) return String(tel).trim();
   return '—';
 }
@@ -595,6 +601,7 @@ function OrderCard({
   const paymentPending = isPaymentPendingOrder(order);
   const withoutMotoboy = isOrderWithoutAssignedMotoboy(order);
   const ageMinutes = getOrderAgeMinutes(order);
+  const hasItemCustomization = orderHasAnyItemCustomization(order);
   const statusRaw = String(order.status || '').trim() || '—';
   const paymentPendingLabel = Number(order.payment_total_paid || 0) > 0
     ? 'Pagamento parcial'
@@ -686,7 +693,7 @@ function OrderCard({
         >
           {compactMode ? (
             <>
-              {(urgent || paymentPending || withoutMotoboy || isQrPending) && (
+              {(urgent || paymentPending || withoutMotoboy || isQrPending || hasItemCustomization) && (
                 <div className="mb-1.5 flex flex-wrap gap-1">
                   {urgent && (
                     <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
@@ -707,6 +714,12 @@ function OrderCard({
                     <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200">
                       <QrCode size={10} />
                       Mesa {mesaReference}
+                    </span>
+                  )}
+                  {hasItemCustomization && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
+                      <ListTree size={10} />
+                      Itens c/ obs.
                     </span>
                   )}
                 </div>
@@ -753,7 +766,7 @@ function OrderCard({
             </>
           ) : (
             <>
-              {(urgent || paymentPending || withoutMotoboy) && (
+              {(urgent || paymentPending || withoutMotoboy || hasItemCustomization) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {urgent && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
@@ -768,6 +781,12 @@ function OrderCard({
                   {withoutMotoboy && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200">
                       Sem motoboy
+                    </span>
+                  )}
+                  {hasItemCustomization && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
+                      <ListTree size={11} />
+                      Itens personalizados
                     </span>
                   )}
                 </div>
@@ -1043,6 +1062,7 @@ function OrderDetailModal({
   const [busyPrint, setBusyPrint] = useState<'cupom' | 'comprovante' | null>(null);
   const canConfirmPayment = canCentralConfirmPayment(order);
   const canPrintProof = canCentralPrintProof(order);
+  const canWhatsAppCliente = canCentralOpenCustomerWhatsApp(order);
 
   const handleConfirmPayment = async () => {
     if (busyPayment) return;
@@ -1065,6 +1085,12 @@ function OrderDetailModal({
     if (!result.ok) {
       alert(result.error || 'Não foi possível abrir a impressão.');
     }
+  };
+
+  const openClienteWhatsApp = () => {
+    const url = getCentralCustomerWhatsAppChatUrl(order);
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -1094,6 +1120,12 @@ function OrderDetailModal({
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600">
                 {String(order.status || '—')}
               </span>
+              {orderHasAnyItemCustomization(order) && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
+                  <ListTree size={12} />
+                  Itens personalizados
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -1160,6 +1192,17 @@ function OrderDetailModal({
                   Imprimir comprovante
                 </Button>
               )}
+              {canWhatsAppCliente && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!justify-start !px-3 !text-xs"
+                  onClick={openClienteWhatsApp}
+                >
+                  <MessageCircle size={14} />
+                  Abrir WhatsApp
+                </Button>
+              )}
               {canConfirmPayment && (
                 <Button
                   type="button"
@@ -1178,20 +1221,42 @@ function OrderDetailModal({
           {/* Itens — mesma lista que OrdersScreen usa em conceito */}
           <div>
             <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Itens</p>
-            <ul className="space-y-2">
-              {(order.items || []).map((it, idx) => (
-                <li
-                  key={`${it.product_id}-${idx}`}
-                  className="flex justify-between gap-3 text-sm border-b border-zinc-100 dark:border-zinc-800 pb-2 last:border-0"
-                >
-                  <span className="text-zinc-700 dark:text-zinc-300 min-w-0">
-                    {it.name || (it as { product_name?: string }).product_name || 'Item'} × {it.quantity}
-                  </span>
-                  <span className="text-zinc-900 dark:text-zinc-100 font-semibold tabular-nums shrink-0">
-                    {formatMoney(Number(it.price_at_time) * Number(it.quantity))}
-                  </span>
-                </li>
-              ))}
+            <ul className="space-y-3">
+              {(order.items || []).map((it, idx) => {
+                const label = it.name || (it as { product_name?: string }).product_name || 'Item';
+                const detail = getOrderItemDetailText(it as { observation?: string | null; obs_opcoes?: string | null });
+                const lines = splitOrderItemDetailLines(detail);
+                const unit = Number(it.price_at_time || 0);
+                const lineTotal = unit * Number(it.quantity);
+                return (
+                  <li
+                    key={`${it.product_id}-${idx}`}
+                    className="border-b border-zinc-100 dark:border-zinc-800 pb-3 last:border-0 last:pb-0"
+                  >
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="text-zinc-700 dark:text-zinc-300 min-w-0 font-semibold">
+                        {it.quantity}× {label}
+                      </span>
+                      <span className="text-zinc-900 dark:text-zinc-100 font-bold tabular-nums shrink-0">
+                        {formatMoney(lineTotal)}
+                      </span>
+                    </div>
+                    {lines.length > 0 ? (
+                      <>
+                        <ul className="mt-1.5 ml-3 list-disc space-y-0.5 text-[12px] leading-snug text-zinc-600 dark:text-zinc-400">
+                          {lines.map((line, j) => (
+                            <li key={j}>{line}</li>
+                          ))}
+                        </ul>
+                        <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                          Preço unitário {formatMoney(unit)} já inclui opções e adicionais indicados acima; o valor à
+                          direita é o total da linha.
+                        </p>
+                      </>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
             {(order.items || []).length === 0 && (
               <p className="text-sm text-zinc-400">Sem itens na lista.</p>

@@ -48,7 +48,7 @@ function buildKitchenMetadata(order: { canal?: string | null; cliente_nome?: str
 
 async function getKitchenItems(orderId: string | number, tenantId: number) {
   const items = await qAll(
-    `SELECT p.name, p.category, p.requires_preparation, p.production_type, ip.quantity
+    `SELECT p.name, p.category, p.requires_preparation, p.production_type, ip.quantity, ip.observation
        FROM itens_pedido ip
        JOIN produtos p ON p.id=ip.product_id
        WHERE ip.order_id=? AND ip.tenant_id=?`,
@@ -245,7 +245,7 @@ export function createPrintRouter() {
 
       const cliente = await q1('SELECT nome_estabelecimento, printer_config FROM clientes WHERE id=?', [req.tenantId]);
       const itens = await qAll(
-        `SELECT p.name, ip.quantity, ip.price_at_time
+        `SELECT p.name, ip.quantity, ip.price_at_time, ip.observation
          FROM itens_pedido ip
          JOIN produtos p ON p.id=ip.product_id
          WHERE ip.order_id=? AND ip.tenant_id=?`,
@@ -301,6 +301,7 @@ export function createPrintRouter() {
           qtd: item.quantity,
           nome: item.name,
           valor: item.price_at_time * item.quantity,
+          obs: String(item.observation || '').trim() || undefined,
         })),
         totais: isMesa
           ? buildMesaReceiptTotals(mesaSnapshot!)
@@ -356,7 +357,7 @@ export function createPrintRouter() {
 
       const cliente = await q1('SELECT nome_estabelecimento, printer_config FROM clientes WHERE id=?', [req.tenantId]);
       const itens = await qAll(
-        `SELECT p.name, ip.quantity, ip.price_at_time
+        `SELECT p.name, ip.quantity, ip.price_at_time, ip.observation
          FROM itens_pedido ip
          JOIN produtos p ON p.id=ip.product_id
          WHERE ip.order_id=? AND ip.tenant_id=?`,
@@ -435,7 +436,11 @@ export function createPrintRouter() {
           canal: getOrderChannel(pedido),
           paperWidthMm: getProfilePaperWidthMm(cliente?.printer_config, 'cozinha'),
           metadata: buildKitchenMetadata(pedido),
-          itens: itens.map((item: any) => ({ qtd: item.quantity, nome: item.name })),
+          itens: itens.map((item: any) => ({
+            qtd: item.quantity,
+            nome: item.name,
+            obs: String(item.observation || '').trim() || undefined,
+          })),
           observacao: pedido.observation || undefined,
         })
       );
@@ -459,7 +464,13 @@ export function createPrintRouter() {
       }
       const texto =
         `COMANDA #${pedido.order_number}\n` +
-        itens.map((item: any) => `${item.quantity}x ${item.name}`).join('\n') +
+        itens
+          .map((item: any) => {
+            const linha = `${item.quantity}x ${item.name}`;
+            const obsItem = String(item.observation || '').trim();
+            return obsItem ? `${linha}\n   ${obsItem}` : linha;
+          })
+          .join('\n') +
         (pedido.observation ? `\nObs: ${pedido.observation}` : '');
       const cfg = JSON.parse(row.printer_config);
       const dados = buildEscPos(texto, getProfilePaperColumns(cfg, 'cozinha'));

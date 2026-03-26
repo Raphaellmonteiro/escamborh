@@ -23,6 +23,12 @@ interface PedidoData {
   estabelecimento: string;
 }
 
+/** Resposta de GET /public/delivery/:slug/pedido/:id (pedido vem aninhado). */
+interface PedidoTrackingApiResponse {
+  pedido: Omit<PedidoData, 'estabelecimento'> & { estabelecimento?: string };
+  nome_estabelecimento?: string | null;
+}
+
 // Pipeline de status (ordem dos passos)
 const STEPS = [
   { key: 'Criado',              label: 'Recebido',          emoji: '01', desc: 'Seu pedido foi recebido pelo restaurante.' },
@@ -32,13 +38,17 @@ const STEPS = [
   { key: 'Entregue',            label: 'Entregue',          emoji: '05', desc: 'Pedido entregue.' },
 ];
 
-// Compatibiliza nomes de status antigos
+// Compatibiliza nomes de status com o pipeline (mesmos valores usados em Operações/Cozinha)
 const ALIAS: Record<string, string> = {
   'Pedido Recebido': 'Criado',
+  Pronto: 'Pronto para Entrega',
+  'Concluído': 'Entregue',
+  concluido: 'Entregue',
 };
 
 function normalizeStatus(s: string): string {
-  return ALIAS[s] ?? s;
+  const t = String(s || '').trim();
+  return ALIAS[t] ?? t;
 }
 
 function getCurrentStepIndex(status: string): number {
@@ -55,14 +65,16 @@ function fmtHora(d?: string | null): string {
   } catch { return ''; }
 }
 
-const fmt = (v: number) => `R$ ${(v||0).toFixed(2).replace('.', ',')}`;
+const fmt = (v: number) => `R$ ${(Number.isFinite(v) ? v : 0).toFixed(2).replace('.', ',')}`;
 
 interface Props {
   slug: string;
   pedidoId: number;
+  /** Layout compacto dentro de modal (sem cabeçalho de página inteira). */
+  embedded?: boolean;
 }
 
-export default function PedidoRastreamento({ slug, pedidoId }: Props) {
+export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) {
   const [pedido, setPedido]     = useState<PedidoData | null>(null);
   const [error, setError]       = useState(false);
   const [lastTick, setLastTick] = useState(0);
@@ -73,10 +85,23 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
     try {
       const res = await fetch(`/public/delivery/${slug}/pedido/${pedidoId}`);
       if (!res.ok) { setError(true); return; }
-      const data: PedidoData = await res.json();
-      setPedido(data);
+      const body = (await res.json()) as PedidoTrackingApiResponse;
+      const p = body?.pedido;
+      if (!p || typeof p.id !== 'number') {
+        setError(true);
+        return;
+      }
+      const total = Number(p.total_amount);
+      const taxa = Number(p.taxa_entrega);
+      const mapped: PedidoData = {
+        ...p,
+        total_amount: Number.isFinite(total) ? total : 0,
+        taxa_entrega: Number.isFinite(taxa) ? taxa : 0,
+        estabelecimento: String(body.nome_estabelecimento ?? p.estabelecimento ?? ''),
+      };
+      setPedido(mapped);
       setError(false);
-      prevStatusRef.current = data.status;
+      prevStatusRef.current = mapped.status;
     } catch { setError(true); }
   };
 
@@ -96,13 +121,17 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
     return () => clearInterval(id);
   }, []);
 
+  const rootStyle: React.CSSProperties = embedded
+    ? { ...s.root, minHeight: 0, background: '#09090b' }
+    : s.root;
+
   if (error && !pedido) return (
-    <div style={s.root}>
+    <div style={rootStyle}>
       <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <div style={{ ...s.badgeBox, width: 64, height: 64, margin: '0 auto 16px', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em' }}>PDV</div>
+        <div style={{ ...s.badgeBox, width: 64, height: 64, margin: '0 auto 16px', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em' }}>PED</div>
         <p style={{ color: '#ef4444', fontSize: 18, fontWeight: 700 }}>Pedido não encontrado</p>
-        <p style={{ color: '#64748b', marginTop: 8, fontSize: 14 }}>Verifique o número do pedido.</p>
-        <a href={`/delivery/${slug}`} style={{ display:'inline-block', marginTop:24, padding:'12px 28px', background:'#06b6d4', color:'#fff', borderRadius:12, fontWeight:700, textDecoration:'none' }}>
+        <p style={{ color: '#71717a', marginTop: 8, fontSize: 14 }}>Verifique o número do pedido ou volte para o cardápio.</p>
+        <a href={`/delivery/${slug}`} style={{ display:'inline-block', marginTop:24, padding:'12px 28px', background:'#ffffff', color:'#09090b', borderRadius:14, fontWeight:800, textDecoration:'none', boxShadow:'0 18px 40px rgba(255,255,255,0.08)' }}>
           Fazer novo pedido
         </a>
       </div>
@@ -110,7 +139,7 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
   );
 
   if (!pedido) return (
-    <div style={s.root}>
+    <div style={rootStyle}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
         <div style={{ width:40, height:40, borderRadius:'50%', border:'3px solid #1e293b', borderTopColor:'#06b6d4', animation:'spin 0.8s linear infinite' }}/>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -119,12 +148,13 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
   );
 
   const stepIdx    = getCurrentStepIndex(pedido.status);
-  const isCancelado = pedido.status === 'Cancelado';
-  const isEntregue  = pedido.status === 'Entregue';
+  const stNorm     = String(pedido.status || '').trim().toLowerCase();
+  const isCancelado = stNorm === 'cancelado';
+  const isEntregue  = stNorm === 'entregue' || stNorm.startsWith('conclu');
   const step        = STEPS[stepIdx];
 
   return (
-    <div style={s.root}>
+    <div style={rootStyle}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
@@ -132,18 +162,20 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
         * { box-sizing: border-box; }
       `}</style>
 
-      {/* Header */}
-      <header style={s.header}>
-        <div style={s.logo}>
-          Flow<span style={{ color: '#06b6d4' }}>PDV</span>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>{pedido.estabelecimento}</div>
-          <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{hora}</div>
-        </div>
-      </header>
+      {/* Header (página cheia; omitido no modal para não duplicar título) */}
+      {!embedded && (
+        <header style={s.header}>
+          <div style={s.logo}>
+            Pedido<span style={{ color: '#67e8f9' }}>Online</span>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fafafa' }}>{pedido.estabelecimento}</div>
+            <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>{hora}</div>
+          </div>
+        </header>
+      )}
 
-      <div style={s.content}>
+      <div style={embedded ? { ...s.content, padding: '12px 12px 8px' } : s.content}>
 
         {/* Card principal */}
         <div style={{ ...s.card, animation: 'slideUp 0.4s ease' }}>
@@ -153,34 +185,45 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               Acompanhe seu pedido
             </div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#f0f4ff', letterSpacing: '-0.02em' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#fafafa', letterSpacing: '-0.02em' }}>
               #{pedido.order_number}
             </div>
             {pedido.cliente_nome && (
-              <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Olá, {pedido.cliente_nome.split(' ')[0]}.</div>
+              <div style={{ fontSize: 14, color: '#a1a1aa', marginTop: 4 }}>Olá, {pedido.cliente_nome.split(' ')[0]}.</div>
             )}
           </div>
 
           {/* Status atual em destaque */}
           {isCancelado ? (
             <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 16, padding: '20px', textAlign: 'center', marginBottom: 24 }}>
-              <div style={{ ...s.badgeBox, width: 48, height: 48, margin: '0 auto', fontSize: 11, fontWeight: 800 }}>PDV</div>
+              <div style={{ ...s.badgeBox, width: 48, height: 48, margin: '0 auto', fontSize: 11, fontWeight: 800 }}>PED</div>
               <div style={{ color: '#f87171', fontWeight: 900, fontSize: 20, marginTop: 8 }}>Pedido Cancelado</div>
-              <div style={{ color: '#94a3b8', fontSize: 13, marginTop: 6 }}>Entre em contato com o restaurante.</div>
+              <div style={{ color: '#a1a1aa', fontSize: 13, marginTop: 6 }}>Entre em contato com o restaurante para mais detalhes.</div>
             </div>
           ) : (
             <div style={{
-              background: isEntregue ? 'rgba(56,189,248,0.12)' : 'rgba(6,182,212,0.08)',
-              border: `1px solid ${isEntregue ? 'rgba(56,189,248,0.3)' : 'rgba(6,182,212,0.2)'}`,
+              background: isEntregue ? 'rgba(34,197,94,0.12)' : 'rgba(251,191,36,0.10)',
+              border: `1px solid ${isEntregue ? 'rgba(34,197,94,0.35)' : 'rgba(251,191,36,0.35)'}`,
               borderRadius: 16, padding: '24px 20px', textAlign: 'center', marginBottom: 24,
             }}>
-              <div style={{ ...s.badgeBox, width: 56, height: 56, margin: '0 auto 10px', animation: isEntregue ? 'none' : 'pulse 2s infinite' }}>
+              <div style={{
+                ...s.badgeBox,
+                width: 56, height: 56, margin: '0 auto 10px',
+                animation: isEntregue ? 'none' : 'pulse 2s infinite',
+                background: isEntregue ? 'rgba(34,197,94,0.15)' : 'rgba(251,191,36,0.18)',
+                borderColor: isEntregue ? 'rgba(34,197,94,0.4)' : 'rgba(251,191,36,0.45)',
+              }}>
                 <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '0.08em' }}>{step.emoji}</span>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: isEntregue ? '#38bdf8' : '#06b6d4', marginBottom: 6 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: isEntregue ? '#86efac' : '#fcd34d', marginBottom: 6 }}>
                 {step.label}
               </div>
-              <div style={{ fontSize: 14, color: '#94a3b8' }}>{step.desc}</div>
+              <div style={{ fontSize: 14, color: '#a1a1aa' }}>{step.desc}</div>
+              {!isEntregue && (
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24', marginTop: 10 }}>
+                  Acompanhe abaixo — atualização automática a cada poucos segundos.
+                </div>
+              )}
             </div>
           )}
 
@@ -200,24 +243,24 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: done ? 11 : 11,
                         fontWeight: 800,
-                        background: done ? '#38bdf8' : current ? '#06b6d4' : 'rgba(255,255,255,0.06)',
-                        border: `2px solid ${done ? '#38bdf8' : current ? '#06b6d4' : 'rgba(255,255,255,0.1)'}`,
+                        background: done ? '#22c55e' : current ? '#f59e0b' : 'rgba(255,255,255,0.06)',
+                        border: `2px solid ${done ? '#16a34a' : current ? '#d97706' : 'rgba(255,255,255,0.1)'}`,
                         transition: 'all 0.4s ease',
                         flexShrink: 0,
                       }}>
                         {done ? 'OK' : st.emoji}
                       </div>
                       {i < STEPS.length - 1 && (
-                        <div style={{ width: 2, flex: 1, minHeight: 24, background: done ? '#38bdf8' : 'rgba(255,255,255,0.08)', margin: '3px 0' }} />
+                        <div style={{ width: 2, flex: 1, minHeight: 24, background: done ? '#4ade80' : 'rgba(255,255,255,0.08)', margin: '3px 0' }} />
                       )}
                     </div>
                     {/* Conteúdo */}
                     <div style={{ paddingTop: 4, paddingBottom: i < STEPS.length - 1 ? 20 : 4 }}>
-                      <div style={{ fontSize: 14, fontWeight: current ? 700 : 500, color: done ? '#38bdf8' : current ? '#f0f4ff' : '#475569' }}>
+                        <div style={{ fontSize: 14, fontWeight: current ? 700 : 500, color: done ? '#4ade80' : current ? '#fafafa' : '#71717a' }}>
                         {st.label}
                       </div>
                       {current && !isEntregue && (
-                        <div style={{ fontSize: 12, color: '#06b6d4', marginTop: 2, animation: 'pulse 2s infinite' }}>
+                        <div style={{ fontSize: 12, color: '#fbbf24', marginTop: 2, animation: 'pulse 2s infinite' }}>
                           ● Em andamento
                         </div>
                       )}
@@ -228,7 +271,7 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
                         <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{fmtHora(pedido.saiu_entrega_at)}</div>
                       )}
                       {i === 4 && pedido.entregue_at && (
-                        <div style={{ fontSize: 11, color: '#38bdf8', marginTop: 2 }}>{fmtHora(pedido.entregue_at)}</div>
+                        <div style={{ fontSize: 11, color: '#67e8f9', marginTop: 2 }}>{fmtHora(pedido.entregue_at)}</div>
                       )}
                     </div>
                   </div>
@@ -241,7 +284,7 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
           <div style={s.section}>
               <div style={s.sectionTitle}>Seu pedido</div>
             {pedido.resumo_itens && (
-              <div style={{ color: '#cbd5e1', fontSize: 14, lineHeight: 1.6 }}>
+              <div style={{ color: '#e4e4e7', fontSize: 14, lineHeight: 1.6 }}>
                 {pedido.resumo_itens.split(', ').map((item, i) => (
                   <div key={i} style={{ padding: '4px 0', borderBottom: i < pedido.resumo_itens!.split(', ').length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                     {item}
@@ -263,11 +306,11 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
           {pedido.endereco && (
             <div style={{ ...s.section, marginTop: 12 }}>
               <div style={s.sectionTitle}>Endereço de entrega</div>
-              <div style={{ color: '#94a3b8', fontSize: 14 }}>{pedido.endereco}</div>
+              <div style={{ color: '#a1a1aa', fontSize: 14 }}>{pedido.endereco}</div>
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pedido.endereco)}`}
                 target="_blank" rel="noreferrer"
-                style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, fontSize:12, fontWeight:700, color:'#60a5fa', textDecoration:'none' }}
+                style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, fontSize:12, fontWeight:700, color:'#67e8f9', textDecoration:'none' }}
               >
                 Ver no Maps
               </a>
@@ -278,13 +321,13 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
           <div style={{ ...s.section, marginTop: 12 }}>
             <div style={s.sectionTitle}>Pagamento</div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <span style={{ color:'#94a3b8', fontSize:14 }}>
+              <span style={{ color:'#a1a1aa', fontSize:14 }}>
                 {{ pix:'PIX', dinheiro:'Dinheiro', cartao:'Cartão' }[pedido.pagamento_tipo||''] || pedido.pagamento_tipo}
               </span>
               <span style={{
                 padding:'3px 10px', borderRadius:100, fontSize:11, fontWeight:700,
-                background: pedido.pagamento_status==='pago' ? 'rgba(56,189,248,0.15)' : 'rgba(251,191,36,0.15)',
-                color:       pedido.pagamento_status==='pago' ? '#38bdf8' : '#fbbf24',
+                background: pedido.pagamento_status==='pago' ? 'rgba(34,211,238,0.15)' : 'rgba(251,191,36,0.15)',
+                color:       pedido.pagamento_status==='pago' ? '#67e8f9' : '#fbbf24',
               }}>
                 {pedido.pagamento_status==='pago' ? '✓ Pago' : 'Aguardando'}
               </span>
@@ -292,14 +335,14 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
           </div>
 
           {/* Botão refazer pedido */}
-          <a href={`/delivery/${slug}`} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:24, padding:'14px', background:'rgba(6,182,212,0.12)', border:'1px solid rgba(6,182,212,0.25)', borderRadius:14, color:'#06b6d4', fontWeight:700, fontSize:14, textDecoration:'none', transition:'all .2s' }}>
+          <a href={`/delivery/${slug}`} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:24, padding:'14px', background:'rgba(255,255,255,0.92)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:14, color:'#09090b', fontWeight:800, fontSize:14, textDecoration:'none', transition:'all .2s' }}>
             Fazer novo pedido
           </a>
         </div>
 
         {/* Rodapé */}
-        <div style={{ textAlign:'center', color:'#94a3b8', fontSize:11, padding:'16px 0 32px' }}>
-          Atualização automática a cada 5 segundos · FlowPDV
+        <div style={{ textAlign:'center', color:'#a1a1aa', fontSize:11, padding:'16px 0 32px' }}>
+          Atualização automática a cada 5 segundos · Delivery online
         </div>
       </div>
     </div>
@@ -309,15 +352,15 @@ export default function PedidoRastreamento({ slug, pedidoId }: Props) {
 // ── Estilos ──────────────────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
   root: {
-    background: '#090e17',
+    background: '#09090b',
     minHeight: '100vh',
     fontFamily: "'DM Sans', system-ui, sans-serif",
-    color: '#f0f4ff',
+    color: '#fafafa',
   },
   header: {
-    background: 'rgba(9,14,23,0.96)',
+    background: 'rgba(9,9,11,0.94)',
     backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(148,163,184,0.12)',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
     padding: '14px 20px',
     display: 'flex',
     alignItems: 'center',
@@ -331,7 +374,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '1.3rem',
     fontWeight: 800,
     letterSpacing: '-0.02em',
-    color: '#f0f4ff',
+    color: '#fafafa',
   },
   content: {
     maxWidth: 480,
@@ -339,32 +382,33 @@ const s: Record<string, React.CSSProperties> = {
     padding: '24px 16px',
   },
   card: {
-    background: 'rgba(15,23,42,0.52)',
-    border: '1px solid rgba(148,163,184,0.12)',
+    background: 'rgba(24,24,27,0.96)',
+    border: '1px solid rgba(255,255,255,0.08)',
     borderRadius: 24,
     padding: '28px 24px',
+    boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
   },
   section: {
-    background: 'rgba(15,23,42,0.4)',
-    border: '1px solid rgba(148,163,184,0.1)',
+    background: 'rgba(9,9,11,0.7)',
+    border: '1px solid rgba(255,255,255,0.08)',
     borderRadius: 14,
     padding: '16px',
   },
   sectionTitle: {
     fontSize: 11,
     fontWeight: 800,
-    color: '#94a3b8',
+    color: '#a1a1aa',
     textTransform: 'uppercase',
     letterSpacing: '0.08em',
     marginBottom: 10,
   },
   badgeBox: {
-    background: 'rgba(6,182,212,0.1)',
-    border: '1px solid rgba(6,182,212,0.24)',
+    background: 'rgba(34,211,238,0.12)',
+    border: '1px solid rgba(34,211,238,0.24)',
     borderRadius: 18,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#e0f2fe',
+    color: '#ecfeff',
   },
 };

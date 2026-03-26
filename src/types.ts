@@ -19,6 +19,8 @@ export interface Product {
   descricao?: string | null;
   custo?: number;
   destaque?: number;
+  em_promocao?: number;
+  preco_original?: number | null;
   ordem?: number;
   disponivel_de?: string | null;
   disponivel_ate?: string | null;
@@ -55,6 +57,12 @@ export interface Order {
   order_number: string;
   status: string;
   canal?: string | null;
+  /** Delivery / retirada / cardápio — nome exibido na operação. */
+  cliente_nome?: string | null;
+  /** Telefone do cliente (geralmente só dígitos no banco). */
+  cliente_tel?: string | null;
+  /** Endereço de entrega quando aplicável. */
+  endereco?: string | null;
   total_amount: number;
   pagamento_tipo?: string | null;
   pagamento_status?: string | null;

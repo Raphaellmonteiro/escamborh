@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import {
   ShoppingCart, Plus, Minus, Trash2, CheckCircle2, ShoppingBag,
   X, Search, Printer, Barcode, ScanLine,
@@ -12,6 +12,16 @@ import { normalizeBarcode } from '../utils/barcode';
 import { openPrintPreview } from '../utils/print';
 import { resolveRequiresPreparation } from '../utils/preparation';
 import { useDebounce } from '../hooks/useDebounce';
+import { usePOSKeyboard } from '../hooks/usePOSKeyboard';
+import { buildDeliveryCardapioTheme } from '../segments/delivery/deliveryCardapioTheme';
+import { CardapioThemeShell } from '../segments/delivery/DeliveryCardapioThemeContext';
+import {
+  ProductOptionsModal,
+  type ProductOptionsProduto,
+  type ProductOptionsCartItem,
+  type GrupoOpcao,
+  type VariacaoVendavel,
+} from './ProductOptionsModal';
 
 // ── Constantes de estilo ──────────────────────────────────────────────────────
 const PAY_METHODS: PaymentMethod[] = ['Dinheiro', 'PIX', 'Débito', 'Crédito'];
@@ -22,6 +32,72 @@ const PAY_ICON: Record<string, string> = {
   Débito:   '💳',
   Crédito:  '💳',
 };
+
+function getShortcutProductScore(product: Product): number {
+  return (
+    ((product as any).mais_vendido ? 1000 : 0) +
+    ((product as any).destaque ? 100 : 0) +
+    ((product as any).recomendado ? 10 : 0)
+  );
+}
+
+type POSCartSeed = {
+  product_id: number;
+  product_name: string;
+  price_at_time: number;
+  variation_id?: number | null;
+  observation?: string;
+};
+
+function normalizeGruposPDV(raw: unknown): GrupoOpcao[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((g: any) => g != null && g.ativo !== 0 && g.ativo !== false)
+    .map((g: any) => ({
+      id: Number(g.id),
+      nome: String(g.nome || ''),
+      tipo: (g.tipo === 'checkbox' || g.tipo === 'quantidade' ? g.tipo : 'radio') as GrupoOpcao['tipo'],
+      min_selecoes: Number(g.min_selecoes ?? 0),
+      max_selecoes: Number(g.max_selecoes ?? 0),
+      obrigatorio: !!(g.obrigatorio === 1 || g.obrigatorio === true),
+      modo_preco: g.modo_preco === 'final' ? 'final' as const : 'adicional' as const,
+      itens: (Array.isArray(g.itens) ? g.itens : [])
+        .filter((it: any) => it != null && it.ativo !== 0 && it.ativo !== false)
+        .map((it: any) => ({
+          id: Number(it.id),
+          nome: String(it.nome || ''),
+          preco_adicional: Number(it.preco_adicional ?? 0),
+        })),
+    }))
+    .filter((g) => g.itens.length > 0);
+}
+
+function buildProdutoOptionsPayload(
+  product: Product,
+  grupos: GrupoOpcao[],
+  variacoes: VariacaoVendavel[]
+): ProductOptionsProduto {
+  return {
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    category: product.category,
+    photo_url: product.photo_url || undefined,
+    descricao: (product as any).descricao || undefined,
+    em_promocao: (product as any).em_promocao,
+    preco_original: (product as any).preco_original ?? null,
+    grupos_opcao: grupos,
+    variacoes_vendaveis: variacoes,
+  };
+}
+
+function samePOSCartLine(item: OrderItem, sel: POSCartSeed, tipo: string): boolean {
+  return item.product_id === sel.product_id
+    && item.type === tipo
+    && Number((item as any).variation_id || 0) === Number(sel.variation_id || 0)
+    && String((item as any).observation || '') === String(sel.observation || '')
+    && String((item as any).product_name || '') === String(sel.product_name || '');
+}
 
 // ─── ProductCard memoizado para evitar re-renders desnecessários ─────────────
 const ProductCard = React.memo(function ProductCard({
@@ -113,9 +189,15 @@ export default function POSScreen({
   const [currentPaymentMethod, setCurrentPaymentMethod]  = useState<PaymentMethod>('Dinheiro');
   const [currentAmount, setCurrentAmount]                 = useState<number>(0);
   const [pendingProduct, setPendingProduct]               = useState<Product | null>(null);
-  const [pendingSelection, setPendingSelection]           = useState<{ product_id: number; product_name: string; price_at_time: number; variation_id?: number | null } | null>(null);
-  const [variacaoModalProduct, setVariacaoModalProduct]   = useState<Product | null>(null);
-  const [variacoesVendaveis, setVariacoesVendaveis]       = useState<any[]>([]);
+  const [pendingSelection, setPendingSelection]           = useState<{
+    product_id: number;
+    product_name: string;
+    price_at_time: number;
+    variation_id?: number | null;
+    observation?: string;
+  } | null>(null);
+  const [opcaoModalProduto, setOpcaoModalProduto]         = useState<ProductOptionsProduto | null>(null);
+  const [opcaoModalBaseProduct, setOpcaoModalBaseProduct] = useState<Product | null>(null);
   const [carregandoVariacoes, setCarregandoVariacoes]     = useState(false);
   const [showSuccess, setShowSuccess]                     = useState<{ number: string; receipt: string; senha: number; tipo: string; orderId?: number } | null>(null);
   const [isFinalizing, setIsFinalizing]                   = useState(false);
@@ -126,6 +208,7 @@ export default function POSScreen({
   const [mesaToast, setMesaToast]                         = useState<string | null>(null);
   const [confirmLimpar, setConfirmLimpar]                 = useState(false);
   const [mobileCartOpen, setMobileCartOpen]               = useState(false);
+  const [selectedCartIndex, setSelectedCartIndex]         = useState<number | null>(null);
 
   // ─── Estado de UI ─────────────────────────────────────────────────────────
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
@@ -135,8 +218,6 @@ export default function POSScreen({
   const [barcodeToast, setBarcodeToast]         = useState<string | null>(null);
   const searchRef    = useRef<HTMLInputElement>(null);
   const barcodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const proceedSelectionRef = useRef<(p: Product, v?: any) => void>(() => {});
-
   // ─── Derivados ────────────────────────────────────────────────────────────
   const total     = useMemo(() => cart.reduce((a, i) => a + i.price_at_time * i.quantity, 0), [cart]);
   const totalPaid = useMemo(() => payments.reduce((a, p) => a + p.amount_paid, 0), [payments]);
@@ -181,6 +262,20 @@ export default function POSScreen({
       : filteredProducts.filter(p => p.category === selectedCategory),
   [filteredProducts, selectedCategory]);
 
+  const topShortcutProducts = useMemo(() => (
+    [...(Array.isArray(products) ? products : [])]
+      .filter((product) => Boolean(product.active))
+      .sort((a, b) => {
+        const scoreDiff = getShortcutProductScore(b) - getShortcutProductScore(a);
+        if (scoreDiff !== 0) return scoreDiff;
+        const orderA = Number((a as any).ordem ?? Number.MAX_SAFE_INTEGER);
+        const orderB = Number((b as any).ordem ?? Number.MAX_SAFE_INTEGER);
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+      })
+      .slice(0, 8)
+  ), [products]);
+
   // ─── Taxas de pagamento (após todos os useState e useMemo simples) ──────────
   const getTaxa = (method: PaymentMethod): number => {
     if (!taxasPagamento) return 0;
@@ -204,96 +299,83 @@ export default function POSScreen({
   const change           = Math.max(0, totalPagoComTaxas - totalComTaxas);
   // ─────────────────────────────────────────────────────────────────────────
 
-  const addToCartDirect = (product: Product) => {
-    const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
-    const seed = { product_id: product.id, product_name: product.name, price_at_time: product.price, variation_id: null };
+  const addSelectionToCart = useCallback((selection: POSCartSeed, tipo: string) => {
+    let nextSelectedIndex: number | null = null;
     setCart(prev => {
-      const ex = prev.find(i =>
-        i.product_id === seed.product_id
-        && i.type === tipo
-        && Number((i as any).variation_id || 0) === Number(seed.variation_id || 0)
-      );
+      const ex = prev.find(i => samePOSCartLine(i, selection, tipo));
       if (ex) {
+        const existingIndex = prev.findIndex(i => samePOSCartLine(i, selection, tipo));
+        nextSelectedIndex = existingIndex >= 0 ? existingIndex : prev.length - 1;
         return prev.map(i =>
-          i.product_id === seed.product_id
-          && i.type === tipo
-          && Number((i as any).variation_id || 0) === Number(seed.variation_id || 0)
+          samePOSCartLine(i, selection, tipo)
             ? { ...i, quantity: i.quantity + 1 }
             : i
         );
       }
-      return [...prev, { ...seed, quantity: 1, type: tipo } as any];
-    });
-  };
-
-  const addSelectionToCart = useCallback((selection: { product_id: number; product_name: string; price_at_time: number; variation_id?: number | null }, tipo: string) => {
-    setCart(prev => {
-      const ex = prev.find(i =>
-        i.product_id === selection.product_id
-        && i.type === tipo
-        && Number((i as any).variation_id || 0) === Number(selection.variation_id || 0)
-      );
-      if (ex) {
-        return prev.map(i =>
-          i.product_id === selection.product_id
-          && i.type === tipo
-          && Number((i as any).variation_id || 0) === Number(selection.variation_id || 0)
-            ? { ...i, quantity: i.quantity + 1 }
-            : i
-        );
-      }
+      nextSelectedIndex = prev.length;
       return [...prev, { ...selection, quantity: 1, type: tipo } as any];
     });
+    setSelectedCartIndex(nextSelectedIndex);
   }, []);
 
-  const proceedSelection = useCallback((product: Product, variation?: any) => {
-    const selection = variation
-      ? {
-          product_id: product.id,
-          product_name: `${product.name} - ${variation.nome}`,
-          price_at_time: Number(variation.preco || 0),
-          variation_id: Number(variation.id || 0),
-        }
-      : {
-          product_id: product.id,
-          product_name: product.name,
-          price_at_time: product.price,
-          variation_id: null,
-        };
-
-    if (cfg.usaTipoItem && cfg.tiposItem.length > 1) {
-      setPendingSelection(selection);
-      setPendingProduct(product);
-      return;
-    }
-    const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
-    addSelectionToCart(selection, tipo);
-  }, [cfg.usaTipoItem, cfg.tiposItem, addSelectionToCart]);
-
-  proceedSelectionRef.current = proceedSelection;
-
-  const handleProductClick = useCallback(async (product: Product) => {
+  const openProductCustomizeFlow = useCallback(async (product: Product) => {
+    setCarregandoVariacoes(true);
     try {
-      setCarregandoVariacoes(true);
-      const res = await fetch(`/api/products/${product.id}/variacoes-vendaveis`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const vars = res.ok ? await res.json() : [];
+      const [resVar, resGrp] = await Promise.all([
+        fetch(`/api/products/${product.id}/variacoes-vendaveis`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/products/${product.id}/opcoes`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const vars = resVar.ok ? await resVar.json() : [];
+      const gruposRaw = resGrp.ok ? await resGrp.json() : [];
       const ativas = Array.isArray(vars)
         ? vars.filter((v: { ativo?: number }) => Number(v?.ativo) === 1)
         : [];
-      if (ativas.length > 0) {
-        setVariacoesVendaveis(ativas);
-        setVariacaoModalProduct(product);
-        return;
-      }
-      proceedSelectionRef.current(product);
+      const variacoes: VariacaoVendavel[] = ativas.map((v: any) => ({
+        id: Number(v.id),
+        nome: String(v.nome || ''),
+        preco: Number(v.preco ?? 0),
+      }));
+      const grupos = normalizeGruposPDV(gruposRaw);
+      setOpcaoModalBaseProduct(product);
+      setOpcaoModalProduto(buildProdutoOptionsPayload(product, grupos, variacoes));
     } catch {
-      proceedSelectionRef.current(product);
+      setOpcaoModalBaseProduct(product);
+      setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
     } finally {
       setCarregandoVariacoes(false);
     }
   }, [token]);
+
+  const handleProductClick = useCallback((product: Product) => {
+    void openProductCustomizeFlow(product);
+  }, [openProductCustomizeFlow]);
+
+  const applyModalItemToPedido = useCallback((item: ProductOptionsCartItem) => {
+    const base = opcaoModalBaseProduct;
+    setOpcaoModalProduto(null);
+    setOpcaoModalBaseProduct(null);
+    if (!base) return;
+    const selection: POSCartSeed = {
+      product_id: item.id,
+      product_name: item.name,
+      price_at_time: item.preco_final,
+      variation_id: item.variation_id ?? null,
+      observation: item.obs_opcoes?.trim() || undefined,
+    };
+    if (cfg.usaTipoItem && cfg.tiposItem.length > 1) {
+      setPendingSelection(selection);
+      setPendingProduct(base);
+      return;
+    }
+    const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
+    const tipoCfg = cfg.tiposItem[0];
+    if (tipoCfg?.usaMesas) {
+      setPendingMesaProduct(base);
+      setShowMesaPicker(true);
+      return;
+    }
+    addSelectionToCart(selection, tipo);
+  }, [opcaoModalBaseProduct, cfg.usaTipoItem, cfg.tiposItem, addSelectionToCart]);
 
   const addToCartWithType = (tipo: TipoItem) => {
     if (!pendingProduct || !pendingSelection) return;
@@ -304,17 +386,60 @@ export default function POSScreen({
     addSelectionToCart(selection, tipo.type);
   };
 
-  const updateQuantity = (index: number, delta: number) => {
-    setCart(prev => { const n = [...prev]; n[index].quantity = Math.max(1, n[index].quantity + delta); return n; });
-  };
-  const removeItem    = (index: number) => setCart(prev => prev.filter((_, i) => i !== index));
+  const updateQuantity = useCallback((index: number, delta: number) => {
+    setCart(prev => {
+      if (!prev[index]) return prev;
+      const next = [...prev];
+      next[index] = { ...next[index], quantity: Math.max(1, next[index].quantity + delta) };
+      return next;
+    });
+    setSelectedCartIndex(index);
+  }, []);
+  const removeItem = useCallback((index: number) => {
+    setCart(prev => prev.filter((_, i) => i !== index));
+    setSelectedCartIndex((current) => {
+      if (current === null) return null;
+      if (current === index) return null;
+      if (current > index) return current - 1;
+      return current;
+    });
+  }, []);
   const addPayment    = () => { if (currentAmount <= 0) return; setPayments(prev => [...prev, { method: currentPaymentMethod, amount_paid: currentAmount }]); setCurrentAmount(0); };
   const removePayment = (index: number) => setPayments(prev => prev.filter((_, i) => i !== index));
+  const clearCartConfirmed = useCallback(() => {
+    setCart([]);
+    setPayments([]);
+    setObservation('');
+    setCurrentAmount(0);
+    setSelectedCartIndex(null);
+    setConfirmLimpar(false);
+  }, []);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
   useEffect(() => {
+    if (cart.length === 0) {
+      setSelectedCartIndex(null);
+      return;
+    }
+    setSelectedCartIndex((current) => {
+      if (current === null) return current;
+      return current >= cart.length ? cart.length - 1 : current;
+    });
+  }, [cart.length]);
+
+  const hasBlockingModal = Boolean(
+    pendingProduct ||
+    opcaoModalProduto ||
+    showMesaPicker ||
+    showTipoRetirada ||
+    showSuccess ||
+    confirmLimpar
+  );
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (hasBlockingModal) return;
       const el = document.activeElement as HTMLElement;
       if (el?.tagName === 'TEXTAREA') return;
       if (el?.tagName === 'INPUT' && el !== searchRef.current) return;
@@ -326,7 +451,11 @@ export default function POSScreen({
               p => p.active && normalizeBarcode((p as any).codigo_barras) === code
             )
           : null;
-        if (found) { addToCartDirect(found); setBarcodeToast(`✓ ${found.name} adicionado`); setSearchTerm(''); }
+        if (found) {
+          void openProductCustomizeFlow(found);
+          setBarcodeToast(`✓ ${found.name} — personalizar`);
+          setSearchTerm('');
+        }
         else { setBarcodeToast(`⚠ Código "${code}" não cadastrado`); }
         setTimeout(() => setBarcodeToast(null), 2500); return;
       }
@@ -338,7 +467,104 @@ export default function POSScreen({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [barcodeBuffer, products]);
+  }, [barcodeBuffer, products, hasBlockingModal, openProductCustomizeFlow]);
+
+  const handleStartFinalize = useCallback(() => {
+    if (cart.length === 0 || remaining > 0.01 || isFinalizing) return;
+    const isRestaurante = ['Restaurante/Food', 'Bar/Pub'].includes(estabelecimentoSegmento || '');
+    const cartHasFood = cart.some(item => {
+      const prod = products.find(p => p.id === item.product_id);
+      return prod ? resolveRequiresPreparation(prod) : false;
+    });
+    if (isRestaurante && cartHasFood && !cfg.usaTipoItem) {
+      setShowTipoRetirada(true);
+      return;
+    }
+    void finalizeOrder('local');
+  }, [
+    cart,
+    remaining,
+    isFinalizing,
+    estabelecimentoSegmento,
+    products,
+    cfg.usaTipoItem,
+    observation,
+    totalComTaxas,
+    taxasAcumuladas,
+    change,
+    token,
+  ]);
+
+  const handleEscape = useCallback(() => {
+    if (confirmLimpar) {
+      setConfirmLimpar(false);
+      return;
+    }
+    if (showSuccess) {
+      setShowSuccess(null);
+      searchRef.current?.focus();
+      return;
+    }
+    if (showTipoRetirada) {
+      setShowTipoRetirada(false);
+      return;
+    }
+    if (showMesaPicker) {
+      setShowMesaPicker(false);
+      setPendingMesaProduct(null);
+      return;
+    }
+    if (opcaoModalProduto) {
+      setOpcaoModalProduto(null);
+      setOpcaoModalBaseProduct(null);
+      return;
+    }
+    if (pendingProduct) {
+      setPendingProduct(null);
+      setPendingSelection(null);
+      return;
+    }
+    if (mobileCartOpen) {
+      setMobileCartOpen(false);
+    }
+  }, [confirmLimpar, showSuccess, showTipoRetirada, showMesaPicker, opcaoModalProduto, pendingProduct, mobileCartOpen]);
+
+  const handleQtyIncrease = useCallback(() => {
+    if (selectedCartIndex === null) return;
+    updateQuantity(selectedCartIndex, 1);
+  }, [selectedCartIndex, updateQuantity]);
+
+  const handleQtyDecrease = useCallback(() => {
+    if (selectedCartIndex === null) return;
+    updateQuantity(selectedCartIndex, -1);
+  }, [selectedCartIndex, updateQuantity]);
+
+  const handleToggleCart = useCallback(() => {
+    if (window.innerWidth >= 768) return;
+    setMobileCartOpen((current) => !current);
+  }, []);
+
+  const requestClearCart = useCallback(() => {
+    if (cart.length === 0) return;
+    setConfirmLimpar(true);
+  }, [cart.length]);
+
+  usePOSKeyboard({
+    products: topShortcutProducts,
+    onAddProduct: handleProductClick,
+    onClearCart: requestClearCart,
+    onFocusSearch: () => {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    },
+    onEscape: handleEscape,
+    onFinalize: handleStartFinalize,
+    onQtyIncrease: handleQtyIncrease,
+    onQtyDecrease: handleQtyDecrease,
+    onToggleCart: handleToggleCart,
+    hasBlockingModal,
+    enabled: true,
+  });
 
   const finalizeOrder = async (tipo: 'local' | 'levar' = 'local') => {
     if (cart.length === 0 || remaining > 0.01 || isFinalizing) return;
@@ -358,6 +584,7 @@ export default function POSScreen({
       if (data.success) {
         setShowSuccess({ number: data.orderNumber, receipt: data.receipt, senha: data.senhaPedido || 0, tipo, orderId: data.orderId });
         setCart([]); setPayments([]); setObservation(''); setCurrentAmount(0); setTipoRetirada('local');
+        setSelectedCartIndex(null);
         setMobileCartOpen(false);
       } else { alert('Erro ao finalizar pedido: ' + (data.error || 'Erro desconhecido')); }
     } catch { alert('Erro ao finalizar pedido'); }
@@ -395,16 +622,27 @@ export default function POSScreen({
           <div className="space-y-2">
             {cart.map((item, index) => (
               <motion.div key={index} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
-                className="flex items-center gap-2 bg-zinc-800 rounded-lg border border-zinc-700 p-2">
+                onClick={() => setSelectedCartIndex(index)}
+                className={`flex items-center gap-2 bg-zinc-800 rounded-lg border p-2 transition-all cursor-pointer ${
+                  selectedCartIndex === index
+                    ? 'border-amber-400 ring-1 ring-amber-400/30'
+                    : 'border-zinc-700 hover:border-zinc-600'
+                }`}>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-zinc-100 text-xs leading-snug line-clamp-2">{item.product_name}</p>
+                  {(item as any).observation ? (
+                    <p className="text-[9px] text-zinc-500 line-clamp-2 mt-0.5">{(item as any).observation}</p>
+                  ) : null}
+                  {selectedCartIndex === index && (
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mt-0.5">Selecionado</p>
+                  )}
                   <p className="text-amber-400 font-black text-xs mt-0.5">R$ {(item.price_at_time * item.quantity).toFixed(2)}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={() => updateQuantity(index, -1)} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Minus size={11} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Minus size={11} /></button>
                   <span className="w-7 md:w-6 text-center font-black text-xs text-zinc-100">{item.quantity}</span>
-                  <button type="button" onClick={() => updateQuantity(index, 1)} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Plus size={11} /></button>
-                  <button type="button" onClick={() => removeItem(index)} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Plus size={11} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
                 </div>
               </motion.div>
             ))}
@@ -516,16 +754,7 @@ export default function POSScreen({
           </div>
           <button
             type="button"
-            onClick={() => {
-              if (cart.length === 0 || remaining > 0.01 || isFinalizing) return;
-              const isRestaurante = ['Restaurante/Food', 'Bar/Pub'].includes(estabelecimentoSegmento || '');
-              const cartHasFood = cart.some(item => {
-                const prod = products.find(p => p.id === item.product_id);
-                return prod ? resolveRequiresPreparation(prod) : false;
-              });
-              if (isRestaurante && cartHasFood && !cfg.usaTipoItem) { setShowTipoRetirada(true); }
-              else { finalizeOrder('local'); }
-            }}
+            onClick={handleStartFinalize}
             disabled={cart.length === 0 || remaining > 0.01 || isFinalizing}
             className="w-full py-4 text-base font-black rounded-xl flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 bg-amber-400 hover:bg-amber-300 active:scale-[0.98] text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 hover:ring-amber-400/60 min-h-[52px]"
           >
@@ -571,6 +800,29 @@ export default function POSScreen({
             )}
           </div>
         </div>
+
+        {topShortcutProducts.length > 0 && (
+          <div className="hidden md:block px-3 pb-2 shrink-0">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Atalhos</p>
+                <p className="text-[10px] text-zinc-500">Ctrl+F busca • Ctrl+Enter finaliza</p>
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-500">Alt+↑/↓ ajusta o item selecionado • Ctrl+Backspace limpa</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {topShortcutProducts.map((product, index) => (
+                  <span
+                    key={product.id}
+                    className="max-w-[180px] truncate rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-[10px] font-medium text-zinc-300"
+                    title={product.name}
+                  >
+                    F{index + 1} {product.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Abas de categoria */}
         <div className="px-3 pb-2 shrink-0">
@@ -726,45 +978,21 @@ export default function POSScreen({
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {variacaoModalProduct && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-              <div className="mb-4">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Escolha a variação</p>
-                <h3 className="text-xl font-black text-zinc-900">{variacaoModalProduct.name}</h3>
-              </div>
-              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-                {variacoesVendaveis.map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => {
-                      const product = variacaoModalProduct;
-                      setVariacaoModalProduct(null);
-                      setVariacoesVendaveis([]);
-                      proceedSelection(product, v);
-                    }}
-                    className="w-full text-left p-3 rounded-xl border border-zinc-200 hover:border-amber-300 hover:bg-amber-50 transition-all"
-                  >
-                    <p className="font-bold text-sm text-zinc-800">{v.nome}</p>
-                    <p className="text-xs text-zinc-500">
-                      R$ {Number(v.preco || 0).toFixed(2)}
-                      {v.codigo_barras ? ` · ${v.codigo_barras}` : ''}
-                    </p>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => { setVariacaoModalProduct(null); setVariacoesVendaveis([]); }}
-                className="w-full mt-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all"
-              >
-                Cancelar
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {opcaoModalProduto && (
+        <CardapioThemeShell theme={buildDeliveryCardapioTheme('dark_premium')}>
+          <AnimatePresence>
+            <Fragment key={opcaoModalProduto.id}>
+              <ProductOptionsModal
+                produto={opcaoModalProduto}
+                addDestination="pedido"
+                visualVariant="pos"
+                onClose={() => { setOpcaoModalProduto(null); setOpcaoModalBaseProduct(null); }}
+                onAdicionar={applyModalItemToPedido}
+              />
+            </Fragment>
+          </AnimatePresence>
+        </CardapioThemeShell>
+      )}
 
       {showMesaPicker && pendingMesaProduct && (
         <MesaPickerModal product={pendingMesaProduct} token={token}
@@ -896,11 +1124,7 @@ export default function POSScreen({
                 </button>
                 <button
                   onClick={() => {
-                    setCart([]);
-                    setPayments([]);
-                    setObservation('');
-                    setCurrentAmount(0);
-                    setConfirmLimpar(false);
+                    clearCartConfirmed();
                   }}
                   className="flex-1 py-2.5 rounded-xl text-sm font-black bg-red-600 hover:bg-red-700 text-white transition-all"
                 >

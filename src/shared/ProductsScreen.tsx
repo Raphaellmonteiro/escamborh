@@ -42,6 +42,25 @@ interface ProductExtended extends Product {
   disponivel_de?: string;
   disponivel_ate?: string;
 }
+
+function getPromotionValidationMessage(product?: Partial<ProductExtended> | null) {
+  if (!product?.em_promocao) return '';
+
+  const currentPrice = Number(product.price ?? 0);
+  const originalPrice = product.preco_original == null
+    ? NaN
+    : Number(product.preco_original);
+
+  if (!Number.isFinite(originalPrice) || originalPrice <= 0) {
+    return 'Informe um Preço de antes válido para ativar a promoção.';
+  }
+
+  if (originalPrice <= currentPrice) {
+    return 'O Preço de antes deve ser maior que o preço atual.';
+  }
+
+  return '';
+}
 interface ProductSuggestion {
   id: number;
   name: string;
@@ -181,6 +200,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    const promotionError = getPromotionValidationMessage(editing);
+    if (promotionError) {
+      alert(promotionError);
+      return;
+    }
     const method = editing.id ? 'PUT' : 'POST';
     const url    = editing.id ? `/api/products/${editing.id}` : '/api/products';
     try {
@@ -553,7 +577,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
               </div>
             </div>
-            <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
+            <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
               className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
               <Plus size={16}/> Novo Produto
             </button>
@@ -618,6 +642,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-zinc-900 text-sm break-words">{p.name}</span>
                         {p.destaque ? <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0"/> : null}
+                        {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 bg-rose-100 text-rose-700">
+                            Promocao
+                          </span>
+                        ) : null}
                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
                           {p.active ? 'Ativo' : 'Inativo'}
                         </span>
@@ -627,6 +656,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       </div>
                       <p className="text-xs text-zinc-400 mt-0.5 break-words">
                         {p.category} · {fmtR$(p.price)}
+                        {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) && <span className="text-rose-500"> · de {fmtR$(Number(p.preco_original || 0))}</span>}
                         {p.custo && p.custo > 0 && <span className="text-zinc-300"> · custo {fmtR$(p.custo)}</span>}
                         {mg !== null && <span className={`font-bold ${mg >= 50 ? 'text-emerald-600' : mg >= 30 ? 'text-amber-600' : 'text-red-500'}`}> · {mg.toFixed(0)}% margem</span>}
                       </p>
@@ -678,6 +708,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                   <div className={`w-full h-40 flex items-center justify-center overflow-hidden relative ${cc.bg}`}>
                     {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={40} className="text-zinc-300"/>}
                     {p.destaque ? <div className="absolute top-2 left-2 bg-amber-400 text-white rounded-full p-1"><Star size={12} className="fill-white"/></div> : null}
+                    {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
+                      <div className="absolute top-2 left-11 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black uppercase">
+                        Promocao
+                      </div>
+                    ) : null}
                     <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${p.active ? 'bg-emerald-500 text-white' : 'bg-zinc-500 text-white'}`}>
                       {p.active ? 'Ativo' : 'Inativo'}
                     </div>
@@ -692,6 +727,9 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     {p.descricao && <p className="text-[11px] text-zinc-400 line-clamp-2 mb-2">{p.descricao}</p>}
                     <div className="mt-auto">
                       <p className="text-base font-black text-zinc-900">{fmtR$(p.price)}</p>
+                      {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) && (
+                        <p className="text-[10px] font-bold text-rose-500 line-through">{fmtR$(Number(p.preco_original || 0))}</p>
+                      )}
                       {mg !== null && <p className={`text-[10px] font-bold ${mg >= 50 ? 'text-emerald-600' : mg >= 30 ? 'text-amber-600' : 'text-red-500'}`}>{mg.toFixed(0)}% margem</p>}
                     </div>
                   </div>
@@ -764,6 +802,64 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       onChange={e => setEditing(p => ({...p, custo: parseFloat(e.target.value) || 0}))}
                       className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
                   </div>
+                </div>
+
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-800">Promocao no cardapio online</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        O preco atual continua sendo o Preco de venda. O campo abaixo serve apenas para exibir o valor antigo riscado.
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={!!editing.em_promocao}
+                        onChange={e => setEditing(prev => ({
+                          ...prev,
+                          em_promocao: e.target.checked ? 1 : 0,
+                          preco_original: e.target.checked ? prev?.preco_original ?? undefined : null,
+                        }))}
+                        className="w-4 h-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span className="text-sm font-medium text-zinc-700">Produto em promocao</span>
+                    </label>
+                  </div>
+
+                  {!!editing.em_promocao && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Preco de antes (R$)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={editing.preco_original ?? ''}
+                          onChange={e => setEditing(prev => ({
+                            ...prev,
+                            preco_original: e.target.value === '' ? null : (parseFloat(e.target.value) || 0),
+                          }))}
+                          className="w-full px-3.5 py-2.5 border border-rose-200 bg-white rounded-xl text-sm focus:outline-none focus:border-rose-400"
+                        />
+                      </div>
+                      <div className="rounded-xl border border-rose-100 bg-white px-3.5 py-2.5 flex flex-col justify-center">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Preview</span>
+                        <div className="mt-1 flex items-baseline gap-2">
+                          <span className="text-base font-black text-zinc-900">{fmtR$(Number(editing.price || 0))}</span>
+                          {Number(editing.preco_original || 0) > Number(editing.price || 0) && (
+                            <span className="text-xs font-bold text-rose-500 line-through">{fmtR$(Number(editing.preco_original || 0))}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {getPromotionValidationMessage(editing) && (
+                    <div className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
+                      {getPromotionValidationMessage(editing)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Margem calculada */}

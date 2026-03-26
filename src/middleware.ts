@@ -5,7 +5,7 @@ import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
-import { pool, q1 } from './db';
+import { isDatabaseConnectivityError, pool, q1 } from './db';
 import { type PlanFeature } from './config/planFeatures';
 import { getTenantFeatures } from './services/tenantPlan';
 
@@ -264,6 +264,38 @@ export function requirePlanFeature(feature: PlanFeature) {
   };
 }
 
+function buildAuthenticationErrorResponse(err: unknown): Extract<AuthenticatedSession, { ok: false }> {
+  const message = err instanceof Error ? err.message : String(err ?? 'Erro desconhecido');
+  const isDbUnavailable = isDatabaseConnectivityError(err);
+
+  console.error('[resolveAuthenticatedSession] erro:', {
+    message,
+    code:
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code ?? '')
+        : undefined,
+  });
+
+  return {
+    ok: false,
+    status: isDbUnavailable ? 503 : 500,
+    body: {
+      error: isDbUnavailable ? 'Serviço de autenticação temporariamente indisponível' : 'Erro de autenticação',
+    },
+  };
+}
+
+async function touchTenantLastAccess(tenantId: number) {
+  try {
+    await pool.query('UPDATE clientes SET ultimo_acesso=NOW() WHERE id=$1', [tenantId]);
+  } catch (err) {
+    console.warn('[resolveAuthenticatedSession] falha ao atualizar ultimo_acesso:', {
+      tenantId,
+      message: err instanceof Error ? err.message : String(err ?? 'Erro desconhecido'),
+    });
+  }
+}
+
 export async function resolveAuthenticatedSession(req: Request, tokenOverride?: string): Promise<AuthenticatedSession> {
   const authHeader = req.headers['authorization'];
   const token = tokenOverride || (authHeader && authHeader.split(' ')[1]);
@@ -280,11 +312,13 @@ export async function resolveAuthenticatedSession(req: Request, tokenOverride?: 
   }
 
   try {
-    const userRecord = await q1('SELECT id, status, vencimento FROM clientes WHERE usuario=?', [user.username]);
-    const usuarioRecord = await q1(
-      'SELECT token_version, ativo, cliente_id, cargo, permissoes, nome FROM usuarios WHERE username=?',
-      [user.username]
-    );
+    const [userRecord, usuarioRecord] = await Promise.all([
+      q1('SELECT id, status, vencimento FROM clientes WHERE usuario=?', [user.username]),
+      q1(
+        'SELECT token_version, ativo, cliente_id, cargo, permissoes, nome FROM usuarios WHERE username=?',
+        [user.username]
+      ),
+    ]);
 
     if (!usuarioRecord) {
       return { ok: false, status: 401, body: { error: 'Sessão inválida. Por favor, faça login novamente.' } };
@@ -304,7 +338,7 @@ export async function resolveAuthenticatedSession(req: Request, tokenOverride?: 
         return { ok: false, status: 403, body: { error: 'trial_expirado' } };
       }
 
-      await pool.query('UPDATE clientes SET ultimo_acesso=NOW() WHERE id=$1', [userRecord.id]);
+      void touchTenantLastAccess(Number(userRecord.id));
 
       return {
         ok: true,
@@ -332,9 +366,8 @@ export async function resolveAuthenticatedSession(req: Request, tokenOverride?: 
     }
 
     return { ok: false, status: 401, body: { error: 'Sessão inválida. Por favor, faça login novamente.' } };
-  } catch (err: any) {
-    console.error('[resolveAuthenticatedSession] erro:', err.message);
-    return { ok: false, status: 500, body: { error: 'Erro de autenticação' } };
+  } catch (err) {
+    return buildAuthenticationErrorResponse(err);
   }
 }
 

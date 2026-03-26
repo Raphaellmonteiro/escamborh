@@ -6,9 +6,10 @@ import {
   User, CreditCard, Banknote, Smartphone, Check,
   Truck, AlertCircle, DollarSign, TrendingUp, Users, Search,
   Printer, Navigation, MessageCircle, BarChart2, Tag, Plus, Trash2,
-  Zap, Globe, Bell, BellOff, Map, LayoutGrid,
+  Zap, Globe, Bell, BellOff, Map, LayoutGrid, Palette, ListTree,
 } from 'lucide-react';
 import { openPrintPreview } from '../utils/print';
+import { getOrderItemDetailText, splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { getDeliveryNextStatus } from '../utils/deliveryStatusNext';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
@@ -33,12 +34,21 @@ function playNewOrderSound() {
 }
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
+interface DeliveryPedidoItem {
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  price_at_time: number;
+  observation?: string | null;
+}
 interface Pedido {
   id: number; order_number: string; status: string; total_amount: number;
   cliente_nome?: string; cliente_tel?: string; endereco?: string;
   pagamento_tipo?: string; pagamento_status?: string; taxa_entrega?: number;
   motoboy_id?: number; saiu_entrega_at?: string; entregue_at?: string;
   created_at: string; resumo_itens?: string; observation?: string;
+  /** Lista estruturada (API GET /delivery/pedidos); fallback para `resumo_itens`. */
+  itens?: DeliveryPedidoItem[];
   delivery_checkout_snapshot?: DeliveryCheckoutSnapshot | string | null;
 }
 interface Motoboy { id: number; nome: string; cargo: string; }
@@ -55,6 +65,7 @@ interface DeliveryConfig {
   desconto_primeiro_cliente_valor?: number;
   desconto_primeiro_cliente_min_pedido?: number;
   evolution_url?: string; evolution_token?: string; evolution_instance?: string;
+  theme_mode?: 'dark_premium' | 'light_red';
 }
 interface Dashboard {
   pedidos_hoje: number; faturamento_hoje: number;
@@ -126,6 +137,28 @@ const PAGS: Record<string, { label: string; icon: React.ReactNode }> = {
 
 const fmt      = (v: number) => `R$ ${(v||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 const fmtHour  = (d?: string) => d ? new Date(d.includes('T')?d:d.replace(' ','T')).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+
+function deliveryPedidoTemItensDetalhe(p: Pedido): boolean {
+  return Array.isArray(p.itens) && p.itens.length > 0;
+}
+
+function deliveryPedidoTemCustomizacaoItens(p: Pedido): boolean {
+  if (!Array.isArray(p.itens)) return false;
+  return p.itens.some((it) => getOrderItemDetailText(it).length > 0);
+}
+
+function formatDeliveryItensResumoWhatsApp(p: Pedido): string {
+  if (deliveryPedidoTemItensDetalhe(p)) {
+    return p
+      .itens!.map((it) => {
+        const d = getOrderItemDetailText(it);
+        const base = `- ${it.quantity}x ${it.product_name}`;
+        return d ? `${base} (${d})` : base;
+      })
+      .join('\n');
+  }
+  return p.resumo_itens || '';
+}
 const parseDeliveryCheckoutSnapshot = (value: Pedido['delivery_checkout_snapshot']) => {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -514,7 +547,16 @@ function TabPainel({ token }: { token: string }) {
                 const cfg = STATUS_CFG[p.status] || STATUS_CFG['Pedido Recebido'];
                 return (
                   <tr key={p.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer" onClick={() => setSelectedPedido(p)}>
-                    <td className="px-4 py-3 font-mono font-bold text-zinc-800 dark:text-zinc-200">#{p.order_number}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                      <span className="inline-flex items-center gap-1">
+                        #{p.order_number}
+                        {deliveryPedidoTemCustomizacaoItens(p) && (
+                          <span className="text-violet-500 dark:text-violet-400" title="Itens com observações ou adicionais">
+                            ●
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{p.cliente_nome || '—'}</td>
                     <td className="px-4 py-3"><span className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wide ${cfg.toneClass}`}>{cfg.label}</span></td>
                     <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-xs">{PAGS[p.pagamento_tipo||'']?.label || p.pagamento_tipo}</td>
@@ -589,10 +631,48 @@ function TabPainel({ token }: { token: string }) {
                   )}
                 </div>
 
-                {selectedPedido.resumo_itens && (
+                {(deliveryPedidoTemItensDetalhe(selectedPedido) || selectedPedido.resumo_itens) && (
                   <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3">
-                    <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Itens</p>
-                    <p className="text-zinc-700 dark:text-zinc-300">{selectedPedido.resumo_itens}</p>
+                    <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Itens</p>
+                    {deliveryPedidoTemItensDetalhe(selectedPedido) ? (
+                      <ul className="space-y-3">
+                        {selectedPedido.itens!.map((it, idx) => {
+                          const detail = getOrderItemDetailText(it);
+                          const lines = splitOrderItemDetailLines(detail);
+                          const unit = Number(it.price_at_time || 0);
+                          const lineTotal = unit * Number(it.quantity);
+                          return (
+                            <li
+                              key={`${it.product_id}-${idx}`}
+                              className="border-b border-zinc-200 dark:border-zinc-700 pb-3 last:border-0 last:pb-0"
+                            >
+                              <div className="flex justify-between gap-2 text-sm">
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 min-w-0">
+                                  {it.quantity}× {it.product_name}
+                                </span>
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 tabular-nums shrink-0">
+                                  {fmt(lineTotal)}
+                                </span>
+                              </div>
+                              {lines.length > 0 ? (
+                                <>
+                                  <ul className="mt-1.5 ml-3 list-disc space-y-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                                    {lines.map((line, j) => (
+                                      <li key={j}>{line}</li>
+                                    ))}
+                                  </ul>
+                                  <p className="mt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                                    Preço unit. {fmt(unit)} já inclui opções/adicionais acima; à direita, total da linha.
+                                  </p>
+                                </>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-zinc-700 dark:text-zinc-300">{selectedPedido.resumo_itens}</p>
+                    )}
                     {selectedPedido.observation && (
                       <div className="mt-2 space-y-0.5">
                         {selectedPedido.observation.split('\n').filter((l:string) => !l.startsWith('🛵')).map((l:string,i:number) => (
@@ -662,7 +742,7 @@ function TabPainel({ token }: { token: string }) {
                   const pagInfo = selectedPedido.pagamento_status==='pago' ? '✅ JÁ PAGO'
                     : selectedPedido.pagamento_tipo==='dinheiro' ? `💵 COBRAR R$ ${selectedPedido.total_amount.toFixed(2).replace('.',',')} em dinheiro`
                     : `💳 COBRAR R$ ${selectedPedido.total_amount.toFixed(2).replace('.',',')} no cartão`;
-                  const msg = `🛵 *ENTREGA #${selectedPedido.order_number}*\n\n👤 ${selectedPedido.cliente_nome}\n📱 ${selectedPedido.cliente_tel||'—'}\n\n📍 *Endereço:*\n${selectedPedido.endereco}\n🗺️ ${mapsUrl}\n\n${pagInfo}\n\n${selectedPedido.resumo_itens||''}`;
+                  const msg = `🛵 *ENTREGA #${selectedPedido.order_number}*\n\n👤 ${selectedPedido.cliente_nome}\n📱 ${selectedPedido.cliente_tel||'—'}\n\n📍 *Endereço:*\n${selectedPedido.endereco}\n🗺️ ${mapsUrl}\n\n${pagInfo}\n\n${formatDeliveryItensResumoWhatsApp(selectedPedido)}`;
                   return (
                     <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
                       <p className="text-[10px] font-black text-orange-600 uppercase tracking-wider mb-2">📦 Enviar rota para motoboy</p>
@@ -740,7 +820,18 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, cfg }
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 md:p-3 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all max-md:active:bg-zinc-50/80 dark:max-md:active:bg-zinc-800/40">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1 pr-1">
-          <p className="font-black text-zinc-900 dark:text-zinc-100 text-base max-md:text-[15px] leading-tight">#{pedido.order_number}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-black text-zinc-900 dark:text-zinc-100 text-base max-md:text-[15px] leading-tight">#{pedido.order_number}</p>
+            {deliveryPedidoTemCustomizacaoItens(pedido) && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full border border-violet-200 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-800 dark:text-violet-200"
+                title="Itens com observações ou adicionais"
+              >
+                <ListTree size={10} />
+                Pers.
+              </span>
+            )}
+          </div>
           {pedido.cliente_nome && <p className="text-sm max-md:text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5 line-clamp-2">{pedido.cliente_nome}</p>}
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -749,7 +840,18 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, cfg }
           <button type="button" onClick={onDetail} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-lg active:scale-95" aria-label="Ver detalhes"><ChevronRight size={18}/></button>
         </div>
       </div>
-      <p className="text-sm max-md:text-[13px] text-zinc-600 dark:text-zinc-400 mb-2 leading-snug line-clamp-3 break-words">{pedido.resumo_itens || '—'}</p>
+      <p
+        className={`text-sm max-md:text-[13px] text-zinc-600 dark:text-zinc-400 leading-snug line-clamp-3 break-words ${
+          deliveryPedidoTemCustomizacaoItens(pedido) ? 'mb-1' : 'mb-2'
+        }`}
+      >
+        {pedido.resumo_itens || '—'}
+      </p>
+      {deliveryPedidoTemCustomizacaoItens(pedido) && (
+        <p className="text-[10px] font-semibold text-violet-700 dark:text-violet-300 mb-2 leading-snug">
+          Itens com personalização — abra o pedido para ver composição completa.
+        </p>
+      )}
       <div className="flex items-center justify-between gap-2">
         <span className="font-black text-base text-zinc-800 dark:text-zinc-200 tabular-nums">{fmt(pedido.total_amount)}</span>
         <span className={`text-[11px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide shrink-0 ${pedido.pagamento_status==='pago'?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'}`}>
@@ -1430,7 +1532,9 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
-  const [activeSection, setActiveSection] = useState<'geral'|'zonas'|'cupons'|'evolution'>('geral');
+  const [activeSection, setActiveSection] = useState<'loja'|'zonas'|'cupons'|'evolution'>('loja');
+  type LojaSubTab = 'operacao' | 'entrega' | 'financeiro' | 'pagamentos' | 'comunicacao' | 'aparencia';
+  const [lojaSub, setLojaSub] = useState<LojaSubTab>('operacao');
 
   // Cupons
   const [cupons, setCupons]     = useState<Cupom[]>([]);
@@ -1533,139 +1637,213 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
     </button>
   );
 
+  const LojaSubBtn = ({ id, label }: { id: LojaSubTab; label: string }) => (
+    <button
+      type="button"
+      onClick={() => setLojaSub(id)}
+      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+        lojaSub === id
+          ? 'bg-zinc-900 dark:bg-zinc-700 text-white'
+          : 'bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:border-zinc-400'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="space-y-5 max-w-2xl">
-      {/* Seções */}
+      {/* Seções principais */}
       <div className="flex gap-2 flex-wrap">
-        <SectionBtn k="geral"     label="Geral"       icon={<Settings size={14}/>}/>
+        <SectionBtn k="loja"      label="Loja"        icon={<Settings size={14}/>}/>
         <SectionBtn k="zonas"     label="Zonas"       icon={<Map size={14}/>}/>
         <SectionBtn k="cupons"    label="Cupons"      icon={<Tag size={14}/>}/>
         <SectionBtn k="evolution" label="WhatsApp Auto" icon={<Zap size={14}/>}/>
       </div>
 
-      {/* ── GERAL ─────────────────────────────────────────────────── */}
-      {activeSection === 'geral' && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
-          <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">Configurações gerais</h3>
-
-          <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 p-4">
-            <p className="font-bold text-blue-900 dark:text-blue-300">Modelo atual da entrega</p>
-            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-              Nesta fase o FlowPDV calcula o delivery por bairro com taxa fixa. A taxa padrão abaixo entra apenas quando nenhum bairro cadastrado casar com o endereço do cliente. Não há cálculo por km/raio ainda.
-            </p>
+      {/* ── LOJA (subdomínios) ───────────────────────────────────── */}
+      {activeSection === 'loja' && (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-6">
+          <div>
+            <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">Configurações da loja</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Organizado por área do negócio. Os dados continuam no mesmo JSON de sempre — apenas a visualização mudou.</p>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold text-zinc-800 dark:text-zinc-200">Delivery ativo</p>
-              <p className="text-xs text-zinc-400">Permite receber pedidos online</p>
-            </div>
-            <button onClick={() => setCfg(c=>({...c,ativo:!c.ativo}))}
-              className={`w-12 h-6 rounded-full transition-all relative ${cfg.ativo?'bg-emerald-500':'bg-zinc-200'}`}>
-              <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-zinc-200 rounded-full shadow transition-all ${cfg.ativo?'left-6':'left-0.5'}`}/>
-            </button>
+          <div className="flex flex-wrap gap-2">
+            <LojaSubBtn id="operacao" label="Geral / Operação" />
+            <LojaSubBtn id="entrega" label="Entrega" />
+            <LojaSubBtn id="financeiro" label="Financeiro" />
+            <LojaSubBtn id="pagamentos" label="Pagamentos" />
+            <LojaSubBtn id="comunicacao" label="Comunicação" />
+            <LojaSubBtn id="aparencia" label="Aparência" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Taxa padrão (R$)" value={String(cfg.taxa_entrega||'')} onChange={v=>setCfg(c=>({...c,taxa_entrega:parseFloat(v)||0}))} type="number" placeholder="0"/>
-            <Field label="Pedido mínimo (R$)"   value={String(cfg.pedido_minimo||'')} onChange={v=>setCfg(c=>({...c,pedido_minimo:parseFloat(v)||0}))} type="number" placeholder="0"/>
-            <Field label="Tempo de preparo (min)" value={String(cfg.tempo_preparo||'')} onChange={v=>setCfg(c=>({...c,tempo_preparo:parseInt(v)||0}))} type="number" placeholder="40"/>
-            <Field label="Desconto Pix (%)"     value={String(cfg.desconto_pix||'')} onChange={v=>setCfg(c=>({...c,desconto_pix:parseFloat(v)||0}))} type="number" placeholder="0"/>
-            <Field label="Horário abertura"     value={cfg.horario_abertura||''} onChange={v=>setCfg(c=>({...c,horario_abertura:v}))} type="time"/>
-            <Field label="Horário fechamento"   value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>
-          </div>
-
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-4 space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-bold text-zinc-800 dark:text-zinc-200">Desconto automático de primeira compra</p>
-                <p className="text-xs text-zinc-500">Calculado no backend e aplicado apenas na primeira compra válida do cliente, entrando corretamente no total final do pedido.</p>
+          {lojaSub === 'operacao' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Clock size={16} className="text-zinc-500"/>Geral / Operação</h4>
+              <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 p-4">
+                <p className="font-bold text-blue-900 dark:text-blue-300">Modelo atual da entrega</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                  O FlowPDV calcula o delivery por bairro com taxa fixa. A taxa padrão (aba Entrega) entra quando nenhum bairro cadastrado casar com o endereço. Zonas são editadas na aba <strong>Zonas</strong>.
+                </p>
               </div>
-              <button
-                onClick={() => setCfg(c=>({...c,desconto_primeiro_cliente_ativo:!c.desconto_primeiro_cliente_ativo}))}
-                className={`w-12 h-6 rounded-full transition-all relative ${cfg.desconto_primeiro_cliente_ativo?'bg-emerald-500':'bg-zinc-200'}`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${cfg.desconto_primeiro_cliente_ativo?'left-6':'left-0.5'}`}/>
-              </button>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-zinc-800 dark:text-zinc-200">Delivery ativo</p>
+                  <p className="text-xs text-zinc-400">Permite receber pedidos online</p>
+                </div>
+                <button onClick={() => setCfg(c=>({...c,ativo:!c.ativo}))}
+                  className={`w-12 h-6 rounded-full transition-all relative ${cfg.ativo?'bg-emerald-500':'bg-zinc-200'}`}>
+                  <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-zinc-200 rounded-full shadow transition-all ${cfg.ativo?'left-6':'left-0.5'}`}/>
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Horário abertura" value={cfg.horario_abertura||''} onChange={v=>setCfg(c=>({...c,horario_abertura:v}))} type="time"/>
+                <Field label="Horário fechamento" value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>
+                <Field label="Tempo de preparo (min)" value={String(cfg.tempo_preparo||'')} onChange={v=>setCfg(c=>({...c,tempo_preparo:parseInt(v)||0}))} type="number" placeholder="40"/>
+                <Field label="Pedido mínimo (R$)" value={String(cfg.pedido_minimo||'')} onChange={v=>setCfg(c=>({...c,pedido_minimo:parseFloat(v)||0}))} type="number" placeholder="0"/>
+              </div>
             </div>
+          )}
 
-            <div className="grid grid-cols-2 gap-4">
+          {lojaSub === 'entrega' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Truck size={16} className="text-zinc-500"/>Entrega (logística)</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Taxa padrão (R$)" value={String(cfg.taxa_entrega||'')} onChange={v=>setCfg(c=>({...c,taxa_entrega:parseFloat(v)||0}))} type="number" placeholder="0"/>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Valor por entrega (motoboy) R$</label>
+                  <input type="number" value={cfg.valor_por_entrega||''} onChange={e=>setCfg(c=>({...c,valor_por_entrega:parseFloat(e.target.value)||0}))}
+                    placeholder="0" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4 space-y-2">
+                <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Zonas (bairros e taxas)</p>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Cadastre bairros com taxa fixa na aba <strong>Zonas</strong>. Se o bairro do cliente não casar, usa a taxa padrão acima.
+                </p>
+                <button type="button" onClick={() => { setActiveSection('zonas'); }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold hover:opacity-90">
+                  Abrir aba Zonas <ChevronRight size={14}/>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {lojaSub === 'financeiro' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><DollarSign size={16} className="text-zinc-500"/>Financeiro</h4>
+              <Field label="Desconto Pix (%)" value={String(cfg.desconto_pix||'')} onChange={v=>setCfg(c=>({...c,desconto_pix:parseFloat(v)||0}))} type="number" placeholder="0"/>
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-4 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-zinc-800 dark:text-zinc-200">Desconto automático de primeira compra</p>
+                    <p className="text-xs text-zinc-500">Calculado no backend na primeira compra válida.</p>
+                  </div>
+                  <button
+                    onClick={() => setCfg(c=>({...c,desconto_primeiro_cliente_ativo:!c.desconto_primeiro_cliente_ativo}))}
+                    className={`w-12 h-6 rounded-full transition-all relative ${cfg.desconto_primeiro_cliente_ativo?'bg-emerald-500':'bg-zinc-200'}`}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${cfg.desconto_primeiro_cliente_ativo?'left-6':'left-0.5'}`}/>
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tipo do desconto</label>
+                    <select
+                      value={cfg.desconto_primeiro_cliente_tipo || 'percentual'}
+                      disabled={!cfg.desconto_primeiro_cliente_ativo}
+                      onChange={e=>setCfg(c=>({...c,desconto_primeiro_cliente_tipo:e.target.value as DeliveryConfig['desconto_primeiro_cliente_tipo']}))}
+                      className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="percentual">% Percentual</option>
+                      <option value="fixo">R$ Valor fixo</option>
+                      <option value="frete_gratis">Frete grátis</option>
+                    </select>
+                  </div>
+                  {cfg.desconto_primeiro_cliente_tipo !== 'frete_gratis' ? (
+                    <Field
+                      label={cfg.desconto_primeiro_cliente_tipo === 'fixo' ? 'Valor do desconto (R$)' : 'Valor do desconto (%)'}
+                      value={String(cfg.desconto_primeiro_cliente_valor||'')}
+                      onChange={v=>setCfg(c=>({...c,desconto_primeiro_cliente_valor:parseFloat(v)||0}))}
+                      type="number"
+                      placeholder="0"
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-700 dark:text-emerald-300 flex items-center">
+                      O frete da primeira compra será zerado quando houver taxa.
+                    </div>
+                  )}
+                  <Field
+                    label="Pedido mínimo para aplicar (R$)"
+                    value={String(cfg.desconto_primeiro_cliente_min_pedido||'')}
+                    onChange={v=>setCfg(c=>({...c,desconto_primeiro_cliente_min_pedido:parseFloat(v)||0}))}
+                    type="number"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {lojaSub === 'pagamentos' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><CreditCard size={16} className="text-zinc-500"/>Pagamentos</h4>
+              <p className="text-xs text-zinc-500">Mesma lógica de Pix do checkout público (payload estático ou chave + EMV). Não altere sem testar o fechamento do pedido.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Chave Pix" value={cfg.pix_chave||''} onChange={v=>setCfg(c=>({...c,pix_chave:v}))} placeholder="email@ou.cpf"/>
+                <Field label="Nome Pix" value={cfg.pix_nome||''} onChange={v=>setCfg(c=>({...c,pix_nome:v}))} placeholder="Nome do recebedor"/>
+                <Field label="Cidade Pix" value={cfg.pix_cidade||''} onChange={v=>setCfg(c=>({...c,pix_cidade:v}))} placeholder="Cidade"/>
+              </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tipo do desconto</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Payload PIX estático (QR Code fixo)</label>
+                <textarea
+                  value={cfg.pix_payload_estatico||''}
+                  onChange={e=>setCfg(c=>({...c,pix_payload_estatico:e.target.value}))}
+                  placeholder="00020126580014BR.GOV.BCB.PIX..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100 resize-none"
+                />
+                <p className="text-[10px] text-zinc-400 mt-1">
+                  Quando preenchido, o cliente vê o QR com o valor do carrinho (mesma rotina de sempre).
+                </p>
+              </div>
+            </div>
+          )}
+
+          {lojaSub === 'comunicacao' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><MessageCircle size={16} className="text-zinc-500"/>Comunicação</h4>
+              <p className="text-xs text-zinc-500">WhatsApp usado nos links do cardápio e confirmações. Mensagens automáticas futuras podem usar este número como referência.</p>
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">WhatsApp do restaurante</label>
+                <input value={cfg.whatsapp||''} onChange={e=>setCfg(c=>({...c,whatsapp:e.target.value}))}
+                  placeholder="55119XXXXXXXX" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+              </div>
+            </div>
+          )}
+
+          {lojaSub === 'aparencia' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Palette size={16} className="text-zinc-500"/>Aparência da loja</h4>
+              <p className="text-xs text-zinc-500">Visual do cardápio online público. Salve com o botão no fim da página.</p>
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tema do cardápio</label>
                 <select
-                  value={cfg.desconto_primeiro_cliente_tipo || 'percentual'}
-                  disabled={!cfg.desconto_primeiro_cliente_ativo}
-                  onChange={e=>setCfg(c=>({...c,desconto_primeiro_cliente_tipo:e.target.value as DeliveryConfig['desconto_primeiro_cliente_tipo']}))}
-                  className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-zinc-900 dark:text-zinc-100"
+                  value={cfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium'}
+                  onChange={e => setCfg(c => ({ ...c, theme_mode: e.target.value as 'dark_premium' | 'light_red' }))}
+                  className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100"
                 >
-                  <option value="percentual">% Percentual</option>
-                  <option value="fixo">R$ Valor fixo</option>
-                  <option value="frete_gratis">Frete grÃ¡tis</option>
+                  <option value="dark_premium">Dark premium (padrão atual)</option>
+                  <option value="light_red">Claro com vermelho (light red)</option>
                 </select>
               </div>
-
-              {cfg.desconto_primeiro_cliente_tipo !== 'frete_gratis' ? (
-                <Field
-                  label={cfg.desconto_primeiro_cliente_tipo === 'fixo' ? 'Valor do desconto (R$)' : 'Valor do desconto (%)'}
-                  value={String(cfg.desconto_primeiro_cliente_valor||'')}
-                  onChange={v=>setCfg(c=>({...c,desconto_primeiro_cliente_valor:parseFloat(v)||0}))}
-                  type="number"
-                  placeholder="0"
-                />
-              ) : (
-                <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-700 dark:text-emerald-300 flex items-center">
-                  O frete da primeira compra serÃ¡ zerado quando houver taxa.
+              {slug && (
+                <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3">
+                  <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Link do cardápio</p>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 font-mono">{window.location.origin}/delivery/{slug}</p>
                 </div>
               )}
-
-              <Field
-                label="Pedido mÃ­nimo para aplicar (R$)"
-                value={String(cfg.desconto_primeiro_cliente_min_pedido||'')}
-                onChange={v=>setCfg(c=>({...c,desconto_primeiro_cliente_min_pedido:parseFloat(v)||0}))}
-                type="number"
-                placeholder="0"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">WhatsApp do restaurante</label>
-            <input value={cfg.whatsapp||''} onChange={e=>setCfg(c=>({...c,whatsapp:e.target.value}))}
-              placeholder="55119XXXXXXXX" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Chave Pix"  value={cfg.pix_chave||''}  onChange={v=>setCfg(c=>({...c,pix_chave:v}))}  placeholder="email@ou.cpf"/>
-            <Field label="Nome Pix"   value={cfg.pix_nome||''}   onChange={v=>setCfg(c=>({...c,pix_nome:v}))}   placeholder="Nome do recebedor"/>
-            <Field label="Cidade Pix" value={cfg.pix_cidade||''} onChange={v=>setCfg(c=>({...c,pix_cidade:v}))} placeholder="Cidade"/>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-              Payload PIX estático (QR Code fixo)
-            </label>
-            <textarea
-              value={cfg.pix_payload_estatico||''}
-              onChange={e=>setCfg(c=>({...c,pix_payload_estatico:e.target.value}))}
-              placeholder="00020126580014BR.GOV.BCB.PIX..."
-              rows={3}
-              className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100 resize-none"
-            />
-            <p className="text-[10px] text-zinc-400 mt-1">
-              Cole aqui o payload completo do seu QR Code PIX. Quando preenchido, o cliente vê o QR Code gerado automaticamente com o valor do carrinho.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Valor por entrega (motoboy) R$</label>
-            <input type="number" value={cfg.valor_por_entrega||''} onChange={e=>setCfg(c=>({...c,valor_por_entrega:parseFloat(e.target.value)||0}))}
-              placeholder="0" className="w-40 px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
-          </div>
-
-          {slug && (
-            <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3">
-              <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Link do cardápio</p>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 font-mono">{window.location.origin}/delivery/{slug}</p>
             </div>
           )}
         </div>
