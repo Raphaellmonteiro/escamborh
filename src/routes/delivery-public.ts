@@ -7,9 +7,15 @@ import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '
 import { publicRateLimit, authDeliveryCliente } from '../middleware';
 import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
+import { serializeOrderItemSelecoes } from '../services/ordersService';
 import { getTenantFeaturesBySlug } from '../services/tenantPlan';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
+import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
+import {
+  recordDeliveryAutoAcceptOnline,
+  runAutomatedKitchenPrintForOrder,
+} from '../services/operationalAutomationService';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -1211,6 +1217,16 @@ export function createDeliveryPublicRouter() {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
+      const rawCfgParsed: Record<string, unknown> = (() => {
+        try {
+          if (!tenant.delivery_config || !String(tenant.delivery_config).trim()) return {};
+          const o = JSON.parse(String(tenant.delivery_config));
+          return o && typeof o === 'object' ? (o as Record<string, unknown>) : {};
+        } catch {
+          return {};
+        }
+      })();
+      const automation = parseAutomationFromDeliveryConfigJson(rawCfgParsed);
       const { items, pagamento_tipo, observation, cliente_nome, cliente_tel, endereco, clienteToken, cupom_codigo, endereco_id, bairro_temporario } = req.body;
       const canalPedido: OrderChannel = String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
       const tipoRetirada = canalPedido === 'retirada' ? 'levar' : 'local';
@@ -1281,6 +1297,9 @@ export function createDeliveryPublicRouter() {
       const d = String(dateObj.getDate()).padStart(2, '0');
       const prefix = `D${y}${m}${d}`;
 
+      const initialOrderStatus =
+        canalPedido === 'delivery' && automation.delivery_auto_accept_orders ? 'Pedido Recebido' : 'Criado';
+
       const result = await withTx(async (client) => {
         const n = await txQ1(client, 'SELECT COUNT(*) as c FROM pedidos WHERE tenant_id=? AND order_number LIKE ?', [tenant.id, `${prefix}-%`]);
         const num = Number(n?.c || 0) + 1;
@@ -1289,14 +1308,15 @@ export function createDeliveryPublicRouter() {
         const orderId = await txInsert(
           client,
           `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,delivery_checkout_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, enderecoFinal, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', 'Criado', clienteId, JSON.stringify(checkoutSnapshot)]
+          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, enderecoFinal, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', initialOrderStatus, clienteId, JSON.stringify(checkoutSnapshot)]
         );
 
           for (const item of itensValidados) {
             const lineObs = normalizeItemObservationForDb(item.obs_opcoes ?? item.observation);
+            const selecoesJson = serializeOrderItemSelecoes(item.selecoes);
             await txRun(
               client,
-              'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation) VALUES (?,?,?,?,?,?,?,?)',
+              'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation,selecoes_json) VALUES (?,?,?,?,?,?,?,?,?)',
               [
                 orderId,
                 item.product_id,
@@ -1306,6 +1326,7 @@ export function createDeliveryPublicRouter() {
                 tenant.id,
                 item.variation_id ?? null,
                 lineObs,
+                selecoesJson,
               ]
             );
             const resolution = await resolveProductInventoryTargets({
@@ -1365,6 +1386,21 @@ export function createDeliveryPublicRouter() {
         ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`
         : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;
+
+      if (canalPedido === 'delivery' && automation.delivery_auto_accept_orders) {
+        void recordDeliveryAutoAcceptOnline(tenant.id, Number(result.orderId));
+      }
+
+      if (canalPedido === 'retirada' && automation.retirada_auto_print_production) {
+        void runAutomatedKitchenPrintForOrder(tenant.id, Number(result.orderId), { trigger: 'retirada_public_create' });
+      }
+      if (
+        canalPedido === 'delivery' &&
+        automation.delivery_auto_print_production &&
+        automation.delivery_auto_accept_orders
+      ) {
+        void runAutomatedKitchenPrintForOrder(tenant.id, Number(result.orderId), { trigger: 'delivery_public_create' });
+      }
 
       res.json({
         success: true,

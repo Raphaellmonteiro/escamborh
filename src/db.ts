@@ -355,6 +355,94 @@ export async function runMigrations() {
         minutos INTEGER NOT NULL DEFAULT 0, observacao TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS func_pagamentos_folha (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        referencia TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        valor REAL NOT NULL,
+        observacao TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by TEXT,
+        recibo_numero TEXT,
+        metadata_json TEXT,
+        despesas_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_func_pag_folha_lookup
+        ON func_pagamentos_folha (tenant_id, funcionario_id, referencia);
+    `);
+
+    await client.query(`
+      ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS minutos_pago_folha INTEGER NULL;
+      ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS tipo_contrato TEXT DEFAULT 'fixo';
+
+      CREATE TABLE IF NOT EXISTS func_banco_horas_mov (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        data_referencia TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        minutos INTEGER NOT NULL,
+        origem TEXT NOT NULL,
+        observacao TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by TEXT,
+        metadata_json TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_banco_horas_tenant_func_data
+        ON func_banco_horas_mov (tenant_id, funcionario_id, data_referencia);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS func_ferias (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        data_inicio_aquisitivo TEXT NOT NULL,
+        data_fim_aquisitivo TEXT NOT NULL,
+        dias_disponiveis INTEGER NOT NULL DEFAULT 30,
+        dias_usados INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'available',
+        data_inicio_gozo TEXT,
+        data_fim_gozo TEXT,
+        valor_pago REAL NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_func_ferias_tenant_func
+        ON func_ferias (tenant_id, funcionario_id, status);
+      CREATE TABLE IF NOT EXISTS func_decimo_terceiro (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        ano INTEGER NOT NULL,
+        meses_trabalhados INTEGER NOT NULL DEFAULT 0,
+        valor_total REAL NOT NULL DEFAULT 0,
+        valor_primeira_parcela REAL NOT NULL DEFAULT 0,
+        valor_segunda_parcela REAL NOT NULL DEFAULT 0,
+        pago_primeira INTEGER NOT NULL DEFAULT 0,
+        pago_segunda INTEGER NOT NULL DEFAULT 0,
+        primeira_pago_em TEXT,
+        segunda_pago_em TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (tenant_id, funcionario_id, ano)
+      );
+      CREATE INDEX IF NOT EXISTS idx_func_decimo_tenant_func_ano
+        ON func_decimo_terceiro (tenant_id, funcionario_id, ano);
+      CREATE TABLE IF NOT EXISTS func_beneficios (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        funcionario_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        valor REAL NOT NULL DEFAULT 0,
+        tipo_valor TEXT NOT NULL DEFAULT 'fixo',
+        ativo INTEGER NOT NULL DEFAULT 1,
+        efeito TEXT NOT NULL DEFAULT 'acrescimo',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (tenant_id, funcionario_id, tipo)
+      );
+      CREATE INDEX IF NOT EXISTS idx_func_beneficios_tenant_func
+        ON func_beneficios (tenant_id, funcionario_id);
     `);
 
     await client.query(`
@@ -412,6 +500,10 @@ export async function runMigrations() {
       ALTER TABLE comandas ADD COLUMN IF NOT EXISTS couvert_ativo INTEGER DEFAULT 0;
       ALTER TABLE comandas ADD COLUMN IF NOT EXISTS couvert_valor_unitario REAL DEFAULT 15;
       ALTER TABLE comandas ADD COLUMN IF NOT EXISTS couvert_quantidade_pessoas INTEGER DEFAULT 1;
+      ALTER TABLE itens_comanda ADD COLUMN IF NOT EXISTS observation TEXT;
+      ALTER TABLE itens_comanda ADD COLUMN IF NOT EXISTS variation_id INTEGER;
+      ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS selecoes_json TEXT;
+      ALTER TABLE itens_comanda ADD COLUMN IF NOT EXISTS selecoes_json TEXT;
     `);
 
     await client.query(`

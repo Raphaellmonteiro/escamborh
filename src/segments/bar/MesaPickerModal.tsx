@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
+import type { Selecoes } from '../../shared/ProductOptionsModal';
 
 // ─── [A] TIPOS (adicionar no types.ts) ───────────────────────────────────────
 
@@ -28,7 +29,20 @@ export interface ItemComanda {
   quantity: number;
   price_at_time: number;
   created_at: string;
+  observation?: string | null;
+  variation_id?: number | null;
+  obs_opcoes?: string | null;
 }
+
+/** Linha já calculada no PDV (mesmo contrato do carrinho / balcão: preco_final + obs_opcoes). */
+export type MesaPickerLineSeed = {
+  product_id: number;
+  product_name: string;
+  price_at_time: number;
+  variation_id?: number | null;
+  observation?: string;
+  selecoes?: Selecoes;
+};
 
 // ─── [B] MODIFICAR TipoItem (~linha 915 em App.tsx) ──────────────────────────
 // Substitua a linha:
@@ -150,11 +164,14 @@ export interface ItemComanda {
 
 export default function MesaPickerModal({
   product,
+  lineSeed,
   token,
   onClose,
   onSuccess,
 }: {
   product: any;
+  /** Quando vem do modal de opções: preço unitário com adicionais e texto das seleções. */
+  lineSeed?: MesaPickerLineSeed;
   token: string;
   onClose: () => void;
   onSuccess: (mesaNumero: number) => void;
@@ -170,22 +187,44 @@ export default function MesaPickerModal({
       .catch(() => setLoading(false));
   }, []);
 
+  const unitPrice = Number(
+    lineSeed?.price_at_time ?? (product as { preco_final?: number }).preco_final ?? product.price
+  );
+  const displayName = String(lineSeed?.product_name || product.name || '');
+  const lineObservation = lineSeed?.observation?.trim() || undefined;
+
   const handleSelectMesa = async (mesa: any) => {
     setAdding(mesa.id);
     try {
-      await fetch(`/api/mesas/${mesa.id}/comanda/adicionar`, {
+      const res = await fetch(`/api/mesas/${mesa.id}/comanda/adicionar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          product_id: product.id,
-          product_name: product.name,
+          product_id: lineSeed?.product_id ?? product.id,
+          product_name: displayName,
           quantity: 1,
-          price_at_time: product.price,
+          price_at_time: unitPrice,
+          observation: lineObservation,
+          obs_opcoes: lineObservation,
+          variation_id: lineSeed?.variation_id ?? null,
+          selecoes: lineSeed?.selecoes,
         }),
       });
+      let message = 'Não foi possível adicionar o item à mesa.';
+      try {
+        const data = (await res.json()) as { error?: string; message?: string };
+        if (data?.error) message = String(data.error);
+        else if (data?.message) message = String(data.message);
+      } catch {
+        if (!res.ok) message = res.statusText || message;
+      }
+      if (!res.ok) {
+        alert(message);
+        return;
+      }
       onSuccess(mesa.numero);
     } catch {
-      alert('Erro ao adicionar à mesa');
+      alert('Erro de rede ao adicionar à mesa. Verifique a conexão.');
     } finally {
       setAdding(null);
     }
@@ -205,7 +244,7 @@ export default function MesaPickerModal({
           <div>
             <h3 className="text-xl font-black text-zinc-900">Selecionar Mesa</h3>
             <p className="text-sm text-zinc-400 mt-0.5">
-              {product.name} · <span className="font-bold text-zinc-700">R$ {product.price.toFixed(2)}</span>
+              {displayName} · <span className="font-bold text-zinc-700">R$ {unitPrice.toFixed(2)}</span>
             </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400 transition-colors">

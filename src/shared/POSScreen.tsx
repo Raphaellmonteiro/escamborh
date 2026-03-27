@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import {
   ShoppingCart, Plus, Minus, Trash2, CheckCircle2, ShoppingBag,
-  X, Search, Printer, Barcode, ScanLine,
+  X, Search, Printer, Barcode, ScanLine, ChefHat,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, OrderItem, PaymentMethod } from '../types';
@@ -21,6 +21,7 @@ import {
   type ProductOptionsCartItem,
   type GrupoOpcao,
   type VariacaoVendavel,
+  type Selecoes,
 } from './ProductOptionsModal';
 
 // ── Constantes de estilo ──────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ type POSCartSeed = {
   price_at_time: number;
   variation_id?: number | null;
   observation?: string;
+  selecoes?: Selecoes;
 };
 
 function normalizeGruposPDV(raw: unknown): GrupoOpcao[] {
@@ -91,12 +93,22 @@ function buildProdutoOptionsPayload(
   };
 }
 
+function selecoesLineKey(s: unknown): string {
+  if (!s || typeof s !== 'object') return '';
+  try {
+    return JSON.stringify(s);
+  } catch {
+    return '';
+  }
+}
+
 function samePOSCartLine(item: OrderItem, sel: POSCartSeed, tipo: string): boolean {
   return item.product_id === sel.product_id
     && item.type === tipo
     && Number((item as any).variation_id || 0) === Number(sel.variation_id || 0)
     && String((item as any).observation || '') === String(sel.observation || '')
-    && String((item as any).product_name || '') === String(sel.product_name || '');
+    && String((item as any).product_name || '') === String(sel.product_name || '')
+    && selecoesLineKey((item as any).selecoes) === selecoesLineKey(sel.selecoes);
 }
 
 // ─── ProductCard memoizado para evitar re-renders desnecessários ─────────────
@@ -195,6 +207,7 @@ export default function POSScreen({
     price_at_time: number;
     variation_id?: number | null;
     observation?: string;
+    selecoes?: Selecoes;
   } | null>(null);
   const [opcaoModalProduto, setOpcaoModalProduto]         = useState<ProductOptionsProduto | null>(null);
   const [opcaoModalBaseProduct, setOpcaoModalBaseProduct] = useState<Product | null>(null);
@@ -205,6 +218,7 @@ export default function POSScreen({
   const [tipoRetirada, setTipoRetirada]                   = useState<'local' | 'levar'>('local');
   const [showMesaPicker, setShowMesaPicker]               = useState(false);
   const [pendingMesaProduct, setPendingMesaProduct]       = useState<Product | null>(null);
+  const [pendingMesaSeed, setPendingMesaSeed]             = useState<POSCartSeed | null>(null);
   const [mesaToast, setMesaToast]                         = useState<string | null>(null);
   const [confirmLimpar, setConfirmLimpar]                 = useState(false);
   const [mobileCartOpen, setMobileCartOpen]               = useState(false);
@@ -361,6 +375,7 @@ export default function POSScreen({
       price_at_time: item.preco_final,
       variation_id: item.variation_id ?? null,
       observation: item.obs_opcoes?.trim() || undefined,
+      selecoes: item.selecoes,
     };
     if (cfg.usaTipoItem && cfg.tiposItem.length > 1) {
       setPendingSelection(selection);
@@ -370,6 +385,7 @@ export default function POSScreen({
     const tipo = cfg.tiposItem[0]?.type ?? 'Venda Direta';
     const tipoCfg = cfg.tiposItem[0];
     if (tipoCfg?.usaMesas) {
+      setPendingMesaSeed(selection);
       setPendingMesaProduct(base);
       setShowMesaPicker(true);
       return;
@@ -382,7 +398,12 @@ export default function POSScreen({
     setPendingProduct(null);
     const selection = pendingSelection;
     setPendingSelection(null);
-    if (tipo.usaMesas) { setPendingMesaProduct(pendingProduct); setShowMesaPicker(true); return; }
+    if (tipo.usaMesas) {
+      setPendingMesaSeed(selection);
+      setPendingMesaProduct(pendingProduct);
+      setShowMesaPicker(true);
+      return;
+    }
     addSelectionToCart(selection, tipo.type);
   };
 
@@ -512,6 +533,7 @@ export default function POSScreen({
     if (showMesaPicker) {
       setShowMesaPicker(false);
       setPendingMesaProduct(null);
+      setPendingMesaSeed(null);
       return;
     }
     if (opcaoModalProduto) {
@@ -570,7 +592,17 @@ export default function POSScreen({
     if (cart.length === 0 || remaining > 0.01 || isFinalizing) return;
     setIsFinalizing(true); setShowTipoRetirada(false);
     const orderData = {
-      items: cart, observation,
+      items: cart.map((row: any) => ({
+        product_id: row.product_id,
+        quantity: row.quantity,
+        price_at_time: row.price_at_time,
+        type: row.type,
+        variation_id: row.variation_id ?? null,
+        observation: row.observation,
+        obs_opcoes: row.observation ?? row.obs_opcoes,
+        selecoes: row.selecoes,
+      })),
+      observation,
       // ⚠️ Envia o total COM taxas de maquininha, não o subtotal pré-taxa.
       // Garante que o registro financeiro no servidor bate com o valor realmente pago.
       total_amount: totalComTaxas,
@@ -995,9 +1027,22 @@ export default function POSScreen({
       )}
 
       {showMesaPicker && pendingMesaProduct && (
-        <MesaPickerModal product={pendingMesaProduct} token={token}
-          onClose={() => { setShowMesaPicker(false); setPendingMesaProduct(null); }}
-          onSuccess={n => { setShowMesaPicker(false); setPendingMesaProduct(null); setMesaToast(`✓ Adicionado à Mesa ${n}`); setTimeout(() => setMesaToast(null), 2500); }}
+        <MesaPickerModal
+          product={pendingMesaProduct}
+          lineSeed={pendingMesaSeed ?? undefined}
+          token={token}
+          onClose={() => {
+            setShowMesaPicker(false);
+            setPendingMesaProduct(null);
+            setPendingMesaSeed(null);
+          }}
+          onSuccess={n => {
+            setShowMesaPicker(false);
+            setPendingMesaProduct(null);
+            setPendingMesaSeed(null);
+            setMesaToast(`✓ Adicionado à Mesa ${n}`);
+            setTimeout(() => setMesaToast(null), 2500);
+          }}
         />
       )}
       <AnimatePresence>
@@ -1054,21 +1099,42 @@ export default function POSScreen({
               )}
 
               {/* Botões de impressão */}
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={async () => {
-                    try {
-                      const r = await fetch(`/api/print/cupom-html/${showSuccess.orderId}`, { headers: { Authorization: `Bearer ${token}` } });
-                      const html = await r.text();
-                      openPrintPreview(html);
-                    } catch {
-                      openPrintPreview(showSuccess.receipt);
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-zinc-100 text-zinc-800 hover:bg-zinc-200 transition-colors"
-                >
-                  <Printer size={14} /> Imprimir
-                </button>
+              <div className="flex flex-col gap-2 mt-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const r = await fetch(`/api/print/cupom-html/${showSuccess.orderId}`, { headers: { Authorization: `Bearer ${token}` } });
+                        const html = await r.text();
+                        openPrintPreview(html);
+                      } catch {
+                        openPrintPreview(showSuccess.receipt);
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-zinc-100 text-zinc-800 hover:bg-zinc-200 transition-colors"
+                  >
+                    <Printer size={14} /> Cupom
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const r = await fetch(`/api/print/comanda-html/${showSuccess.orderId}`, { headers: { Authorization: `Bearer ${token}` } });
+                        const html = await r.text();
+                        if (html.trim().toLowerCase().includes('nenhum item de preparo')) {
+                          alert('Nenhum item de preparo neste pedido.');
+                          return;
+                        }
+                        openPrintPreview(html);
+                      } catch {
+                        alert('Erro ao gerar comanda de produção.');
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-amber-50 text-amber-950 border border-amber-200 hover:bg-amber-100 transition-colors"
+                    type="button"
+                  >
+                    <ChefHat size={14} /> Produção
+                  </button>
+                </div>
                 <button
                   onClick={async () => {
                     try {
@@ -1077,11 +1143,12 @@ export default function POSScreen({
                       if (!d.success) alert('Impressora: ' + (d.message || 'Erro'));
                     } catch { alert('Erro ao enviar para impressora.'); }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors"
                   style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}
-                  title="Impressora térmica"
+                  title="Impressora térmica (cupom)"
+                  type="button"
                 >
-                  <Printer size={14} />
+                  <Printer size={14} /> Térmica (cupom)
                 </button>
               </div>
 

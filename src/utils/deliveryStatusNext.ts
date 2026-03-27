@@ -3,7 +3,8 @@
  * Fonte única para DeliveryScreen e Central de Pedidos.
  */
 const DELIVERY_NEXT: Record<string, string | undefined> = {
-  Criado: 'Em Preparo',
+  /** Pendente de aceite da loja; depois segue para preparo. */
+  Criado: 'Pedido Recebido',
   'Pedido Recebido': 'Em Preparo',
   'Em Preparo': 'Pronto para Entrega',
   'Pronto para Entrega': 'Saiu para Entrega',

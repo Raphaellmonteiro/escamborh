@@ -2,6 +2,8 @@ import type { PoolClient } from 'pg';
 import {
   q1,
   qAll,
+  qRun,
+  qInsert,
   withTx,
   txQ1,
   txQAll,
@@ -26,7 +28,10 @@ import { logError } from '../utils/logger';
 import { getProfilePaperWidthMm } from '../utils/printProfiles';
 import { resolveRequiresPreparation } from '../utils/preparation';
 import { validateSecurityPassword } from '../utils/securityPassword';
+import { splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { requireProductInventoryTargets } from './stockIdentification';
+import { parseAutomationFromDeliveryConfigJson, shouldAutoPrintForBalcaoOrder } from './automationConfig';
+import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -63,6 +68,90 @@ const ALLOWED_PAYMENT_METHODS = new Set([
 type TenantId = number | string;
 
 const MAX_ITEM_OBSERVATION_LEN = 4000;
+const MAX_SELECOES_JSON_LEN = 12000;
+
+/** Persiste mapa de seleções (grupo → opção → qtd) como JSON; usado por balcão, mesa e pode ser reutilizado pelo cardápio. */
+export function serializeOrderItemSelecoes(selecoes: unknown): string | null {
+  if (selecoes === undefined || selecoes === null) return null;
+  if (typeof selecoes !== 'object' || Array.isArray(selecoes)) return null;
+  try {
+    const j = JSON.stringify(selecoes);
+    if (j === '{}') return null;
+    return j.length > MAX_SELECOES_JSON_LEN ? j.slice(0, MAX_SELECOES_JSON_LEN) : j;
+  } catch {
+    return null;
+  }
+}
+
+export function parseOrderItemSelecoesJson(raw: string | null | undefined): Record<string, unknown> | null {
+  if (raw == null || !String(raw).trim()) return null;
+  try {
+    const o = JSON.parse(String(raw)) as unknown;
+    if (o === null || typeof o !== 'object' || Array.isArray(o)) return null;
+    return o as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+type OrderItemRow = {
+  order_id: number;
+  product_id: number;
+  quantity: number;
+  type?: string | null;
+  price_at_time: number;
+  variation_id?: number | null;
+  observation?: string | null;
+  selecoes_json?: string | null;
+  product_name?: string | null;
+  product_category?: string | null;
+  production_type?: string | null;
+  requires_preparation?: number | null;
+};
+
+/** Item enriquecido para API (operação, detalhe, integrações) — sempre com preço congelado, sem recálculo. */
+export type PublicOrderItem = {
+  product_id: number;
+  quantity: number;
+  type?: string;
+  price_at_time: number;
+  variation_id: number | null;
+  product_name: string;
+  product_category?: string | null;
+  production_type?: string | null;
+  requires_preparation?: number | null;
+  name: string;
+  observation?: string;
+  obs_opcoes?: string;
+  selecoes: Record<string, unknown> | null;
+  item_display_summary: string;
+  item_display_details: string[];
+};
+
+export function buildPublicOrderItemFromPersisted(row: OrderItemRow): PublicOrderItem {
+  const obs = String(row.observation || '').trim() || undefined;
+  const summary = obs || '';
+  const lines = splitOrderItemDetailLines(summary);
+  const vid = row.variation_id != null ? Number(row.variation_id) : null;
+  const pname = row.product_name || 'Produto';
+  return {
+    product_id: Number(row.product_id),
+    quantity: Number(row.quantity),
+    type: row.type || undefined,
+    price_at_time: Number(row.price_at_time || 0),
+    variation_id: Number.isInteger(vid) && vid > 0 ? vid : null,
+    product_name: pname,
+    product_category: row.product_category ?? null,
+    production_type: row.production_type ?? null,
+    requires_preparation: row.requires_preparation ?? null,
+    name: pname,
+    observation: obs,
+    obs_opcoes: obs,
+    selecoes: parseOrderItemSelecoesJson(row.selecoes_json),
+    item_display_summary: summary,
+    item_display_details: lines,
+  };
+}
 
 type NormalizedOrderItem = {
   product_id: number;
@@ -71,6 +160,7 @@ type NormalizedOrderItem = {
   price_at_time: number;
   variation_id: number | null;
   observation: string | null;
+  selecoes_json: string | null;
 };
 
 type StockAdjustmentItem = Pick<NormalizedOrderItem, 'product_id' | 'quantity' | 'variation_id'>;
@@ -118,20 +208,6 @@ type OrderRow = {
   reembolsado_por?: number | null;
 };
 
-type OrderItemRow = {
-  order_id: number;
-  product_id: number;
-  quantity: number;
-  type?: string | null;
-  price_at_time: number;
-  variation_id?: number | null;
-  observation?: string | null;
-  product_name?: string | null;
-  product_category?: string | null;
-  production_type?: string | null;
-  requires_preparation?: number | null;
-};
-
 type ProductRow = {
   id: number;
   name: string;
@@ -161,6 +237,13 @@ type OrderPaymentAggregateRow = {
   payment_total_change: number | string | null;
   payment_total_paid: number | string | null;
   payment_count: number | string | null;
+};
+
+type OrderAutomationFlagsRow = {
+  pedido_id: number | string;
+  automation_auto_delivery_accept: boolean | null;
+  automation_kitchen_failed: boolean | null;
+  automation_kitchen_ok: boolean | null;
 };
 
 type OrderHistoryEventRow = {
@@ -199,14 +282,19 @@ function parseOrderId(orderId: number | string) {
   return parsed;
 }
 
-function normalizeItemObservationField(item: OrderItemInput): string | null {
-  const raw = item.observation ?? item.obs_opcoes;
+/** Mesma regra do item de pedido (balcão): observation ou obs_opcoes, trim e limite de tamanho. */
+export function normalizeOrderLineObservation(observation?: unknown, obs_opcoes?: unknown): string | null {
+  const raw = observation ?? obs_opcoes;
   if (raw === undefined || raw === null) return null;
   const trimmed = String(raw).trim();
   if (!trimmed) return null;
   return trimmed.length > MAX_ITEM_OBSERVATION_LEN
     ? trimmed.slice(0, MAX_ITEM_OBSERVATION_LEN)
     : trimmed;
+}
+
+function normalizeItemObservationField(item: OrderItemInput): string | null {
+  return normalizeOrderLineObservation(item.observation, item.obs_opcoes);
 }
 
 function normalizeOrderItem(item: OrderItemInput, index: number): NormalizedOrderItem {
@@ -236,6 +324,7 @@ function normalizeOrderItem(item: OrderItemInput, index: number): NormalizedOrde
     price_at_time: priceAtTime,
     variation_id,
     observation: normalizeItemObservationField(item),
+    selecoes_json: serializeOrderItemSelecoes(item.selecoes),
   };
 }
 
@@ -474,7 +563,7 @@ async function insertOrderItems(
   for (const item of items) {
     await txRun(
       client,
-      'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation) VALUES (?,?,?,?,?,?,?,?)',
+      'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation,selecoes_json) VALUES (?,?,?,?,?,?,?,?,?)',
       [
         orderId,
         item.product_id,
@@ -484,6 +573,7 @@ async function insertOrderItems(
         tenantId,
         item.variation_id,
         item.observation,
+        item.selecoes_json,
       ]
     );
   }
@@ -934,12 +1024,12 @@ function buildOrderFilters(filters: GetOrdersFilters) {
 export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
   ensureTenantId(tenantId);
 
-  try {
-    const input = normalizeCreateOrderInput(data);
+  const input = normalizeCreateOrderInput(data);
 
+  try {
     await ensureProductsExist(input.items, tenantId);
 
-    return await withTx(async (client) => {
+    const result = await withTx(async (client) => {
       const { nextNumber, orderNumber } = await generateOrderNumber(client, tenantId);
       const senhaPedido = nextNumber;
       const paymentMethod = summarizePaymentMethod(input.payments);
@@ -1004,6 +1094,22 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         senhaPedido,
       };
     });
+
+    try {
+      const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+      const parsed =
+        cfgRow?.delivery_config && String(cfgRow.delivery_config).trim()
+          ? (JSON.parse(cfgRow.delivery_config) as Record<string, unknown>)
+          : {};
+      const automation = parseAutomationFromDeliveryConfigJson(parsed);
+      if (shouldAutoPrintForBalcaoOrder(automation, input.canal, input.tipo_retirada)) {
+        void runAutomatedKitchenPrintForOrder(Number(tenantId), result.orderId, { trigger: 'balcao_order_create' });
+      }
+    } catch (e) {
+      logError('ordersService.createOrder.autoKitchenPrintConfig', e, { tenantId });
+    }
+
+    return result;
   } catch (error) {
     logError('ordersService.createOrder', error, { tenantId });
     throw error;
@@ -1468,7 +1574,7 @@ export async function getOrders(filters: GetOrdersFilters) {
     const orderIds = orders.map((order) => order.id);
     const items = await qAll<OrderItemRow>(
       `SELECT ip.order_id, ip.product_id, ip.quantity, ip.type, ip.price_at_time,
-              ip.observation,
+              ip.observation, ip.selecoes_json,
               p.name AS product_name, p.category AS product_category,
               p.production_type, p.requires_preparation
        FROM itens_pedido ip
@@ -1489,11 +1595,34 @@ export async function getOrders(filters: GetOrdersFilters) {
       orderIds
     );
 
+    const automationRows = await qAll<OrderAutomationFlagsRow>(
+      `SELECT pedido_id,
+              BOOL_OR(tipo = 'AUTOMATION_DELIVERY_ACEITE_AUTO') AS automation_auto_delivery_accept,
+              BOOL_OR(tipo = 'AUTOMATION_COZINHA_FALHA') AS automation_kitchen_failed,
+              BOOL_OR(tipo = 'AUTOMATION_COZINHA_OK') AS automation_kitchen_ok
+       FROM pedido_eventos
+       WHERE tenant_id = ? AND pedido_id IN (${orderIds.map(() => '?').join(',')})
+       GROUP BY pedido_id`,
+      [filters.tenantId, ...orderIds]
+    );
+
     const itemsByOrder = new Map<number, OrderItemRow[]>();
     const paymentsByOrder = new Map<
       number,
       { totalReceived: number; totalChange: number; totalPaid: number; count: number }
     >();
+    const automationByOrder = new Map<
+      number,
+      { autoDeliveryAccept: boolean; kitchenFailed: boolean; kitchenOk: boolean }
+    >();
+
+    for (const row of automationRows) {
+      automationByOrder.set(Number(row.pedido_id), {
+        autoDeliveryAccept: Boolean(row.automation_auto_delivery_accept),
+        kitchenFailed: Boolean(row.automation_kitchen_failed),
+        kitchenOk: Boolean(row.automation_kitchen_ok),
+      });
+    }
 
     for (const item of items) {
       const bucket = itemsByOrder.get(Number(item.order_id)) || [];
@@ -1511,26 +1640,14 @@ export async function getOrders(filters: GetOrdersFilters) {
     }
 
     return orders.map((order) => {
-      const orderItems = (itemsByOrder.get(Number(order.id)) || []).map((item) => {
-        const obs = String(item.observation || '').trim() || undefined;
-        return {
-          product_id: Number(item.product_id),
-          quantity: Number(item.quantity),
-          type: item.type || undefined,
-          price_at_time: Number(item.price_at_time || 0),
-          product_name: item.product_name || 'Produto',
-          product_category: item.product_category || null,
-          production_type: item.production_type || null,
-          requires_preparation: item.requires_preparation ?? null,
-          name: item.product_name || 'Produto',
-          observation: obs,
-          obs_opcoes: obs,
-        };
-      });
+      const orderItems = (itemsByOrder.get(Number(order.id)) || []).map((item) =>
+        buildPublicOrderItemFromPersisted(item)
+      );
       const derivedSubtotal = orderItems.reduce(
         (sum, item) => sum + Number(item.quantity) * Number(item.price_at_time || 0),
         0
       );
+      const auto = automationByOrder.get(Number(order.id));
 
       return {
         ...order,
@@ -1541,6 +1658,9 @@ export async function getOrders(filters: GetOrdersFilters) {
         payment_total_paid: paymentsByOrder.get(Number(order.id))?.totalPaid || 0,
         payment_count: paymentsByOrder.get(Number(order.id))?.count || 0,
         items: orderItems,
+        automation_auto_delivery_accept: auto?.autoDeliveryAccept ?? false,
+        automation_kitchen_failed: auto?.kitchenFailed ?? false,
+        automation_kitchen_ok: auto?.kitchenOk ?? false,
       };
     });
   } catch (error) {
@@ -1605,3 +1725,152 @@ export async function confirmQrOrder(input: { orderId: number | string; tenantId
     throw error;
   }
 }
+
+/** Corpo da API POST /mesas/:id/comanda/adicionar — preço e observação vêm do cliente (como no balcão), sem recálculo. */
+export type MesaComandaAddItemBody = {
+  product_id?: unknown;
+  product_name?: unknown;
+  quantity?: unknown;
+  price_at_time?: unknown;
+  observation?: unknown;
+  obs_opcoes?: unknown;
+  variation_id?: unknown;
+  selecoes?: unknown;
+};
+
+export type MesaComandaAddItemResult = {
+  comanda_id: number;
+  mesa_id: number;
+  quantity_added: number;
+  product_id: number;
+  price_at_time: number;
+  variation_id: number | null;
+  observation: string | null;
+  selecoes_json: string | null;
+};
+
+function parseMesaComandaAddItem(body: MesaComandaAddItemBody, indexLabel: string) {
+  const productId = Number(body.product_id);
+  const productName = String(body.product_name ?? '').trim();
+  const quantity = Number(body.quantity);
+  const priceAtTime = Number(body.price_at_time);
+
+  if (!Number.isInteger(productId) || productId <= 0) {
+    throw new AppError(`${indexLabel}: produto inválido`, 400);
+  }
+  if (!productName) {
+    throw new AppError(`${indexLabel}: nome do produto obrigatório`, 400);
+  }
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new AppError(`${indexLabel}: quantidade inválida`, 400);
+  }
+  if (!Number.isFinite(priceAtTime) || priceAtTime < 0) {
+    throw new AppError(`${indexLabel}: preço inválido`, 400);
+  }
+
+  const vid = Number(body.variation_id);
+  const variation_id = Number.isInteger(vid) && vid > 0 ? vid : null;
+  const observation = normalizeOrderLineObservation(body.observation, body.obs_opcoes);
+  const selecoes_json = serializeOrderItemSelecoes(body.selecoes);
+
+  return {
+    product_id: productId,
+    product_name: productName,
+    quantity,
+    price_at_time: priceAtTime,
+    variation_id,
+    observation,
+    selecoes_json,
+  };
+}
+
+/**
+ * Abre comanda na mesa se necessário e insere/atualiza linha distinguindo adicionais (observation + variation_id).
+ * Não consulta preço em produtos.
+ */
+export async function addItemToMesaComanda(input: {
+  tenantId: TenantId;
+  mesaId: number;
+  body: MesaComandaAddItemBody;
+}): Promise<MesaComandaAddItemResult> {
+  ensureTenantId(input.tenantId);
+  const tenantId = Number(input.tenantId);
+  const mesaId = Number(input.mesaId);
+  if (!Number.isInteger(mesaId) || mesaId <= 0) {
+    throw new AppError('Mesa inválida', 400);
+  }
+
+  const item = parseMesaComandaAddItem(input.body, 'Item');
+
+  const mesa = await q1<{ id: number }>('SELECT id FROM mesas WHERE id=? AND tenant_id=?', [mesaId, tenantId]);
+  if (!mesa) {
+    throw new AppError('Mesa não encontrada', 404);
+  }
+
+  let comanda = await q1<{ id: number }>(
+    "SELECT id FROM comandas WHERE mesa_id=? AND status='aberta' AND tenant_id=? LIMIT 1",
+    [mesaId, tenantId]
+  );
+  if (!comanda) {
+    await qRun("UPDATE mesas SET status='aberta', opened_at=NOW() WHERE id=? AND tenant_id=?", [mesaId, tenantId]);
+    const cid = await qInsert("INSERT INTO comandas (mesa_id,tenant_id,status) VALUES (?,?,'aberta')", [
+      mesaId,
+      tenantId,
+    ]);
+    comanda = await q1<{ id: number }>('SELECT id FROM comandas WHERE id=?', [cid]);
+    if (!comanda) {
+      throw new AppError('Falha ao abrir comanda', 500);
+    }
+  }
+
+  const ex = await q1<{ id: number }>(
+    `SELECT id FROM itens_comanda
+     WHERE comanda_id=? AND product_id=? AND tenant_id=?
+       AND observation IS NOT DISTINCT FROM ?
+       AND variation_id IS NOT DISTINCT FROM ?
+       AND selecoes_json IS NOT DISTINCT FROM ?`,
+    [comanda.id, item.product_id, tenantId, item.observation, item.variation_id, item.selecoes_json]
+  );
+
+  if (ex) {
+    await qRun('UPDATE itens_comanda SET quantity=quantity+? WHERE id=? AND tenant_id=?', [
+      item.quantity,
+      ex.id,
+      tenantId,
+    ]);
+  } else {
+    await qInsert(
+      'INSERT INTO itens_comanda (comanda_id,product_id,product_name,quantity,price_at_time,tenant_id,observation,variation_id,selecoes_json) VALUES (?,?,?,?,?,?,?,?,?)',
+      [
+        comanda.id,
+        item.product_id,
+        item.product_name,
+        item.quantity,
+        item.price_at_time,
+        tenantId,
+        item.observation,
+        item.variation_id,
+        item.selecoes_json,
+      ]
+    );
+  }
+
+  return {
+    comanda_id: comanda.id,
+    mesa_id: mesaId,
+    quantity_added: item.quantity,
+    product_id: item.product_id,
+    price_at_time: item.price_at_time,
+    variation_id: item.variation_id,
+    observation: item.observation,
+    selecoes_json: item.selecoes_json,
+  };
+}
+
+export {
+  resolveKitchenChannelUi,
+  buildKitchenReceiptHtml,
+  filterKitchenPreparationItems,
+  buildKitchenEscPosPlainText,
+  KITCHEN_PRINT_FEATURE_FLAGS,
+} from './kitchenPrintService';

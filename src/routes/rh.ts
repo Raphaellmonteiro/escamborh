@@ -1,9 +1,86 @@
 // src/routes/rh.ts — Módulo RH: funcionários, ponto, espelho, folha
 import { Router } from 'express';
 import { q1, qAll, qRun, qInsert } from '../db';
+import {
+  hourBankApplicable,
+  isEvento,
+  isFixo,
+  normalizeTipoContrato,
+  usesAutoDecimoTerceiro,
+} from '../services/employeeContract';
 import { uploadFotoFunc, checkMagicBytes } from '../middleware';
+import {
+  calculatePayroll,
+  computePayrollPaymentSummary,
+  getPayrollPaymentHistory,
+  registerPayrollPayment,
+  getEmployeeHourBankSummary,
+  listHourBankMovements,
+  addHourBankMovement,
+  syncBankCreditFromHoraExtra,
+  deleteHourBankMovementsLinkedToHoraExtra,
+  extraMinutesForPayrollRow,
+  roundMoney,
+} from '../services/payrollService';
+import {
+  buildRhAlerts,
+  listFerias,
+  feriasSaldoResumo,
+  scheduleFerias,
+  startFerias,
+  completeFerias,
+  countFeriasOverlap,
+  ensureDecimoRow,
+  payDecimoParcela,
+  listBeneficios,
+  upsertBeneficio,
+} from '../services/hrManagerialService';
 
 const TZ = 'America/Sao_Paulo';
+
+async function assertFixoForFeriasOps(
+  tenantId: number,
+  feriasId: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = await q1<{ funcionario_id: number }>(
+    'SELECT funcionario_id FROM func_ferias WHERE id=? AND tenant_id=?',
+    [feriasId, tenantId]
+  );
+  if (!row) return { ok: false, error: 'Período de férias não encontrado.' };
+  const f = await q1<{ tipo_contrato: string | null }>(
+    'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+    [row.funcionario_id, tenantId]
+  );
+  if (!isFixo(normalizeTipoContrato(f?.tipo_contrato))) {
+    return {
+      ok: false,
+      error: 'Férias gerenciais automáticas não se aplicam a este tipo de contrato (use histórico apenas para consulta, se existir).',
+    };
+  }
+  return { ok: true };
+}
+
+async function assertFixoForDecimoOps(
+  tenantId: number,
+  decimoId: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = await q1<{ funcionario_id: number }>(
+    'SELECT funcionario_id FROM func_decimo_terceiro WHERE id=? AND tenant_id=?',
+    [decimoId, tenantId]
+  );
+  if (!row) return { ok: false, error: 'Registro de 13º não encontrado.' };
+  const f = await q1<{ tipo_contrato: string | null }>(
+    'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+    [row.funcionario_id, tenantId]
+  );
+  if (!isFixo(normalizeTipoContrato(f?.tipo_contrato))) {
+    return {
+      ok: false,
+      error: '13º gerencial automático não se aplica a este tipo de contrato.',
+    };
+  }
+  return { ok: true };
+}
 
 export function createRhRouter() {
   const router = Router();
@@ -11,17 +88,108 @@ export function createRhRouter() {
 
   // ── Funcionários CRUD ─────────────────────────────────────────────────────
   router.get('/', async (req: any, res) => {
-    try { res.json(await qAll('SELECT * FROM funcionarios WHERE tenant_id=? ORDER BY nome ASC', [req.tenantId])); }
-    catch(e: any) { res.status(500).json({ error:e.message }); }
+    try {
+      res.json(await qAll('SELECT * FROM funcionarios WHERE tenant_id=? ORDER BY nome ASC', [req.tenantId]));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.get('/painel/alertas', async (req: any, res) => {
+    try {
+      const alertas = await buildRhAlerts({ tenantId: req.tenantId });
+      res.json({ alertas });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.patch('/ferias/:feriasId', async (req: any, res) => {
+    try {
+      const feriasId = Number(req.params.feriasId);
+      const gate = await assertFixoForFeriasOps(req.tenantId, feriasId);
+      if (gate.ok === false) return res.status(400).json({ error: gate.error });
+      const { action } = req.body || {};
+      if (action === 'schedule') {
+        const { data_inicio_gozo, data_fim_gozo } = req.body || {};
+        if (!data_inicio_gozo || !data_fim_gozo) {
+          return res.status(400).json({ error: 'Informe data_inicio_gozo e data_fim_gozo.' });
+        }
+        const rowCheck = await q1<{ funcionario_id: number }>(
+          'SELECT funcionario_id FROM func_ferias WHERE id=? AND tenant_id=?',
+          [feriasId, req.tenantId]
+        );
+        const overlap = rowCheck
+          ? await countFeriasOverlap({
+              tenantId: req.tenantId,
+              excludeEmployeeId: rowCheck.funcionario_id,
+              dataInicio: String(data_inicio_gozo),
+              dataFim: String(data_fim_gozo),
+            })
+          : { count: 0, alerta: false };
+        const r = await scheduleFerias({
+          tenantId: req.tenantId,
+          feriasId,
+          dataInicioGozo: String(data_inicio_gozo),
+          dataFimGozo: String(data_fim_gozo),
+        });
+        if (r.ok === false) return res.status(400).json({ error: r.error });
+        return res.json({ success: true, ferias: r.row, overlap });
+      }
+      if (action === 'start') {
+        const r = await startFerias({ tenantId: req.tenantId, feriasId });
+        if (r.ok === false) return res.status(400).json({ error: r.error });
+        return res.json({ success: true, ferias: r.row });
+      }
+      if (action === 'complete') {
+        const valor_pago = req.body?.valor_pago;
+        const r = await completeFerias({
+          tenantId: req.tenantId,
+          feriasId,
+          valorPago: Number(valor_pago),
+        });
+        if (r.ok === false) return res.status(400).json({ error: r.error });
+        return res.json({ success: true, ferias: r.row });
+      }
+      return res.status(400).json({ error: 'action inválida (schedule, start, complete).' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.patch('/decimo-terceiro/:dtId', async (req: any, res) => {
+    try {
+      const dtId = Number(req.params.dtId);
+      const gate = await assertFixoForDecimoOps(req.tenantId, dtId);
+      if (gate.ok === false) return res.status(400).json({ error: gate.error });
+      const { action } = req.body || {};
+      if (action !== 'pay_primeira' && action !== 'pay_segunda') {
+        return res.status(400).json({ error: 'Use action pay_primeira ou pay_segunda.' });
+      }
+      const r = await payDecimoParcela({
+        tenantId: req.tenantId,
+        decimoId: dtId,
+        parcela: action === 'pay_primeira' ? 1 : 2,
+      });
+      if (r.ok === false) return res.status(400).json({ error: r.error });
+      res.json({ success: true, decimo: r.row });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   router.post('/', async (req: any, res) => {
     try {
       const { nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,foto_url } = req.body;
       if (!nome) return res.status(400).json({ error:'Nome obrigatório' });
+      const tipoContrato = req.body.tipo_contrato || 'fixo';
+      const allowedTipoContrato = ['fixo', 'diarista', 'evento'];
+      if (!allowedTipoContrato.includes(tipoContrato)) {
+        return res.status(400).json({ error: 'tipo_contrato inválido' });
+      }
       const id = await qInsert(
-        'INSERT INTO funcionarios (tenant_id,nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,foto_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [req.tenantId,nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,foto_url||null]
+        'INSERT INTO funcionarios (tenant_id,nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,tipo_contrato,foto_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [req.tenantId,nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null]
       );
       res.json({ id });
     } catch(e: any) { res.status(500).json({ error:e.message }); }
@@ -30,9 +198,14 @@ export function createRhRouter() {
   router.put('/:id', async (req: any, res) => {
     try {
       const { nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,foto_url } = req.body;
+      const tipoContrato = req.body.tipo_contrato || 'fixo';
+      const allowedTipoContrato = ['fixo', 'diarista', 'evento'];
+      if (!allowedTipoContrato.includes(tipoContrato)) {
+        return res.status(400).json({ error: 'tipo_contrato inválido' });
+      }
       await qRun(
-        'UPDATE funcionarios SET nome=?,cargo=?,salario_base=?,horario_entrada=?,horario_saida=?,carga_horaria=?,dias_semana=?,tolerancia_minutos=?,dias_trabalho_mes=?,data_admissao=?,telefone=?,cpf=?,pin=?,foto_url=? WHERE id=? AND tenant_id=?',
-        [nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,foto_url||null,req.params.id,req.tenantId]
+        'UPDATE funcionarios SET nome=?,cargo=?,salario_base=?,horario_entrada=?,horario_saida=?,carga_horaria=?,dias_semana=?,tolerancia_minutos=?,dias_trabalho_mes=?,data_admissao=?,telefone=?,cpf=?,pin=?,tipo_contrato=?,foto_url=? WHERE id=? AND tenant_id=?',
+        [nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null,req.params.id,req.tenantId]
       );
       res.json({ success:true });
     } catch(e: any) { res.status(500).json({ error:e.message }); }
@@ -140,19 +313,98 @@ export function createRhRouter() {
 
   router.post('/:id/horas-extras', async (req: any, res) => {
     try {
-      const { data, minutos, observacao } = req.body;
+      const { data, minutos, observacao, minutos_pago_folha } = req.body;
       if (!data||!minutos) return res.status(400).json({ error:'data e minutos obrigatórios' });
-      const id = await qInsert('INSERT INTO func_horas_extras (tenant_id,funcionario_id,data,minutos,observacao) VALUES (?,?,?,?,?)',
-        [req.tenantId,req.params.id,data,minutos,observacao||null]);
+      const total = Math.floor(Number(minutos));
+      if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error:'minutos inválidos' });
+      let pagoFolha: number | null = null;
+      if (minutos_pago_folha !== undefined && minutos_pago_folha !== null && String(minutos_pago_folha).trim() !== '') {
+        pagoFolha = Math.floor(Number(minutos_pago_folha));
+        if (!Number.isFinite(pagoFolha) || pagoFolha < 0 || pagoFolha > total) {
+          return res.status(400).json({ error:'minutos_pago_folha deve estar entre 0 e o total de minutos' });
+        }
+      }
+      const createdBy = req.user?.username != null ? String(req.user.username) : null;
+      const id = await qInsert(
+        'INSERT INTO func_horas_extras (tenant_id,funcionario_id,data,minutos,observacao,minutos_pago_folha) VALUES (?,?,?,?,?,?)',
+        [req.tenantId,req.params.id,data,total,observacao||null,pagoFolha]
+      );
+      if (id != null) {
+        await syncBankCreditFromHoraExtra({
+          tenantId: req.tenantId,
+          employeeId: Number(req.params.id),
+          horaExtraId: Number(id),
+          data,
+          minutos: total,
+          minutosPagoFolha: pagoFolha,
+          createdBy,
+        });
+      }
       res.json({success:true,id});
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });
 
   router.delete('/horas-extras/:id', async (req: any, res) => {
     try {
+      const row = await q1<{ id: number; funcionario_id: number }>(
+        'SELECT id, funcionario_id FROM func_horas_extras WHERE id=? AND tenant_id=?',
+        [req.params.id,req.tenantId]
+      );
+      if (!row) return res.status(404).json({ error:'Registro não encontrado' });
+      await deleteHourBankMovementsLinkedToHoraExtra({
+        tenantId: req.tenantId,
+        employeeId: row.funcionario_id,
+        horaExtraId: row.id,
+      });
       await qRun('DELETE FROM func_horas_extras WHERE id=? AND tenant_id=?', [req.params.id,req.tenantId]);
       res.json({success:true});
     } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  // ── Banco de horas ────────────────────────────────────────────────────────
+  router.get('/:id/banco-horas', async (req: any, res) => {
+    try {
+      const employeeId = Number(req.params.id);
+      const fc = await q1<{ tipo_contrato: string | null }>(
+        'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [employeeId, req.tenantId]
+      );
+      const bOk = hourBankApplicable(normalizeTipoContrato(fc?.tipo_contrato));
+      const summary = await getEmployeeHourBankSummary({ tenantId: req.tenantId, employeeId });
+      const { month, year, limit } = req.query;
+      const movimentacoes = await listHourBankMovements({
+        tenantId: req.tenantId,
+        employeeId,
+        month: month != null ? String(month) : undefined,
+        year: year != null ? String(year) : undefined,
+        limit: limit != null ? Number(limit) : 250,
+      });
+      res.json({ ...summary, movimentacoes, aplicavel: bOk });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.post('/:id/banco-horas/movimentacoes', async (req: any, res) => {
+    try {
+      const { data_referencia, tipo, minutos, origem, observacao } = req.body || {};
+      const createdBy = req.user?.username != null ? String(req.user.username) : null;
+      const result = await addHourBankMovement({
+        tenantId: req.tenantId,
+        employeeId: Number(req.params.id),
+        dataReferencia: String(data_referencia || ''),
+        tipo: String(tipo || ''),
+        minutos: Number(minutos),
+        origem: String(origem || ''),
+        observacao: observacao != null ? String(observacao) : null,
+        createdBy,
+        metadataJson: null,
+      });
+      if (result.ok === false) return res.status(400).json({ error: result.error });
+      res.json({ success: true, movimentacao: result.mov });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ── Eventos (falta/folga/atestado) ────────────────────────────────────────
@@ -194,6 +446,17 @@ export function createRhRouter() {
     try {
       const { valor, motivo } = req.body;
       if (!valor) return res.status(400).json({ error:'valor obrigatório' });
+      const funcRow = await q1<{ tipo_contrato: string | null }>(
+        'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [req.params.id, req.tenantId]
+      );
+      if (!funcRow) return res.status(404).json({ error: 'Funcionário não encontrado' });
+      if (isEvento(normalizeTipoContrato(funcRow.tipo_contrato))) {
+        return res.status(400).json({
+          error:
+            'Colaboradores por evento não utilizam adiantamento de folha. Registre valores na aba Folha em Pagamentos (pagamento avulso ou parcial).',
+        });
+      }
       const id = await qInsert('INSERT INTO func_adiantamentos (tenant_id,funcionario_id,valor,motivo) VALUES (?,?,?,?)',
         [req.tenantId,req.params.id,valor,motivo||null]);
       res.json({success:true,id});
@@ -212,6 +475,89 @@ export function createRhRouter() {
     try {
       res.json(await qAll('SELECT * FROM func_ajustes_salario WHERE funcionario_id=? AND tenant_id=? ORDER BY data DESC', [req.params.id,req.tenantId]));
     } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.get('/:id/ferias', async (req: any, res) => {
+    try {
+      const employeeId = Number(req.params.id);
+      const rows = await listFerias({ tenantId: req.tenantId, employeeId });
+      const resumo = feriasSaldoResumo(rows);
+      res.json({ ferias: rows, resumo });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.get('/:id/decimo-terceiro', async (req: any, res) => {
+    try {
+      const employeeId = Number(req.params.id);
+      const ano = req.query.ano != null ? Number(req.query.ano) : new Date().getFullYear();
+      if (!Number.isFinite(ano)) return res.status(400).json({ error: 'Ano inválido' });
+      const funcRow = await q1<{ id: number; tipo_contrato: string | null }>(
+        'SELECT id, tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [employeeId, req.tenantId]
+      );
+      if (!funcRow) return res.status(404).json({ error: 'Funcionário não encontrado' });
+      const tipoEmp = normalizeTipoContrato(funcRow.tipo_contrato);
+      const row = await ensureDecimoRow({ tenantId: req.tenantId, employeeId, ano });
+      if (!row && !usesAutoDecimoTerceiro(tipoEmp)) {
+        return res.json({ aplicavel: false, decimo: null, pago_total: 0, pendente: 0 });
+      }
+      if (!row) return res.status(404).json({ error: 'Funcionário não encontrado' });
+      const pago = roundMoney(Number(row.valor_primeira_parcela) * (row.pago_primeira ? 1 : 0) + Number(row.valor_segunda_parcela) * (row.pago_segunda ? 1 : 0));
+      const pendente = roundMoney(Number(row.valor_total) - pago);
+      res.json({
+        aplicavel: usesAutoDecimoTerceiro(tipoEmp),
+        decimo: row,
+        pago_total: pago,
+        pendente,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.get('/:id/beneficios', async (req: any, res) => {
+    try {
+      const employeeId = Number(req.params.id);
+      const rows = await listBeneficios({ tenantId: req.tenantId, employeeId });
+      res.json({ beneficios: rows });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.put('/:id/beneficios', async (req: any, res) => {
+    try {
+      const employeeId = Number(req.params.id);
+      const func = await q1<{ id: number; tipo_contrato: string | null }>(
+        'SELECT id, tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [employeeId, req.tenantId]
+      );
+      if (!func) return res.status(404).json({ error: 'Funcionário não encontrado' });
+      if (isEvento(normalizeTipoContrato(func.tipo_contrato))) {
+        return res.status(400).json({
+          error: 'Benefícios gerenciais não se aplicam a colaboradores por evento.',
+        });
+      }
+      const items = req.body?.items;
+      if (!Array.isArray(items)) return res.status(400).json({ error: 'Envie items: array' });
+      for (const it of items) {
+        await upsertBeneficio({
+          tenantId: req.tenantId,
+          employeeId,
+          tipo: String(it.tipo || ''),
+          valor: Number(it.valor),
+          tipoValor: String(it.tipo_valor || 'fixo'),
+          ativo: Boolean(it.ativo),
+          efeito: String(it.efeito || 'acrescimo'),
+        });
+      }
+      const rows = await listBeneficios({ tenantId: req.tenantId, employeeId });
+      res.json({ success: true, beneficios: rows });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   router.post('/:id/ajustes', async (req: any, res) => {
@@ -259,8 +605,16 @@ export function createRhRouter() {
       const tolerancia = func.tolerancia_minutos||10;
       const cargaHoras = func.carga_horaria||8;
       const horEnt = func.horario_entrada||'08:00';
+      const horSai = func.horario_saida||'17:00';
+      const timeToMin = (t: string) => {
+        const p = String(t||'0:0').split(':');
+        const h = Number(p[0])||0, m = Number(p[1])||0;
+        return h*60+m;
+      };
+      const expectedOutMin = timeToMin(horSai);
       let totalFaltas=0,totalAtrasos=0,diasTrab=0,diasFolga=0,diasAtestado=0;
-      let totalExtraMin=0; // NOVO: Somador de horas extras totais
+      let totalExtraMin=0;
+      let totalExtraMinPagoFolha=0;
 
       const dias: any[] = [];
       for (let d=1;d<=diasNoMes;d++) {
@@ -269,7 +623,7 @@ export function createRhRouter() {
         const isExp=diasSemana.includes(diaSem);
         const evts=ebd[dataStr]||[];
         const pts=pbd[dataStr]||[];
-        const extraAprov=hbd[dataStr]||null; // NOVO: Pega a hora extra se existir neste dia
+        const extraAprov=hbd[dataStr]||null;
         
         const ent=pts.find((p:any)=>p.tipo==='entrada');
         const said=pts.find((p:any)=>p.tipo==='saida');
@@ -277,7 +631,16 @@ export function createRhRouter() {
         const isFut=dataStr>hoje;
         const isAnt=admissao&&dataStr<admissao;
 
-        if (extraAprov) totalExtraMin += extraAprov.minutos; // Soma as horas pro resumo
+        if (extraAprov) {
+          totalExtraMin += Number(extraAprov.minutos)||0;
+          totalExtraMinPagoFolha += extraMinutesForPayrollRow(extraAprov);
+        }
+
+        let saidaRealExtraMin = 0;
+        if (said && !isFut && !isAnt) {
+          const outMin = timeToMin(said.hora);
+          if (outMin > expectedOutMin) saidaRealExtraMin = outMin - expectedOutMin;
+        }
 
         if (isFut||isAnt) { status='sem_expediente'; }
         else if (evts.some((e:any)=>e.tipo==='folga')) { status='folga'; diasFolga++; }
@@ -292,110 +655,134 @@ export function createRhRouter() {
             if (entMin>lim) { atrasoMin=entMin-(eh*60+em); totalAtrasos+=atrasoMin; }
           } else { status='falta'; totalFaltas++; }
         }
-        // NOVO: Passa a variável 'extraAprov' para a lista de dias
-        dias.push({data:dataStr,dia:d,diaSemana:diaSem,isExpediente:isExp&&!isFut&&!isAnt,status,entrada:ent?.hora,saida:said?.hora,atrasoMin,eventos:evts,extraAprov});
+        dias.push({
+          data:dataStr,dia:d,diaSemana:diaSem,isExpediente:isExp&&!isFut&&!isAnt,status,
+          entrada:ent?.hora,saida:said?.hora,atrasoMin,eventos:evts,extraAprov,saidaRealExtraMin,
+        });
       }
       const valorDia=func.salario_base/(func.dias_trabalho_mes||26);
       const valorHora=valorDia/cargaHoras;
-      
-      // NOVO: Adiciona 'totalExtraMin' no resumo final
-      res.json({ func, dias, resumo:{diasTrabalhados:diasTrab,totalFaltas,diasFolga,diasAtestado,totalAtrasoMin:totalAtrasos,totalExtraMin,descontoFaltas:totalFaltas*valorDia,descontoAtrasos:(totalAtrasos/60)*valorHora,totalDescontos:(totalFaltas*valorDia)+((totalAtrasos/60)*valorHora)} });
+
+      const tipoEsp = normalizeTipoContrato((func as { tipo_contrato?: string | null }).tipo_contrato);
+      const bancoOk = hourBankApplicable(tipoEsp);
+      const banco = bancoOk
+        ? await getEmployeeHourBankSummary({ tenantId: req.tenantId, employeeId: Number(func.id) })
+        : { saldo_minutos: 0 };
+      const movBancoMes = bancoOk
+        ? await listHourBankMovements({
+            tenantId: req.tenantId,
+            employeeId: Number(func.id),
+            month: mm,
+            year: yy,
+            limit: 100,
+          })
+        : [];
+
+      res.json({
+        func,
+        funcionario: func,
+        dias,
+        resumo:{
+          diasTrabalhados:diasTrab,totalFaltas,diasFolga,diasAtestado,totalAtrasoMin:totalAtrasos,
+          totalExtraMin,totalExtraMinPagoFolha,totalExtraMinBancoMes:Math.max(0,totalExtraMin-totalExtraMinPagoFolha),
+          saldoBancoHorasMin:banco.saldo_minutos,
+          descontoFaltas:totalFaltas*valorDia,descontoAtrasos:(totalAtrasos/60)*valorHora,
+          totalDescontos:(totalFaltas*valorDia)+((totalAtrasos/60)*valorHora),
+        },
+        banco_horas_mes: movBancoMes,
+        banco_horas_aplicavel: bancoOk,
+      });
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });
 
   // ── Folha de pagamento ────────────────────────────────────────────────────
   router.get('/:id/folha', async (req: any, res) => {
     try {
-      const func = await q1('SELECT * FROM funcionarios WHERE id=? AND tenant_id=?', [req.params.id,req.tenantId]);
-      if (!func) return res.status(404).json({ error:'Funcionário não encontrado' });
-      
       const mm = String(req.query.month||new Date().getMonth()+1).padStart(2,'0');
       const yy = String(req.query.year||new Date().getFullYear());
-      const hoje = new Date().toLocaleDateString('en-CA',{timeZone:TZ});
-      const admissao = func.data_admissao||null;
+      const startDate = `${yy}-${mm}-01`;
+      const lastDay = new Date(Number(yy), Number(mm), 0).getDate();
+      const endDate = `${yy}-${mm}-${String(lastDay).padStart(2,'0')}`;
 
-      // Busca todos os dados do mês
-      const pontos = await qAll(`SELECT * FROM func_pontos WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`, [func.id,req.tenantId,mm,yy]);
-      const eventos = await qAll(`SELECT * FROM func_eventos WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`, [func.id,req.tenantId,mm,yy]);
-      const extras = await qAll(`SELECT * FROM func_horas_extras WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`, [func.id,req.tenantId,mm,yy]);
-      const adiantamentos = await qAll(`SELECT * FROM func_adiantamentos WHERE funcionario_id=? AND tenant_id=? AND descontado=0 AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`, [func.id,req.tenantId,mm,yy]);
+      const computed = await calculatePayroll({
+        tenantId: req.tenantId,
+        employeeId: Number(req.params.id),
+        startDate,
+        endDate,
+      });
+      if (!computed) return res.status(404).json({ error:'Funcionário não encontrado' });
 
-      const pbd: Record<string,any[]>={}, ebd: Record<string,any[]>={};
-      for (const p of pontos) { if(!pbd[p.data])pbd[p.data]=[]; pbd[p.data].push(p); }
-      for (const e of eventos) { if(!ebd[e.data])ebd[e.data]=[]; ebd[e.data].push(e); }
-
-      const diasNoMes = new Date(Number(yy),Number(mm),0).getDate();
-      const diasSemana = (func.dias_semana||'1,2,3,4,5').split(',').map(Number);
-      const tolerancia = func.tolerancia_minutos||10;
-      const cargaHoras = func.carga_horaria||8;
-      const horEnt = func.horario_entrada||'08:00';
-
-      let totalFaltas=0, totalAtrasos=0, horasAusentesParcial=0;
-      let totalExtraMin = extras.reduce((acc, curr) => acc + (curr.minutos||0), 0);
-      let totalAdiantamentos = adiantamentos.reduce((acc, curr) => acc + (Number(curr.valor)||0), 0);
-
-      // Loop para varrer os dias do mês e contar faltas/atrasos
-      for (let d=1;d<=diasNoMes;d++) {
-        const dataStr=`${yy}-${mm}-${String(d).padStart(2,'0')}`;
-        const diaSem=new Date(dataStr+'T12:00:00').getDay();
-        const isExp=diasSemana.includes(diaSem);
-        const evts=ebd[dataStr]||[];
-        const pts=pbd[dataStr]||[];
-        const isFut=dataStr>hoje;
-        const isAnt=admissao&&dataStr<admissao;
-
-        const parcial = evts.find((e:any)=>e.tipo==='declaracao_parcial');
-        if(parcial) horasAusentesParcial += (Number(parcial.horas_ausentes)||0);
-
-        if (!isFut && !isAnt && isExp && !evts.some((e:any)=>['folga','atestado'].includes(e.tipo))) {
-          const ent=pts.find((p:any)=>p.tipo==='entrada');
-          if (ent) {
-            const [eh,em]=horEnt.split(':').map(Number);
-            const lim=eh*60+em+tolerancia;
-            const [rh,rm]=ent.hora.split(':').map(Number);
-            const entMin=rh*60+rm;
-            if (entMin>lim) totalAtrasos+=(entMin-(eh*60+em));
-          } else {
-            totalFaltas++;
-          }
-        }
-      }
-
-      // Cálculos Financeiros
-      const salarioBruto = Number(func.salario_base) || 0;
-      const valorDia = salarioBruto / (func.dias_trabalho_mes || 26);
-      const valorHora = valorDia / cargaHoras;
-
-      const descontoFaltas = totalFaltas * valorDia;
-      const descontoAtrasos = (totalAtrasos / 60) * valorHora;
-      const descontoParcial = horasAusentesParcial * valorHora;
-      const valorExtras = (totalExtraMin / 60) * (valorHora * 1.5); // Adicional de 50% CLT
-
-      const inss = salarioBruto * 0.11; // 11% estimado
-
-      const totalDescontos = descontoFaltas + descontoAtrasos + descontoParcial + inss + totalAdiantamentos;
-      const salarioLiquido = salarioBruto + valorExtras - totalDescontos;
-
-      // Envia a estrutura exata que o Front-end espera
+      const { legacy, earnings, deductions, totals, base_salary, competencia } = computed;
+      const payroll_payments = await getPayrollPaymentHistory({
+        tenantId: req.tenantId,
+        employeeId: Number(req.params.id),
+        referencia: competencia.referencia,
+      });
+      const payroll_payment_summary = computePayrollPaymentSummary(totals.net, payroll_payments, {
+        unbounded: Boolean(computed.pagamentos_sem_teto_folha),
+      });
+      const tipoFolha = computed.contract_profile.tipo;
+      const hourOk = hourBankApplicable(tipoFolha);
+      const hour_bank_summary = hourOk
+        ? await getEmployeeHourBankSummary({
+            tenantId: req.tenantId,
+            employeeId: Number(req.params.id),
+          })
+        : { saldo_minutos: 0 };
+      const hour_bank_mes = hourOk
+        ? await listHourBankMovements({
+            tenantId: req.tenantId,
+            employeeId: Number(req.params.id),
+            month: mm,
+            year: yy,
+            limit: 100,
+          })
+        : [];
       res.json({
-        funcionario: func,
-        mes: `${mm}/${yy}`,
-        salarioBruto,
-        totalFaltas,
-        descontoFaltas,
-        totalAtrasoMin: totalAtrasos,
-        descontoAtrasos,
-        horasAusentesParcial,
-        descontoParcial,
-        inss,
-        totalAdiantamentos,
-        adiantamentos,
-        totalExtraMin,
-        valorExtras,
-        totalDescontos,
-        salarioLiquido
+        ...legacy,
+        funcionario: legacy.funcionario,
+        competencia,
+        contract_profile: computed.contract_profile,
+        pagamentos_sem_teto_folha: computed.pagamentos_sem_teto_folha ?? false,
+        payroll: {
+          base_salary,
+          earnings,
+          deductions,
+          totals,
+        },
+        managerial: computed.managerial,
+        payroll_payments,
+        payroll_payment_summary,
+        hour_bank: {
+          saldo_minutos: hour_bank_summary.saldo_minutos,
+          movimentacoes: hour_bank_mes,
+          aplicavel: hourOk,
+        },
       });
     } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.post('/:id/folha/pagamentos', async (req: any, res) => {
+    try {
+      const { month, year, tipo, valor, observacao } = req.body || {};
+      const mm = month != null ? String(month) : String(new Date().getMonth() + 1);
+      const yy = year != null ? String(year) : String(new Date().getFullYear());
+      const createdBy = req.user?.username != null ? String(req.user.username) : null;
+      const result = await registerPayrollPayment({
+        tenantId: req.tenantId,
+        employeeId: Number(req.params.id),
+        month: mm,
+        year: yy,
+        tipo: String(tipo || ''),
+        valor: Number(valor),
+        observacao: observacao != null ? String(observacao) : null,
+        createdBy,
+      });
+      if (result.ok === false) return res.status(400).json({ error: result.error });
+      res.json({ success: true, payment: result.payment });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   return router;

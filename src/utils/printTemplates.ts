@@ -1,11 +1,19 @@
 export type PrintVariant = 'receipt' | 'kitchen-ticket' | 'table-slip' | 'proof';
-export type PrintChannel = 'balcao' | 'mesa' | 'delivery' | 'retirada' | 'generic';
+export type PrintChannel =
+  | 'balcao'
+  | 'mesa'
+  | 'delivery'
+  | 'retirada'
+  | 'consumo_local'
+  | 'generic';
 
 type PrintItem = {
   qtd: number;
   nome: string;
   obs?: string;
   valor?: number;
+  /** Linhas de personalização (mesmo critério de item_display_details / observation segmentada). */
+  detalhes?: string[];
 };
 
 type PrintTotal = {
@@ -61,7 +69,7 @@ function formatMoney(value: number) {
 function buildVariantLabel(variant: PrintVariant) {
   switch (variant) {
     case 'kitchen-ticket':
-      return 'Comanda de cozinha';
+      return 'Producao';
     case 'table-slip':
       return 'Comanda de mesa';
     case 'proof':
@@ -79,6 +87,8 @@ function buildChannelLabel(channel: PrintChannel) {
       return 'Mesa';
     case 'retirada':
       return 'Retirada';
+    case 'consumo_local':
+      return 'Consumo local';
     case 'balcao':
       return 'Balcao';
     default:
@@ -157,17 +167,32 @@ export function gerarCupomHtml(opts: PrintDocumentOptions): string {
         : 'FlowPDV';
 
   const itemsHtml = opts.itens
-    .map(
-      (item) => `
+    .map((item) => {
+      const detalhes = item.detalhes && item.detalhes.length > 0
+        ? item.detalhes
+        : null;
+      const detailBlock =
+        detalhes && variant === 'kitchen-ticket'
+          ? `<div class="item-details">${detalhes
+              .map((d) => `<div class="item-detail-line">${escapeHtml(d)}</div>`)
+              .join('')}</div>`
+          : '';
+      const kitchenObsFallback =
+        variant === 'kitchen-ticket' && !detalhes && item.obs
+          ? `<div class="item-note item-note-accent">${escapeHtml(item.obs)}</div>`
+          : '';
+      return `
         <div class="item-row">
           <div class="item-main">
             <div class="item-name">${item.qtd}x ${escapeHtml(item.nome)}</div>
-            ${item.obs ? `<div class="item-note">${escapeHtml(item.obs)}</div>` : ''}
+            ${detailBlock}
+            ${variant !== 'kitchen-ticket' && item.obs ? `<div class="item-note">${escapeHtml(item.obs)}</div>` : ''}
+            ${kitchenObsFallback}
           </div>
           ${item.valor !== undefined ? `<div class="item-value">${formatMoney(item.valor)}</div>` : ''}
         </div>
-      `
-    )
+      `;
+    })
     .join('');
 
   const totalsHtml = [
@@ -322,6 +347,29 @@ export function gerarCupomHtml(opts: PrintDocumentOptions): string {
       color: #6b7280;
       font-size: 10px;
       word-break: break-word;
+    }
+    .item-note-accent {
+      margin-top: 6px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px dashed #111827;
+      font-weight: 700;
+      color: #111827;
+    }
+    .item-details {
+      margin-top: 4px;
+      padding-left: 8px;
+      border-left: 3px solid #111827;
+    }
+    .item-detail-line {
+      font-size: 10px;
+      color: #374151;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .item-detail-line::before {
+      content: "- ";
+      font-weight: 800;
     }
     .item-value {
       white-space: nowrap;

@@ -50,6 +50,7 @@ function getNotifyMessage(order: Order): string {
 }
 
 function labelForDeliveryNext(nextStatus: string): string {
+  if (nextStatus === 'Pedido Recebido') return 'Aceitar pedido';
   if (nextStatus === 'Em Preparo') return 'Preparar';
   if (nextStatus === 'Pronto para Entrega') return 'Marcar como pronto';
   if (nextStatus === 'Saiu para Entrega') return 'Enviar para entrega';
@@ -192,6 +193,11 @@ export function canCentralPrintCupom(_order: Order): boolean {
   return true;
 }
 
+export function canCentralPrintProducao(order: Order): boolean {
+  if (isOrderCanceledLike(order)) return false;
+  return true;
+}
+
 export function canCentralOpenMaps(order: Order): boolean {
   return getCustomerAddress(order).length > 0;
 }
@@ -258,16 +264,29 @@ export async function executeCentralConfirmPayment(input: {
 export async function executeCentralPrintAction(input: {
   token: string;
   order: Order;
-  document: 'cupom' | 'comprovante';
+  document: 'cupom' | 'comprovante' | 'producao';
 }): Promise<{ ok: boolean; error?: string }> {
   const { token, order, document } = input;
   const url =
     document === 'cupom'
       ? `/api/print/cupom-html/${order.id}`
-      : `/api/print/comprovante-html/${order.id}`;
+      : document === 'producao'
+        ? `/api/print/comanda-html/${order.id}`
+        : `/api/print/comprovante-html/${order.id}`;
 
   try {
     const html = await fetchPrintableHtml(url, token);
+    if (document === 'producao') {
+      const t = html.trim().toLowerCase();
+      if (t.includes('nenhum item de preparo') || t.includes('pedido cancelado')) {
+        return {
+          ok: false,
+          error: t.includes('cancelado')
+            ? 'Pedido cancelado — não é possível imprimir produção.'
+            : 'Nenhum item de preparo neste pedido.',
+        };
+      }
+    }
     const win = openPrintPreview(html, 'width=420,height=700,toolbar=0,menubar=0,location=0');
     if (!win) {
       return { ok: false, error: 'Permita popups para abrir a impressão.' };
@@ -283,7 +302,9 @@ export async function executeCentralPrintAction(input: {
       error:
         document === 'cupom'
           ? 'Não foi possível gerar o cupom.'
-          : 'Não foi possível gerar o comprovante.',
+          : document === 'producao'
+            ? 'Não foi possível gerar a comanda de produção.'
+            : 'Não foi possível gerar o comprovante.',
     };
   }
 }

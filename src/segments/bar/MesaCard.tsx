@@ -4,6 +4,7 @@ import {
   Clock,
   X,
   Printer,
+  ChefHat,
 } from 'lucide-react';
 import { openPrintPreviewFromUrl } from '../../utils/print';
 
@@ -44,6 +45,21 @@ function MesaCard({
       }
 
       alert('Erro ao gerar impressao da comanda.');
+    }
+  };
+
+  const handlePrintProducao = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const win = await openPrintPreviewFromUrl(`/api/mesas/${mesa.id}/producao-html`, token);
+      if (!win) alert('Permita popups para imprimir.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('(404)')) {
+        alert('Sem comanda aberta ou sem itens.');
+        return;
+      }
+      alert('Erro ao gerar comanda de produção.');
     }
   };
 
@@ -126,13 +142,24 @@ function MesaCard({
       <div className={`px-2 pb-2 flex gap-1.5 ${!isOpen ? 'pt-2' : ''}`}>
         {isOpen ? (
           <>
-            <button
-              onClick={handlePrint}
-              className="flex-1 flex items-center justify-center gap-0.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-[10px] font-bold text-zinc-100 transition-all"
-            >
-              <Printer size={11} />
-              Imprimir
-            </button>
+            <div className="flex-1 flex gap-1">
+              <button
+                type="button"
+                title="Comanda mesa"
+                onClick={handlePrint}
+                className="flex-1 flex items-center justify-center py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-100 transition-all"
+              >
+                <Printer size={11} />
+              </button>
+              <button
+                type="button"
+                title="Produção (cozinha)"
+                onClick={handlePrintProducao}
+                className="flex-1 flex items-center justify-center py-1.5 bg-amber-900/40 hover:bg-amber-900/55 border border-amber-700/40 rounded-lg text-amber-100 transition-all"
+              >
+                <ChefHat size={11} />
+              </button>
+            </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();

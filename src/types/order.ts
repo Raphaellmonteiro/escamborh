@@ -21,6 +21,8 @@ export interface OrderItemInput {
   /** Observação / resumo de opções e adicionais do item (cardápio envia como `obs_opcoes`). */
   observation?: string;
   obs_opcoes?: string;
+  /** Mapa grupoId → { opcaoId: quantidade } — persistido como JSON em `selecoes_json`. */
+  selecoes?: Record<number, Record<number, number>> | null;
 }
 
 export interface PaymentInput {

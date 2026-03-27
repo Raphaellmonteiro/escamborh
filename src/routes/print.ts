@@ -5,8 +5,12 @@ import { q1, qAll } from '../db';
 import { requireAnyPermission } from '../middleware';
 import { buildMesaFinanceSnapshot, buildMesaReceiptTotals } from '../utils/mesaFinance';
 import { getProfilePaperColumns, getProfilePaperWidthMm } from '../utils/printProfiles';
-import { resolveRequiresPreparation } from '../utils/preparation';
 import { gerarCupomHtml } from '../utils/printTemplates';
+import {
+  buildKitchenReceiptHtml,
+  filterKitchenPreparationItems,
+} from '../services/kitchenPrintService';
+import { dispatchKitchenProductionForOrder, loadKitchenItemRowsForOrder } from '../services/kitchenPrintDispatchService';
 
 function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
   return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
@@ -26,44 +30,20 @@ function getOrderChannel(order: { canal?: string | null; tipo_retirada?: string 
   return 'generic' as const;
 }
 
-function buildKitchenMetadata(order: { canal?: string | null; cliente_nome?: string | null; observation?: string | null }) {
-  const metadata: { label: string; value: string }[] = [];
-  const channel = getOrderChannel(order);
-
-  if (channel === 'delivery' && order.cliente_nome) {
-    metadata.push({ label: 'Cliente', value: order.cliente_nome });
-  }
-
-  if (channel === 'retirada') {
-    metadata.push({ label: 'Operacao', value: 'Retirada no local' });
-  }
-
-  if (channel === 'mesa' || /mesa\s+\d+/i.test(String(order.observation || ''))) {
-    const mesaMatch = String(order.observation || '').match(/mesa\s+(\d+)/i);
-    if (mesaMatch) metadata.push({ label: 'Mesa', value: mesaMatch[1] });
-  }
-
-  return metadata;
+async function loadKitchenItemRows(orderId: string | number, tenantId: number) {
+  return loadKitchenItemRowsForOrder(orderId, tenantId);
 }
 
-async function getKitchenItems(orderId: string | number, tenantId: number) {
-  const items = await qAll(
-    `SELECT p.name, p.category, p.requires_preparation, p.production_type, ip.quantity, ip.observation
-       FROM itens_pedido ip
-       JOIN produtos p ON p.id=ip.product_id
-       WHERE ip.order_id=? AND ip.tenant_id=?`,
-    [orderId, tenantId]
-  );
-
-  return items.filter((item: any) =>
-    resolveRequiresPreparation({
-        name: item.name,
-        category: item.category,
-        requires_preparation: item.requires_preparation,
-        production_type: item.production_type,
-      })
-    );
-  }
+function mapRowsToKitchenItems(rows: any[]) {
+  return rows.map((row: any) => ({
+    quantity: Number(row.quantity),
+    name: row.name,
+    observation: row.observation,
+    category: row.category,
+    requires_preparation: row.requires_preparation,
+    production_type: row.production_type,
+  }));
+}
 
 function formatPrintDateTime(value?: string | null) {
   const rawValue = String(value || '').trim();
@@ -414,34 +394,28 @@ export function createPrintRouter() {
       const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
       if (!pedido) return res.status(404).send('');
       if (isCanceledOrder(pedido)) return res.status(409).send('<h1>Pedido cancelado</h1>');
-      const cliente = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
+      const cliente = await q1('SELECT nome_estabelecimento, printer_config FROM clientes WHERE id=?', [req.tenantId]);
 
-      const itens = await getKitchenItems(req.params.pedidoId, req.tenantId);
-      if (itens.length === 0) return res.send('<h1>Nenhum item de preparo neste pedido.</h1>');
-      const now = new Date().toLocaleString('pt-BR', {
-        timeZone: 'America/Sao_Paulo',
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      const rows = await loadKitchenItemRows(req.params.pedidoId, req.tenantId);
+      const kitchenItems = mapRowsToKitchenItems(rows);
+      if (filterKitchenPreparationItems(kitchenItems).length === 0) {
+        return res.send('<h1>Nenhum item de preparo neste pedido.</h1>');
+      }
 
       res.send(
-        gerarCupomHtml({
-          titulo: 'Comanda de cozinha',
-          orderNumber: pedido.order_number,
-          data: now,
-          variant: 'kitchen-ticket',
-          canal: getOrderChannel(pedido),
+        buildKitchenReceiptHtml({
+          order: {
+            order_number: String(pedido.order_number),
+            canal: pedido.canal,
+            tipo_retirada: pedido.tipo_retirada,
+            observation: pedido.observation,
+            cliente_nome: pedido.cliente_nome,
+            cliente_tel: pedido.cliente_tel,
+            created_at: pedido.created_at,
+          },
+          items: kitchenItems,
+          estabelecimento: cliente?.nome_estabelecimento,
           paperWidthMm: getProfilePaperWidthMm(cliente?.printer_config, 'cozinha'),
-          metadata: buildKitchenMetadata(pedido),
-          itens: itens.map((item: any) => ({
-            qtd: item.quantity,
-            nome: item.name,
-            obs: String(item.observation || '').trim() || undefined,
-          })),
-          observacao: pedido.observation || undefined,
         })
       );
     } catch (e: any) {
@@ -451,32 +425,14 @@ export function createPrintRouter() {
 
   router.post('/comanda/:pedidoId', async (req: Request, res) => {
     try {
-      const row = await q1('SELECT printer_config FROM clientes WHERE id=?', [req.tenantId]);
-      if (!row?.printer_config) return res.json({ success: false, message: 'Impressora nao configurada' });
-
-      const pedido = await q1('SELECT * FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, req.tenantId]);
-      if (!pedido) return res.status(404).json({ success: false, message: 'Pedido nao encontrado' });
-      if (isCanceledOrder(pedido)) return res.status(409).json({ success: false, message: 'Pedido cancelado nao pode gerar comanda' });
-
-      const itens = await getKitchenItems(req.params.pedidoId, req.tenantId);
-      if (itens.length === 0) {
-        return res.json({ success: false, message: 'Pedido sem itens de preparo para a cozinha' });
+      const dispatch = await dispatchKitchenProductionForOrder(req.tenantId, Number(req.params.pedidoId));
+      if (dispatch.ok === false) {
+        const msg = dispatch.message || 'Falha na impressao';
+        if (dispatch.reason === 'not_found') return res.status(404).json({ success: false, message: msg });
+        if (dispatch.reason === 'canceled') return res.status(409).json({ success: false, message: msg });
+        return res.json({ success: false, message: msg });
       }
-      const texto =
-        `COMANDA #${pedido.order_number}\n` +
-        itens
-          .map((item: any) => {
-            const linha = `${item.quantity}x ${item.name}`;
-            const obsItem = String(item.observation || '').trim();
-            return obsItem ? `${linha}\n   ${obsItem}` : linha;
-          })
-          .join('\n') +
-        (pedido.observation ? `\nObs: ${pedido.observation}` : '');
-      const cfg = JSON.parse(row.printer_config);
-      const dados = buildEscPos(texto, getProfilePaperColumns(cfg, 'cozinha'));
-      await enviarParaImpressora(dados, cfg.ip, cfg.porta);
-
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (e: any) {
       res.json({ success: false, message: e.message });
     }

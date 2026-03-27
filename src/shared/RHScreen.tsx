@@ -1,10 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { generatePayrollPdf, generatePayrollReceiptHtml, generateFeriasReceiptHtml, generateDecimoReceiptHtml } from '../utils/payrollPdfHtml';
+import {
+  hourBankApplicable,
+  hourBankVisibleInUi,
+  isEvento,
+  isFixo,
+  normalizeTipoContrato,
+} from '../services/employeeContract';
 import {
   Users, Fingerprint, Calendar, FileText, UserPlus, X, Pencil,
   Trash2, AlertTriangle, CheckCircle2, DollarSign,
   TrendingUp, Download, ArrowRight, Check, RefreshCw,
   ChevronLeft, ChevronRight, Search, Camera, Upload,
+  Bell, Palmtree, Gift,
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -14,12 +23,99 @@ interface Func {
   dias_semana: string; tolerancia_minutos: number; dias_trabalho_mes: number;
   data_admissao: string; telefone?: string; cpf?: string; pin?: string;
   foto_url?: string; status: string;
+  tipo_contrato?: 'fixo' | 'diarista' | 'evento';
 }
 interface Evento { id: number; funcionario_id: number; data: string; tipo: string; horas_ausentes: number; observacao?: string; }
 interface Adiantamento { id: number; valor: number; motivo: string; data: string; descontado: number; }
-interface DiaEspelho { data: string; dia: number; diaSemana: number; isExpediente: boolean; status: string; entrada?: string; saida?: string; atrasoMin: number; eventos: Evento[]; }
-interface Espelho { funcionario: Func; dias: DiaEspelho[]; resumo: { diasTrabalhados: number; totalFaltas: number; diasFolga: number; diasAtestado: number; totalAtrasoMin: number; descontoFaltas: number; descontoAtrasos: number; descontoParcial: number; totalDescontos: number; }; }
-interface Folha { funcionario: Func; mes: string; salarioBruto: number; totalFaltas: number; descontoFaltas: number; totalAtrasoMin: number; descontoAtrasos: number; horasAusentesParcial: number; descontoParcial: number; inss: number; totalAdiantamentos: number; adiantamentos: Adiantamento[]; totalExtraMin: number; valorExtras: number; totalDescontos: number; salarioLiquido: number; }
+interface HoraExtraDia { id: number; minutos: number; minutos_pago_folha?: number | null; observacao?: string | null }
+interface DiaEspelho {
+  data: string; dia: number; diaSemana: number; isExpediente: boolean; status: string;
+  entrada?: string; saida?: string; atrasoMin: number; eventos: Evento[];
+  extraAprov?: HoraExtraDia | null; saidaRealExtraMin?: number;
+}
+interface BancoMovRow {
+  id: number; data_referencia: string; tipo: string; minutos: number; origem: string;
+  observacao?: string | null; created_at: string; created_by?: string | null;
+}
+interface Espelho {
+  /** Dados do colaborador (API também pode enviar legado em `func`) */
+  funcionario?: Func;
+  func?: Func;
+  dias: DiaEspelho[];
+  resumo: {
+    diasTrabalhados: number; totalFaltas: number; diasFolga: number; diasAtestado: number; totalAtrasoMin: number;
+    descontoFaltas: number; descontoAtrasos: number; descontoParcial?: number; totalDescontos: number;
+    totalExtraMin?: number; totalExtraMinPagoFolha?: number; totalExtraMinBancoMes?: number; saldoBancoHorasMin?: number;
+  };
+  banco_horas_mes?: BancoMovRow[];
+  banco_horas_aplicavel?: boolean;
+}
+interface PayrollLineApi { type: string; label: string; amount: number }
+interface FolhaPayrollApi {
+  base_salary: number;
+  earnings: PayrollLineApi[];
+  deductions: PayrollLineApi[];
+  totals: { gross: number; deductions: number; net: number };
+}
+interface FolhaCompetenciaApi {
+  referencia: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+}
+interface FolhaPagamentoRow {
+  id: number;
+  tipo: string;
+  valor: number;
+  observacao?: string | null;
+  created_at: string;
+  created_by?: string | null;
+  recibo_numero?: string | null;
+}
+interface FolhaPaymentSummary {
+  net_liquid: number;
+  total_paid: number;
+  balance_due: number;
+  status: 'pending' | 'partial' | 'paid';
+  unbounded?: boolean;
+}
+interface FolhaManagerialApi {
+  informativos: { label: string; amount: number }[];
+  benefit_credits: { label: string; amount: number }[];
+  benefit_deductions: { label: string; amount: number }[];
+  benefit_credit_total: number;
+  benefit_deduction_total: number;
+  net_adjusted: number;
+}
+
+interface Folha {
+  funcionario: Func;
+  mes: string;
+  salarioBruto: number;
+  totalFaltas: number;
+  descontoFaltas: number;
+  totalAtrasoMin: number;
+  descontoAtrasos: number;
+  horasAusentesParcial: number;
+  descontoParcial: number;
+  inss: number;
+  totalAdiantamentos: number;
+  adiantamentos: Adiantamento[];
+  totalExtraMin: number;
+  totalExtraMinPago?: number;
+  totalExtraMinBancoMes?: number;
+  valorExtras: number;
+  totalDescontos: number;
+  salarioLiquido: number;
+  competencia?: FolhaCompetenciaApi;
+  payroll?: FolhaPayrollApi;
+  managerial?: FolhaManagerialApi;
+  payroll_payments?: FolhaPagamentoRow[];
+  payroll_payment_summary?: FolhaPaymentSummary;
+  hour_bank?: { saldo_minutos: number; movimentacoes: BancoMovRow[]; aplicavel?: boolean };
+  contract_profile?: { tipo: 'fixo' | 'diarista' | 'evento'; folha_tradicional: boolean };
+  pagamentos_sem_teto_folha?: boolean;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
@@ -41,10 +137,21 @@ const STATUS_COLOR: Record<string, string> = {
   sem_expediente: 'bg-zinc-50 text-zinc-400 border-zinc-100',
 };
 const STATUS_LABEL: Record<string, string> = { trabalhado: 'OK', falta: 'Falta', folga: 'Folga', atestado: 'Ates.', declaracao_parcial: 'Parc.', sem_expediente: '—' };
+const PAYROLL_STATUS_LABEL: Record<string, string> = { pending: 'Pendente', partial: 'Parcial', paid: 'Quitada' };
+const PAYMENT_TIPO_LABEL: Record<string, string> = {
+  advance: 'Adiantamento',
+  partial_payment: 'Pagamento parcial',
+  final_payment: 'Pagamento final',
+};
+const TIPO_CONTRATO_LABEL: Record<'fixo' | 'diarista' | 'evento', string> = {
+  fixo: 'Fixo',
+  diarista: 'Diarista',
+  evento: 'Evento',
+};
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function RHScreen({ token }: { token: string }) {
-  const [tab, setTab] = useState<'lista'|'ponto'|'espelho'|'folha'>('lista');
+  const [tab, setTab] = useState<'lista'|'ponto'|'espelho'|'folha'|'gestao'>('lista');
   const slug = React.useMemo(() => {
     try { const p = token.split('.')[1]; return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/')))?.username || ''; }
     catch { return ''; }
@@ -54,6 +161,7 @@ export default function RHScreen({ token }: { token: string }) {
     { key:'lista',   label:'Funcionários',  icon:<Users size={14}/> },
     { key:'espelho', label:'Espelho',        icon:<Calendar size={14}/> },
     { key:'folha',   label:'Folha de Pgto', icon:<FileText size={14}/> },
+    { key:'gestao',  label:'Gestão RH',     icon:<Bell size={14}/> },
   ];
 
   return (
@@ -87,20 +195,84 @@ export default function RHScreen({ token }: { token: string }) {
         {tab==='lista'   && <TabLista   token={token}/>}
         {tab==='espelho' && <TabEspelho token={token}/>}
         {tab==='folha'   && <TabFolha   token={token}/>}
+        {tab==='gestao'  && <TabGestaoRH token={token}/>}
       </div>
     </motion.div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ABA GESTÃO RH (alertas)
+// ═══════════════════════════════════════════════════════════════════════════════
+function TabGestaoRH({ token }: { token: string }) {
+  const [alertas, setAlertas] = useState<
+    { id: string; severity: string; titulo: string; detalhe: string; funcionario_id?: number }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const hdrs = { Authorization: `Bearer ${token}` };
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch('/api/funcionarios/painel/alertas', { headers: hdrs });
+        const d = await r.json();
+        setAlertas(Array.isArray(d.alertas) ? d.alertas : []);
+      } catch {
+        setAlertas([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [token]);
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-zinc-500 max-w-3xl">
+        Painel gerencial: férias, 13º, folha em aberto e banco de horas. Use o botão <span className="font-bold text-zinc-700">Gestão</span> no card do
+        funcionário para férias, benefícios e parcelas do 13º.
+      </p>
+      {loading ? (
+        <LoadSpinner />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {alertas.map((a) => (
+            <div
+              key={a.id}
+              className={`rounded-2xl border p-4 text-sm ${
+                a.severity === 'urgent'
+                  ? 'bg-red-50 border-red-200 text-red-950'
+                  : a.severity === 'attention'
+                    ? 'bg-amber-50 border-amber-200 text-amber-950'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              }`}
+            >
+              <p className="font-black text-[10px] uppercase tracking-wider mb-1 opacity-80">
+                {a.severity === 'ok' ? 'Ok' : a.severity === 'urgent' ? 'Urgente' : 'Atenção'}
+              </p>
+              <p className="font-bold">{a.titulo}</p>
+              <p className="text-xs mt-1.5 leading-relaxed opacity-90">{a.detalhe}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ABA LISTA
 // ═══════════════════════════════════════════════════════════════════════════════
+const BEN_TIPOS = [
+  { key: 'transporte' as const, label: 'Transporte' },
+  { key: 'refeicao' as const, label: 'Refeição' },
+  { key: 'ajuda_custo' as const, label: 'Ajuda de custo' },
+];
+
 function TabLista({ token }: { token: string }) {
   const [funcs, setFuncs] = useState<Func[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Func|null>(null);
-  const [modal, setModal] = useState<null|'novo'|'edit'|'adiant'|'ajuste'|'evento'>(null);
+  const [modal, setModal] = useState<null|'novo'|'edit'|'adiant'|'ajuste'|'evento'|'rh_gestao'>(null);
   const [adiantamentos, setAdiantamentos] = useState<Adiantamento[]>([]);
   const [saving, setSaving] = useState(false);
   const hdrs = { Authorization:`Bearer ${token}` };
@@ -125,7 +297,7 @@ function TabLista({ token }: { token: string }) {
     atendente: ['pos','orders','mesas'],
   };
 
-  const eF = { nome:'', cargo:'', salario_base:'', horario_entrada:'08:00', horario_saida:'17:00', carga_horaria:'8', dias_semana:'1,2,3,4,5', tolerancia_minutos:'10', dias_trabalho_mes:'26', data_admissao:'', telefone:'', cpf:'', pin:'' };
+  const eF = { nome:'', cargo:'', salario_base:'', horario_entrada:'08:00', horario_saida:'17:00', carga_horaria:'8', dias_semana:'1,2,3,4,5', tolerancia_minutos:'10', dias_trabalho_mes:'26', data_admissao:'', telefone:'', cpf:'', pin:'', tipo_contrato: 'fixo' as 'fixo' | 'diarista' | 'evento' };
   const eAcesso = { login:'', senha:'', cargo_sistema:'atendente' as 'dono'|'gerente'|'atendente', permissoes: ['pos','orders','mesas'] as string[], criar_acesso: false };
   const [form, setForm] = useState(eF);
   const [formAcesso, setFormAcesso] = useState(eAcesso);
@@ -136,18 +308,96 @@ function TabLista({ token }: { token: string }) {
   const [formAdiant, setFormAdiant] = useState({ valor:'', motivo:'' });
   const [formAjuste, setFormAjuste] = useState({ tipo:'aumento' as 'aumento'|'reducao', valor:'', motivo:'' });
   const [formEvento, setFormEvento] = useState({ data:'', tipo:'falta', horas_ausentes:'', observacao:'' });
+  const [rhPackFerias, setRhPackFerias] = useState<{ ferias: any[]; resumo: Record<string, number> } | null>(null);
+  const [rhPackDecimo, setRhPackDecimo] = useState<{
+    decimo: Record<string, unknown> | null;
+    pago_total: number;
+    pendente: number;
+    aplicavel?: boolean;
+  } | null>(null);
+  const [rhDecimoAno, setRhDecimoAno] = useState(new Date().getFullYear());
+  const [rhBen, setRhBen] = useState<
+    Record<string, { valor: string; tipo_valor: 'fixo' | 'percentual'; ativo: boolean; efeito: 'acrescimo' | 'desconto' }>
+  >({
+    transporte: { valor: '0', tipo_valor: 'fixo', ativo: false, efeito: 'acrescimo' },
+    refeicao: { valor: '0', tipo_valor: 'fixo', ativo: false, efeito: 'acrescimo' },
+    ajuda_custo: { valor: '0', tipo_valor: 'fixo', ativo: false, efeito: 'acrescimo' },
+  });
+  const [rhSchedIni, setRhSchedIni] = useState('');
+  const [rhSchedFim, setRhSchedFim] = useState('');
+  const [rhSchedId, setRhSchedId] = useState<number | ''>('');
+  const [rhValFerias, setRhValFerias] = useState('');
+  const [rhGestaoLoading, setRhGestaoLoading] = useState(false);
+
+  const loadRhGestao = async (fid: number, ano: number) => {
+    setRhGestaoLoading(true);
+    try {
+      const [rf, rd, rb] = await Promise.all([
+        fetch(`/api/funcionarios/${fid}/ferias`, { headers: hdrs }).then((r) => r.json()),
+        fetch(`/api/funcionarios/${fid}/decimo-terceiro?ano=${ano}`, { headers: hdrs }).then((r) => r.json()),
+        fetch(`/api/funcionarios/${fid}/beneficios`, { headers: hdrs }).then((r) => r.json()),
+      ]);
+      setRhPackFerias({ ferias: rf.ferias || [], resumo: rf.resumo || {} });
+      if (!rd.error) setRhPackDecimo(rd);
+      const next: typeof rhBen = {
+        transporte: { valor: '0', tipo_valor: 'fixo', ativo: false, efeito: 'acrescimo' },
+        refeicao: { valor: '0', tipo_valor: 'fixo', ativo: false, efeito: 'acrescimo' },
+        ajuda_custo: { valor: '0', tipo_valor: 'fixo', ativo: false, efeito: 'acrescimo' },
+      };
+      for (const row of rb.beneficios || []) {
+        const k = String(row.tipo || '');
+        if (next[k]) {
+          next[k] = {
+            valor: String(row.valor ?? 0),
+            tipo_valor: row.tipo_valor === 'percentual' ? 'percentual' : 'fixo',
+            ativo: !!row.ativo,
+            efeito: row.efeito === 'desconto' ? 'desconto' : 'acrescimo',
+          };
+        }
+      }
+      setRhBen(next);
+      const firstAvail = (rf.ferias || []).find((x: any) => x.status === 'available');
+      setRhSchedId(firstAvail ? firstAvail.id : '');
+    } catch {
+      setRhPackFerias(null);
+      setRhPackDecimo(null);
+    } finally {
+      setRhGestaoLoading(false);
+    }
+  };
 
   useEffect(()=>{ fetchFuncs(); fetchUsuarios(); },[]);
-  useEffect(()=>{ if(selected) fetchAdiantamentos(selected.id); },[selected]);
+  useEffect(() => {
+    if (!selected || isEvento(normalizeTipoContrato(selected.tipo_contrato))) {
+      setAdiantamentos([]);
+      return;
+    }
+    void fetchAdiantamentos(selected.id);
+  }, [selected]);
+  useEffect(() => {
+    if (modal !== 'rh_gestao' || !selected) return;
+    void loadRhGestao(selected.id, rhDecimoAno);
+  }, [modal, selected, rhDecimoAno]);
 
-  const fetchFuncs = async () => { setLoading(true); try { const r=await fetch('/api/funcionarios',{headers:hdrs}); setFuncs(await r.json()); } catch{} finally{setLoading(false);} };
+  const fetchFuncs = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/funcionarios', { headers: hdrs });
+      const d = await r.json();
+      setFuncs(Array.isArray(d) ? d : []);
+    } catch {
+      setFuncs([]);
+    } finally {
+      setLoading(false);
+    }
+  };
   const fetchAdiantamentos = async (id:number) => { const r=await fetch(`/api/funcionarios/${id}/adiantamentos`,{headers:hdrs}); setAdiantamentos(await r.json()); };
   const fetchUsuarios = async () => { try { const r=await fetch('/api/usuarios/funcionarios',{headers:hdrs}); if(r.ok) setUsuariosExistentes(await r.json()); } catch{} };
 
   const handleSalvar = async () => {
     setSaving(true);
     try {
-      const body = { ...form, salario_base:parseFloat(form.salario_base), carga_horaria:parseFloat(form.carga_horaria), tolerancia_minutos:parseInt(form.tolerancia_minutos), dias_trabalho_mes:parseInt(form.dias_trabalho_mes) };
+      const body = { ...form, salario_base:parseFloat(form.salario_base), carga_horaria:parseFloat(form.carga_horaria), tolerancia_minutos:parseInt(form.tolerancia_minutos), dias_trabalho_mes:parseInt(form.dias_trabalho_mes), tipo_contrato: form.tipo_contrato || 'fixo' };
       const url = modal==='novo' ? '/api/funcionarios' : `/api/funcionarios/${selected!.id}`;
       const r = await fetch(url, { method:modal==='novo'?'POST':'PUT', headers:jHdrs, body:JSON.stringify(body) });
       const data = await r.json();
@@ -170,13 +420,26 @@ function TabLista({ token }: { token: string }) {
   };
 
   const handleAdiantamento = async () => {
+    if (selected && isEvento(normalizeTipoContrato(selected.tipo_contrato))) {
+      alert(
+        'Colaboradores por evento não utilizam adiantamento de folha. Use a aba Folha e registre em Pagamentos (valores avulsos ou parciais).'
+      );
+      return;
+    }
     const valor = parseFloat(formAdiant.valor);
     if (isNaN(valor) || valor <= 0) { alert('Informe um valor válido maior que zero.'); return; }
     if (!formAdiant.motivo.trim()) { alert('Informe o motivo do adiantamento.'); return; }
     setSaving(true);
     try {
       const r = await fetch(`/api/funcionarios/${selected!.id}/adiantamentos`, { method:'POST', headers:jHdrs, body:JSON.stringify({ valor, motivo:formAdiant.motivo }) });
-      if (r.ok) { setModal(null); setFormAdiant({ valor:'', motivo:'' }); fetchAdiantamentos(selected!.id); }
+      if (r.ok) {
+        setModal(null);
+        setFormAdiant({ valor:'', motivo:'' });
+        void fetchAdiantamentos(selected!.id);
+      } else {
+        const data = await r.json().catch(() => ({}));
+        alert((data as { error?: string }).error || 'Não foi possível registrar.');
+      }
     } finally { setSaving(false); }
   };
 
@@ -195,7 +458,8 @@ function TabLista({ token }: { token: string }) {
 
   const openEdit = (f:Func) => {
     setSelected(f);
-    setForm({ nome:f.nome, cargo:f.cargo, salario_base:String(f.salario_base), horario_entrada:f.horario_entrada||'08:00', horario_saida:f.horario_saida||'17:00', carga_horaria:String(f.carga_horaria||8), dias_semana:f.dias_semana||'1,2,3,4,5', tolerancia_minutos:String(f.tolerancia_minutos||10), dias_trabalho_mes:String(f.dias_trabalho_mes||26), data_admissao:f.data_admissao||'', telefone:f.telefone||'', cpf:f.cpf||'', pin:f.pin||'' });
+    const tc = f.tipo_contrato === 'diarista' || f.tipo_contrato === 'evento' ? f.tipo_contrato : 'fixo';
+    setForm({ nome:f.nome, cargo:f.cargo, salario_base:String(f.salario_base), horario_entrada:f.horario_entrada||'08:00', horario_saida:f.horario_saida||'17:00', carga_horaria:String(f.carga_horaria||8), dias_semana:f.dias_semana||'1,2,3,4,5', tolerancia_minutos:String(f.tolerancia_minutos||10), dias_trabalho_mes:String(f.dias_trabalho_mes||26), data_admissao:f.data_admissao||'', telefone:f.telefone||'', cpf:f.cpf||'', pin:f.pin||'', tipo_contrato: tc });
     // Usa caminho relativo: funciona tanto em localhost quanto em produção
     setFotoPreview(f.foto_url ? f.foto_url : '');
     // Carrega dados de acesso existente
@@ -228,7 +492,7 @@ function TabLista({ token }: { token: string }) {
             <div key={f.id} className="bg-white border border-zinc-200 rounded-2xl p-5 hover:border-zinc-400 hover:shadow-md transition-all">
               <div className="flex items-start gap-3 mb-4">
                 <Avatar func={f} size={44}/>
-                <div className="flex-1 min-w-0"><p className="font-black text-zinc-900 truncate">{f.nome}</p><p className="text-xs text-zinc-400 truncate">{f.cargo}</p></div>
+                <div className="flex-1 min-w-0"><p className="font-black text-zinc-900 truncate">{f.nome}</p><p className="text-xs text-zinc-400 truncate">{f.cargo}</p><p className="text-[11px] text-zinc-500 mt-0.5">Tipo: {TIPO_CONTRATO_LABEL[(f.tipo_contrato === 'diarista' || f.tipo_contrato === 'evento' ? f.tipo_contrato : 'fixo')]}</p></div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">ativo</span>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
@@ -240,8 +504,11 @@ function TabLista({ token }: { token: string }) {
               <div className="flex gap-1.5 flex-wrap">
                 <ABtn label="Editar" icon={<Pencil size={11}/>} onClick={()=>openEdit(f)}/>
                 <ABtn label="Evento" icon={<Calendar size={11}/>} onClick={()=>{setSelected(f);setModal('evento');}}/>
-                <ABtn label="Adiantamento" icon={<DollarSign size={11}/>} onClick={()=>{setSelected(f);setModal('adiant');}}/>
+                {!isEvento(normalizeTipoContrato(f.tipo_contrato)) && (
+                  <ABtn label="Adiantamento" icon={<DollarSign size={11}/>} onClick={()=>{setSelected(f);setModal('adiant');}}/>
+                )}
                 <ABtn label="Salário" icon={<TrendingUp size={11}/>} onClick={()=>{setSelected(f);setModal('ajuste');}}/>
+                <ABtn label="Gestão" icon={<Palmtree size={11}/>} onClick={()=>{setSelected(f);setRhDecimoAno(new Date().getFullYear());setRhSchedIni('');setRhSchedFim('');setRhValFerias('');setModal('rh_gestao');}}/>
                 <ABtn label="Desativar" icon={<Trash2 size={11}/>} danger onClick={()=>handleDesativar(f.id)}/>
               </div>
             </div>
@@ -265,6 +532,18 @@ function TabLista({ token }: { token: string }) {
           <div className="grid grid-cols-2 gap-3">
             <FInput label="Cargo" value={form.cargo} onChange={v=>setForm({...form,cargo:v})} placeholder="Garçom, Cozinheiro..."/>
             <FInput label="Salário base (R$)*" value={form.salario_base} onChange={v=>setForm({...form,salario_base:v})} placeholder="1500,00"/>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Tipo de contrato</label>
+            <select
+              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+              value={form.tipo_contrato || 'fixo'}
+              onChange={(e) => setForm({ ...form, tipo_contrato: e.target.value as 'fixo' | 'diarista' | 'evento' })}
+            >
+              <option value="fixo">Fixo (mensal)</option>
+              <option value="diarista">Diarista</option>
+              <option value="evento">Evento</option>
+            </select>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <FInput label="Entrada" type="time" value={form.horario_entrada} onChange={v=>setForm({...form,horario_entrada:v})}/>
@@ -401,6 +680,377 @@ function TabLista({ token }: { token: string }) {
         </div>
         <MBtns onCancel={()=>setModal(null)} onConfirm={handleAjuste} saving={saving} label="Confirmar Ajuste"/>
       </Modal>
+
+      <Modal open={modal==='rh_gestao'} onClose={()=>setModal(null)} title={`Gestão RH — ${selected?.nome}`} wide>
+        <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+          {rhGestaoLoading && <p className="text-xs text-zinc-400">Carregando…</p>}
+          {selected && !isFixo(normalizeTipoContrato(selected.tipo_contrato)) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
+              <p className="font-black text-amber-900">Contrato {TIPO_CONTRATO_LABEL[normalizeTipoContrato(selected.tipo_contrato)]}</p>
+              <p className="text-xs mt-2 leading-relaxed text-amber-900/90">
+                {isEvento(normalizeTipoContrato(selected.tipo_contrato))
+                  ? 'Colaborador por evento não utiliza folha mensal CLT no sistema. Use a aba Folha para registrar pagamentos por competência e o Espelho para ponto. Serviços por evento podem ser controlados externamente; aqui o foco é histórico financeiro e presença.'
+                  : '13º e férias gerenciais automáticos não se aplicam a diarista no FlowPDV. Use Espelho e Folha (folha simplificada, sem INSS automático) e pagamentos na competência.'}
+              </p>
+            </div>
+          )}
+          {selected && isFixo(normalizeTipoContrato(selected.tipo_contrato)) && (
+          <>
+          {/* Benefícios */}
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 space-y-3">
+            <p className="text-xs font-black uppercase tracking-wider text-zinc-500">Benefícios (folha)</p>
+            <p className="text-[11px] text-zinc-400">Valores fixos ou % do salário base; efeito na folha como acréscimo ou desconto gerencial.</p>
+            {BEN_TIPOS.map((t) => (
+              <div key={t.key} className="flex flex-wrap items-end gap-2 bg-white border border-zinc-100 rounded-xl p-3">
+                <div className="flex items-center gap-2 min-w-[140px]">
+                  <button
+                    type="button"
+                    onClick={() => setRhBen((b) => ({ ...b, [t.key]: { ...b[t.key], ativo: !b[t.key].ativo } }))}
+                    className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${rhBen[t.key].ativo ? 'bg-emerald-600' : 'bg-zinc-200'}`}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${rhBen[t.key].ativo ? 'left-4' : 'left-0.5'}`} />
+                  </button>
+                  <span className="text-sm font-bold text-zinc-800">{t.label}</span>
+                </div>
+                <input
+                  type="text"
+                  value={rhBen[t.key].valor}
+                  onChange={(e) => setRhBen((b) => ({ ...b, [t.key]: { ...b[t.key], valor: e.target.value } }))}
+                  className="w-24 px-2 py-1.5 border border-zinc-200 rounded-lg text-sm font-mono"
+                  placeholder="0"
+                />
+                <select
+                  value={rhBen[t.key].tipo_valor}
+                  onChange={(e) =>
+                    setRhBen((b) => ({
+                      ...b,
+                      [t.key]: { ...b[t.key], tipo_valor: e.target.value as 'fixo' | 'percentual' },
+                    }))
+                  }
+                  className="px-2 py-1.5 border border-zinc-200 rounded-lg text-xs font-bold"
+                >
+                  <option value="fixo">R$ fixo</option>
+                  <option value="percentual">% salário</option>
+                </select>
+                <select
+                  value={rhBen[t.key].efeito}
+                  onChange={(e) =>
+                    setRhBen((b) => ({
+                      ...b,
+                      [t.key]: { ...b[t.key], efeito: e.target.value as 'acrescimo' | 'desconto' },
+                    }))
+                  }
+                  className="px-2 py-1.5 border border-zinc-200 rounded-lg text-xs font-bold"
+                >
+                  <option value="acrescimo">Soma na folha</option>
+                  <option value="desconto">Desconta na folha</option>
+                </select>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="w-full py-2.5 bg-zinc-900 text-white rounded-xl text-xs font-black"
+              onClick={async () => {
+                if (!selected) return;
+                const items = BEN_TIPOS.map((t) => ({
+                  tipo: t.key,
+                  valor: parseFloat(String(rhBen[t.key].valor).replace(',', '.')) || 0,
+                  tipo_valor: rhBen[t.key].tipo_valor,
+                  ativo: rhBen[t.key].ativo,
+                  efeito: rhBen[t.key].efeito,
+                }));
+                const r = await fetch(`/api/funcionarios/${selected.id}/beneficios`, {
+                  method: 'PUT',
+                  headers: jHdrs,
+                  body: JSON.stringify({ items }),
+                });
+                if (!r.ok) {
+                  const d = await r.json();
+                  alert(d.error || 'Erro ao salvar benefícios');
+                  return;
+                }
+                alert('Benefícios salvos.');
+              }}
+            >
+              Salvar benefícios
+            </button>
+          </div>
+
+          {/* 13º */}
+          {rhPackDecimo?.decimo && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-black uppercase tracking-wider text-violet-800 flex items-center gap-1">
+                  <Gift size={14} /> 13º salário (gerencial)
+                </p>
+                <input
+                  type="number"
+                  className="w-24 px-2 py-1 border border-violet-200 rounded-lg text-sm font-mono"
+                  value={rhDecimoAno}
+                  onChange={(e) => setRhDecimoAno(Number(e.target.value) || new Date().getFullYear())}
+                />
+              </div>
+              {(() => {
+                const d = rhPackDecimo.decimo as any;
+                return (
+                  <div className="text-sm space-y-1 text-zinc-700">
+                    <p>
+                      Meses trabalhados (ano): <strong>{d.meses_trabalhados}</strong>
+                    </p>
+                    <p>
+                      Total: <strong>{fmt(Number(d.valor_total) || 0)}</strong> · Pago:{' '}
+                      <strong>{fmt(rhPackDecimo.pago_total)}</strong> · Pendente:{' '}
+                      <strong>{fmt(rhPackDecimo.pendente)}</strong>
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <button
+                        type="button"
+                        disabled={!!d.pago_primeira}
+                        className="px-3 py-2 bg-violet-700 text-white rounded-xl text-xs font-bold disabled:opacity-40"
+                        onClick={async () => {
+                          const r = await fetch(`/api/funcionarios/decimo-terceiro/${d.id}`, {
+                            method: 'PATCH',
+                            headers: jHdrs,
+                            body: JSON.stringify({ action: 'pay_primeira' }),
+                          });
+                          const x = await r.json();
+                          if (!r.ok) {
+                            alert(x.error || 'Erro');
+                            return;
+                          }
+                          const dec = x.decimo as any;
+                          await loadRhGestao(selected!.id, rhDecimoAno);
+                          const w = window.open('', '_blank', 'width=750,height=950');
+                          if (w && selected && dec) {
+                            w.document.write(
+                              generateDecimoReceiptHtml({
+                                employeeName: selected.nome,
+                                ano: rhDecimoAno,
+                                parcelaLabel: '1ª parcela',
+                                valor: Number(dec.valor_primeira_parcela) || 0,
+                                dataDocumentoLabel: new Date().toLocaleString('pt-BR'),
+                              })
+                            );
+                            w.document.close();
+                          }
+                        }}
+                      >
+                        Pagar 1ª parcela
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!d.pago_primeira || !!d.pago_segunda}
+                        className="px-3 py-2 bg-violet-900 text-white rounded-xl text-xs font-bold disabled:opacity-40"
+                        onClick={async () => {
+                          const r = await fetch(`/api/funcionarios/decimo-terceiro/${d.id}`, {
+                            method: 'PATCH',
+                            headers: jHdrs,
+                            body: JSON.stringify({ action: 'pay_segunda' }),
+                          });
+                          const x = await r.json();
+                          if (!r.ok) {
+                            alert(x.error || 'Erro');
+                            return;
+                          }
+                          const dec = x.decimo as any;
+                          await loadRhGestao(selected!.id, rhDecimoAno);
+                          const w = window.open('', '_blank', 'width=750,height=950');
+                          if (w && selected && dec) {
+                            w.document.write(
+                              generateDecimoReceiptHtml({
+                                employeeName: selected.nome,
+                                ano: rhDecimoAno,
+                                parcelaLabel: '2ª parcela',
+                                valor: Number(dec.valor_segunda_parcela) || 0,
+                                dataDocumentoLabel: new Date().toLocaleString('pt-BR'),
+                              })
+                            );
+                            w.document.close();
+                          }
+                        }}
+                      >
+                        Pagar 2ª parcela
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Férias */}
+          {rhPackFerias && (
+            <div className="rounded-2xl border border-teal-200 bg-teal-50/40 p-4 space-y-3">
+              <p className="text-xs font-black uppercase tracking-wider text-teal-900">Férias (gerencial)</p>
+              <p className="text-sm text-teal-950">
+                Saldo aproximado de dias livres:{' '}
+                <strong>{rhPackFerias.resumo?.dias_livres ?? 0}</strong> · Agendadas:{' '}
+                {rhPackFerias.resumo?.pendentes_agendamento ?? 0} · Em gozo:{' '}
+                {rhPackFerias.resumo?.em_andamento ?? 0}
+              </p>
+              <div className="space-y-2 max-h-48 overflow-y-auto text-xs">
+                {(rhPackFerias.ferias || []).map((row: any) => (
+                  <div
+                    key={row.id}
+                    className="flex flex-col gap-2 bg-white/90 border border-teal-100 rounded-lg px-2 py-2"
+                  >
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span className="text-zinc-600">
+                        <span className="font-mono text-zinc-400">#{row.id}</span> · Aquis. {row.data_inicio_aquisitivo} →{' '}
+                        {row.data_fim_aquisitivo} · <strong>{row.status}</strong>
+                        {row.data_inicio_gozo ? ` · gozo ${row.data_inicio_gozo}–${row.data_fim_gozo}` : ''}
+                      </span>
+                      <span className="font-mono text-teal-800">{fmt(Number(row.valor_pago) || 0)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {row.status === 'scheduled' && (
+                        <button
+                          type="button"
+                          className="px-2 py-1 rounded-lg bg-teal-600 text-white text-[10px] font-bold"
+                          onClick={async () => {
+                            if (!selected) return;
+                            const r = await fetch(`/api/funcionarios/ferias/${row.id}`, {
+                              method: 'PATCH',
+                              headers: jHdrs,
+                              body: JSON.stringify({ action: 'start' }),
+                            });
+                            const data = await r.json();
+                            if (!r.ok) alert(data.error || 'Erro');
+                            else await loadRhGestao(selected.id, rhDecimoAno);
+                          }}
+                        >
+                          Iniciar gozo
+                        </button>
+                      )}
+                      {(row.status === 'in_progress' || row.status === 'scheduled') && (
+                        <button
+                          type="button"
+                          className="px-2 py-1 rounded-lg bg-teal-900 text-white text-[10px] font-bold"
+                          onClick={async () => {
+                            if (!selected) return;
+                            const def = rhValFerias || '0';
+                            const vStr = window.prompt('Valor pago registrado (R$):', def);
+                            if (vStr === null) return;
+                            const v = parseFloat(String(vStr).replace(',', '.'));
+                            const r = await fetch(`/api/funcionarios/ferias/${row.id}`, {
+                              method: 'PATCH',
+                              headers: jHdrs,
+                              body: JSON.stringify({
+                                action: 'complete',
+                                valor_pago: Number.isFinite(v) ? v : 0,
+                              }),
+                            });
+                            const data = await r.json();
+                            if (!r.ok) alert(data.error || 'Erro');
+                            else {
+                              await loadRhGestao(selected.id, rhDecimoAno);
+                              const fr = data.ferias;
+                              if (fr && selected) {
+                                const w = window.open('', '_blank', 'width=750,height=950');
+                                if (w) {
+                                  const d0 = fr.data_inicio_gozo || '';
+                                  const d1 = fr.data_fim_gozo || '';
+                                  let dias = 0;
+                                  if (d0 && d1) {
+                                    const a = new Date(d0 + 'T12:00:00').getTime();
+                                    const b = new Date(d1 + 'T12:00:00').getTime();
+                                    dias = Math.floor((b - a) / 86400000) + 1;
+                                  }
+                                  w.document.write(
+                                    generateFeriasReceiptHtml({
+                                      employeeName: selected.nome,
+                                      periodoAquisitivoLabel: `${fr.data_inicio_aquisitivo} a ${fr.data_fim_aquisitivo}`,
+                                      dataInicioGozo: d0,
+                                      dataFimGozo: d1,
+                                      dias,
+                                      valorPago: Number(fr.valor_pago) || 0,
+                                      dataDocumentoLabel: new Date().toLocaleString('pt-BR'),
+                                    })
+                                  );
+                                  w.document.close();
+                                }
+                              }
+                            }
+                          }}
+                        >
+                          Concluir + recibo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-500">Período (ID interno)</label>
+                  <select
+                    className="w-full mt-1 px-2 py-2 border border-zinc-200 rounded-lg text-xs"
+                    value={rhSchedId === '' ? '' : String(rhSchedId)}
+                    onChange={(e) => setRhSchedId(e.target.value ? Number(e.target.value) : '')}
+                  >
+                    <option value="">Selecione período disponível</option>
+                    {(rhPackFerias.ferias || [])
+                      .filter((x: any) => x.status === 'available')
+                      .map((x: any) => (
+                        <option key={x.id} value={x.id}>
+                          #{x.id} · {x.data_inicio_aquisitivo}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <FInput label="Início gozo" type="date" value={rhSchedIni} onChange={(v) => setRhSchedIni(v)} />
+                <FInput label="Fim gozo" type="date" value={rhSchedFim} onChange={(v) => setRhSchedFim(v)} />
+              </div>
+              <button
+                type="button"
+                className="w-full py-2 bg-teal-700 text-white rounded-xl text-xs font-black"
+                onClick={async () => {
+                  if (!selected || !rhSchedId) {
+                    alert('Selecione o período e as datas.');
+                    return;
+                  }
+                  const r = await fetch(`/api/funcionarios/ferias/${rhSchedId}`, {
+                    method: 'PATCH',
+                    headers: jHdrs,
+                    body: JSON.stringify({
+                      action: 'schedule',
+                      data_inicio_gozo: rhSchedIni,
+                      data_fim_gozo: rhSchedFim,
+                    }),
+                  });
+                  const data = await r.json();
+                  if (!r.ok) {
+                    alert(data.error || 'Erro');
+                    return;
+                  }
+                  if (data.overlap?.alerta) {
+                    alert(
+                      `Aviso: ${data.overlap.count} outro(s) colaborador(es) com férias sobrepostas neste intervalo (limite sugerido: 3).`
+                    );
+                  }
+                  await loadRhGestao(selected.id, rhDecimoAno);
+                }}
+              >
+                Agendar férias
+              </button>
+              <p className="text-[10px] text-zinc-400">Dica: use Iniciar / Concluir em cada linha do histórico. O valor no prompt de conclusão sugere o campo abaixo.</p>
+              <FInput
+                label="Sugestão valor pago (R$) — usada no prompt ao concluir"
+                value={rhValFerias}
+                onChange={(v) => setRhValFerias(v)}
+                placeholder="0,00"
+              />
+            </div>
+          )}
+          </>
+          )}
+        </div>
+        <div className="flex justify-end pt-2 border-t border-zinc-100 mt-2">
+          <button type="button" className="px-4 py-2 text-sm font-bold text-zinc-600" onClick={() => setModal(null)}>
+            Fechar
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }
@@ -434,12 +1084,25 @@ function TabEspelho({ token }: { token: string }) {
   // ── Hora Extra ──────────────────────────────────────────────────────────
   const [horaExtraMin, setHoraExtraMin]         = useState('');
   const [horaExtraObs, setHoraExtraObs]         = useState('');
+  const [horaExtraDestino, setHoraExtraDestino] = useState<'folha'|'banco'|'dividir'>('folha');
+  const [horaExtraPagoFolha, setHoraExtraPagoFolha] = useState('');
   const [savingExtra, setSavingExtra]           = useState(false);
 
   const hdrs   = { Authorization:`Bearer ${token}` };
   const jHdrs  = { ...hdrs, 'Content-Type':'application/json' };
 
-  useEffect(()=>{ fetch('/api/funcionarios',{headers:hdrs}).then(r=>r.json()).then(d=>{ setFuncs(d); const ativos=d.filter((f:Func)=>f.status==='ativo'); if(ativos.length) setSel(ativos[0].id); }); },[]);
+  useEffect(() => {
+    fetch('/api/funcionarios', { headers: hdrs }).then(async (r) => {
+      const d = await r.json();
+      if (!r.ok || !Array.isArray(d)) {
+        setFuncs([]);
+        return;
+      }
+      setFuncs(d);
+      const ativos = d.filter((f: Func) => f.status === 'ativo');
+      if (ativos.length) setSel(ativos[0].id);
+    });
+  }, []);
   useEffect(()=>{ if(sel) fetchEspelho(); },[sel,month,year]);
 
   const fetchEspelho = async () => {
@@ -450,7 +1113,10 @@ function TabEspelho({ token }: { token: string }) {
       if (!r.ok) return;
       const d = await r.json();
       // Garante que o retorno é um objeto válido com a propriedade dias antes de setar
-      if (d && Array.isArray(d.dias)) setEspelho(d);
+      if (d && Array.isArray(d.dias)) {
+        const funcionario = d.funcionario ?? d.func;
+        setEspelho({ ...d, funcionario });
+      }
     } catch {} finally { setLoading(false); }
   };
 
@@ -517,14 +1183,29 @@ function TabEspelho({ token }: { token: string }) {
     if (!gestaoData || !horaExtraMin || parseInt(horaExtraMin) <= 0) {
       alert('Informe quantos minutos de hora extra aprovar.'); return;
     }
+    const total = parseInt(horaExtraMin, 10);
+    const body: Record<string, unknown> = {
+      data: gestaoData,
+      minutos: total,
+      observacao: horaExtraObs || null,
+    };
+    if (horaExtraDestino === 'banco') body.minutos_pago_folha = 0;
+    else if (horaExtraDestino === 'dividir') {
+      const p = parseInt(horaExtraPagoFolha, 10);
+      if (!Number.isFinite(p) || p <= 0 || p >= total) {
+        alert('Na divisão, informe minutos a pagar na folha entre 1 e (total − 1).');
+        return;
+      }
+      body.minutos_pago_folha = p;
+    }
     setSavingExtra(true);
     try {
       const r = await fetch(`/api/funcionarios/${sel}/horas-extras`, {
         method: 'POST', headers: jHdrs,
-        body: JSON.stringify({ data: gestaoData, minutos: parseInt(horaExtraMin), observacao: horaExtraObs }),
+        body: JSON.stringify(body),
       });
       if (r.ok) {
-        setHoraExtraMin(''); setHoraExtraObs('');
+        setHoraExtraMin(''); setHoraExtraObs(''); setHoraExtraDestino('folha'); setHoraExtraPagoFolha('');
         await fetchEspelho();
       } else {
         const d = await r.json(); alert(d.error || 'Erro ao aprovar hora extra');
@@ -544,7 +1225,8 @@ function TabEspelho({ token }: { token: string }) {
   // ── PDF do espelho ───────────────────────────────────────────────────────
   const exportarPDF = () => {
     if(!espelho) return;
-    const func = espelho.funcionario;
+    const func = espelho.funcionario ?? espelho.func;
+    if (!func) return;
     const diasExp = espelho.dias.filter(d=>d.isExpediente);
     const mesLabel = `${MESES[month-1]} ${year}`;
     const fmtMoney = (v:number) => `R$ ${(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')}`;
@@ -618,6 +1300,16 @@ function TabEspelho({ token }: { token: string }) {
 
   const chgMonth = (d:number)=>{ let m=month+d,y=year; if(m>12){m=1;y++;}if(m<1){m=12;y--;} setMonth(m);setYear(y); };
   const funcSel = funcs.find(f=>f.id===sel);
+  const espFunc = espelho ? (espelho.funcionario ?? espelho.func) : undefined;
+  const tipoEsp = normalizeTipoContrato(espFunc?.tipo_contrato ?? 'fixo');
+  const espBancoOk = espelho?.banco_horas_aplicavel !== false;
+  const heBancoOk = hourBankApplicable(tipoEsp);
+
+  useEffect(() => {
+    if (!heBancoOk && (horaExtraDestino === 'banco' || horaExtraDestino === 'dividir')) {
+      setHoraExtraDestino('folha');
+    }
+  }, [heBancoOk, horaExtraDestino, gestaoData]);
 
   return (
     <>
@@ -642,16 +1334,55 @@ function TabEspelho({ token }: { token: string }) {
       {loading ? <LoadSpinner/> : espelho ? (
         <>
           {/* Resumo */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-3">
             <SCard label="Trabalhados" value={espelho.resumo.diasTrabalhados} color="emerald"/>
             <SCard label="Faltas"      value={espelho.resumo.totalFaltas}     color="red"/>
             <SCard label="Folgas"      value={espelho.resumo.diasFolga}       color="blue"/>
             <SCard label="Atestados"   value={espelho.resumo.diasAtestado}    color="purple"/>
             <SCard label="Atraso"      value={`${espelho.resumo.totalAtrasoMin}min`} color="amber"/>
-            <SCard label="H. Extras"   value={`${espelho.resumo.totalExtraMin ?? 0}min`} color="orange"/>
+            <SCard label="HE apuradas" value={`${espelho.resumo.totalExtraMin ?? 0}min`} color="orange"/>
+            <SCard label="HE → folha"  value={`${espelho.resumo.totalExtraMinPagoFolha ?? espelho.resumo.totalExtraMin ?? 0}min`} color="orange"/>
+            {espBancoOk && (
+              <SCard label="Saldo banco" value={`${espelho.resumo.saldoBancoHorasMin ?? 0}min`} color="cyan"/>
+            )}
             <SCard label="Desc.Faltas" value={fmt(espelho.resumo.descontoFaltas)}   color="red"   small/>
             <SCard label="Desc.Atrasos" value={fmt(espelho.resumo.descontoAtrasos)} color="amber" small/>
           </div>
+
+          {!espBancoOk && (
+            <p className="text-xs text-zinc-500 bg-zinc-100/80 border border-zinc-200 rounded-xl px-3 py-2">
+              Banco de horas não se aplica a colaboradores por evento neste módulo.
+            </p>
+          )}
+
+          {espBancoOk && espelho.banco_horas_mes && espelho.banco_horas_mes.length > 0 && (
+            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+              <div className="px-4 py-2 bg-cyan-50 border-b border-cyan-100 text-[10px] font-black text-cyan-800 uppercase tracking-wider">
+                Banco de horas — movimentações no mês
+              </div>
+              <div className="max-h-40 overflow-y-auto divide-y divide-zinc-100 text-xs">
+                {espelho.banco_horas_mes.map((m) => (
+                  <div key={m.id} className="px-4 py-2 flex justify-between gap-2 text-zinc-600">
+                    <span className="font-mono text-[10px] text-zinc-400 shrink-0">{fmtDate(m.data_referencia)}</span>
+                    <span className="flex-1 truncate">{m.tipo} · {m.origem}{m.observacao ? ` — ${m.observacao}` : ''}</span>
+                    <span className={`font-black tabular-nums shrink-0 ${
+                      m.tipo === 'manual_adjust'
+                        ? m.minutos < 0 ? 'text-red-600' : 'text-emerald-600'
+                        : m.tipo === 'debit' || m.tipo === 'converted_to_payroll'
+                          ? 'text-red-600'
+                          : 'text-emerald-600'
+                    }`}>
+                      {m.tipo === 'manual_adjust'
+                        ? `${m.minutos > 0 ? '+' : ''}${m.minutos}m`
+                        : m.tipo === 'debit' || m.tipo === 'converted_to_payroll'
+                          ? `−${Math.abs(m.minutos)}m`
+                          : `+${Math.abs(m.minutos)}m`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Calendário */}
           <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
@@ -942,6 +1673,14 @@ function TabEspelho({ token }: { token: string }) {
                       <div className="flex items-center justify-between bg-white border border-orange-200 rounded-xl px-4 py-3">
                         <div>
                           <p className="text-sm font-black text-orange-700">{extraExistente.minutos} minutos aprovados</p>
+                          {extraExistente.minutos_pago_folha != null && (() => {
+                            const pagoF = Math.min(extraExistente.minutos, Math.max(0, Number(extraExistente.minutos_pago_folha)));
+                            return (
+                              <p className="text-[11px] text-orange-600/90 mt-1">
+                                Na folha: {pagoF} min · Banco: {Math.max(0, extraExistente.minutos - pagoF)} min
+                              </p>
+                            );
+                          })()}
                           {extraExistente.observacao && <p className="text-xs text-zinc-400 mt-0.5">{extraExistente.observacao}</p>}
                         </div>
                         <button
@@ -954,40 +1693,87 @@ function TabEspelho({ token }: { token: string }) {
                     </div>
                   ) : (
                     /* Ainda não aprovada — formulário de aprovação */
-                    <div className="flex items-end gap-3">
-                      <div className="w-36">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos extras</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="480"
-                          value={horaExtraMin}
-                          onChange={e => setHoraExtraMin(e.target.value)}
-                          placeholder={diaEspelho?.saidaRealExtraMin ? String(diaEspelho.saidaRealExtraMin) : '30'}
-                          className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
-                        />
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Destino da hora extra</p>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { k: 'folha' as const, label: 'Pagar na folha' },
+                            ...(heBancoOk
+                              ? ([
+                                  { k: 'banco' as const, label: 'Banco de horas' },
+                                  { k: 'dividir' as const, label: 'Dividir' },
+                                ] as const)
+                              : []),
+                          ]).map((o) => (
+                            <button
+                              key={o.k}
+                              type="button"
+                              onClick={() => setHoraExtraDestino(o.k)}
+                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
+                                horaExtraDestino === o.k
+                                  ? 'bg-orange-500 text-white border-orange-500'
+                                  : 'bg-white text-zinc-500 border-zinc-200 hover:border-orange-200'
+                              }`}
+                            >
+                              {o.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Observação (opcional)</label>
-                        <input
-                          type="text"
-                          value={horaExtraObs}
-                          onChange={e => setHoraExtraObs(e.target.value)}
-                          placeholder="Ex: Cobertura de turno, evento especial..."
-                          className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
-                        />
+                      {horaExtraDestino === 'dividir' && (
+                        <div className="w-40">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos na folha</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="479"
+                            value={horaExtraPagoFolha}
+                            onChange={(e) => setHoraExtraPagoFolha(e.target.value)}
+                            placeholder="ex: 60"
+                            className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20"
+                          />
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="w-36">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos extras</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="480"
+                            value={horaExtraMin}
+                            onChange={e => setHoraExtraMin(e.target.value)}
+                            placeholder={diaEspelho?.saidaRealExtraMin ? String(diaEspelho.saidaRealExtraMin) : '30'}
+                            className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-[160px]">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Observação (opcional)</label>
+                          <input
+                            type="text"
+                            value={horaExtraObs}
+                            onChange={e => setHoraExtraObs(e.target.value)}
+                            placeholder="Ex: Cobertura de turno, evento especial..."
+                            className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
+                          />
+                        </div>
+                        <button
+                          onClick={handleAprovarExtra}
+                          disabled={savingExtra || !horaExtraMin}
+                          className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-all flex items-center gap-2 whitespace-nowrap"
+                        >
+                          {savingExtra ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Check size={14}/>}
+                          Aprovar HE
+                        </button>
                       </div>
-                      <button
-                        onClick={handleAprovarExtra}
-                        disabled={savingExtra || !horaExtraMin}
-                        className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-all flex items-center gap-2 whitespace-nowrap"
-                      >
-                        {savingExtra ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Check size={14}/>}
-                        Aprovar HE
-                      </button>
                     </div>
                   )}
-                  <p className="text-[10px] text-orange-500/70 mt-2">Horas extras são calculadas a 50% sobre o valor/hora (CLT). O valor aparece na folha de pagamento.</p>
+                  <p className="text-[10px] text-orange-500/70 mt-2">
+                    {heBancoOk
+                      ? 'Horas extras na folha usam 50% sobre o valor/hora (CLT). O que for para o banco acumula saldo e pode ser compensado depois (folga, saída antecipada, etc.).'
+                      : 'Contrato por evento: horas extras são registradas apenas como referência de ponto (sem destino banco neste módulo).'}
+                  </p>
                 </div>
               );
             })()}
@@ -1012,41 +1798,260 @@ function TabFolha({ token }: { token: string }) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [folha, setFolha] = useState<Folha|null>(null);
   const [loading, setLoading] = useState(false);
-  const printRef = useRef<HTMLDivElement>(null);
+  const [savingPay, setSavingPay] = useState(false);
+  const [payForm, setPayForm] = useState({ tipo: 'partial_payment' as 'advance' | 'partial_payment' | 'final_payment', valor: '', observacao: '' });
+  const [bancoSaving, setBancoSaving] = useState(false);
+  const [bancoTipo, setBancoTipo] = useState<'debit' | 'credit' | 'manual_adjust' | 'converted_to_payroll'>('debit');
+  const [bancoMin, setBancoMin] = useState('');
+  const [bancoDataRef, setBancoDataRef] = useState('');
+  const [bancoObs, setBancoObs] = useState('');
   const hdrs = { Authorization:`Bearer ${token}` };
+  const jHdrs = { ...hdrs, 'Content-Type': 'application/json' };
 
-  useEffect(()=>{ fetch('/api/funcionarios',{headers:hdrs}).then(r=>r.json()).then(d=>{ setFuncs(d); const ativos=d.filter((f:any)=>f.status==='ativo'); if(ativos.length) setSel(ativos[0].id); }); },[]);
+  useEffect(() => {
+    fetch('/api/funcionarios', { headers: hdrs }).then(async (r) => {
+      const d = await r.json();
+      if (!r.ok || !Array.isArray(d)) {
+        setFuncs([]);
+        return;
+      }
+      setFuncs(d);
+      const ativos = d.filter((f: Func) => f.status === 'ativo');
+      if (ativos.length) setSel(ativos[0].id);
+    });
+  }, []);
   useEffect(()=>{ if(sel)fetchFolha(); },[sel,month,year]);
+  useEffect(() => {
+    setBancoDataRef(`${year}-${String(month).padStart(2, '0')}-01`);
+  }, [month, year]);
 
   const fetchFolha = async () => { setLoading(true); try{const r=await fetch(`/api/funcionarios/${sel}/folha?month=${month}&year=${year}`,{headers:hdrs});setFolha(await r.json());}catch{}finally{setLoading(false);} };
 
+  const printReceipt = (pay: FolhaPagamentoRow) => {
+    if (!folha?.funcionario) return;
+    const periodLabel = folha.competencia
+      ? `Competência ${folha.competencia.referencia}`
+      : `${MESES[month - 1]} ${year}`;
+    const payments = [...(folha.payroll_payments || [])].sort((a, b) => a.id - b.id);
+    const ix = payments.findIndex((p) => p.id === pay.id);
+    const totalAfter = payments.slice(0, ix + 1).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+    const netL = folha.payroll_payment_summary?.net_liquid ?? Math.max(0, folha.payroll?.totals.net ?? folha.salarioLiquido);
+    const totalAfterR = Math.round(totalAfter * 100) / 100;
+    const balanceAfter = Math.max(0, Math.round((netL - totalAfterR) * 100) / 100);
+    const paidAt = pay.created_at
+      ? new Date(pay.created_at).toLocaleString('pt-BR')
+      : '-';
+    const html = generatePayrollReceiptHtml({
+      employeeName: folha.funcionario.nome,
+      periodLabel,
+      reciboNumero: pay.recibo_numero || `RHF-${pay.id}`,
+      tipo: pay.tipo,
+      valor: Number(pay.valor) || 0,
+      paidAtLabel: paidAt,
+      observacao: pay.observacao,
+      netLiquid: netL,
+      totalPaidAfter: totalAfterR,
+      balanceAfter,
+    });
+    const w = window.open('', '_blank', 'width=750,height=950');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+  };
+
+  const registrarPagamento = async () => {
+    if (!sel) return;
+    const valor = parseFloat(payForm.valor.replace(',', '.'));
+    if (!Number.isFinite(valor) || valor <= 0) {
+      alert('Informe um valor válido.');
+      return;
+    }
+    setSavingPay(true);
+    try {
+      const r = await fetch(`/api/funcionarios/${sel}/folha/pagamentos`, {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({
+          month,
+          year,
+          tipo: payForm.tipo,
+          valor,
+          observacao: payForm.observacao || undefined,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        alert(data.error || 'Erro ao registrar');
+        return;
+      }
+      setPayForm((f) => ({ ...f, valor: '', observacao: '' }));
+      await fetchFolha();
+    } catch {
+      alert('Erro de rede');
+    } finally {
+      setSavingPay(false);
+    }
+  };
+
   const handlePrint = () => {
-    if(!printRef.current||!folha)return;
-    const content=printRef.current.innerHTML;
-    const w=window.open('','_blank','width=750,height=950');
-    if(!w)return;
-    w.document.write(`<!DOCTYPE html><html><head><title>Folha de Pagamento — ${folha.funcionario.nome}</title>
-    <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:40px;color:#111;font-size:13px}
-    h1{font-size:20px;font-weight:900;margin:0}p.sub{color:#666;margin:2px 0 24px}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px}
-    .header-right{text-align:right}.header-right p{margin:2px 0;color:#555}
-    table{width:100%;border-collapse:collapse;margin-top:8px}
-    td{padding:9px 14px;border-bottom:1px solid #eee;vertical-align:middle}
-    td:last-child{text-align:right;font-weight:700}
-    .section{background:#f8f8f8;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
-    .desconto td:last-child{color:#dc2626}
-    .subtotal{background:#f4f4f5}
-    .liquido{background:#dcfce7}
-    .liquido td{font-size:16px;font-weight:900}
-    .liquido td:last-child{color:#15803d}
-    .sign{margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center;font-size:11px;color:#888}
-    .sign div{border-top:1px solid #ccc;padding-top:8px}
-    @media print{body{padding:20px}}</style>
-    </head><body>${content}<script>window.onload=function(){window.print();}</script></body></html>`);
+    if (!folha) return;
+    const t = folha.contract_profile?.tipo ?? normalizeTipoContrato(folha.funcionario.tipo_contrato);
+    if (isEvento(t) || folha.pagamentos_sem_teto_folha) {
+      alert('Funcionário por evento não utiliza impressão de folha mensal CLT neste módulo.');
+      return;
+    }
+    const periodLabel = folha.competencia
+      ? `Competência ${folha.competencia.referencia}`
+      : `${MESES[month - 1]} ${year}`;
+    const earningsPdf =
+      folha.payroll?.earnings.map((e) => ({ label: e.label, amount: e.amount })) ?? [
+        { label: 'Salário Base', amount: folha.salarioBruto },
+        ...(folha.totalExtraMin > 0
+          ? [{ label: `Horas Extras (${folha.totalExtraMin} min · 50% CLT)`, amount: folha.valorExtras ?? 0 }]
+          : []),
+      ];
+    const deductionsPdf =
+      folha.payroll?.deductions.map((d) => ({ label: d.label, amount: d.amount })) ?? [
+        { label: 'INSS (11% estimado)', amount: folha.inss },
+        { label: `Faltas (${folha.totalFaltas} dia${folha.totalFaltas !== 1 ? 's' : ''})`, amount: folha.descontoFaltas },
+        { label: `Atrasos (${folha.totalAtrasoMin} min)`, amount: folha.descontoAtrasos },
+        ...(folha.descontoParcial > 0
+          ? [{ label: `Ausência parcial (${folha.horasAusentesParcial} h)`, amount: folha.descontoParcial }]
+          : []),
+        ...(folha.totalAdiantamentos > 0
+          ? [{ label: `Adiantamentos (${folha.adiantamentos.length})`, amount: folha.totalAdiantamentos }]
+          : []),
+      ];
+    const net = folha.payroll?.totals.net ?? folha.salarioLiquido;
+    const html = generatePayrollPdf({
+      employeeName: folha.funcionario.nome,
+      periodLabel,
+      earnings: earningsPdf,
+      deductions: deductionsPdf,
+      net: Math.max(0, net),
+    });
+    const w = window.open('', '_blank', 'width=750,height=950');
+    if (!w) return;
+    w.document.write(html);
     w.document.close();
   };
 
   const chgMonth = (d:number)=>{ let m=month+d,y=year; if(m>12){m=1;y++;}if(m<1){m=12;y--;} setMonth(m);setYear(y); };
+
+  const folhaView = useMemo(() => {
+    if (!folha) return null;
+    if (folha.payroll) {
+      return {
+        earnings: folha.payroll.earnings,
+        deductions: folha.payroll.deductions,
+        gross: folha.payroll.totals.gross,
+        dedTotal: folha.payroll.totals.deductions,
+        net: folha.payroll.totals.net,
+        referencia: folha.competencia?.referencia ?? folha.mes,
+        periodRange:
+          folha.competencia &&
+          `${new Date(folha.competencia.start_date + 'T12:00:00').toLocaleDateString('pt-BR')} — ${new Date(folha.competencia.end_date + 'T12:00:00').toLocaleDateString('pt-BR')}`,
+      };
+    }
+    const earnings = [
+      { type: 'salary', label: 'Salário Base', amount: folha.salarioBruto },
+      ...((folha.totalExtraMinPago ?? folha.totalExtraMin) > 0
+        ? [{ type: 'overtime', label: `Horas Extras (${folha.totalExtraMinPago ?? folha.totalExtraMin} min · 50% CLT)`, amount: folha.valorExtras ?? 0 }]
+        : []),
+    ];
+    const deductions = [
+      { type: 'inss', label: 'INSS (estimado)', amount: folha.inss },
+      { type: 'absences', label: `Faltas (${folha.totalFaltas} dia${folha.totalFaltas !== 1 ? 's' : ''})`, amount: folha.descontoFaltas },
+      { type: 'late', label: `Atrasos (${folha.totalAtrasoMin} min)`, amount: folha.descontoAtrasos },
+      ...(folha.descontoParcial > 0
+        ? [{ type: 'partial_absence', label: `Ausência parcial (${folha.horasAusentesParcial} h)`, amount: folha.descontoParcial }]
+        : []),
+      ...(folha.totalAdiantamentos > 0
+        ? [{ type: 'advances', label: `Adiantamentos (${folha.adiantamentos.length})`, amount: folha.totalAdiantamentos }]
+        : []),
+    ];
+    const gross = earnings.reduce((s, e) => s + e.amount, 0);
+    return {
+      earnings,
+      deductions,
+      gross,
+      dedTotal: folha.totalDescontos,
+      net: folha.salarioLiquido,
+      referencia: folha.mes,
+      periodRange: undefined as string | undefined,
+    };
+  }, [folha]);
+
+  const paySummary = useMemo(() => {
+    if (!folha) return null;
+    if (folha.payroll_payment_summary) return folha.payroll_payment_summary;
+    const net = Math.max(0, folha.payroll?.totals.net ?? folha.salarioLiquido);
+    return { net_liquid: net, total_paid: 0, balance_due: net, status: 'pending' as const };
+  }, [folha]);
+
+  const payStatusClass =
+    paySummary?.status === 'paid'
+      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+      : paySummary?.status === 'partial'
+        ? 'bg-amber-100 text-amber-900 border-amber-200'
+        : 'bg-zinc-100 text-zinc-600 border-zinc-200';
+
+  const registrarMovBanco = async () => {
+    if (!sel || !bancoDataRef) return;
+    const raw = parseInt(String(bancoMin).replace(/\s/g, ''), 10);
+    if (bancoTipo === 'manual_adjust') {
+      if (!Number.isFinite(raw) || raw === 0) {
+        alert('Ajuste manual: informe minutos (positivo aumenta o banco, negativo reduz).');
+        return;
+      }
+    } else if (!Number.isFinite(raw) || raw <= 0) {
+      alert('Informe uma quantidade positiva de minutos.');
+      return;
+    }
+    const origem =
+      bancoTipo === 'debit' ? 'compensacao' : bancoTipo === 'converted_to_payroll' ? 'folha' : 'manual';
+    setBancoSaving(true);
+    try {
+      const r = await fetch(`/api/funcionarios/${sel}/banco-horas/movimentacoes`, {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({
+          data_referencia: bancoDataRef,
+          tipo: bancoTipo,
+          minutos: bancoTipo === 'manual_adjust' ? raw : Math.abs(raw),
+          origem,
+          observacao: bancoObs.trim() || null,
+        }),
+      });
+      if (r.ok) {
+        setBancoMin('');
+        setBancoObs('');
+        await fetchFolha();
+      } else {
+        const d = await r.json();
+        alert(d.error || 'Erro ao registrar movimentação');
+      }
+    } catch {
+      alert('Erro de conexão');
+    } finally {
+      setBancoSaving(false);
+    }
+  };
+
+  const tcF = useMemo(() => {
+    if (!folha?.funcionario) return 'fixo' as const;
+    return folha.contract_profile?.tipo ?? normalizeTipoContrato(folha.funcionario.tipo_contrato);
+  }, [folha]);
+  const evF = useMemo(
+    () => isEvento(tcF) || !!folha?.pagamentos_sem_teto_folha,
+    [tcF, folha?.pagamentos_sem_teto_folha]
+  );
+  const folhaTradicional = folha?.contract_profile?.folha_tradicional ?? tcF === 'fixo';
+  const showBancoBloco = !!(
+    folha?.hour_bank &&
+    folha.hour_bank.aplicavel !== false &&
+    hourBankVisibleInUi(tcF)
+  );
 
   return (
     <>
@@ -1059,105 +2064,569 @@ function TabFolha({ token }: { token: string }) {
           <span className="text-sm font-bold text-zinc-900 w-28 text-center">{MESES[month-1]} {year}</span>
           <button onClick={()=>chgMonth(1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronRight size={16}/></button>
         </div>
-        {folha&&<button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all"><Download size={15}/>Imprimir / PDF</button>}
+        {folha && !evF && (
+          <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all">
+            <Download size={15} />
+            Imprimir / PDF
+          </button>
+        )}
       </div>
 
-      {loading?<LoadSpinner/>:folha?(
+      {loading ? <LoadSpinner/> : folha && folha.funcionario && folhaView ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Recibo */}
           <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-            <div ref={printRef} className="p-6">
-              <div className="header flex justify-between items-start pb-5 border-b-2 border-zinc-900 mb-5">
+            <div className="p-6 space-y-5">
+              <div className="flex justify-between items-start pb-5 border-b border-zinc-200">
                 <div>
-                  <h1 className="text-xl font-black text-zinc-900">Folha de Pagamento</h1>
-                  <p className="sub text-sm text-zinc-400 mt-1">{MESES[month-1]} {year} · Competência {String(month).padStart(2,'0')}/{year}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl font-black text-zinc-900">
+                      {evF ? 'Pagamentos (contrato por evento)' : 'Folha de Pagamento'}
+                    </h1>
+                    {paySummary && (
+                      <span
+                        className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${payStatusClass}`}
+                      >
+                        {paySummary.unbounded ? 'Pagamentos avulsos' : PAYROLL_STATUS_LABEL[paySummary.status] || paySummary.status}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm mt-1" style={{ color: '#9ca3af' }}>
+                    {MESES[month - 1]} {year}
+                    {folhaView.periodRange ? ` · ${folhaView.periodRange}` : ''}
+                  </p>
+                  <p className="text-xs font-bold text-zinc-500 mt-0.5">Competência {folhaView.referencia}</p>
                 </div>
-                <div className="header-right text-right">
+                <div className="text-right">
                   <p className="font-black text-zinc-900 text-lg">{folha.funcionario.nome}</p>
-                  <p className="text-sm text-zinc-500">{folha.funcionario.cargo}</p>
-                  {folha.funcionario.cpf&&<p className="text-xs text-zinc-400">CPF: {folha.funcionario.cpf}</p>}
-                  {folha.funcionario.data_admissao&&<p className="text-xs text-zinc-400">Admissão: {fmtDate(folha.funcionario.data_admissao)}</p>}
+                  <p className="text-sm" style={{ color: '#9ca3af' }}>{folha.funcionario.cargo}</p>
+                  {folha.funcionario.cpf && <p className="text-xs text-zinc-400">CPF: {folha.funcionario.cpf}</p>}
+                  {folha.funcionario.data_admissao && (
+                    <p className="text-xs text-zinc-400">Admissão: {fmtDate(folha.funcionario.data_admissao)}</p>
+                  )}
                 </div>
               </div>
-              <table className="w-full text-sm border-collapse">
-                <tbody>
-                  <tr className="bg-emerald-50/60"><td className="py-3 px-4 font-black text-zinc-900">Salário Bruto</td><td className="py-3 px-4 text-right font-black text-zinc-900 text-base">{fmt(folha.salarioBruto)}</td></tr>
-                  {/* Horas extras — acréscimo */}
-                  {(folha.totalExtraMin ?? 0) > 0 && (
-                    <tr className="bg-orange-50/50 border-b border-orange-100">
-                      <td className="py-2.5 px-4 text-orange-700 font-bold flex items-center gap-2">
-                        <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded font-black">HE</span>
-                        Horas Extras ({folha.totalExtraMin}min · 50% CLT)
-                      </td>
-                      <td className="py-2.5 px-4 text-right font-bold text-orange-600">+ {fmt(folha.valorExtras ?? 0)}</td>
-                    </tr>
+
+              {!folhaTradicional && !evF && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-xs text-violet-950">
+                  <p className="font-bold text-violet-900">Folha simplificada (diarista)</p>
+                  <p className="mt-1 text-violet-900/85">
+                    INSS e complemento gerencial automáticos não se aplicam. 13º e férias gerenciais não são geridos pelo sistema para este tipo.
+                  </p>
+                </div>
+              )}
+
+              {evF ? (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+                    <p className="font-black text-sky-900">Sem folha mensal CLT nesta tela</p>
+                    <p className="text-xs mt-2 text-sky-900/85 leading-relaxed">
+                      Use os pagamentos ao lado para registrar valores por competência (histórico e recibos). O valor abaixo é só referência cadastral
+                      (serviço/evento), não salário líquido calculado.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
+                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">Valor referência (cadastro)</p>
+                    <p className="text-2xl font-black text-zinc-900 tabular-nums mt-1">{fmt(folha.salarioBruto)}</p>
+                  </div>
+                  {folha.adiantamentos.length > 0 && (
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                        Histórico na competência (legado)
+                      </p>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                        Lançamentos antigos feitos como adiantamento de folha permanecem cadastrados só para consulta; não entram no fluxo de
+                        pagamento por evento. Novos valores use a coluna de pagamentos ao lado.
+                      </p>
+                      <div className="divide-y divide-zinc-200/80">
+                        {folha.adiantamentos.map((a) => (
+                          <div key={a.id} className="flex justify-between gap-2 py-2 text-xs text-zinc-700">
+                            <span className="min-w-0">
+                              {fmtDate(a.data)} · {a.motivo || '—'}
+                              <span className="ml-1.5 text-[10px] font-bold text-zinc-400">
+                                {a.descontado ? 'Baixado' : 'Pendente'}
+                              </span>
+                            </span>
+                            <span className="font-bold tabular-nums shrink-0">{fmt(a.valor)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  <tr><td className="py-1.5 px-4 text-[11px] font-black text-zinc-400 uppercase tracking-wider" colSpan={2}>Descontos</td></tr>
-                  {[
-                    [`INSS (11% estimado)`, folha.inss],
-                    [`Faltas (${folha.totalFaltas} dia${folha.totalFaltas!==1?'s':''})`, folha.descontoFaltas],
-                    [`Atrasos (${folha.totalAtrasoMin} min)`, folha.descontoAtrasos],
-                    ...(folha.descontoParcial>0?[[`Ausência parcial (${folha.horasAusentesParcial}h)`, folha.descontoParcial]]:[] as any[]),
-                    ...(folha.totalAdiantamentos>0?[[`Adiantamentos (${folha.adiantamentos.length})`, folha.totalAdiantamentos]]:[] as any[]),
-                  ].map(([label,val]:any,i)=>(
-                    <tr key={i} className="border-b border-zinc-100 desconto"><td className="py-2.5 px-4 text-zinc-600">{label}</td><td className="py-2.5 px-4 text-right font-bold text-red-600">— {fmt(val)}</td></tr>
+                </div>
+              ) : (
+              <>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
+                  Proventos
+                </p>
+                <div className="rounded-2xl bg-emerald-950 px-4 py-3 space-y-2">
+                  {folhaView.earnings.map((row, i) => (
+                    <div key={i} className="flex justify-between items-center gap-3 text-sm">
+                      <span className="text-white font-medium">{row.label}</span>
+                      <span className="font-black tabular-nums shrink-0 text-emerald-300">{fmt(row.amount)}</span>
+                    </div>
                   ))}
-                  <tr className="subtotal bg-zinc-50"><td className="py-3 px-4 font-black text-zinc-700">Total de Descontos</td><td className="py-3 px-4 text-right font-black text-red-600">— {fmt(folha.totalDescontos)}</td></tr>
-                  {folha.totalDescontos > folha.salarioBruto && (
-                    <tr>
-                      <td colSpan={2} className="px-4 py-2">
-                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-                          <span className="text-sm leading-none mt-0.5">⚠️</span>
-                          <span>Descontos (<strong>{fmt(folha.totalDescontos)}</strong>) superam o salário bruto (<strong>{fmt(folha.salarioBruto)}</strong>). Excedente de <strong>{fmt(folha.totalDescontos - folha.salarioBruto)}</strong> deve ser cobrado separadamente ou transferido para o próximo mês.</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  <tr className="liquido bg-emerald-50"><td className="py-4 px-4 font-black text-zinc-900 text-base">SALÁRIO LÍQUIDO</td><td className="py-4 px-4 text-right font-black text-emerald-700 text-2xl">{fmt(Math.max(0, folha.salarioLiquido))}</td></tr>
-                </tbody>
-              </table>
-              {folha.adiantamentos.length>0&&<div className="mt-4 p-4 bg-zinc-50 rounded-xl"><p className="text-xs font-black text-zinc-600 uppercase tracking-wider mb-2">Adiantamentos descontados</p>{folha.adiantamentos.map(a=><div key={a.id} className="flex justify-between text-xs text-zinc-500 py-1"><span>{fmtDate(a.data)} · {a.motivo}</span><span className="font-bold">{fmt(a.valor)}</span></div>)}</div>}
-              <div className="sign mt-8 pt-6 border-t border-zinc-200 grid grid-cols-2 gap-8 text-center text-xs text-zinc-400">
-                <div><div className="border-b border-zinc-300 mb-2 h-10"/><p>Assinatura do Funcionário</p></div>
-                <div><div className="border-b border-zinc-300 mb-2 h-10"/><p>Assinatura do Responsável</p></div>
+                </div>
               </div>
+
+              {(folha.totalExtraMin ?? 0) > 0 && (
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-xs text-cyan-950 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Horas extras no mês</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    <span>
+                      <span className="text-cyan-700/80">Apuradas:</span>{' '}
+                      <strong>{folha.totalExtraMin} min</strong>
+                    </span>
+                    <span>
+                      <span className="text-cyan-700/80">Pagas na folha:</span>{' '}
+                      <strong>{folha.totalExtraMinPago ?? folha.totalExtraMin} min</strong>
+                    </span>
+                    <span>
+                      <span className="text-cyan-700/80">Para o banco (este mês):</span>{' '}
+                      <strong>{folha.totalExtraMinBancoMes ?? 0} min</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>Descontos</p>
+                <div className="rounded-2xl bg-rose-950 px-4 py-3 space-y-2">
+                  {folhaView.deductions.map((row, i) => (
+                    <div key={i} className="flex justify-between items-center gap-3 text-sm">
+                      <span className="text-white font-medium">{row.label}</span>
+                      <span className="font-black tabular-nums shrink-0 text-red-300">{fmt(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {folha.managerial &&
+                (folha.managerial.informativos.length > 0 ||
+                  folha.managerial.benefit_credits.length > 0 ||
+                  folha.managerial.benefit_deductions.length > 0) && (
+                  <div className="rounded-2xl border border-indigo-200 bg-indigo-50/90 px-4 py-4 space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
+                      Complemento gerencial (Etapa 4)
+                    </p>
+                    <p className="text-[11px] text-indigo-800/90">
+                      Pagamentos da folha (Etapa 2) continuam baseados no líquido da folha principal abaixo. Itens informativos não alteram esse cálculo.
+                    </p>
+                    {folha.managerial.informativos.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-indigo-700">Informativos (férias / 13º no mês)</p>
+                        {folha.managerial.informativos.map((it, i) => (
+                          <div key={i} className="flex justify-between text-xs text-indigo-950">
+                            <span>{it.label}</span>
+                            <span className="font-bold tabular-nums">{fmt(it.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {folha.managerial.benefit_credits.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-emerald-800">Benefícios — acréscimo</p>
+                        {folha.managerial.benefit_credits.map((it, i) => (
+                          <div key={i} className="flex justify-between text-xs text-emerald-950">
+                            <span>{it.label}</span>
+                            <span className="font-bold tabular-nums">{fmt(it.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {folha.managerial.benefit_deductions.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-rose-800">Benefícios — desconto</p>
+                        {folha.managerial.benefit_deductions.map((it, i) => (
+                          <div key={i} className="flex justify-between text-xs text-rose-950">
+                            <span>{it.label}</span>
+                            <span className="font-bold tabular-nums">{fmt(it.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-indigo-200 flex justify-between text-sm font-black text-indigo-950">
+                      <span>Líquido com benefícios gerenciais</span>
+                      <span className="tabular-nums">{fmt(folha.managerial.net_adjusted)}</span>
+                    </div>
+                  </div>
+                )}
+
+              <div className="rounded-2xl bg-zinc-100 border border-zinc-200 px-4 py-4 space-y-3">
+                <p className="text-[11px] font-black uppercase tracking-wider" style={{ color: '#9ca3af' }}>Resumo</p>
+                <div className="flex justify-between text-sm">
+                  <span style={{ color: '#9ca3af' }}>Total bruto</span>
+                  <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span style={{ color: '#9ca3af' }}>Total descontos</span>
+                  <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.dedTotal)}</span>
+                </div>
+                {paySummary && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span style={{ color: '#9ca3af' }}>Já pago (folha)</span>
+                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span style={{ color: '#9ca3af' }}>Saldo pendente</span>
+                      <span className="font-bold text-amber-800 tabular-nums">{fmt(paySummary.balance_due)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between items-center pt-2 border-t border-zinc-200">
+                  <span className="font-black text-zinc-900">Salário líquido</span>
+                  <span className="text-2xl font-black tabular-nums" style={{ color: '#22c55e' }}>
+                    {fmt(Math.max(0, folhaView.net))}
+                  </span>
+                </div>
+              </div>
+
+              {folha.totalDescontos > folha.salarioBruto && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                  <span>
+                    Descontos ({fmt(folha.totalDescontos)}) superam o bruto base ({fmt(folha.salarioBruto)}). Excedente{' '}
+                    {fmt(folha.totalDescontos - folha.salarioBruto)} — tratar à parte ou no mês seguinte.
+                  </span>
+                </div>
+              )}
+
+              {folha.adiantamentos.length > 0 && (
+                <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-2">Adiantamentos descontados</p>
+                  {folha.adiantamentos.map((a) => (
+                    <div key={a.id} className="flex justify-between text-xs text-zinc-600 py-1">
+                      <span>
+                        {fmtDate(a.data)} · {a.motivo}
+                      </span>
+                      <span className="font-bold tabular-nums">{fmt(a.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {showBancoBloco && (
+                <div className="p-4 rounded-xl border border-cyan-200 bg-white space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs font-black text-cyan-900 uppercase tracking-wider">Banco de horas</p>
+                    <span className="text-lg font-black text-cyan-800 tabular-nums">
+                      Saldo {folha.hour_bank.saldo_minutos} min
+                    </span>
+                  </div>
+                  {folha.hour_bank.movimentacoes?.length ? (
+                    <div className="max-h-36 overflow-y-auto divide-y divide-zinc-100 text-[11px] text-zinc-600">
+                      {folha.hour_bank.movimentacoes.map((m) => (
+                        <div key={m.id} className="py-1.5 flex justify-between gap-2">
+                          <span className="truncate">
+                            {fmtDate(m.data_referencia)} · {m.tipo} · {m.origem}
+                            {m.observacao ? ` — ${m.observacao}` : ''}
+                          </span>
+                          <span className="shrink-0 font-bold tabular-nums text-cyan-900">
+                            {m.tipo === 'manual_adjust'
+                              ? `${m.minutos > 0 ? '+' : ''}${m.minutos}m`
+                              : m.tipo === 'debit' || m.tipo === 'converted_to_payroll'
+                                ? `−${m.minutos}m`
+                                : `+${m.minutos}m`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-zinc-400">Nenhuma movimentação neste mês.</p>
+                  )}
+                  <div className="pt-2 border-t border-zinc-100 space-y-2">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Nova movimentação</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Tipo</label>
+                        <select
+                          value={bancoTipo}
+                          onChange={(e) => setBancoTipo(e.target.value as typeof bancoTipo)}
+                          className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-medium"
+                        >
+                          <option value="debit">Débito (compensação — usa saldo)</option>
+                          <option value="credit">Crédito manual</option>
+                          <option value="manual_adjust">Ajuste manual (+/− min)</option>
+                          <option value="converted_to_payroll">Convertido em pagamento (baixa banco)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Data referência</label>
+                        <input
+                          type="date"
+                          value={bancoDataRef}
+                          onChange={(e) => setBancoDataRef(e.target.value)}
+                          className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">
+                        Minutos {bancoTipo === 'manual_adjust' ? '(+ ou −)' : ''}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={bancoMin}
+                        onChange={(e) => setBancoMin(e.target.value)}
+                        placeholder={bancoTipo === 'manual_adjust' ? 'ex: -30 ou +60' : 'ex: 60'}
+                        className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Observação</label>
+                      <input
+                        type="text"
+                        value={bancoObs}
+                        onChange={(e) => setBancoObs(e.target.value)}
+                        placeholder="Motivo autorizado"
+                        className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={registrarMovBanco}
+                      disabled={bancoSaving}
+                      className="w-full py-2.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-black disabled:opacity-50"
+                    >
+                      {bancoSaving ? 'Salvando…' : 'Registrar movimentação'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              </>
+              )}
+
+              {!evF && (
+              <div className="pt-6 border-t border-zinc-200 grid grid-cols-2 gap-8 text-center text-xs text-zinc-400">
+                <div>
+                  <div className="border-b border-zinc-300 mb-2 h-10" />
+                  <p>Assinatura do Funcionário</p>
+                </div>
+                <div>
+                  <div className="border-b border-zinc-300 mb-2 h-10" />
+                  <p>Assinatura do Responsável</p>
+                </div>
+              </div>
+              )}
             </div>
           </div>
 
-          {/* Painel lateral */}
           <div className="space-y-4">
             <div className="bg-white border border-zinc-200 rounded-2xl p-5">
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-3">Resumo</p>
+              <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
+                Resumo rápido
+              </p>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-zinc-500">Salário Bruto</span><span className="font-bold">{fmt(folha.salarioBruto)}</span></div>
-                {(folha.totalExtraMin ?? 0) > 0 && (
-                  <div className="flex justify-between"><span className="text-orange-500">H. Extras ({folha.totalExtraMin}min)</span><span className="font-bold text-orange-600">+ {fmt(folha.valorExtras ?? 0)}</span></div>
+                {!evF && (
+                  <>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Bruto</span>
+                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Descontos</span>
+                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.dedTotal)}</span>
+                    </div>
+                  </>
                 )}
-                <div className="flex justify-between"><span className="text-zinc-500">Faltas</span><span className="font-bold text-red-500">{folha.totalFaltas}x</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Atraso total</span><span className="font-bold text-amber-500">{folha.totalAtrasoMin}min</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Adiantamentos</span><span className="font-bold text-blue-500">{fmt(folha.totalAdiantamentos)}</span></div>
-                <div className="border-t border-zinc-100 pt-2 flex justify-between"><span className="text-zinc-500">Total descontos</span><span className="font-bold text-red-600">— {fmt(folha.totalDescontos)}</span></div>
+                {paySummary && !paySummary.unbounded && (
+                  <>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Valor líquido</span>
+                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.net_liquid)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Já pago</span>
+                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Pendente</span>
+                      <span className="font-bold text-amber-800 tabular-nums">{fmt(paySummary.balance_due)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1">
+                      <span style={{ color: '#9ca3af' }}>Status folha</span>
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${payStatusClass}`}>
+                        {PAYROLL_STATUS_LABEL[paySummary.status]}
+                      </span>
+                    </div>
+                  </>
+                )}
+                {paySummary?.unbounded && (
+                  <div className="flex justify-between">
+                    <span style={{ color: '#9ca3af' }}>Total pago (competência)</span>
+                    <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
+                  </div>
+                )}
+                {!evF && (
+                  <>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Faltas</span>
+                      <span className="font-bold text-zinc-700">{folha.totalFaltas}×</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: '#9ca3af' }}>Atrasos</span>
+                      <span className="font-bold text-zinc-700">{folha.totalAtrasoMin} min</span>
+                    </div>
+                  </>
+                )}
+                {showBancoBloco && folha.hour_bank && (
+                  <div className="flex justify-between">
+                    <span style={{ color: '#9ca3af' }}>Saldo banco</span>
+                    <span className="font-bold text-cyan-800 tabular-nums">{folha.hour_bank.saldo_minutos} min</span>
+                  </div>
+                )}
               </div>
-              <div className="mt-4 p-3 bg-emerald-50 rounded-xl flex justify-between items-center">
-                <span className="text-sm font-black text-zinc-900">Líquido</span>
-                <span className="text-xl font-black text-emerald-700">{fmt(Math.max(0, folha.salarioLiquido))}</span>
+              <div className="mt-4 p-3 rounded-xl bg-zinc-100 border border-zinc-200 flex justify-between items-center">
+                <span className="text-sm font-black text-zinc-800">{evF ? 'Salário líquido (CLT)' : 'Líquido'}</span>
+                {evF ? (
+                  <span className="text-xs font-bold text-zinc-500 text-right max-w-[140px]">Não aplicável (contrato por evento)</span>
+                ) : (
+                  <span className="text-xl font-black tabular-nums" style={{ color: '#22c55e' }}>
+                    {fmt(Math.max(0, folhaView.net))}
+                  </span>
+                )}
               </div>
-              {folha.totalDescontos > folha.salarioBruto && (
-                <p className="text-[10px] text-amber-600 mt-2 text-center font-bold">⚠️ Excedente: {fmt(folha.totalDescontos - folha.salarioBruto)}</p>
+            </div>
+
+            <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+              <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
+                Registrar pagamento
+              </p>
+              <p className="text-xs text-zinc-500 mb-3">
+                Lança o valor no financeiro (despesas) e atualiza o histórico da competência. Não altera salário base nem adiantamentos já descontados na folha.
+                {evF && (
+                  <span className="block mt-2 text-sky-800/90">
+                    Contrato por evento: não há teto automático de folha — registre os valores acordados por competência.
+                  </span>
+                )}
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Tipo</label>
+                  <select
+                    value={payForm.tipo}
+                    onChange={(e) =>
+                      setPayForm((f) => ({ ...f, tipo: e.target.value as typeof payForm.tipo }))
+                    }
+                    className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                  >
+                    <option value="advance">Adiantamento</option>
+                    <option value="partial_payment">Pagamento parcial</option>
+                    <option value="final_payment">Pagamento final (quita)</option>
+                  </select>
+                </div>
+                <FInput
+                  label="Valor (R$)"
+                  type="text"
+                  value={payForm.valor}
+                  onChange={(v) => setPayForm((f) => ({ ...f, valor: v }))}
+                  placeholder="0,00"
+                />
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Observação</label>
+                  <textarea
+                    value={payForm.observacao}
+                    onChange={(e) => setPayForm((f) => ({ ...f, observacao: e.target.value }))}
+                    rows={2}
+                    className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                    placeholder="Opcional"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {paySummary && !paySummary.unbounded && paySummary.balance_due > 0.009 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPayForm((f) => ({
+                          ...f,
+                          tipo: 'final_payment',
+                          valor: paySummary.balance_due.toFixed(2).replace('.', ','),
+                        }))
+                      }
+                      className="px-3 py-2 text-xs font-bold rounded-xl bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100"
+                    >
+                      Preencher saldo ({fmt(paySummary.balance_due)})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={savingPay || (paySummary?.status === 'paid' && !paySummary?.unbounded)}
+                    onClick={registrarPagamento}
+                    className="flex-1 min-w-[140px] py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-40"
+                  >
+                    {savingPay ? 'Salvando…' : 'Registrar'}
+                  </button>
+                </div>
+              </div>
+
+              {(folha.payroll_payments?.length ?? 0) > 0 && (
+                <div className="mt-5 pt-5 border-t border-zinc-100">
+                  <p className="text-[10px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
+                    Histórico de pagamentos
+                  </p>
+                  <ul className="space-y-2 max-h-48 overflow-y-auto">
+                    {(folha.payroll_payments || []).map((p) => (
+                      <li
+                        key={p.id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-xs bg-zinc-50 rounded-lg px-3 py-2 border border-zinc-100"
+                      >
+                        <div>
+                          <span className="font-bold text-zinc-800">{PAYMENT_TIPO_LABEL[p.tipo] || p.tipo}</span>
+                          <span className="text-zinc-400 mx-1">·</span>
+                          <span className="font-black text-emerald-700 tabular-nums">{fmt(Number(p.valor))}</span>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">
+                            {p.recibo_numero || `RHF-${p.id}`} ·{' '}
+                            {p.created_at ? new Date(p.created_at).toLocaleString('pt-BR') : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => printReceipt(p)}
+                          className="shrink-0 px-2 py-1 rounded-lg border border-zinc-200 bg-white text-[11px] font-bold text-zinc-700 hover:bg-zinc-100"
+                        >
+                          Recibo
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
+
             <div className="bg-white border border-zinc-200 rounded-2xl p-5">
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-3">Funcionário</p>
-              <div className="flex items-center gap-3 mb-3"><Avatar func={folha.funcionario} size={44}/><div><p className="font-black text-zinc-900">{folha.funcionario.nome}</p><p className="text-xs text-zinc-400">{folha.funcionario.cargo}</p></div></div>
+              <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
+                Funcionário
+              </p>
+              <div className="flex items-center gap-3 mb-3">
+                <Avatar func={folha.funcionario} size={44} />
+                <div>
+                  <p className="font-black text-zinc-900">{folha.funcionario.nome}</p>
+                  <p className="text-xs text-zinc-400">{folha.funcionario.cargo}</p>
+                </div>
+              </div>
               <div className="space-y-1 text-xs text-zinc-500">
-                <div className="flex justify-between"><span>Entrada/Saída</span><span className="font-bold text-zinc-700">{folha.funcionario.horario_entrada} – {folha.funcionario.horario_saida}</span></div>
-                <div className="flex justify-between"><span>Carga diária</span><span className="font-bold text-zinc-700">{folha.funcionario.carga_horaria}h</span></div>
-                <div className="flex justify-between"><span>Tolerância</span><span className="font-bold text-zinc-700">{folha.funcionario.tolerancia_minutos}min</span></div>
+                <div className="flex justify-between">
+                  <span style={{ color: '#9ca3af' }}>Entrada/Saída</span>
+                  <span className="font-bold text-zinc-700">
+                    {folha.funcionario.horario_entrada} – {folha.funcionario.horario_saida}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: '#9ca3af' }}>Carga diária</span>
+                  <span className="font-bold text-zinc-700">{folha.funcionario.carga_horaria}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: '#9ca3af' }}>Tolerância</span>
+                  <span className="font-bold text-zinc-700">{folha.funcionario.tolerancia_minutos} min</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      ):null}
+      ) : null}
     </>
   );
 }
@@ -1178,8 +2647,8 @@ function ABtn({ label, icon, onClick, danger=false }: { label:string; icon:React
   return <button onClick={onClick} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${danger?'border-red-200 text-red-500 bg-red-50 hover:bg-red-100':'border-zinc-200 text-zinc-600 bg-zinc-50 hover:bg-zinc-100'}`}>{icon}{label}</button>;
 }
 function SCard({ label, value, color, small=false }: { label:string; value:string|number; color:string; small?:boolean }) {
-  const bg:Record<string,string>={emerald:'bg-emerald-50 border-emerald-200',red:'bg-red-50 border-red-200',blue:'bg-blue-50 border-blue-200',purple:'bg-purple-50 border-purple-200',amber:'bg-amber-50 border-amber-200',orange:'bg-orange-50 border-orange-200'};
-  const txt:Record<string,string>={emerald:'text-emerald-700',red:'text-red-700',blue:'text-blue-700',purple:'text-purple-700',amber:'text-amber-700',orange:'text-orange-700'};
+  const bg:Record<string,string>={emerald:'bg-emerald-50 border-emerald-200',red:'bg-red-50 border-red-200',blue:'bg-blue-50 border-blue-200',purple:'bg-purple-50 border-purple-200',amber:'bg-amber-50 border-amber-200',orange:'bg-orange-50 border-orange-200',cyan:'bg-cyan-50 border-cyan-200'};
+  const txt:Record<string,string>={emerald:'text-emerald-700',red:'text-red-700',blue:'text-blue-700',purple:'text-purple-700',amber:'text-amber-700',orange:'text-orange-700',cyan:'text-cyan-800'};
   return <div className={`${bg[color]} border rounded-xl p-3`}><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p><p className={`font-black mt-1 ${txt[color]} ${small?'text-sm':'text-2xl'}`}>{value}</p></div>;
 }
 function FInput({ label, value, onChange, placeholder='', type='text' }: { label:string; value:string; onChange:(v:string)=>void; placeholder?:string; type?:string }) {

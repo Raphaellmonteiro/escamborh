@@ -16,6 +16,19 @@ export function splitOrderItemDetailLines(detail: string): string[] {
   return parts.length > 0 ? parts : [detail];
 }
 
-export function orderHasAnyItemCustomization(order: { items?: Array<OrderItemDetailSource> }): boolean {
-  return Boolean(order.items?.some((it) => getOrderItemDetailText(it).length > 0));
+type ItemCustomizationSource = OrderItemDetailSource & {
+  selecoes?: unknown;
+  item_display_summary?: string;
+};
+
+export function orderHasAnyItemCustomization(order: { items?: Array<ItemCustomizationSource> }): boolean {
+  return Boolean(
+    order.items?.some((it) => {
+      if (getOrderItemDetailText(it).length > 0) return true;
+      const summary = String(it.item_display_summary ?? '').trim();
+      if (summary.length > 0) return true;
+      const sel = it.selecoes;
+      return sel != null && typeof sel === 'object' && !Array.isArray(sel) && Object.keys(sel as object).length > 0;
+    })
+  );
 }

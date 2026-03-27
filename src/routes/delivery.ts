@@ -1,7 +1,11 @@
 // src/routes/delivery.ts — rotas autenticadas do painel delivery
 import { Router, Request } from 'express';
+import { buildPublicOrderItemFromPersisted, serializeOrderItemSelecoes } from '../services/ordersService';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
 import { requireAnyPermission } from '../middleware';
+import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
+import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
+import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomationService';
 
 const TZ = 'America/Sao_Paulo';
 const ACTIVE_CUSTOMER_DAYS = 30;
@@ -132,14 +136,31 @@ router.get('/pedidos', async (req: Request, res) => {
               'product_name', pr.name,
               'quantity', ip.quantity,
               'price_at_time', ip.price_at_time,
-              'observation', ip.observation
+              'observation', ip.observation,
+              'obs_opcoes', ip.observation,
+              'selecoes_json', ip.selecoes_json
             ) ORDER BY ip.id ASC
           ),
           '[]'::json
         )
         FROM itens_pedido ip
         INNER JOIN produtos pr ON pr.id=ip.product_id AND pr.tenant_id=ip.tenant_id
-        WHERE ip.order_id=p.id AND ip.tenant_id=p.tenant_id) as itens
+        WHERE ip.order_id=p.id AND ip.tenant_id=p.tenant_id) as itens,
+        EXISTS (
+          SELECT 1 FROM pedido_eventos pe
+          WHERE pe.pedido_id = p.id AND pe.tenant_id = p.tenant_id
+            AND pe.tipo = 'AUTOMATION_DELIVERY_ACEITE_AUTO'
+        ) AS automation_auto_delivery_accept,
+        EXISTS (
+          SELECT 1 FROM pedido_eventos pe
+          WHERE pe.pedido_id = p.id AND pe.tenant_id = p.tenant_id
+            AND pe.tipo = 'AUTOMATION_COZINHA_FALHA'
+        ) AS automation_kitchen_failed,
+        EXISTS (
+          SELECT 1 FROM pedido_eventos pe
+          WHERE pe.pedido_id = p.id AND pe.tenant_id = p.tenant_id
+            AND pe.tipo = 'AUTOMATION_COZINHA_OK'
+        ) AS automation_kitchen_ok
         FROM pedidos p LEFT JOIN delivery_motoboys dc ON dc.id=p.motoboy_id AND dc.tenant_id=p.tenant_id
         WHERE p.tenant_id=? AND p.canal='delivery'`;
       const params: any[] = [req.tenantId];
@@ -176,11 +197,30 @@ router.get('/pedidos', async (req: Request, res) => {
             }
           }
           if (!Array.isArray(itens)) itens = [];
+          const itensPublic = itens.map((it: Record<string, unknown>) =>
+            buildPublicOrderItemFromPersisted({
+              order_id: Number(p.id),
+              product_id: Number(it.product_id),
+              quantity: Number(it.quantity),
+              type: 'Delivery',
+              price_at_time: Number(it.price_at_time || 0),
+              variation_id: it.variation_id != null ? Number(it.variation_id) : null,
+              observation: (it.observation as string | null) ?? null,
+              selecoes_json: (it.selecoes_json as string | null) ?? null,
+              product_name: (it.product_name as string | null) ?? null,
+              product_category: null,
+              production_type: null,
+              requires_preparation: null,
+            })
+          );
           return {
             ...p,
-            itens,
+            itens: itensPublic,
             total_amount: Number(p.total_amount || 0),
             taxa_entrega: Number(p.taxa_entrega || 0),
+            automation_auto_delivery_accept: Boolean(p.automation_auto_delivery_accept),
+            automation_kitchen_failed: Boolean(p.automation_kitchen_failed),
+            automation_kitchen_ok: Boolean(p.automation_kitchen_ok),
           };
         })
       );
@@ -196,6 +236,7 @@ router.get('/pedidos', async (req: Request, res) => {
         return res.status(400).json({ error: 'Este fluxo aceita apenas pedidos de delivery' });
       }
 
+      const previousStatus = String(order.status || '').trim();
       const { status, motoboy_id } = req.body;
       const normalizedMotoboyId = motoboy_id == null || motoboy_id === ''
         ? null
@@ -215,7 +256,29 @@ router.get('/pedidos', async (req: Request, res) => {
       if (status === 'Entregue')          { updates.push('entregue_at=NOW()'); }
       params.push(req.params.id, req.tenantId);
       await qRun(`UPDATE pedidos SET ${updates.join(',')} WHERE id=? AND tenant_id=?`, params);
-      res.json({ success: true });
+
+      const nextStatus = String(status || '').trim();
+      let kitchenPrintAutomation: { ok: boolean; message?: string; reason?: string } | undefined;
+      if (previousStatus === 'Criado' && nextStatus === 'Pedido Recebido') {
+        const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
+        const parsed =
+          cfgRow?.delivery_config && String(cfgRow.delivery_config).trim()
+            ? (JSON.parse(cfgRow.delivery_config) as Record<string, unknown>)
+            : {};
+        const automation = parseAutomationFromDeliveryConfigJson(parsed);
+        if (automation.delivery_auto_print_production) {
+          const pr = await runAutomatedKitchenPrintForOrder(Number(req.tenantId), Number(req.params.id), {
+            trigger: 'delivery_manual_accept',
+          });
+          if (pr.ok) {
+            kitchenPrintAutomation = { ok: true };
+          } else if (isKitchenDispatchFailure(pr)) {
+            kitchenPrintAutomation = { ok: false, message: pr.message || pr.reason, reason: pr.reason };
+          }
+        }
+      }
+
+      res.json({ success: true, automation: kitchenPrintAutomation ? { kitchen_print: kitchenPrintAutomation } : undefined });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -539,9 +602,10 @@ router.get('/clientes', async (req: Request, res) => {
                 if (!s) return null;
                 return s.length > 4000 ? s.slice(0, 4000) : s;
               })();
+        const selecoesJson = serializeOrderItemSelecoes(item?.selecoes);
         await qRun(
-          'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,observation) VALUES (?,?,?,?,?,?,?)',
-          [orderId, item.product_id, item.quantity, 'Delivery', item.price_at_time, req.tenantId, lineObs]
+          'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,observation,selecoes_json) VALUES (?,?,?,?,?,?,?,?)',
+          [orderId, item.product_id, item.quantity, 'Delivery', item.price_at_time, req.tenantId, lineObs, selecoesJson]
         );
       }
       if (deliveryClienteId) {
@@ -551,7 +615,31 @@ router.get('/clientes', async (req: Request, res) => {
           origemCadastro: 'pedido_manual',
         });
       }
-      res.json({ success: true, orderId, orderNumber: on });
+
+      const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
+      const parsed =
+        cfgRow?.delivery_config && String(cfgRow.delivery_config).trim()
+          ? (JSON.parse(cfgRow.delivery_config) as Record<string, unknown>)
+          : {};
+      const automation = parseAutomationFromDeliveryConfigJson(parsed);
+      let kitchenPrintAutomation: { ok: boolean; message?: string; reason?: string } | undefined;
+      if (automation.delivery_auto_print_production) {
+        const pr = await runAutomatedKitchenPrintForOrder(Number(req.tenantId), Number(orderId), {
+          trigger: 'delivery_manual_post',
+        });
+        if (pr.ok) {
+          kitchenPrintAutomation = { ok: true };
+        } else if (isKitchenDispatchFailure(pr)) {
+          kitchenPrintAutomation = { ok: false, message: pr.message || pr.reason, reason: pr.reason };
+        }
+      }
+
+      res.json({
+        success: true,
+        orderId,
+        orderNumber: on,
+        automation: kitchenPrintAutomation ? { kitchen_print: kitchenPrintAutomation } : undefined,
+      });
     } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
   });
 

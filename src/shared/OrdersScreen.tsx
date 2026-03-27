@@ -7,6 +7,7 @@ import {
   ChevronRight,
   X,
   Printer,
+  ChefHat,
   Monitor,
   ShoppingBag,
   Store,
@@ -25,6 +26,7 @@ import {
   orderHasAnyItemCustomization,
   splitOrderItemDetailLines,
 } from '../utils/orderItemDisplay';
+import { OrderAutomationBadges } from '../components/OrderAutomationBadges';
 
 type OrderWithRefund = Order & {
   reembolso_status?: string | null;
@@ -53,6 +55,9 @@ type OrderScreenItem = OrderItem & {
   production_type?: string | null;
   requires_preparation?: number | boolean | null;
   obs_opcoes?: string | null;
+  item_display_details?: string[];
+  item_display_summary?: string;
+  selecoes?: Record<string, unknown> | null;
 };
 
 type HistoryDetail = {
@@ -589,6 +594,10 @@ const handleConfirmOrder = async (id: number) => {
       return { bg: 'bg-blue-50', border: 'border-blue-100', badge: 'bg-blue-100 text-blue-700' };
     }
 
+    if (event.tipo.startsWith('AUTOMATION_')) {
+      return { bg: 'bg-amber-50', border: 'border-amber-100', badge: 'bg-amber-100 text-amber-900' };
+    }
+
     return { bg: 'bg-zinc-50', border: 'border-zinc-100', badge: 'bg-zinc-100 text-zinc-700' };
   };
 
@@ -597,6 +606,7 @@ const handleConfirmOrder = async (id: number) => {
     if (event.tipo === 'REEMBOLSO') return 'Financeiro';
     if (event.tipo === 'CANCELAMENTO') return 'Cancelamento';
     if (event.tipo === 'CRIACAO') return 'Criacao';
+    if (event.tipo.startsWith('AUTOMATION_')) return 'Automacao';
     return 'Auditoria';
   };
 
@@ -608,6 +618,11 @@ const handleConfirmOrder = async (id: number) => {
     }
     if (event.tipo === 'CANCELAMENTO') return 'Pedido cancelado';
     if (event.tipo === 'REEMBOLSO') return 'Reembolso registrado';
+    if (event.tipo === 'AUTOMATION_DELIVERY_ACEITE_AUTO') return 'Delivery aceito automaticamente';
+    if (event.tipo === 'AUTOMATION_COZINHA_OK') return 'Producao impressa (automatico)';
+    if (event.tipo === 'AUTOMATION_COZINHA_FALHA') return 'Falha na auto-impressao de producao';
+    if (event.tipo === 'AUTOMATION_COZINHA_SUPRIMIDA_KDS') return 'Auto-impressao suprimida (KDS)';
+    if (event.tipo === 'AUTOMATION_COZINHA_DUPLICIDADE_IGNORADA') return 'Auto-impressao ignorada (duplicidade)';
     return event.tipo;
   };
 
@@ -639,6 +654,24 @@ const handleConfirmOrder = async (id: number) => {
 
     if (event.usuario_id) {
       details.push({ label: 'Usuario', value: `#${event.usuario_id}` });
+    }
+
+    if (event.tipo.startsWith('AUTOMATION_') && event.payload && typeof event.payload === 'object') {
+      const pl = event.payload as Record<string, unknown>;
+      const trigger = pl.trigger != null ? String(pl.trigger) : '';
+      const msg = pl.message != null ? String(pl.message) : '';
+      const motivo = pl.motivo != null ? String(pl.motivo) : '';
+      const dr = pl.dispatch_reason != null ? String(pl.dispatch_reason) : '';
+      if (trigger) details.push({ label: 'Disparo', value: trigger });
+      if (dr) details.push({ label: 'Motivo tecnico', value: dr });
+      if (msg) details.push({ label: 'Mensagem', value: msg });
+      if (motivo) details.push({ label: 'Detalhe', value: motivo });
+      const when = pl.momento != null ? String(pl.momento) : '';
+      if (when) details.push({ label: 'Momento (ISO)', value: when });
+      if (pl.impressao_com_kds === true) details.push({ label: 'KDS', value: 'Impressao com KDS ativa (config ligada)' });
+      if (pl.print_production_even_with_kds === false && pl.uses_kds === true) {
+        details.push({ label: 'KDS', value: 'Impressao suprimida com KDS (config desligada)' });
+      }
     }
 
     return details;
@@ -882,6 +915,7 @@ const handleConfirmOrder = async (id: number) => {
                               Itens personalizados
                             </span>
                           )}
+                          <OrderAutomationBadges order={order} />
                         </div>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           <span className="text-xs font-bold text-zinc-500">{formatMoney(order.total_amount)}</span>
@@ -908,27 +942,33 @@ const handleConfirmOrder = async (id: number) => {
                           <ChevronRight size={14} /> Avancar para {next}
                         </button>
                       )}
-                      {/* Imprimir comanda */}
+                      {/* Imprimir produção (cozinha) — separado do cupom comercial */}
                       <button
                         onClick={async () => {
-                          // Tenta impressora térmica; se não configurada, abre janela browser
                           try {
                             const r = await fetch(`/api/print/comanda/${order.id}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
                             const d = await r.json();
                             if (!d.success) {
-                              // Fallback: browser print
                               const rh = await fetch(`/api/print/comanda-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
                               const html = await rh.text();
+                              if (html.trim().toLowerCase().includes('nenhum item de preparo')) {
+                                alert('Nenhum item de preparo neste pedido.');
+                                return;
+                              }
                               openPrintPreview(html, 'width=420,height=600');
                             }
                           } catch {
                             const rh = await fetch(`/api/print/comanda-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
                             const html = await rh.text();
+                            if (html.trim().toLowerCase().includes('nenhum item de preparo')) {
+                              alert('Nenhum item de preparo neste pedido.');
+                              return;
+                            }
                             openPrintPreview(html, 'width=420,height=600');
                           }
                         }}
-                        className={secondaryActionClassName} title="Imprimir Comanda (Cozinha)">
-                        <Printer size={15} /> Comanda
+                        className={secondaryActionClassName} title="Imprimir produção (cozinha)">
+                        <ChefHat size={15} /> Produção
                       </button>
                       <button onClick={async () => {
                           try {
@@ -1018,7 +1058,10 @@ const handleConfirmOrder = async (id: number) => {
                     <div className="mt-2 space-y-2">
                       {(order.items || []).map((item: OrderScreenItem, i: number) => {
                         const detail = getOrderItemDetailText(item);
-                        const lines = splitOrderItemDetailLines(detail);
+                        const lines =
+                          Array.isArray(item.item_display_details) && item.item_display_details.length > 0
+                            ? item.item_display_details
+                            : splitOrderItemDetailLines(detail);
                         const unit = Number(item.price_at_time || 0);
                         const lineTotal = Number(item.quantity) * unit;
                         return (
@@ -1028,7 +1071,7 @@ const handleConfirmOrder = async (id: number) => {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <p className="text-[11px] font-bold text-zinc-800 min-w-0">
-                                {item.quantity}× {item.product_name}
+                                {item.product_name || item.name} ×{item.quantity}
                               </p>
                               <p className="text-[11px] font-bold text-zinc-900 tabular-nums shrink-0">
                                 {formatMoney(lineTotal)}
@@ -1036,14 +1079,16 @@ const handleConfirmOrder = async (id: number) => {
                             </div>
                             {lines.length > 0 ? (
                               <>
-                                <ul className="mt-1.5 ml-3 list-disc space-y-0.5 text-[11px] leading-snug text-zinc-600">
+                                <ul className="mt-1.5 ml-1 space-y-0.5 text-[11px] leading-snug text-zinc-600">
                                   {lines.map((line, j) => (
-                                    <li key={j}>{line}</li>
+                                    <li key={j} className="flex gap-1.5">
+                                      <span className="text-zinc-400 shrink-0" aria-hidden>–</span>
+                                      <span className="min-w-0">{line}</span>
+                                    </li>
                                   ))}
                                 </ul>
                                 <p className="mt-1.5 text-[10px] leading-snug text-zinc-500">
-                                  Valor ao lado é o total da linha; o preço unitário ({formatMoney(unit)}) já inclui
-                                  opções e adicionais indicados acima.
+                                  Total da linha à direita; unitário {formatMoney(unit)} (congelado na venda, já inclui adicionais).
                                 </p>
                               </>
                             ) : null}
@@ -1169,6 +1214,7 @@ const handleConfirmOrder = async (id: number) => {
                         Pers.
                       </span>
                     )}
+                    <OrderAutomationBadges order={order} />
                   </div>
                   {refundMeta && (
                     <span
@@ -1199,15 +1245,33 @@ const handleConfirmOrder = async (id: number) => {
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end">
                       <button onClick={async () => {
-                          // Busca cupom HTML padrão e abre janela de impressão
                           try {
                             const r = await fetch(`/api/print/cupom-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
                             const html = await r.text();
                             openPrintPreview(html);
-                          } catch { /* fallback: receipt_text */ setSelectedReceipt(order.receipt_text || ''); }
+                          } catch { setSelectedReceipt(order.receipt_text || ''); }
                         }}
-                        className={secondaryActionClassName} title="Imprimir na tela">
-                        <Printer size={15} /> Imprimir
+                        className={secondaryActionClassName} title="Cupom comercial (cliente)">
+                        <Printer size={15} /> Cupom
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const rh = await fetch(`/api/print/comanda-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                            const html = await rh.text();
+                            if (html.trim().toLowerCase().includes('nenhum item de preparo')) {
+                              alert('Nenhum item de preparo neste pedido.');
+                              return;
+                            }
+                            openPrintPreview(html);
+                          } catch {
+                            alert('Erro ao gerar comanda de produção.');
+                          }
+                        }}
+                        className={secondaryActionClassName}
+                        title="Comanda de produção (cozinha)"
+                      >
+                        <ChefHat size={15} /> Produção
                       </button>
                   <button onClick={async () => {
                       try {

@@ -5,12 +5,13 @@ import {
   Phone, Settings, RefreshCw, ChevronRight,
   User, CreditCard, Banknote, Smartphone, Check,
   Truck, AlertCircle, DollarSign, TrendingUp, Users, Search,
-  Printer, Navigation, MessageCircle, BarChart2, Tag, Plus, Trash2,
+  Printer, Navigation, MessageCircle, BarChart2, Tag, Plus, Trash2, ChefHat,
   Zap, Globe, Bell, BellOff, Map, LayoutGrid, Palette, ListTree,
 } from 'lucide-react';
 import { openPrintPreview } from '../utils/print';
-import { getOrderItemDetailText, splitOrderItemDetailLines } from '../utils/orderItemDisplay';
+import { getOrderItemDetailText, orderHasAnyItemCustomization, splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { getDeliveryNextStatus } from '../utils/deliveryStatusNext';
+import { DEFAULT_TENANT_AUTOMATION, type TenantAutomationConfig } from '../services/automationConfig';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 
@@ -50,6 +51,10 @@ interface Pedido {
   /** Lista estruturada (API GET /delivery/pedidos); fallback para `resumo_itens`. */
   itens?: DeliveryPedidoItem[];
   delivery_checkout_snapshot?: DeliveryCheckoutSnapshot | string | null;
+  /** Sinais de automação (GET /api/delivery/pedidos — subconsultas em `pedido_eventos`). */
+  automation_auto_delivery_accept?: boolean;
+  automation_kitchen_failed?: boolean;
+  automation_kitchen_ok?: boolean;
 }
 interface Motoboy { id: number; nome: string; cargo: string; }
 interface DeliveryConfig {
@@ -66,6 +71,7 @@ interface DeliveryConfig {
   desconto_primeiro_cliente_min_pedido?: number;
   evolution_url?: string; evolution_token?: string; evolution_instance?: string;
   theme_mode?: 'dark_premium' | 'light_red';
+  automation?: Partial<TenantAutomationConfig>;
 }
 interface Dashboard {
   pedidos_hoje: number; faturamento_hoje: number;
@@ -129,6 +135,25 @@ const STATUS_CFG: Record<string, { label: string; color: string; bg: string; ton
   'Cancelado':           { label: 'Cancelado',    color: '#ef4444', bg: '#fef2f2', toneClass: 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30', icon: <XCircle size={14}/>,       next: getDeliveryNextStatus('Cancelado') },
 };
 
+/** Rótulo curto do próximo passo (evita mostrar nome técnico de status). */
+function deliveryNextActionTitle(next: string): string {
+  if (next === 'Pedido Recebido') return 'aceitar o pedido';
+  if (next === 'Em Preparo') return 'preparo';
+  if (next === 'Pronto para Entrega') return 'pronto para entrega';
+  if (next === 'Saiu para Entrega') return 'rota de entrega';
+  if (next === 'Entregue') return 'entregue';
+  return next;
+}
+
+function deliveryNextPrimaryLabel(next: string): string {
+  if (next === 'Pedido Recebido') return 'Aceitar';
+  if (next === 'Em Preparo') return 'Preparar';
+  if (next === 'Pronto para Entrega') return 'Pronto';
+  if (next === 'Saiu para Entrega') return 'Despachar';
+  if (next === 'Entregue') return 'Entregar';
+  return 'Avançar';
+}
+
 const PAGS: Record<string, { label: string; icon: React.ReactNode }> = {
   pix:      { label: 'Pix',            icon: <Smartphone size={12}/> },
   dinheiro: { label: 'Dinheiro',       icon: <Banknote size={12}/>   },
@@ -144,7 +169,7 @@ function deliveryPedidoTemItensDetalhe(p: Pedido): boolean {
 
 function deliveryPedidoTemCustomizacaoItens(p: Pedido): boolean {
   if (!Array.isArray(p.itens)) return false;
-  return p.itens.some((it) => getOrderItemDetailText(it).length > 0);
+  return orderHasAnyItemCustomization({ items: p.itens as any });
 }
 
 function formatDeliveryItensResumoWhatsApp(p: Pedido): string {
@@ -309,6 +334,7 @@ function TabPainel({ token }: { token: string }) {
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [sseConectado, setSseConectado] = useState(false);
   const [somAtivo, setSomAtivo]         = useState(() => localStorage.getItem('delivery_som') !== 'false');
+  const [opsToast, setOpsToast]         = useState<{ msg: string; ok: boolean } | null>(null);
   const esRef                           = useRef<EventSource | null>(null);
   const reconnRef                       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef                   = useRef(false);
@@ -399,12 +425,27 @@ function TabPainel({ token }: { token: string }) {
   const mudarStatus = async (id: number, status: string, motoboyId?: number) => {
     const body: any = { status };
     if (motoboyId) body.motoboy_id = motoboyId;
-    await fetch(`/api/delivery/pedidos/${id}/status`, {
+    const res = await fetch(`/api/delivery/pedidos/${id}/status`, {
       method: 'PATCH', headers: { ...hdrs, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    let data: { automation?: { kitchen_print?: { ok?: boolean; message?: string } } } = {};
+    try {
+      data = await res.json();
+    } catch {
+      /* ignore */
+    }
+    if (data?.automation?.kitchen_print && data.automation.kitchen_print.ok === false) {
+      setOpsToast({
+        msg:
+          data.automation.kitchen_print.message ||
+          'Produção não foi impressa automaticamente. Use o botão Produção ou verifique a impressora.',
+        ok: false,
+      });
+      window.setTimeout(() => setOpsToast(null), 8000);
+    }
     fetchAll();
-    if (selectedPedido?.id === id) setSelectedPedido(p => p ? { ...p, status } : null);
+    if (selectedPedido?.id === id) setSelectedPedido((p) => (p ? { ...p, status } : null));
   };
 
   const marcarPago = async (id: number) => {
@@ -423,6 +464,20 @@ function TabPainel({ token }: { token: string }) {
     } catch { alert('Erro ao reimprimir'); }
   };
 
+  const imprimirProducao = async (pedidoId: number) => {
+    try {
+      const r = await fetch(`/api/print/comanda-html/${pedidoId}`, { headers: hdrs });
+      const html = await r.text();
+      if (html.trim().toLowerCase().includes('nenhum item de preparo')) {
+        alert('Nenhum item de preparo neste pedido.');
+        return;
+      }
+      openPrintPreview(html, 'width=420,height=700,toolbar=0,menubar=0,location=0');
+    } catch {
+      alert('Erro ao imprimir produção.');
+    }
+  };
+
   const ATIVOS  = ['Criado','Pedido Recebido','Em Preparo','Pronto para Entrega','Saiu para Entrega'];
   const filtrados = statusFilter === 'ativos' ? pedidos.filter(p => ATIVOS.includes(p.status))
     : statusFilter === 'todos'           ? pedidos
@@ -433,6 +488,18 @@ function TabPainel({ token }: { token: string }) {
 
   return (
     <div className="space-y-5">
+      {opsToast && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-xs font-semibold shadow-sm ${
+            opsToast.ok
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100'
+              : 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-100'
+          }`}
+          role="status"
+        >
+          {opsToast.msg}
+        </div>
+      )}
       {/* Dashboard */}
       {dash && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
@@ -522,6 +589,7 @@ function TabPainel({ token }: { token: string }) {
                       onDetail={() => setSelectedPedido(p)}
                       onAvancar={(mbId) => cfg.next && mudarStatus(p.id, cfg.next!, mbId)}
                       onReimprimir={() => reimprimir(p.id)}
+                      onImprimirProducao={() => imprimirProducao(p.id)}
                       cfg={cfg}
                     />
                   ))}
@@ -564,8 +632,12 @@ function TabPainel({ token }: { token: string }) {
                     <td className="px-4 py-3">
                       <div className="flex gap-1 justify-end">
                         <button type="button" onClick={(e) => { e.stopPropagation(); reimprimir(p.id); }}
-                          className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg" title="Reimprimir">
+                          className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg" title="Cupom (cliente)">
                           <Printer size={14}/>
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); imprimirProducao(p.id); }}
+                          className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 rounded-lg" title="Produção (cozinha)">
+                          <ChefHat size={14}/>
                         </button>
                       </div>
                     </td>
@@ -587,12 +659,16 @@ function TabPainel({ token }: { token: string }) {
               className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto border border-zinc-200 dark:border-zinc-800">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Pedido #{selectedPedido.order_number}</h3>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => reimprimir(selectedPedido.id)}
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <button type="button" onClick={() => reimprimir(selectedPedido.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-200 dark:hover:bg-emerald-500/30 transition-all">
-                    <Printer size={12}/> Reimprimir
+                    <Printer size={12}/> Cupom
                   </button>
-                  <button onClick={() => setSelectedPedido(null)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-400">✕</button>
+                  <button type="button" onClick={() => imprimirProducao(selectedPedido.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-100 rounded-lg text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-all">
+                    <ChefHat size={12}/> Produção
+                  </button>
+                  <button type="button" onClick={() => setSelectedPedido(null)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-400">✕</button>
                 </div>
               </div>
 
@@ -606,6 +682,25 @@ function TabPainel({ token }: { token: string }) {
                   </div>
                 );
               })()}
+
+              {(selectedPedido.automation_auto_delivery_accept ||
+                selectedPedido.automation_kitchen_ok ||
+                selectedPedido.automation_kitchen_failed) && (
+                <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 px-3 py-2 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Automação</p>
+                  <ul className="text-[11px] text-zinc-600 dark:text-zinc-300 space-y-0.5">
+                    {selectedPedido.automation_auto_delivery_accept && (
+                      <li>Aceite automático pelo cardápio online (Pedido Recebido).</li>
+                    )}
+                    {selectedPedido.automation_kitchen_ok && <li>Produção impressa automaticamente ao menos uma vez.</li>}
+                    {selectedPedido.automation_kitchen_failed && (
+                      <li className="text-amber-800 dark:text-amber-200">
+                        Registro de falha na auto-impressão — use Produção ou revise a impressora de cozinha.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
 
               <div className="space-y-3 text-sm">
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-1">
@@ -637,8 +732,12 @@ function TabPainel({ token }: { token: string }) {
                     {deliveryPedidoTemItensDetalhe(selectedPedido) ? (
                       <ul className="space-y-3">
                         {selectedPedido.itens!.map((it, idx) => {
+                          const ext = it as typeof it & { item_display_details?: string[] };
                           const detail = getOrderItemDetailText(it);
-                          const lines = splitOrderItemDetailLines(detail);
+                          const lines =
+                            Array.isArray(ext.item_display_details) && ext.item_display_details.length > 0
+                              ? ext.item_display_details
+                              : splitOrderItemDetailLines(detail);
                           const unit = Number(it.price_at_time || 0);
                           const lineTotal = unit * Number(it.quantity);
                           return (
@@ -648,7 +747,7 @@ function TabPainel({ token }: { token: string }) {
                             >
                               <div className="flex justify-between gap-2 text-sm">
                                 <span className="font-bold text-zinc-900 dark:text-zinc-100 min-w-0">
-                                  {it.quantity}× {it.product_name}
+                                  {it.product_name} ×{it.quantity}
                                 </span>
                                 <span className="font-bold text-zinc-900 dark:text-zinc-100 tabular-nums shrink-0">
                                   {fmt(lineTotal)}
@@ -656,13 +755,16 @@ function TabPainel({ token }: { token: string }) {
                               </div>
                               {lines.length > 0 ? (
                                 <>
-                                  <ul className="mt-1.5 ml-3 list-disc space-y-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                                  <ul className="mt-1.5 ml-1 space-y-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
                                     {lines.map((line, j) => (
-                                      <li key={j}>{line}</li>
+                                      <li key={j} className="flex gap-1.5">
+                                        <span className="text-zinc-400 shrink-0" aria-hidden>–</span>
+                                        <span className="min-w-0">{line}</span>
+                                      </li>
                                     ))}
                                   </ul>
                                   <p className="mt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
-                                    Preço unit. {fmt(unit)} já inclui opções/adicionais acima; à direita, total da linha.
+                                    Unit. {fmt(unit)} (congelado); à direita, total da linha.
                                   </p>
                                 </>
                               ) : null}
@@ -793,7 +895,7 @@ function TabPainel({ token }: { token: string }) {
                     <button onClick={() => { mudarStatus(selectedPedido.id, cfg.next!); }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all hover:opacity-90 active:scale-95"
                       style={{ background:cfg.color, color:'#fff' }}>
-                      <ChevronRight size={16}/> Avançar para {cfg.next}
+                      <ChevronRight size={16}/> {deliveryNextPrimaryLabel(cfg.next!)} — {deliveryNextActionTitle(cfg.next!)}
                     </button>
                   );
                 })()}
@@ -807,11 +909,12 @@ function TabPainel({ token }: { token: string }) {
 }
 
 // ─── PedidoCard ───────────────────────────────────────────────────────────────
-function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, cfg }: {
+function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImprimirProducao, cfg }: {
   key?: React.Key;
   pedido: Pedido; motoboys: Motoboy[];
   onDetail: () => void; onAvancar: (mbId?: number) => void | Promise<void>;
   onReimprimir: () => void | Promise<void>;
+  onImprimirProducao: () => void | Promise<void>;
   cfg: any;
 }) {
   const [selectedMotoboy, setSelectedMotoboy] = useState<number | ''>('');
@@ -831,12 +934,37 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, cfg }
                 Pers.
               </span>
             )}
+            {pedido.automation_auto_delivery_accept && (
+              <span
+                className="inline-flex rounded-full border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-800 dark:text-blue-200"
+                title="Pedido aceito automaticamente pelo cardápio online"
+              >
+                Auto aceito
+              </span>
+            )}
+            {pedido.automation_kitchen_ok && (
+              <span
+                className="inline-flex rounded-full border border-emerald-200 dark:border-emerald-500/35 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
+                title="Produção enviada à impressora automaticamente (ao menos uma vez)"
+              >
+                Produção OK
+              </span>
+            )}
+            {pedido.automation_kitchen_failed && (
+              <span
+                className="inline-flex rounded-full border border-red-200 dark:border-red-500/40 bg-red-50 dark:bg-red-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-800 dark:text-red-200"
+                title="Falha registrada na auto-impressão de produção — verifique impressora ou use impressão manual"
+              >
+                Produção falhou
+              </span>
+            )}
           </div>
           {pedido.cliente_nome && <p className="text-sm max-md:text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5 line-clamp-2">{pedido.cliente_nome}</p>}
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <span className={`text-[11px] font-bold tabular-nums px-1 ${elapsed>=20?'text-red-500':'text-zinc-400 dark:text-zinc-500'}`}>{elapsed===0?'agora':`${elapsed}min`}</span>
-          <button type="button" onClick={onReimprimir} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg active:scale-95" title="Reimprimir"><Printer size={16}/></button>
+          <button type="button" onClick={onReimprimir} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg active:scale-95" title="Cupom (cliente)"><Printer size={16}/></button>
+          <button type="button" onClick={onImprimirProducao} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 rounded-lg active:scale-95" title="Produção (cozinha)"><ChefHat size={16}/></button>
           <button type="button" onClick={onDetail} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-lg active:scale-95" aria-label="Ver detalhes"><ChevronRight size={18}/></button>
         </div>
       </div>
@@ -888,10 +1016,7 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, cfg }
                 <ChevronRight size={16}/>
                 {bloqueado
                   ? 'Selecione o motoboy'
-                  : cfg.next==='Em Preparo'?'Preparar'
-                  : cfg.next==='Pronto para Entrega'?'Pronto'
-                  : cfg.next==='Saiu para Entrega'?'Despachar'
-                  : 'Entregar'}
+                  : deliveryNextPrimaryLabel(cfg.next!)}
               </button>
             );
           })()}
@@ -1556,7 +1681,10 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
         ]);
         if (cfgRes.ok) {
           const d = await cfgRes.json();
-          setCfg(d);
+          setCfg({
+            ...d,
+            automation: { ...DEFAULT_TENANT_AUTOMATION, ...(d.automation && typeof d.automation === 'object' ? d.automation : {}) },
+          });
           setZonas(Array.isArray(d.zonas_entrega) ? d.zonas_entrega : []);
         }
         if (cuponsRes.ok) setCupons(await cuponsRes.json());
@@ -1697,6 +1825,52 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                   <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-zinc-200 rounded-full shadow transition-all ${cfg.ativo?'left-6':'left-0.5'}`}/>
                 </button>
               </div>
+
+              <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 p-4 space-y-4">
+                <div className="flex items-start gap-2">
+                  <ChefHat size={18} className="text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">Automação operacional</p>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                      Impressão automática usa a impressora de cozinha (perfil cozinha). Aceite automático só vale para pedidos criados pelo cardápio online. Eventos ficam no histórico do pedido (Pedidos) e em sinais no painel.
+                    </p>
+                  </div>
+                </div>
+                {([
+                  { key: 'delivery_auto_accept_orders' as const, label: 'Delivery: aceitar pedidos automaticamente', hint: 'Cardápio online entra como Pedido Recebido. Fica registrado no pedido; impressão automática (abaixo) só dispara junto se estiver ligada.' },
+                  { key: 'delivery_auto_print_production' as const, label: 'Delivery: imprimir produção ao aceitar', hint: 'Ao aceitar (painel), ao criar já aceito (manual) ou na criação online quando o aceite automático está ligado.' },
+                  { key: 'balcao_auto_print_production' as const, label: 'Balcão: imprimir produção ao finalizar', hint: 'Pedidos do PDV (consumo no local ou padrão balcão).' },
+                  { key: 'consumo_local_auto_print_production' as const, label: 'Consumo local: imprimir produção', hint: 'Quando o PDV envia tipo de retirada “local”.' },
+                  { key: 'retirada_auto_print_production' as const, label: 'Retirada / levar: imprimir produção', hint: 'PDV levar ou pedido retirada no cardápio.' },
+                  { key: 'mesa_auto_print_production' as const, label: 'Mesa: imprimir ao lançar item', hint: 'Cada inclusão na comanda dispara a cozinha (se houver itens de preparo).' },
+                  { key: 'print_production_even_with_kds' as const, label: 'Mesa: imprimir mesmo com KDS ativo', hint: 'Desligado: com pedido KDS na mesa, a auto-impressão não manda térmica (fica registrado). Ligado: imprime mesmo assim.' },
+                ]).map((row) => {
+                  const merged = { ...DEFAULT_TENANT_AUTOMATION, ...cfg.automation };
+                  const on = Boolean(merged[row.key]);
+                  return (
+                    <div key={row.key} className="flex items-center justify-between gap-3 border-t border-amber-200/60 dark:border-amber-500/20 pt-3 first:border-t-0 first:pt-0">
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">{row.label}</p>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">{row.hint}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCfg((c) => ({
+                            ...c,
+                            automation: { ...DEFAULT_TENANT_AUTOMATION, ...c.automation, [row.key]: !on },
+                          }))
+                        }
+                        className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${on ? 'bg-emerald-500' : 'bg-zinc-200 dark:bg-zinc-600'}`}
+                        aria-pressed={on}
+                      >
+                        <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-zinc-200 rounded-full shadow transition-all ${on ? 'left-6' : 'left-0.5'}`} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Horário abertura" value={cfg.horario_abertura||''} onChange={v=>setCfg(c=>({...c,horario_abertura:v}))} type="time"/>
                 <Field label="Horário fechamento" value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>

@@ -1,6 +1,6 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree } from 'lucide-react';
+import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree, ChefHat } from 'lucide-react';
 import type { Order } from '../types';
 import { Card, Button } from '../components/ui/Card';
 import {
@@ -9,6 +9,7 @@ import {
   canCentralOpenMaps,
   canCentralConfirmPayment,
   canCentralPrintCupom,
+  canCentralPrintProducao,
   canCentralPrintProof,
   executeCentralConfirmPayment,
   executeCentralPrintAction,
@@ -18,6 +19,7 @@ import {
   getCentralNotifyCustomerUrl,
   getCentralPrimaryAction,
 } from '../utils/orderCentralActions';
+import { OrderAutomationBadges, orderHasAutomationBadges } from '../components/OrderAutomationBadges';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { getSegCfg } from '../config/segmentos';
@@ -602,6 +604,7 @@ function OrderCard({
   const withoutMotoboy = isOrderWithoutAssignedMotoboy(order);
   const ageMinutes = getOrderAgeMinutes(order);
   const hasItemCustomization = orderHasAnyItemCustomization(order);
+  const hasAutomationBadges = orderHasAutomationBadges(order);
   const statusRaw = String(order.status || '').trim() || '—';
   const paymentPendingLabel = Number(order.payment_total_paid || 0) > 0
     ? 'Pagamento parcial'
@@ -622,7 +625,7 @@ function OrderCard({
 
   const [motoboyId, setMotoboyId] = useState<number | ''>('');
   const [busy, setBusy] = useState(false);
-  const [busyQuickAction, setBusyQuickAction] = useState<'payment' | 'cupom' | 'comprovante' | null>(null);
+  const [busyQuickAction, setBusyQuickAction] = useState<'payment' | 'cupom' | 'comprovante' | 'producao' | null>(null);
 
   const needsMotoboy =
     primary?.kind === 'patch_delivery' && primary.needsMotoboy;
@@ -630,6 +633,7 @@ function OrderCard({
     Boolean(needsMotoboy) && (!motoboyId || motoboys.length === 0);
   const canConfirmPayment = canCentralConfirmPayment(order);
   const canPrintCupom = canCentralPrintCupom(order);
+  const canPrintProducao = canCentralPrintProducao(order);
   const canPrintProof = canCentralPrintProof(order);
   const mapsUrl = getCentralMapsUrl(order);
   const notifyUrl = getCentralNotifyCustomerUrl(order);
@@ -664,7 +668,7 @@ function OrderCard({
     onActionDone();
   };
 
-  const handleQuickPrint = async (document: 'cupom' | 'comprovante') => {
+  const handleQuickPrint = async (document: 'cupom' | 'comprovante' | 'producao') => {
     if (busyQuickAction) return;
     setBusyQuickAction(document);
     const r = await executeCentralPrintAction({ token, order, document });
@@ -693,7 +697,7 @@ function OrderCard({
         >
           {compactMode ? (
             <>
-              {(urgent || paymentPending || withoutMotoboy || isQrPending || hasItemCustomization) && (
+              {(urgent || paymentPending || withoutMotoboy || isQrPending || hasItemCustomization || hasAutomationBadges) && (
                 <div className="mb-1.5 flex flex-wrap gap-1">
                   {urgent && (
                     <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
@@ -722,6 +726,7 @@ function OrderCard({
                       Itens c/ obs.
                     </span>
                   )}
+                  <OrderAutomationBadges order={order} compact />
                 </div>
               )}
 
@@ -766,7 +771,7 @@ function OrderCard({
             </>
           ) : (
             <>
-              {(urgent || paymentPending || withoutMotoboy || hasItemCustomization) && (
+              {(urgent || paymentPending || withoutMotoboy || hasItemCustomization || hasAutomationBadges) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {urgent && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
@@ -789,6 +794,7 @@ function OrderCard({
                       Itens personalizados
                     </span>
                   )}
+                  <OrderAutomationBadges order={order} />
                 </div>
               )}
               <div className="flex items-start justify-between gap-3">
@@ -856,14 +862,14 @@ function OrderCard({
           )}
         </button>
 
-        {(canConfirmPayment || canPrintCupom || canPrintProof || canCentralOpenMaps(order) || canCentralNotifyCustomer(order) || primary) && (
+        {(canConfirmPayment || canPrintCupom || canPrintProducao || canPrintProof || canCentralOpenMaps(order) || canCentralNotifyCustomer(order) || primary) && (
           <div
             className={`${compactMode ? 'mt-2 pt-2 space-y-1.5' : 'mt-3 pt-3 space-y-2'} border-t border-zinc-100 dark:border-zinc-800`}
             onClick={(e) => e.stopPropagation()}
           >
             {compactMode && !needsMotoboy ? (
               <div className="flex items-center gap-1.5">
-                {(canConfirmPayment || canPrintCupom || canPrintProof || mapsUrl || notifyUrl) && (
+                {(canConfirmPayment || canPrintCupom || canPrintProducao || canPrintProof || mapsUrl || notifyUrl) && (
                   <div className="flex flex-wrap gap-1">
                     {canConfirmPayment && (
                       <button
@@ -887,6 +893,18 @@ function OrderCard({
                         className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
                       >
                         <Printer size={14} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
+                      </button>
+                    )}
+                    {canPrintProducao && (
+                      <button
+                        type="button"
+                        title="Imprimir produção (cozinha)"
+                        aria-label="Imprimir produção"
+                        onClick={() => void handleQuickPrint('producao')}
+                        disabled={busyQuickAction !== null}
+                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100"
+                      >
+                        <ChefHat size={14} className={busyQuickAction === 'producao' ? 'animate-pulse' : ''} />
                       </button>
                     )}
                     {canPrintProof && (
@@ -940,7 +958,7 @@ function OrderCard({
               </div>
             ) : (
               <>
-            {(canConfirmPayment || canPrintCupom || canPrintProof || mapsUrl || notifyUrl) && (
+            {(canConfirmPayment || canPrintCupom || canPrintProducao || canPrintProof || mapsUrl || notifyUrl) && (
               <div className="flex flex-wrap gap-1.5">
                 {canConfirmPayment && (
                   <button
@@ -964,6 +982,18 @@ function OrderCard({
                     className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
                   >
                     <Printer size={15} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
+                  </button>
+                )}
+                {canPrintProducao && (
+                  <button
+                    type="button"
+                    title="Imprimir produção (cozinha)"
+                    aria-label="Imprimir produção"
+                    onClick={() => void handleQuickPrint('producao')}
+                    disabled={busyQuickAction !== null}
+                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100`}
+                  >
+                    <ChefHat size={15} className={busyQuickAction === 'producao' ? 'animate-pulse' : ''} />
                   </button>
                 )}
                 {canPrintProof && (
@@ -1059,9 +1089,10 @@ function OrderDetailModal({
   const badge = channelBadgeMeta(order);
   const pag = getPagamentoLine(order);
   const [busyPayment, setBusyPayment] = useState(false);
-  const [busyPrint, setBusyPrint] = useState<'cupom' | 'comprovante' | null>(null);
+  const [busyPrint, setBusyPrint] = useState<'cupom' | 'comprovante' | 'producao' | null>(null);
   const canConfirmPayment = canCentralConfirmPayment(order);
   const canPrintProof = canCentralPrintProof(order);
+  const canPrintProducaoModal = canCentralPrintProducao(order);
   const canWhatsAppCliente = canCentralOpenCustomerWhatsApp(order);
 
   const handleConfirmPayment = async () => {
@@ -1077,7 +1108,7 @@ function OrderDetailModal({
     onRefresh();
   };
 
-  const handlePrint = async (document: 'cupom' | 'comprovante') => {
+  const handlePrint = async (document: 'cupom' | 'comprovante' | 'producao') => {
     if (busyPrint) return;
     setBusyPrint(document);
     const result = await executeCentralPrintAction({ token, order, document });
@@ -1180,6 +1211,18 @@ function OrderDetailModal({
                 <Printer size={14} className={busyPrint === 'cupom' ? 'animate-pulse' : ''} />
                 Imprimir cupom
               </Button>
+              {canPrintProducaoModal && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!justify-start !px-3 !text-xs border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                  onClick={() => void handlePrint('producao')}
+                  disabled={busyPrint !== null}
+                >
+                  <ChefHat size={14} className={busyPrint === 'producao' ? 'animate-pulse' : ''} />
+                  Imprimir produção
+                </Button>
+              )}
               {canPrintProof && (
                 <Button
                   type="button"
@@ -1224,8 +1267,16 @@ function OrderDetailModal({
             <ul className="space-y-3">
               {(order.items || []).map((it, idx) => {
                 const label = it.name || (it as { product_name?: string }).product_name || 'Item';
-                const detail = getOrderItemDetailText(it as { observation?: string | null; obs_opcoes?: string | null });
-                const lines = splitOrderItemDetailLines(detail);
+                const ext = it as {
+                  observation?: string | null;
+                  obs_opcoes?: string | null;
+                  item_display_details?: string[];
+                };
+                const detail = getOrderItemDetailText(ext);
+                const lines =
+                  Array.isArray(ext.item_display_details) && ext.item_display_details.length > 0
+                    ? ext.item_display_details
+                    : splitOrderItemDetailLines(detail);
                 const unit = Number(it.price_at_time || 0);
                 const lineTotal = unit * Number(it.quantity);
                 return (
@@ -1235,7 +1286,7 @@ function OrderDetailModal({
                   >
                     <div className="flex justify-between gap-3 text-sm">
                       <span className="text-zinc-700 dark:text-zinc-300 min-w-0 font-semibold">
-                        {it.quantity}× {label}
+                        {label} ×{it.quantity}
                       </span>
                       <span className="text-zinc-900 dark:text-zinc-100 font-bold tabular-nums shrink-0">
                         {formatMoney(lineTotal)}
@@ -1243,14 +1294,16 @@ function OrderDetailModal({
                     </div>
                     {lines.length > 0 ? (
                       <>
-                        <ul className="mt-1.5 ml-3 list-disc space-y-0.5 text-[12px] leading-snug text-zinc-600 dark:text-zinc-400">
+                        <ul className="mt-1.5 ml-1 space-y-0.5 text-[12px] leading-snug text-zinc-600 dark:text-zinc-400">
                           {lines.map((line, j) => (
-                            <li key={j}>{line}</li>
+                            <li key={j} className="flex gap-1.5">
+                              <span className="text-zinc-400 shrink-0" aria-hidden>–</span>
+                              <span className="min-w-0">{line}</span>
+                            </li>
                           ))}
                         </ul>
                         <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
-                          Preço unitário {formatMoney(unit)} já inclui opções e adicionais indicados acima; o valor à
-                          direita é o total da linha.
+                          Unitário {formatMoney(unit)} (congelado na venda); à direita, total da linha.
                         </p>
                       </>
                     ) : null}

@@ -7,11 +7,13 @@ import {
   X,
   Settings,
   Printer,
+  ChefHat,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
 import { Card, Button } from '../../components/ui/Card';
 import { openPrintPreview, openPrintPreviewFromUrl } from '../../utils/print';
+import { getOrderItemDetailText, splitOrderItemDetailLines } from '../../utils/orderItemDisplay';
 
 // â”€â”€ Cupom HTML padrÃ£o 80mm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function ComandaMesaModal({
@@ -236,6 +238,15 @@ const handlePrintComanda = async () => {
       alert('Erro ao gerar impressao da comanda.');
     }
   };
+
+  const handlePrintProducao = async () => {
+    try {
+      const win = await openPrintPreviewFromUrl(`/api/mesas/${mesa.id}/producao-html`, token);
+      if (!win) alert('Permita popups para imprimir.');
+    } catch {
+      alert('Erro ao gerar comanda de produção.');
+    }
+  };
   
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -292,11 +303,23 @@ const handlePrintComanda = async () => {
             </div>
           ) : (
             <div className="space-y-2">
-              {itens.map(item => (
+              {itens.map(item => {
+                const detailLines = splitOrderItemDetailLines(getOrderItemDetailText(item));
+                return (
                 <div key={item.id} className="flex items-center gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-100">
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-zinc-900 truncate">{item.product_name}</p>
-                    <p className="text-xs text-zinc-400">R$ {item.price_at_time.toFixed(2)} un.</p>
+                    {detailLines.length > 0 ? (
+                      <ul className="mt-1 ml-0.5 space-y-0.5 text-[11px] text-zinc-500 leading-snug">
+                        {detailLines.map((line, j) => (
+                          <li key={j} className="flex gap-1.5">
+                            <span className="text-zinc-400 shrink-0" aria-hidden>–</span>
+                            <span className="min-w-0 line-clamp-2">{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <p className="text-xs text-zinc-400 mt-0.5">R$ {Number(item.price_at_time).toFixed(2)} un.</p>
                   </div>
                   <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-0.5">
                     <button
@@ -314,7 +337,7 @@ const handlePrintComanda = async () => {
                     </button>
                   </div>
                   <p className="w-20 text-right font-black text-sm text-zinc-900">
-                    R$ {(item.quantity * item.price_at_time).toFixed(2)}
+                    R$ {(Number(item.quantity) * Number(item.price_at_time)).toFixed(2)}
                   </p>
                   <button
                     onClick={() => handleRemoveItem(item.id)}
@@ -323,7 +346,8 @@ const handlePrintComanda = async () => {
                     <Trash2 size={15} />
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -438,17 +462,29 @@ const handlePrintComanda = async () => {
             </div>
 
             {!showPayment ? (
-              <div className="flex gap-2">
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrintComanda}
+                    className="flex items-center justify-center gap-2 py-3 bg-zinc-100 hover:bg-zinc-200 rounded-xl font-bold text-sm text-zinc-700 transition-all"
+                  >
+                    <Printer size={15} />
+                    Comanda mesa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintProducao}
+                    className="flex items-center justify-center gap-2 py-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl font-bold text-sm text-amber-950 transition-all"
+                  >
+                    <ChefHat size={15} />
+                    Produção
+                  </button>
+                </div>
                 <button
-                  onClick={handlePrintComanda}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-100 hover:bg-zinc-200 rounded-xl font-bold text-sm text-zinc-700 transition-all"
-                >
-                  <Printer size={15} />
-                  Imprimir
-                </button>
-                <button
+                  type="button"
                   onClick={() => setShowPayment(true)}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-bold text-sm transition-all"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-bold text-sm transition-all"
                 >
                   <CheckCircle2 size={15} />
                   Fechar Conta

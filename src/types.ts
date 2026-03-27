@@ -91,6 +91,10 @@ export interface Order {
   couvert_quantidade_pessoas?: number;
   valor_couvert?: number;
   total_extras?: number;
+  /** Agregados de `pedido_eventos` (GET /api/orders) — automação de aceite/impressão. */
+  automation_auto_delivery_accept?: boolean;
+  automation_kitchen_ok?: boolean;
+  automation_kitchen_failed?: boolean;
 }
 
 // â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
