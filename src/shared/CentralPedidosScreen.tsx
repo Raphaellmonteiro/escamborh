@@ -3,6 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree, ChefHat } from 'lucide-react';
 import type { Order } from '../types';
 import { Card, Button } from '../components/ui/Card';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import {
+  adminOpsInsetPanelClass,
+  adminScreenMetaHintClass,
+  adminSectionEyebrowClass,
+} from '../components/ui/screenChrome';
 import {
   canCentralNotifyCustomer,
   canCentralOpenCustomerWhatsApp,
@@ -21,6 +27,7 @@ import {
 } from '../utils/orderCentralActions';
 import { OrderAutomationBadges, orderHasAutomationBadges } from '../components/OrderAutomationBadges';
 import { EmptyState } from '../components/ui/EmptyState';
+import { StatusChip } from '../components/ui/StatusChip';
 import { Spinner } from '../components/ui/Spinner';
 import { getSegCfg } from '../config/segmentos';
 import {
@@ -396,20 +403,22 @@ export default function CentralPedidosScreen({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
       <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+        <ScreenHeader
+          titleAs="h1"
+          titleClassName="flex items-center gap-2"
+          title={
+            <>
               <LayoutGrid className="shrink-0 text-zinc-700 dark:text-zinc-300" size={20} />
               Operação
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Visão ao vivo do dia · foco nos ativos · ações rápidas no card
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider hidden sm:inline">
+            </>
+          }
+          subtitle="Visão ao vivo do dia · foco nos ativos · ações rápidas no card"
+          meta={
+            <span className={`${adminScreenMetaHintClass} hidden sm:inline`}>
               Até {CENTRAL_ORDERS_LIMIT} pedidos (hoje)
             </span>
+          }
+          actions={
             <Button
               type="button"
               variant="secondary"
@@ -420,8 +429,8 @@ export default function CentralPedidosScreen({
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               Atualizar
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         <div className="mt-4 flex flex-wrap gap-2">
           {FILTERS.map((f) => (
@@ -441,7 +450,7 @@ export default function CentralPedidosScreen({
           <button
             type="button"
             onClick={() => setShowClosed((current) => !current)}
-            className={`px-3 py-2 rounded-xl text-[11px] font-semibold border min-h-[40px] transition-colors ${
+            className={`px-3 py-2 rounded-xl text-xs font-semibold border min-h-[40px] transition-colors ${
               showClosed
                 ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                 : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -453,7 +462,7 @@ export default function CentralPedidosScreen({
           <button
             type="button"
             onClick={() => setCompactMode((current) => !current)}
-            className={`px-3 py-2 rounded-xl text-[11px] font-semibold border min-h-[40px] transition-colors ${
+            className={`px-3 py-2 rounded-xl text-xs font-semibold border min-h-[40px] transition-colors ${
               compactMode
                 ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                 : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -465,7 +474,7 @@ export default function CentralPedidosScreen({
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">
+          <span className={adminSectionEyebrowClass}>
             Operação
           </span>
           {QUICK_FILTERS.map((f) => (
@@ -473,7 +482,7 @@ export default function CentralPedidosScreen({
               key={f.id}
               type="button"
               onClick={() => setQuickFilter(f.id)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors ${
+              className={`min-h-[40px] rounded-full border px-3 py-2 text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5 ${
                 quickFilter === f.id
                   ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                   : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
@@ -485,7 +494,7 @@ export default function CentralPedidosScreen({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 p-4 sm:p-6 space-y-4">
+      <div className="flex-1 min-h-0 space-y-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 sm:pb-6">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/40 dark:border-red-900 px-4 py-3 text-sm text-red-800 dark:text-red-200">
             {error}
@@ -700,31 +709,41 @@ function OrderCard({
               {(urgent || paymentPending || withoutMotoboy || isQrPending || hasItemCustomization || hasAutomationBadges) && (
                 <div className="mb-1.5 flex flex-wrap gap-1">
                   {urgent && (
-                    <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
+                    <StatusChip variant="error" size="sm">
                       {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
-                    </span>
+                    </StatusChip>
                   )}
                   {paymentPending && (
-                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+                    <StatusChip variant="warning" size="sm" emphasis="bold">
                       {paymentPendingLabel}
-                    </span>
+                    </StatusChip>
                   )}
                   {withoutMotoboy && (
-                    <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200">
+                    <StatusChip
+                      size="sm"
+                      emphasis="bold"
+                      toneClassName="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200"
+                    >
                       Sem motoboy
-                    </span>
+                    </StatusChip>
                   )}
                   {isQrPending && mesaReference && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200">
-                      <QrCode size={10} />
+                    <StatusChip
+                      size="sm"
+                      icon={QrCode}
+                      toneClassName="border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200"
+                    >
                       Mesa {mesaReference}
-                    </span>
+                    </StatusChip>
                   )}
                   {hasItemCustomization && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
-                      <ListTree size={10} />
+                    <StatusChip
+                      size="sm"
+                      icon={ListTree}
+                      toneClassName="border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200"
+                    >
                       Itens c/ obs.
-                    </span>
+                    </StatusChip>
                   )}
                   <OrderAutomationBadges order={order} compact />
                 </div>
@@ -736,19 +755,24 @@ function OrderCard({
                     <p className="min-w-0 truncate text-[12px] font-black leading-tight tracking-tight text-zinc-900 dark:text-zinc-100">
                       {getOrderNumberLine(order)}
                     </p>
-                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${badge.className}`}>
+                    <StatusChip rounded="md" size="sm" toneClassName={badge.className} emphasis="bold" className="shrink-0">
                       {badge.label}
-                    </span>
+                    </StatusChip>
                   </div>
                   <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
                     {getClienteLine(order)}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-black tabular-nums ${elapsed.tone}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${elapsed.dot}`} />
+                  <StatusChip
+                    size="sm"
+                    toneClassName={elapsed.tone}
+                    className="tabular-nums gap-1"
+                    uppercase={false}
+                  >
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${elapsed.dot}`} />
                     {elapsed.label}
-                  </span>
+                  </StatusChip>
                   <p className="mt-1 text-[14px] font-black tabular-nums text-zinc-900 dark:text-zinc-50">
                     {formatMoney(order.total_amount)}
                   </p>
@@ -756,16 +780,19 @@ function OrderCard({
               </div>
 
               <div className="mt-1.5 flex items-center gap-1.5">
-                <span
-                  className={`min-w-0 inline-flex flex-1 items-center rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide leading-tight ${statusTone}`}
+                <StatusChip
+                  rounded="lg"
+                  size="sm"
+                  toneClassName={statusTone}
+                  className="min-w-0 inline-flex max-w-full flex-1 px-2 py-0.5 leading-tight"
                   title={statusRaw}
                 >
                   <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação' : statusRaw}</span>
-                </span>
+                </StatusChip>
                 {paymentBadge && (
-                  <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-md border ${paymentBadge.className}`}>
+                  <StatusChip rounded="md" size="sm" toneClassName={paymentBadge.className} emphasis="semibold" className="shrink-0">
                     {paymentBadge.label}
-                  </span>
+                  </StatusChip>
                 )}
               </div>
             </>
@@ -774,25 +801,32 @@ function OrderCard({
               {(urgent || paymentPending || withoutMotoboy || hasItemCustomization || hasAutomationBadges) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {urgent && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-200">
+                    <StatusChip variant="error" size="md">
                       {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
-                    </span>
+                    </StatusChip>
                   )}
                   {paymentPending && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+                    <StatusChip variant="warning" size="md" emphasis="bold">
                       {paymentPendingLabel}
-                    </span>
+                    </StatusChip>
                   )}
                   {withoutMotoboy && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200">
+                    <StatusChip
+                      size="md"
+                      emphasis="bold"
+                      toneClassName="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200"
+                    >
                       Sem motoboy
-                    </span>
+                    </StatusChip>
                   )}
                   {hasItemCustomization && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
-                      <ListTree size={11} />
+                    <StatusChip
+                      size="md"
+                      icon={ListTree}
+                      toneClassName="border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200"
+                    >
                       Itens personalizados
-                    </span>
+                    </StatusChip>
                   )}
                   <OrderAutomationBadges order={order} />
                 </div>
@@ -800,9 +834,14 @@ function OrderCard({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {isQrPending && mesaReference && (
-                    <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200">
-                      <QrCode size={11} />
-                      Mesa {mesaReference}
+                    <div className="mb-1.5">
+                      <StatusChip
+                        size="md"
+                        icon={QrCode}
+                        toneClassName="border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200"
+                      >
+                        Mesa {mesaReference}
+                      </StatusChip>
                     </div>
                   )}
                   <p className="text-[13px] font-black text-zinc-900 dark:text-zinc-100 truncate leading-tight tracking-tight">
@@ -814,36 +853,44 @@ function OrderCard({
                   </p>
                 </div>
                 <div className="flex items-start gap-2 shrink-0">
-                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black tabular-nums ${elapsed.tone}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${elapsed.dot}`} />
-                    <Clock size={10} />
+                  <StatusChip
+                    size="md"
+                    toneClassName={elapsed.tone}
+                    className="gap-1 px-2 py-1 tabular-nums"
+                    uppercase={false}
+                  >
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${elapsed.dot}`} />
+                    <Clock size={10} className="shrink-0" strokeWidth={2.25} />
                     {elapsed.label}
-                  </span>
+                  </StatusChip>
                   <ChevronRight size={16} className="shrink-0 text-zinc-300 dark:text-zinc-600 mt-1" />
                 </div>
               </div>
 
               <div className="mt-2 w-full min-w-0">
-                <span
-                  className={`inline-flex w-full max-w-full items-center rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide leading-tight ${statusTone}`}
+                <StatusChip
+                  rounded="xl"
+                  size="sm"
+                  toneClassName={statusTone}
+                  className="inline-flex w-full max-w-full px-2.5 py-1 leading-tight"
                   title={statusRaw}
                 >
                   <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação da mesa' : statusRaw}</span>
-                </span>
+                </StatusChip>
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${badge.className}`}>
+                <StatusChip rounded="lg" size="sm" toneClassName={badge.className} emphasis="bold">
                   {badge.label}
-                </span>
+                </StatusChip>
                 {paymentBadge && (
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${paymentBadge.className}`}>
+                  <StatusChip rounded="lg" size="sm" toneClassName={paymentBadge.className} emphasis="semibold">
                     {paymentBadge.label}
-                  </span>
+                  </StatusChip>
                 )}
               </div>
 
-              <div className="mt-3 px-3 py-2.5 rounded-xl bg-zinc-50/90 dark:bg-zinc-800/60">
+              <div className={`mt-3 px-3 py-2.5 ${adminOpsInsetPanelClass}`}>
                 <div className="flex items-end justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-[0.18em]">Total</p>
@@ -878,7 +925,7 @@ function OrderCard({
                         aria-label="Confirmar pagamento"
                         onClick={() => void handleQuickPayment()}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200"
+                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200"
                       >
                         <BadgeCheck size={14} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
                       </button>
@@ -890,7 +937,7 @@ function OrderCard({
                         aria-label="Imprimir cupom"
                         onClick={() => void handleQuickPrint('cupom')}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
                       >
                         <Printer size={14} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
                       </button>
@@ -902,7 +949,7 @@ function OrderCard({
                         aria-label="Imprimir produção"
                         onClick={() => void handleQuickPrint('producao')}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100"
+                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100"
                       >
                         <ChefHat size={14} className={busyQuickAction === 'producao' ? 'animate-pulse' : ''} />
                       </button>
@@ -914,7 +961,7 @@ function OrderCard({
                         aria-label="Imprimir comprovante"
                         onClick={() => void handleQuickPrint('comprovante')}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
                       >
                         <ReceiptText size={14} className={busyQuickAction === 'comprovante' ? 'animate-pulse' : ''} />
                       </button>
@@ -925,7 +972,7 @@ function OrderCard({
                         title="Ver mapa"
                         aria-label="Ver mapa"
                         onClick={() => openExternalUrl(mapsUrl)}
-                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
+                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
                       >
                         <MapPinned size={14} />
                       </button>
@@ -936,7 +983,7 @@ function OrderCard({
                         title="Avisar cliente"
                         aria-label="Avisar cliente"
                         onClick={() => openExternalUrl(notifyUrl)}
-                        className="min-h-[30px] min-w-[30px] inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200"
+                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200"
                       >
                         <MessageCircle size={14} />
                       </button>
@@ -948,7 +995,7 @@ function OrderCard({
                     type="button"
                     variant="primary"
                     disabled={busy || bloqueadoMotoboy}
-                    className="!min-h-[34px] !py-1.5 !px-3 !text-[11px] !font-black shadow-sm flex-1"
+                    className="!min-h-[44px] lg:!min-h-[34px] !py-2 lg:!py-1.5 !px-3 !text-[11px] !font-black shadow-sm flex-1"
                     onClick={() => void handlePrimary()}
                   >
                     <ChevronRight size={13} className={busy ? 'animate-pulse' : ''} />
@@ -967,7 +1014,7 @@ function OrderCard({
                     aria-label="Confirmar pagamento"
                     onClick={() => void handleQuickPayment()}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200`}
                   >
                     <BadgeCheck size={15} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
                   </button>
@@ -979,7 +1026,7 @@ function OrderCard({
                     aria-label="Imprimir cupom"
                     onClick={() => void handleQuickPrint('cupom')}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
                   >
                     <Printer size={15} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
                   </button>
@@ -991,7 +1038,7 @@ function OrderCard({
                     aria-label="Imprimir produção"
                     onClick={() => void handleQuickPrint('producao')}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100`}
                   >
                     <ChefHat size={15} className={busyQuickAction === 'producao' ? 'animate-pulse' : ''} />
                   </button>
@@ -1003,7 +1050,7 @@ function OrderCard({
                     aria-label="Imprimir comprovante"
                     onClick={() => void handleQuickPrint('comprovante')}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
                   >
                     <ReceiptText size={15} className={busyQuickAction === 'comprovante' ? 'animate-pulse' : ''} />
                   </button>
@@ -1014,7 +1061,7 @@ function OrderCard({
                     title="Ver mapa"
                     aria-label="Ver mapa"
                     onClick={() => openExternalUrl(mapsUrl)}
-                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200`}
                   >
                     <MapPinned size={15} />
                   </button>
@@ -1025,7 +1072,7 @@ function OrderCard({
                     title="Avisar cliente"
                     aria-label="Avisar cliente"
                     onClick={() => openExternalUrl(notifyUrl)}
-                    className={`${compactMode ? 'min-h-[32px] min-w-[32px]' : 'min-h-[36px] min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200`}
                   >
                     <MessageCircle size={15} />
                   </button>
@@ -1137,7 +1184,7 @@ function OrderDetailModal({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 24, opacity: 0 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-        className="w-full sm:max-w-lg max-h-[90dvh] overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col"
+        className="flex max-h-[min(92dvh,100%)] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:max-w-lg sm:rounded-2xl sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 px-4 py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
@@ -1170,7 +1217,7 @@ function OrderDetailModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Cliente</p>
               <p className="font-semibold text-zinc-900 dark:text-zinc-100 break-words">{getClienteLine(order)}</p>

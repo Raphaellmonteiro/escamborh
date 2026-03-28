@@ -12,8 +12,12 @@ import { openPrintPreview } from '../utils/print';
 import { getOrderItemDetailText, orderHasAnyItemCustomization, splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { getDeliveryNextStatus } from '../utils/deliveryStatusNext';
 import { DEFAULT_TENANT_AUTOMATION, type TenantAutomationConfig } from '../services/automationConfig';
+import { OrderAutomationBadges } from '../components/OrderAutomationBadges';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Spinner } from '../components/ui/Spinner';
+import { StatusChip } from '../components/ui/StatusChip';
+import { adminOpsDashedWellClass, adminOpsInsetPanelClass, adminOpsSurfaceCardClass } from '../components/ui/screenChrome';
 
 // ─── Sound utils (inline — sem dep externa) ───────────────────────────────────
 function playNewOrderSound() {
@@ -111,6 +115,7 @@ interface DeliveryCustomer {
   dias_sem_comprar?: number | null;
   status_atividade?: string | null;
   cliente_recorrente?: boolean;
+  fidelizacao?: { tier: string; label: string };
   total_pedidos?: number;
   total_pedidos_validos?: number;
   total_gasto?: number;
@@ -243,7 +248,7 @@ const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
 /** Atalho: não embute lista de balcão — envia para a tela Operação (Central) com filtro Balcão. */
 function DeliveryBalcaoCentralShortcut({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-sm">
+    <div className={`${adminOpsSurfaceCardClass} p-5 sm:p-6`}>
       <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Balcão na Operação</h2>
       <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
         O balcão e a operação ao vivo de todos os canais ficam na <strong className="text-zinc-700 dark:text-zinc-300">Operação</strong> (menu lateral).
@@ -276,18 +281,29 @@ export default function DeliveryScreen({
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full overflow-y-auto bg-zinc-100 dark:bg-zinc-950">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2 flex-wrap"><Bike size={24} className="shrink-0"/>Delivery</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Canal delivery, clientes, motoboys e configurações</p>
-          </div>
-          {slug && (
-            <a href={`/delivery/${slug}`} target="_blank" rel="noreferrer"
-              className="flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors shrink-0">
-              <MapPin size={14}/> Ver Cardápio Online
-            </a>
-          )}
-        </div>
+        <ScreenHeader
+          titleAs="h1"
+          titleClassName="flex items-center gap-2 flex-wrap"
+          title={
+            <>
+              <Bike size={24} className="shrink-0" />
+              Delivery
+            </>
+          }
+          subtitle="Canal delivery, clientes, motoboys e configurações"
+          actions={
+            slug ? (
+              <a
+                href={`/delivery/${slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors shrink-0"
+              >
+                <MapPin size={14} /> Ver Cardápio Online
+              </a>
+            ) : null
+          }
+        />
 
         {/* Tabs — mobile: scroll horizontal, toque confortável; desktop: inline */}
         <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 gap-0.5 w-full sm:w-fit overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-pl-1 scroll-pr-1 sm:scroll-pl-0 sm:scroll-pr-0 [-webkit-overflow-scrolling:touch]">
@@ -565,9 +581,7 @@ function TabPainel({ token }: { token: string }) {
             return (
               <div
                 key={col}
-                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm flex flex-col
-                  max-md:w-[min(85vw,20rem)] max-md:max-w-[85vw] max-md:flex-shrink-0 max-md:snap-center
-                  md:min-w-0 md:w-auto md:max-w-none"
+                className={`${adminOpsSurfaceCardClass} overflow-hidden flex flex-col max-md:w-[min(85vw,20rem)] max-md:max-w-[85vw] max-md:flex-shrink-0 max-md:snap-center md:min-w-0 md:w-auto md:max-w-none`}
               >
                 <div className="px-3 sm:px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2 shrink-0" style={{ borderLeftWidth:3, borderLeftColor:cfg.color }}>
                   <span className="shrink-0" style={{ color:cfg.color }}>{cfg.icon}</span>
@@ -576,12 +590,12 @@ function TabPainel({ token }: { token: string }) {
                 </div>
                 <div className="p-2 space-y-2 min-h-[100px] max-md:max-h-[min(52vh,28rem)] max-h-[60vh] overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y">
                   {colPedidos.length===0 ? (
-                    <div className="mx-1 rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+                    <div className={`mx-1 ${adminOpsDashedWellClass}`}>
                       <EmptyState
                         icon={Package}
                         title="Nenhum pedido"
                         description="Pedidos neste status aparecem aqui."
-                        className="!py-8 !sm:py-10 px-2"
+                        className="!py-8 sm:!py-10 px-2"
                       />
                     </div>
                   ) : colPedidos.map(p => (
@@ -599,7 +613,8 @@ function TabPainel({ token }: { token: string }) {
           })}
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden -mx-1 sm:mx-0">
+        <>
+        <div className={`hidden md:block ${adminOpsSurfaceCardClass} overflow-hidden -mx-1 sm:mx-0`}>
           <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
           <table className="w-full text-sm min-w-[640px]">
             <thead><tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700">
@@ -648,27 +663,62 @@ function TabPainel({ token }: { token: string }) {
           </table>
           </div>
         </div>
+        <div className="md:hidden space-y-3 -mx-1 px-1 sm:mx-0 sm:px-0">
+          {filtrados.map((p) => {
+            const cfg = STATUS_CFG[p.status] || STATUS_CFG['Pedido Recebido'];
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelectedPedido(p)}
+                className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 dark:active:bg-zinc-800/80`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-black text-zinc-900 dark:text-zinc-100">
+                      #{p.order_number}
+                      {deliveryPedidoTemCustomizacaoItens(p) && (
+                        <span className="ml-1 text-violet-500 dark:text-violet-400" title="Personalização">●</span>
+                      )}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{p.cliente_nome || '—'}</p>
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{PAGS[p.pagamento_tipo || '']?.label || p.pagamento_tipo || '—'}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${cfg.toneClass}`}>{cfg.label}</span>
+                    <p className="mt-2 text-base font-black tabular-nums text-zinc-900 dark:text-zinc-100">{fmt(p.total_amount)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">Abrir detalhes</span>
+                  <ChevronRight size={16} className="ml-auto text-zinc-400" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        </>
       )}
 
       {/* Modal de detalhe do pedido */}
       <AnimatePresence>
         {selectedPedido && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setSelectedPedido(null)}>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6" onClick={() => setSelectedPedido(null)}>
             <motion.div onClick={e=>e.stopPropagation()}
               initial={{ scale:0.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.9, opacity:0 }}
-              className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto border border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-4">
+              className="max-h-[min(92dvh,100%)] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:rounded-2xl sm:p-6 sm:pb-6">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Pedido #{selectedPedido.order_number}</h3>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <button type="button" onClick={() => reimprimir(selectedPedido.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-200 dark:hover:bg-emerald-500/30 transition-all">
-                    <Printer size={12}/> Cupom
+                    className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-100 px-4 py-2.5 text-sm font-bold text-emerald-700 transition-all hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30 sm:flex-initial sm:px-3 sm:py-2 sm:text-xs">
+                    <Printer size={14}/> Cupom
                   </button>
                   <button type="button" onClick={() => imprimirProducao(selectedPedido.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-100 rounded-lg text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-all">
-                    <ChefHat size={12}/> Produção
+                    className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-amber-100 px-4 py-2.5 text-sm font-bold text-amber-900 transition-all hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-100 dark:hover:bg-amber-500/30 sm:flex-initial sm:px-3 sm:py-2 sm:text-xs">
+                    <ChefHat size={14}/> Produção
                   </button>
-                  <button type="button" onClick={() => setSelectedPedido(null)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-400">✕</button>
+                  <button type="button" onClick={() => setSelectedPedido(null)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" aria-label="Fechar">✕</button>
                 </div>
               </div>
 
@@ -920,44 +970,22 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
   const [selectedMotoboy, setSelectedMotoboy] = useState<number | ''>('');
   const elapsed = Math.max(0, Math.floor((Date.now() - new Date(pedido.created_at).getTime()) / 60000));
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 md:p-3 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all max-md:active:bg-zinc-50/80 dark:max-md:active:bg-zinc-800/40">
+    <div className={`${adminOpsSurfaceCardClass} p-4 md:p-3 hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all max-md:active:bg-zinc-50/80 dark:max-md:active:bg-zinc-800/40`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1 pr-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="font-black text-zinc-900 dark:text-zinc-100 text-base max-md:text-[15px] leading-tight">#{pedido.order_number}</p>
             {deliveryPedidoTemCustomizacaoItens(pedido) && (
-              <span
-                className="inline-flex items-center gap-0.5 rounded-full border border-violet-200 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-800 dark:text-violet-200"
+              <StatusChip
+                size="sm"
+                icon={ListTree}
+                toneClassName="border-violet-200 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-200"
                 title="Itens com observações ou adicionais"
               >
-                <ListTree size={10} />
                 Pers.
-              </span>
+              </StatusChip>
             )}
-            {pedido.automation_auto_delivery_accept && (
-              <span
-                className="inline-flex rounded-full border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-800 dark:text-blue-200"
-                title="Pedido aceito automaticamente pelo cardápio online"
-              >
-                Auto aceito
-              </span>
-            )}
-            {pedido.automation_kitchen_ok && (
-              <span
-                className="inline-flex rounded-full border border-emerald-200 dark:border-emerald-500/35 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-200"
-                title="Produção enviada à impressora automaticamente (ao menos uma vez)"
-              >
-                Produção OK
-              </span>
-            )}
-            {pedido.automation_kitchen_failed && (
-              <span
-                className="inline-flex rounded-full border border-red-200 dark:border-red-500/40 bg-red-50 dark:bg-red-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-800 dark:text-red-200"
-                title="Falha registrada na auto-impressão de produção — verifique impressora ou use impressão manual"
-              >
-                Produção falhou
-              </span>
-            )}
+            <OrderAutomationBadges order={pedido} compact />
           </div>
           {pedido.cliente_nome && <p className="text-sm max-md:text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5 line-clamp-2">{pedido.cliente_nome}</p>}
         </div>
@@ -982,9 +1010,13 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
       )}
       <div className="flex items-center justify-between gap-2">
         <span className="font-black text-base text-zinc-800 dark:text-zinc-200 tabular-nums">{fmt(pedido.total_amount)}</span>
-        <span className={`text-[11px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide shrink-0 ${pedido.pagamento_status==='pago'?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'}`}>
-          {pedido.pagamento_status==='pago'?'Pago':'Aguardando'}
-        </span>
+        <StatusChip
+          size="md"
+          variant={pedido.pagamento_status === 'pago' ? 'success' : 'warning'}
+          className="shrink-0 tabular-nums"
+        >
+          {pedido.pagamento_status === 'pago' ? 'Pago' : 'Aguardando'}
+        </StatusChip>
       </div>
       {cfg.next && (
         <div className="mt-3 space-y-2">
@@ -1035,7 +1067,7 @@ function DCard({ label, value, color, icon }: { label:string; value:string; colo
   };
   const c = C[color]||C.zinc;
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow min-w-0">
+    <div className={`${adminOpsSurfaceCardClass} p-3 sm:p-4 hover:shadow-md transition-shadow min-w-0`}>
       <div className={`w-9 h-9 sm:w-10 sm:h-10 ${c.bg} ${c.text} rounded-xl flex items-center justify-center mb-2 sm:mb-3 shrink-0`}>{icon}</div>
       <p className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 leading-none tabular-nums break-words">{value}</p>
       <p className="text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 sm:mt-1.5 font-bold uppercase tracking-wide leading-tight">{label}</p>
@@ -1088,14 +1120,14 @@ function TabClientes({ token }: { token: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[240px] max-w-sm">
+      <div className="flex flex-wrap gap-3">
+        <div className="relative w-full flex-1 min-w-0 sm:min-w-[240px] sm:max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
           <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&fetchClientes()}
             placeholder="Buscar por nome, telefone ou observacoes..."
-            className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+            className="w-full min-h-[44px] pl-9 pr-4 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
         </div>
-        <button onClick={fetchClientes} className="px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors">Buscar</button>
+        <button onClick={fetchClientes} className="w-full min-h-[44px] px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors sm:w-auto">Buscar</button>
       </div>
 
       {!loading && (
@@ -1113,8 +1145,8 @@ function TabClientes({ token }: { token: string }) {
           <Spinner className="h-7 w-7" />
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className={`${adminOpsSurfaceCardClass} overflow-hidden`}>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm min-w-[980px]">
               <thead><tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700">
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Cliente</th>
@@ -1131,13 +1163,28 @@ function TabClientes({ token }: { token: string }) {
                     <td className="px-4 py-3">
                       <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
                       <div className="flex flex-wrap gap-1.5 mt-1">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-100">
+                        <StatusChip variant="info" size="md">
                           {getCustomerOriginLabel(c.origem_cadastro)}
-                        </span>
-                        {c.cliente_recorrente && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-violet-50 text-violet-700 border border-violet-100">
-                            Recorrente
-                          </span>
+                        </StatusChip>
+                        {c.fidelizacao?.label ? (
+                          <StatusChip
+                            variant="neutral"
+                            size="md"
+                            uppercase={false}
+                            emphasis="semibold"
+                            title="Fidelização"
+                          >
+                            {c.fidelizacao.label}
+                          </StatusChip>
+                        ) : (
+                          c.cliente_recorrente && (
+                            <StatusChip
+                              size="md"
+                              toneClassName="border-violet-100 bg-violet-50 text-violet-700 dark:border-violet-500/25 dark:bg-violet-500/15 dark:text-violet-200"
+                            >
+                              Recorrente
+                            </StatusChip>
+                          )
                         )}
                       </div>
                     </td>
@@ -1154,9 +1201,9 @@ function TabClientes({ token }: { token: string }) {
                         const status = getCustomerActivityMeta(c.status_atividade);
                         return (
                           <>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black border ${status.tone}`}>
+                            <StatusChip size="md" toneClassName={status.tone}>
                               {status.label}
-                            </span>
+                            </StatusChip>
                             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{getDaysWithoutPurchaseLabel(c.dias_sem_comprar)}</p>
                           </>
                         );
@@ -1179,8 +1226,61 @@ function TabClientes({ token }: { token: string }) {
               </tbody>
             </table>
           </div>
+          <div className="md:hidden space-y-3 p-3">
+            {clientes.map(c => {
+              const status = getCustomerActivityMeta(c.status_atividade);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { setSelected(c); fetchPedidos(c.id); }}
+                  className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 dark:active:bg-zinc-800/80`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
+                      <p className="mt-1 text-xs font-mono text-zinc-500 dark:text-zinc-400">{c.telefone || '—'}</p>
+                    </div>
+                    <ChevronRight size={16} className="shrink-0 text-zinc-400" />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <StatusChip variant="info" size="md">
+                      {getCustomerOriginLabel(c.origem_cadastro)}
+                    </StatusChip>
+                    <StatusChip size="md" toneClassName={status.tone}>
+                      {status.label}
+                    </StatusChip>
+                    {c.fidelizacao?.label ? (
+                      <StatusChip variant="neutral" size="md" uppercase={false} emphasis="semibold">
+                        {c.fidelizacao.label}
+                      </StatusChip>
+                    ) : (
+                      c.cliente_recorrente && (
+                        <StatusChip
+                          size="md"
+                          toneClassName="border-violet-100 bg-violet-50 text-violet-700 dark:border-violet-500/25 dark:bg-violet-500/15 dark:text-violet-200"
+                        >
+                          Recorrente
+                        </StatusChip>
+                      )
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-2`}>
+                      <p className="text-zinc-400">Pedidos</p>
+                      <p className="mt-1 font-black text-zinc-800 dark:text-zinc-100">{c.total_pedidos || 0}</p>
+                    </div>
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-2`}>
+                      <p className="text-zinc-400">Total gasto</p>
+                      <p className="mt-1 font-black text-emerald-700">{fmt(c.total_gasto || 0)}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
           {clientes.length===0 && (
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+            <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={Users}
                 title="Nenhum cliente encontrado"
@@ -1194,16 +1294,16 @@ function TabClientes({ token }: { token: string }) {
 
       <AnimatePresence>
         {selected && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={()=>setSelected(null)}>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6" onClick={()=>setSelected(null)}>
             <motion.div onClick={e=>e.stopPropagation()}
               initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}}
-              className="bg-white dark:bg-zinc-900 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-y-auto border border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-4">
+              className="max-h-[min(88dvh,100%)] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:rounded-2xl sm:pb-6">
+              <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">{selected.nome}</h3>
                   <p className="text-sm text-zinc-400 font-mono">{selected.telefone}</p>
                 </div>
-                <button onClick={()=>setSelected(null)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 dark:text-zinc-400">✕</button>
+                <button type="button" onClick={()=>setSelected(null)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" aria-label="Fechar">✕</button>
               </div>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -1215,13 +1315,22 @@ function TabClientes({ token }: { token: string }) {
                     </span>
                   );
                 })()}
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-100">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-500/15 dark:text-blue-200 dark:border-blue-500/25">
                   {getCustomerOriginLabel(selected.origem_cadastro)}
                 </span>
-                {selected.cliente_recorrente && (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-violet-50 text-violet-700 border border-violet-100">
-                    Cliente recorrente
+                {selected.fidelizacao?.label ? (
+                  <span
+                    className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-600"
+                    title="Fidelização"
+                  >
+                    {selected.fidelizacao.label}
                   </span>
+                ) : (
+                  selected.cliente_recorrente && (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-violet-50 text-violet-700 border border-violet-100 dark:bg-violet-500/15 dark:text-violet-200 dark:border-violet-500/25">
+                      Cliente recorrente
+                    </span>
+                  )
                 )}
               </div>
 
@@ -1261,7 +1370,10 @@ function TabClientes({ token }: { token: string }) {
                   </div>
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-xs text-zinc-500">Perfil</span>
-                    <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 text-right">{selected.cliente_recorrente ? 'Recorrente' : 'Pontual'}</span>
+                    <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 text-right">
+                      {selected.fidelizacao?.label ??
+                        (selected.cliente_recorrente ? 'Recorrente' : 'Pontual')}
+                    </span>
                   </div>
                 </div>
 
@@ -1278,7 +1390,7 @@ function TabClientes({ token }: { token: string }) {
               <p className="text-xs font-black text-zinc-400 uppercase tracking-wider mb-3">Historico de pedidos</p>
               <div className="space-y-2">
                 {pedidos.map((p) => (
-                  <div key={p.id} className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-xl">
+                  <div key={p.id} className="flex flex-col gap-2 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800 sm:flex-row sm:items-center">
                     <div className="flex-1">
                       <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">#{p.order_number}</p>
                       <p className="text-xs text-zinc-400">{p.resumo_itens||'—'}</p>
@@ -1323,18 +1435,18 @@ function TabMotoboys({ token }: { token: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <select value={mes} onChange={e=>setMes(Number(e.target.value))}
-          className="px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-zinc-900 dark:text-zinc-100">
+          className="min-h-[44px] px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-zinc-900 dark:text-zinc-100">
           {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(0,i).toLocaleString('pt-BR',{month:'long'})}</option>)}
         </select>
         <input type="number" value={ano} onChange={e=>setAno(Number(e.target.value))}
-          className="w-24 px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-zinc-900 dark:text-zinc-100"/>
-        <button onClick={fetch_relatorio} className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors">Filtrar</button>
+          className="w-full min-h-[44px] px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-zinc-900 dark:text-zinc-100 sm:w-24"/>
+        <button onClick={fetch_relatorio} className="w-full min-h-[44px] px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors sm:w-auto">Filtrar</button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={`${adminOpsSurfaceCardClass} p-5`}>
           <p className="text-3xl font-black text-zinc-900 dark:text-zinc-100">{total_entregas}</p>
           <p className="text-sm text-zinc-400 mt-1">Total de entregas</p>
         </div>
@@ -1349,7 +1461,7 @@ function TabMotoboys({ token }: { token: string }) {
           <Spinner className="h-7 w-7" />
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+        <div className={`${adminOpsSurfaceCardClass} overflow-hidden`}>
           <table className="w-full text-sm">
             <thead><tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700">
               <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Motoboy</th>
@@ -1369,7 +1481,7 @@ function TabMotoboys({ token }: { token: string }) {
             </tbody>
           </table>
           {relatorio.length===0&&(
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+            <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={Truck}
                 title="Nenhum motoboy com entregas no período"
@@ -1475,10 +1587,10 @@ function TabRelatorio({ token }: { token: string }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Faturamento por dia */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm">
+        <div className={`${adminOpsSurfaceCardClass} p-5`}>
           <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Faturamento por dia</h3>
           {porDia.length===0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+            <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={BarChart2}
                 title="Sem dados"
@@ -1507,10 +1619,10 @@ function TabRelatorio({ token }: { token: string }) {
         </div>
 
         {/* Horário de pico */}
-        <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div className={`${adminOpsSurfaceCardClass} p-5`}>
           <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Horário de pico</h3>
           {porHora.length===0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+            <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={BarChart2}
                 title="Sem dados"
@@ -1528,7 +1640,7 @@ function TabRelatorio({ token }: { token: string }) {
                   <div key={h} className="flex-1 flex flex-col items-center gap-0.5" title={`${h}h: ${count} pedido${count!==1?'s':''}`}>
                     <div className="w-full rounded-sm transition-all"
                       style={{ height:`${height}%`, background:count>0?'#3b82f6':'#f4f4f5', minHeight:count?4:0 }}/>
-                    {h%4===0&&<span className="text-[8px] text-zinc-400">{h}h</span>}
+                    {h%4===0&&<span className="text-[10px] tabular-nums text-zinc-400">{h}h</span>}
                   </div>
                 );
               })}
@@ -1537,10 +1649,10 @@ function TabRelatorio({ token }: { token: string }) {
         </div>
 
         {/* Top produtos */}
-        <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div className={`${adminOpsSurfaceCardClass} p-5`}>
           <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Produtos mais vendidos</h3>
           {topProdutos.length===0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+            <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={Package}
                 title="Sem dados"
@@ -1563,10 +1675,10 @@ function TabRelatorio({ token }: { token: string }) {
         </div>
 
         {/* Formas de pagamento */}
-        <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm">
+        <div className={`${adminOpsSurfaceCardClass} p-5`}>
           <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Formas de pagamento</h3>
           {porPag.length===0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
+            <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={CreditCard}
                 title="Sem dados"
@@ -1871,7 +1983,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 })}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Horário abertura" value={cfg.horario_abertura||''} onChange={v=>setCfg(c=>({...c,horario_abertura:v}))} type="time"/>
                 <Field label="Horário fechamento" value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>
                 <Field label="Tempo de preparo (min)" value={String(cfg.tempo_preparo||'')} onChange={v=>setCfg(c=>({...c,tempo_preparo:parseInt(v)||0}))} type="number" placeholder="40"/>
@@ -1883,7 +1995,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
           {lojaSub === 'entrega' && (
             <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
               <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Truck size={16} className="text-zinc-500"/>Entrega (logística)</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Taxa padrão (R$)" value={String(cfg.taxa_entrega||'')} onChange={v=>setCfg(c=>({...c,taxa_entrega:parseFloat(v)||0}))} type="number" placeholder="0"/>
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Valor por entrega (motoboy) R$</label>
@@ -1921,7 +2033,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                     <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${cfg.desconto_primeiro_cliente_ativo?'left-6':'left-0.5'}`}/>
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tipo do desconto</label>
                     <select
@@ -1964,7 +2076,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
             <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
               <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><CreditCard size={16} className="text-zinc-500"/>Pagamentos</h4>
               <p className="text-xs text-zinc-500">Mesma lógica de Pix do checkout público (payload estático ou chave + EMV). Não altere sem testar o fechamento do pedido.</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Chave Pix" value={cfg.pix_chave||''} onChange={v=>setCfg(c=>({...c,pix_chave:v}))} placeholder="email@ou.cpf"/>
                 <Field label="Nome Pix" value={cfg.pix_nome||''} onChange={v=>setCfg(c=>({...c,pix_nome:v}))} placeholder="Nome do recebedor"/>
                 <Field label="Cidade Pix" value={cfg.pix_cidade||''} onChange={v=>setCfg(c=>({...c,pix_cidade:v}))} placeholder="Cidade"/>

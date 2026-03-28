@@ -289,7 +289,7 @@ function getModalAccent(isLightRed: boolean, visualVariant: ProductOptionsVisual
 
 const POS_MODAL_OPCOES_OVERRIDES = {
   sheet:
-    'relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-amber-500/25 sm:rounded-[32px]',
+    'relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-amber-500/25 sm:rounded-[32px]',
   footerBtn:
     'flex w-full min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-amber-400 py-4 text-sm font-black text-zinc-900 shadow-[0_14px_36px_rgba(245,158,11,0.4)] transition-all hover:bg-amber-300 active:scale-[0.99] disabled:opacity-40 ring-2 ring-amber-400/45 hover:ring-amber-400/60',
   qtyBtnPlus:
@@ -439,13 +439,13 @@ export function ProductOptionsModal({
     : (destSacola ? `Adicionar a sacola${qty > 1 ? ` (${qty}x)` : ''}` : `Adicionar ao pedido${qty > 1 ? ` (${qty}x)` : ''}`);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose} />
 
       <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-        className={mo.sheet}>
+        className={`${mo.sheet} max-h-[min(95dvh,100%)] w-full pb-[env(safe-area-inset-bottom)] sm:max-h-[92vh] sm:pb-0`}>
 
         <div className={mo.headerBg}>
           <button type="button" onClick={onClose} className={mo.closeBtn}>
@@ -665,13 +665,13 @@ export function ProductOptionsModal({
                               onClick={e => e.stopPropagation()}>
                               <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, -1, g); }}
                                 disabled={qtdItem === 0}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600">
+                                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 sm:h-8 sm:w-8">
                                 <Minus size={11} />
                               </button>
                               <span className="w-6 text-center text-sm font-black text-white">{qtdItem}</span>
                               <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, +1, g); }}
                                 disabled={!podeAumentarQuantidade}
-                                className={`flex h-8 w-8 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${ac.qtdStepPlusSm}`}>
+                                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}>
                                 <Plus size={11} />
                               </button>
                             </div>

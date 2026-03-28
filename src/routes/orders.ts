@@ -97,7 +97,7 @@ export function createOrdersRouter() {
       const status = await confirmQrOrder({
         orderId: req.params.id,
         tenantId: req.tenantId,
-        userId: req.userId, // caso tenha o ID de quem clicou
+        userId: req.user?.id,
       });
       res.json({ success: true, status });
     } catch (error: any) {

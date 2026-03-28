@@ -2,7 +2,10 @@ node_modules/
 build/
 dist/
 coverage/
+uploads/
+backup/
 .DS_Store
 *.log
 .env*
 !.env.example
+src.zip

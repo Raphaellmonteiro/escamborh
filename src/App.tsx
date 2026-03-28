@@ -2,16 +2,16 @@
  * App.tsx - Roteador principal do FlowPDV.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, ShoppingCart, Package, LogOut, Archive,
   Settings, Monitor, UtensilsCrossed,
-  DollarSign, Clock, History, BarChart2, FileText, Users, Lock, Bell, Bike,
+  DollarSign, History, FileText, Users, Lock, Bell, Bike,
   Menu, LayoutGrid, List, Volume2, VolumeX,
 } from 'lucide-react';
 
-import type { Product, Caixa, Order } from './types';
+import type { Product, CaixaStatusApi, Order } from './types';
 import NavItem from './components/ui/NavItem';
 import PlanBadge from './components/ui/PlanBadge';
 import { getSegCfg, getOperationalSegment } from './config/segmentos';
@@ -20,43 +20,54 @@ import { FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, mapOrderToCentralColumn } from './u
 import type { PlanProfileInfo } from './utils/planStatus';
 import { playNewOrderSound } from './utils/sound';
 
-// ── Telas compartilhadas (todos os segmentos) ─────────────────────
+// ── Telas críticas no primeiro paint (login + PDV padrão) ────────
 import LoginScreen           from './shared/LoginScreen';
 import POSScreen             from './shared/POSScreen';
-import OrdersScreen          from './shared/OrdersScreen';
-import CentralPedidosScreen  from './shared/CentralPedidosScreen';
-import DashboardScreen       from './shared/DashboardScreen';
-import FinanceScreen         from './shared/FinanceScreen';
-import EstoqueScreen         from './shared/EstoqueScreen';
-import ProductsScreen        from './shared/ProductsScreen';
-import AdminPanel            from './shared/AdminPanel';
 import LicenseBlockedScreen  from './shared/LicenseBlockedScreen';
-import ConfiguracoesScreen   from './shared/ConfiguracoesScreen';
-import OpenCaixaModal        from './shared/modals/OpenCaixaModal';
-import CloseCaixaModal       from './shared/modals/CloseCaixaModal';
-import SolicitacaoModal      from './shared/modals/SolicitacaoModal';
-import RHScreen           from './shared/RHScreen';
-import SystemLogsScreen   from './shared/SystemLogsScreen';
-import DeliveryScreen        from './shared/DeliveryScreen';
-import DeliveryCardapio      from './segments/delivery/DeliveryCardapio';
-import PedidoRastreamento    from './shared/PedidoRastreamento';
 
-// ── Restaurante / Food Service ────────────────────────────────────
-import KDSScreen             from './segments/restaurante/KDSScreen';
-import ClienteDisplayScreen from './segments/restaurante/ClienteDisplayScreen';
-import ClienteMesaScreen    from './segments/restaurante/ClienteMesaScreen';
-
-// ── Bar / Pub ─────────────────────────────────────────────────────
-import MesasScreen           from './segments/bar/MesasScreen';
-import MesaPickerModal       from './segments/bar/MesaPickerModal';
+const AdminPanel            = lazy(() => import('./shared/AdminPanel'));
+const OrdersScreen          = lazy(() => import('./shared/OrdersScreen'));
+const CentralPedidosScreen  = lazy(() => import('./shared/CentralPedidosScreen'));
+const DashboardScreen       = lazy(() => import('./shared/DashboardScreen'));
+const FinanceScreen         = lazy(() => import('./shared/FinanceScreen'));
+const EstoqueScreen         = lazy(() => import('./shared/EstoqueScreen'));
+const ProductsScreen        = lazy(() => import('./shared/ProductsScreen'));
+const ConfiguracoesScreen   = lazy(() => import('./shared/ConfiguracoesScreen'));
+const OpenCaixaModal        = lazy(() => import('./shared/modals/OpenCaixaModal'));
+const CloseCaixaModal       = lazy(() => import('./shared/modals/CloseCaixaModal'));
+const SolicitacaoModal      = lazy(() => import('./shared/modals/SolicitacaoModal'));
+const RHScreen              = lazy(() => import('./shared/RHScreen'));
+const SystemLogsScreen      = lazy(() => import('./shared/SystemLogsScreen'));
+const DeliveryScreen        = lazy(() => import('./shared/DeliveryScreen'));
+const DeliveryCardapio      = lazy(() => import('./segments/delivery/DeliveryCardapio'));
+const PedidoRastreamento    = lazy(() => import('./shared/PedidoRastreamento'));
+const KDSScreen             = lazy(() => import('./segments/restaurante/KDSScreen'));
+const ClienteDisplayScreen  = lazy(() => import('./segments/restaurante/ClienteDisplayScreen'));
+const ClienteMesaScreen     = lazy(() => import('./segments/restaurante/ClienteMesaScreen'));
+const MesasScreen           = lazy(() => import('./segments/bar/MesasScreen'));
 
 import { Button }            from './components/ui/Card';
 import { Input }             from './components/ui/Card';
 
-// ── FlowAI ────────────────────────────────────────────────────────
-import FlowAIPopup           from './shared/FlowAIPopup';
-import NotificationCenter   from './shared/NotificationCenter';
+const FlowAIPopup           = lazy(() => import('./shared/FlowAIPopup'));
+const NotificationCenter    = lazy(() => import('./shared/NotificationCenter'));
 import { useFlowAI }         from './hooks/useFlowAI';
+
+function TabLoadingFallback() {
+  return (
+    <div className="flex flex-1 min-h-[50vh] items-center justify-center text-sm text-zinc-400">
+      Carregando…
+    </div>
+  );
+}
+
+function PublicRouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm text-zinc-400">
+      Carregando…
+    </div>
+  );
+}
 
 
 export default function App() {
@@ -74,7 +85,7 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingTab, setPendingTab] = useState<any>(null);
   const [authPassword, setAuthPassword] = useState('');
-  const [currentCaixa, setCurrentCaixa] = useState<Caixa | null>(null);
+  const [currentCaixa, setCurrentCaixa] = useState<CaixaStatusApi | null>(null);
   const [showCaixaModal, setShowCaixaModal] = useState<'abrir' | 'fechar' | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [showWatermarkSettings, setShowWatermarkSettings] = useState(false);
@@ -118,7 +129,7 @@ export default function App() {
     const feature = normalizeAccessFeature(tab);
     return planAllows(feature) && userAllows(feature);
   };
-  const aiEnabled = planFeatures !== null && canAccess('ai');
+  const alertsEnabled = Boolean(token);
   const userRoleLabel =
     userCargo === 'dono' ? 'Proprietário' : userCargo === 'gerente' ? 'Gerente' : 'Atendente';
   const userDisplayName = userName || 'Sessão ativa';
@@ -137,7 +148,7 @@ export default function App() {
     historico, historicoTotal, carregandoHist,
     buscarAvisos, marcarLido, marcarTodosLidos,
     gerarAvisos, proximoAviso, buscarHistorico,
-  } = useFlowAI(aiEnabled ? token : null);
+  } = useFlowAI(alertsEnabled ? token : null);
 
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -152,8 +163,8 @@ export default function App() {
           // Falha silenciosa — ANTHROPIC_API_KEY ausente ou rede indisponível
           // não polui o console de produção
         });
-    // Aguarda 3s após login para não competir com fetchProducts/fetchCaixa/fetchPerfil
-    const init = setTimeout(rodar, 3000);
+    // Após boot HTTP (produtos/caixa/perfil) — evita competir com o pool do banco
+    const init = setTimeout(rodar, 6000);
     const iv   = setInterval(rodar, 30 * 60 * 1000);
     return () => { clearTimeout(init); clearInterval(iv); };
   }, [token]);
@@ -418,9 +429,17 @@ React.useEffect(() => {
       } catch {}
     };
 
-    fetchOperationalAlerts();
-    const id = setInterval(fetchOperationalAlerts, 30000);
-    return () => clearInterval(id);
+    // 1º poll depois do carregamento inicial (perfil/produtos/caixa em série)
+    const BOOT_ALERT_DELAY_MS = 4500;
+    let intervalId: number | undefined;
+    const bootTimer = window.setTimeout(() => {
+      fetchOperationalAlerts();
+      intervalId = window.setInterval(fetchOperationalAlerts, 30000) as unknown as number;
+    }, BOOT_ALERT_DELAY_MS);
+    return () => {
+      window.clearTimeout(bootTimer);
+      if (intervalId) window.clearInterval(intervalId);
+    };
   }, [token, isAdmin, isOperationTab, operationalSoundEnabled, segCfg.statusConcluido]);
 
   useEffect(() => {
@@ -435,16 +454,46 @@ React.useEffect(() => {
   
   // ── Rotas públicas — Tela Cliente ────────────────────────────────────────────
   // /delivery/:slug/pedido/:id → rastreamento do pedido pelo cliente
-  if (trackingMatch) return <PedidoRastreamento slug={trackingMatch[1]} pedidoId={Number(trackingMatch[2])} />;
+  if (trackingMatch) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <PedidoRastreamento slug={trackingMatch[1]} pedidoId={Number(trackingMatch[2])} />
+      </Suspense>
+    );
+  }
   // /delivery/:slug → PÚBLICO — deve vir ANTES de qualquer check de token
-  if (deliveryMatch) return <DeliveryCardapio />;
-  if (displayMatch) return <ClienteDisplayScreen slug={displayMatch[1]} />;
+  if (deliveryMatch) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <DeliveryCardapio />
+      </Suspense>
+    );
+  }
+  if (displayMatch) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <ClienteDisplayScreen slug={displayMatch[1]} />
+      </Suspense>
+    );
+  }
   // /mesa/:slug/:numero  →  Display individual da mesa (celular do cliente)
-  if (mesaMatch)    return <ClienteMesaScreen slug={mesaMatch[1]} mesa={mesaMatch[2]} />;
+  if (mesaMatch) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <ClienteMesaScreen slug={mesaMatch[1]} mesa={mesaMatch[2]} />
+      </Suspense>
+    );
+  }
 
   // ── Site público de agendamento ──────────────────────────────────────────────
   if (bookingSlug) return <SegmentDisabledNotice />;
-  if (kdsSlug)     return <KDSScreen slug={kdsSlug} />;
+  if (kdsSlug) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <KDSScreen slug={kdsSlug} />
+      </Suspense>
+    );
+  }
 
   const fetchCaixa = async () => {
     try {
@@ -459,12 +508,13 @@ React.useEffect(() => {
   };
 
   useEffect(() => {
-    if (token) {
-      fetchProducts();
-      fetchCaixa();
-      fetchLogo();
-      fetchPerfil();
-    }
+    if (!token) return;
+    // Sequencial: menos conexões simultâneas no Postgres (Session pooler / plano Free).
+    void (async () => {
+      await fetchProducts();
+      await fetchCaixa();
+      await fetchPerfil();
+    })();
   }, [token]);
 
 const fetchPerfil = async () => {
@@ -475,6 +525,8 @@ const fetchPerfil = async () => {
       if (res.ok) {
         const data = await res.json();
         if (data.nome_estabelecimento) setEstabelecimentoNome(data.nome_estabelecimento);
+        if (typeof data.logo_url === 'string' && data.logo_url) setLogoUrl(data.logo_url);
+        else if (data.logo_url === null) setLogoUrl(null);
         if (data.segmento) setEstabelecimentoSegmento(getOperationalSegment(data.segmento));
         setPlanFeatures(Array.isArray(data.plan_features) ? data.plan_features : null);
         setPlanProfile({
@@ -503,18 +555,6 @@ const fetchPerfil = async () => {
         localStorage.setItem('user_nome', nome);
       }
     } catch (err) { }
-  };
-
-  const fetchLogo = async () => {
-    try {
-      const res = await fetch('/api/settings/logo', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.logo_url) setLogoUrl(data.logo_url);
-    } catch (err) {
-      console.error("Erro ao carregar logo", err);
-    }
   };
 
 const fetchProducts = async () => {
@@ -668,7 +708,13 @@ const handleAuth = async (e: React.FormEvent) => {
     return () => { window.fetch = originalFetch; };
   }, []); // sem deps — usa handleLogout via closure estável
 
-  if (isAdmin) return <AdminPanel />;
+  if (isAdmin) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <AdminPanel />
+      </Suspense>
+    );
+  }
   if (licenseError) return <LicenseBlockedScreen type={licenseError} onBack={() => { setLicenseError(null); handleLogout(); }} />;
 
   if (!token) {
@@ -683,7 +729,9 @@ const handleAuth = async (e: React.FormEvent) => {
           onShowSolicitacao={() => setShowSolicitacao(true)}
           onLicenseError={(type) => setLicenseError(type)}
         />
-        <SolicitacaoModal isOpen={showSolicitacao} onClose={() => setShowSolicitacao(false)} />
+        <Suspense fallback={null}>
+          <SolicitacaoModal isOpen={showSolicitacao} onClose={() => setShowSolicitacao(false)} />
+        </Suspense>
       </>
     );
   }
@@ -800,9 +848,9 @@ const handleAuth = async (e: React.FormEvent) => {
                 setPendingTab('abrir-caixa');
                 setShowAuthModal(true);
               }}
-              disabled={currentCaixa?.status === 'fechado'}
+              disabled={currentCaixa == null || currentCaixa.can_open_caixa === false}
             >
-              {currentCaixa?.status === 'fechado' ? 'Caixa Encerrado' : 'Abrir Caixa'}
+              Abrir Caixa
             </Button>
           )}
         </div>
@@ -857,8 +905,8 @@ const handleAuth = async (e: React.FormEvent) => {
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Utilitários</p>
             <p className="text-[10px] text-zinc-400">Tema, alertas e sessão</p>
           </div>
-          <div className={`grid gap-2 ${canAccess('ai') ? 'grid-cols-4' : 'grid-cols-3'}`}>
-            {canAccess('ai') && (
+          <div className={`grid gap-2 ${alertsEnabled ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            {alertsEnabled && (
               <button
                 onClick={() => setNotifCenterOpen(true)}
                 title="Central de Notificações"
@@ -1003,28 +1051,30 @@ const handleAuth = async (e: React.FormEvent) => {
         )}
 
         <AnimatePresence mode="wait">
-          {activeTab === 'pos' && canAccess('pos') && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
-          {activeTab === 'orders' && canAccess('orders') && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
-          {activeTab === 'central' && canAccess('orders') && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => handleTabChange('pos')} />}
-          {activeTab === 'products' && canAccess('products') && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
-          {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
-            <DeliveryScreen
-              token={token}
-              slug={slugAtual}
-              onOpenCentralBalcao={() => {
-                sessionStorage.setItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, 'balcao');
-                handleTabChange('central');
-                setMobileNavOpen(false);
-              }}
-            />
-          )}
-          {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
-          {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
-          {activeTab === 'funcionarios' && canAccess('funcionarios') && <RHScreen token={token} />}
-          {activeTab === 'logs' && canAccess('logs') && <SystemLogsScreen token={token} />}
-          {activeTab === 'configuracoes' && canAccess('configuracoes') && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
+          <Suspense fallback={<TabLoadingFallback />}>
+            {activeTab === 'pos' && canAccess('pos') && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
+            {activeTab === 'orders' && canAccess('orders') && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
+            {activeTab === 'central' && canAccess('orders') && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
+            {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => handleTabChange('pos')} />}
+            {activeTab === 'products' && canAccess('products') && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
+            {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
+            {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
+              <DeliveryScreen
+                token={token}
+                slug={slugAtual}
+                onOpenCentralBalcao={() => {
+                  sessionStorage.setItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, 'balcao');
+                  handleTabChange('central');
+                  setMobileNavOpen(false);
+                }}
+              />
+            )}
+            {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
+            {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
+            {activeTab === 'funcionarios' && canAccess('funcionarios') && <RHScreen token={token} />}
+            {activeTab === 'logs' && canAccess('logs') && <SystemLogsScreen token={token} />}
+            {activeTab === 'configuracoes' && canAccess('configuracoes') && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
+          </Suspense>
         </AnimatePresence>
 
         {/* Modal de Autenticação para Áreas Restritas */}
@@ -1070,26 +1120,30 @@ const handleAuth = async (e: React.FormEvent) => {
         {/* Modais de Caixa */}
         <AnimatePresence>
           {showCaixaModal === 'abrir' && (
-            <OpenCaixaModal 
-              onClose={() => setShowCaixaModal(null)} 
-              onSuccess={() => {
-                setShowCaixaModal(null);
-                fetchCaixa();
-                postLog('CAIXA_ABERTO', `${userName || 'Usuário'} abriu o caixa`);
-              }}
-              token={token}
-            />
+            <Suspense fallback={null}>
+              <OpenCaixaModal
+                onClose={() => setShowCaixaModal(null)}
+                onSuccess={() => {
+                  setShowCaixaModal(null);
+                  fetchCaixa();
+                  postLog('CAIXA_ABERTO', `${userName || 'Usuário'} abriu o caixa`);
+                }}
+                token={token}
+              />
+            </Suspense>
           )}
           {showCaixaModal === 'fechar' && (
-            <CloseCaixaModal 
-              onClose={() => setShowCaixaModal(null)} 
-              onSuccess={() => {
-                setShowCaixaModal(null);
-                fetchCaixa();
-                postLog('CAIXA_FECHADO', `${userName || 'Usuário'} fechou o caixa`);
-              }}
-              token={token}
-            />
+            <Suspense fallback={null}>
+              <CloseCaixaModal
+                onClose={() => setShowCaixaModal(null)}
+                onSuccess={() => {
+                  setShowCaixaModal(null);
+                  fetchCaixa();
+                  postLog('CAIXA_FECHADO', `${userName || 'Usuário'} fechou o caixa`);
+                }}
+                token={token}
+              />
+            </Suspense>
           )}
         </AnimatePresence>
       </main>
@@ -1103,36 +1157,40 @@ const handleAuth = async (e: React.FormEvent) => {
 
       {/* ── FlowAI Popup proativo ─────────────────────────────────────────── */}
       <AnimatePresence>
-        {canAccess('ai') && avisoAtivo && (
-          <FlowAIPopup
-            aviso={avisoAtivo}
-            onDismiss={(id) => { marcarLido(id); proximoAviso(); }}
-            onAcao={(rota) => {
-              const tab = rota.replace('/', '') as any;
-              handleTabChange(tab);
-              if (avisoAtivo) { marcarLido(avisoAtivo.id); proximoAviso(); }
-            }}
-          />
+        {alertsEnabled && avisoAtivo && (
+          <Suspense fallback={null}>
+            <FlowAIPopup
+              aviso={avisoAtivo}
+              onDismiss={(id) => { marcarLido(id); proximoAviso(); }}
+              onAcao={(rota) => {
+                const tab = rota.replace('/', '') as any;
+                handleTabChange(tab);
+                if (avisoAtivo) { marcarLido(avisoAtivo.id); proximoAviso(); }
+              }}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
 
       {/* ── Central de Notificações ───────────────────────────────────────── */}
-      {canAccess('ai') && (
-        <NotificationCenter
-          open={notifCenterOpen}
-          onClose={() => setNotifCenterOpen(false)}
-          historico={historico}
-          carregandoHist={carregandoHist}
-          avisosNaoLidos={avisosNaoLidos}
-          onMarcarLido={marcarLido}
-          onMarcarTodosLidos={marcarTodosLidos}
-          onAcao={(rota) => {
-            const tab = rota.replace('/', '') as any;
-            handleTabChange(tab);
-            setNotifCenterOpen(false);
-          }}
-          onRefresh={() => buscarHistorico(100, 0)}
-        />
+      {alertsEnabled && (
+        <Suspense fallback={null}>
+          <NotificationCenter
+            open={notifCenterOpen}
+            onClose={() => setNotifCenterOpen(false)}
+            historico={historico}
+            carregandoHist={carregandoHist}
+            avisosNaoLidos={avisosNaoLidos}
+            onMarcarLido={marcarLido}
+            onMarcarTodosLidos={marcarTodosLidos}
+            onAcao={(rota) => {
+              const tab = rota.replace('/', '') as any;
+              handleTabChange(tab);
+              setNotifCenterOpen(false);
+            }}
+            onRefresh={() => buscarHistorico(100, 0)}
+          />
+        </Suspense>
       )}
       </div>
     </div>

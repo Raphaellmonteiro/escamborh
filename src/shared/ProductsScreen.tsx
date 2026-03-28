@@ -11,6 +11,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { adminOpsListRowClass, adminOpsMutedBlockClass } from '../components/ui/screenChrome';
 import type { ProductionType } from '../utils/preparation';
 import { resolveProductionType, resolveRequiresPreparation } from '../utils/preparation';
 
@@ -554,35 +556,39 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
 
       {/* ── Header ── */}
       <div className="bg-white border-b border-zinc-200 px-3 sm:px-6 py-3 sm:py-5 flex-shrink-0">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 lg:gap-4">
-          <div className="min-w-0">
-            <h2 className="text-xl sm:text-2xl font-black text-zinc-900">Cardápio</h2>
+        <ScreenHeader
+          rowFrom="lg"
+          className="lg:gap-4"
+          title="Cardápio"
+          subtitle={
             <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 leading-snug">
               {products.filter(p => p.active).length} ativos · {products.filter(p => !p.active).length} inativos
               {products.filter(p => p.destaque).length > 0 && ` · ${products.filter(p => p.destaque).length} em destaque`}
             </p>
-          </div>
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:justify-end">
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-              <button type="button" onClick={handleExportPDF}
-                className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
-                <Download size={13}/> PDF
-              </button>
-              <button type="button" onClick={() => setShowCategoryModal(true)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
-                <Filter size={13}/> Categorias
-              </button>
-              <div className="flex bg-zinc-100 p-0.5 rounded-xl shrink-0">
-                <button type="button" aria-label="Lista" onClick={() => setViewMode('list')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
-                <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
+          }
+          actions={
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:shrink-0">
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <button type="button" onClick={handleExportPDF}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
+                  <Download size={13}/> PDF
+                </button>
+                <button type="button" onClick={() => setShowCategoryModal(true)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
+                  <Filter size={13}/> Categorias
+                </button>
+                <div className="flex bg-zinc-100 p-0.5 rounded-xl shrink-0">
+                  <button type="button" aria-label="Lista" onClick={() => setViewMode('list')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
+                  <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
+                </div>
               </div>
+              <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
+                <Plus size={16}/> Novo Produto
+              </button>
             </div>
-            <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
-              <Plus size={16}/> Novo Produto
-            </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* ── Filtros ── */}
         <div className="flex flex-col gap-3 mt-3 sm:mt-4">
@@ -629,7 +635,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
             {produtosVisiveis.map((p, idx) => {
               const mg = margem(p);
               return (
-                <div key={p.id} className={`bg-white rounded-2xl border border-zinc-200 p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 hover:border-zinc-300 transition-all ${!p.active ? 'opacity-60' : ''}`}>
+                <div key={p.id} className={`${adminOpsListRowClass} p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 hover:border-zinc-300 transition-all ${!p.active ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="flex flex-col gap-0.5 flex-shrink-0">
                       <button type="button" onClick={() => handleReorder(p, 'up')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === 0}><ChevronUp size={13}/></button>
@@ -703,7 +709,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
               const mg = margem(p);
               const cc = COLOR_MAP[p.color || 'zinc'] || COLOR_MAP.zinc;
               return (
-                <div key={p.id} className={`bg-white rounded-2xl border border-zinc-200 overflow-hidden hover:border-zinc-300 transition-all flex flex-col ${!p.active ? 'opacity-60' : ''}`}>
+                <div key={p.id} className={`${adminOpsListRowClass} overflow-hidden hover:border-zinc-300 transition-all flex flex-col ${!p.active ? 'opacity-60' : ''}`}>
                   {/* Foto */}
                   <div className={`w-full h-40 flex items-center justify-center overflow-hidden relative ${cc.bg}`}>
                     {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={40} className="text-zinc-300"/>}
@@ -901,7 +907,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                <div className={adminOpsMutedBlockClass}>
                   <div>
                     <span className="block text-sm font-semibold text-zinc-800">Setor de producao</span>
                     <span className="block text-xs text-zinc-500 mt-0.5">
@@ -983,7 +989,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 </div>
 
                 {editing.id && (
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-3">
+                  <div className={`${adminOpsMutedBlockClass} space-y-3`}>
                     <div>
                       <p className="text-sm font-semibold text-zinc-800">Sugestões de complementos</p>
                       <p className="text-xs text-zinc-500 mt-0.5">Cadastre produtos sugeridos para este item.</p>
@@ -1044,7 +1050,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 )}
 
                 {editing.id && (
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-3">
+                  <div className={`${adminOpsMutedBlockClass} space-y-3`}>
                     <div>
                       <p className="text-sm font-semibold text-zinc-800">Variações vendáveis</p>
                       <p className="text-xs text-zinc-500 mt-0.5">

@@ -29,6 +29,10 @@ export type DeliveryCardapioTheme = {
   menuDropdown: string;
   menuItem: string;
   menuItemActive: string;
+  /** Categoria selecionada no dropdown (contraste explícito no fundo escuro/claro). */
+  menuCategoryActive: string;
+  menuCategoryCountActive: string;
+  menuCategoryCountIdle: string;
   searchToggle: string;
   searchInput: string;
   vitrine: {
@@ -196,11 +200,13 @@ const darkPremium: DeliveryCardapioTheme = {
     inner: 'relative z-10 min-h-screen',
   },
   header: {
-    bar: 'sticky top-0 z-40 border-b border-white/12 bg-zinc-950/95 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.38)]',
-    navBtn: 'whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-zinc-100 transition-colors hover:bg-white/10 hover:text-white',
-    navBtnActive: 'whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-zinc-100 transition-colors bg-white/12 text-white',
+    bar: 'sticky top-0 z-40 border-b border-white/12 bg-zinc-950/95 backdrop-blur-xl pt-[env(safe-area-inset-top)] shadow-[0_20px_60px_rgba(0,0,0,0.38)]',
+    navBtn:
+      'inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-zinc-100 transition-colors hover:bg-white/10 hover:text-white',
+    navBtnActive:
+      'inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-zinc-100 transition-colors bg-white/12 text-white',
     cartFab:
-      'absolute right-0 top-1/2 shrink-0 -translate-y-1/2 rounded-full bg-gradient-to-br from-white via-white to-cyan-100 p-2.5 text-zinc-950 shadow-[0_6px_26px_rgba(34,211,238,0.42)] ring-2 ring-cyan-400/55 transition-all hover:from-cyan-200 hover:to-white hover:shadow-[0_8px_32px_rgba(34,211,238,0.55)] hover:ring-cyan-300/70 active:scale-95',
+      'absolute right-0 top-1/2 flex min-h-[48px] min-w-[48px] shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-gradient-to-br from-white via-white to-cyan-100 p-3 text-zinc-950 shadow-[0_6px_26px_rgba(34,211,238,0.42)] ring-2 ring-cyan-400/55 transition-all hover:from-cyan-200 hover:to-white hover:shadow-[0_8px_32px_rgba(34,211,238,0.55)] hover:ring-cyan-300/70 active:scale-95',
     cartFabIcon: 'text-zinc-900 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]',
   },
   hero: {
@@ -216,15 +222,19 @@ const darkPremium: DeliveryCardapioTheme = {
   menuItem:
     'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors text-zinc-100 hover:bg-white/5',
   menuItemActive: 'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/10 text-cyan-100',
+  menuCategoryActive:
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/15 text-cyan-50 ring-1 ring-cyan-400/25',
+  menuCategoryCountActive: 'text-xs font-black tabular-nums text-cyan-200',
+  menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
     'inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 transition-colors hover:bg-white/8',
   searchInput:
     'w-full rounded-2xl border border-white/12 bg-zinc-950 py-4 pl-12 pr-10 text-sm text-white shadow-[0_14px_30px_rgba(0,0,0,0.24)] placeholder:text-zinc-300 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20',
   vitrine: {
     showcaseCard:
-      'group flex h-[348px] min-h-0 min-w-[280px] max-w-[320px] flex-col overflow-hidden rounded-[30px] border border-white/14 bg-[linear-gradient(180deg,rgba(52,52,60,0.98),rgba(28,28,34,1))] shadow-[0_24px_56px_rgba(0,0,0,0.38)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_28px_64px_rgba(34,211,238,0.18)]',
+      'group flex h-[min(348px,52vh)] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[30px] border border-white/14 bg-[linear-gradient(180deg,rgba(52,52,60,0.98),rgba(28,28,34,1))] shadow-[0_24px_56px_rgba(0,0,0,0.38)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_28px_64px_rgba(34,211,238,0.18)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px]',
     compactCard:
-      'group flex h-[164px] min-w-[290px] min-h-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] shadow-[0_20px_52px_rgba(0,0,0,0.32)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-cyan-400/32 hover:shadow-[0_26px_60px_rgba(34,211,238,0.14)]',
+      'group flex h-[164px] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] shadow-[0_20px_52px_rgba(0,0,0,0.32)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-cyan-400/32 hover:shadow-[0_26px_60px_rgba(34,211,238,0.14)] sm:min-w-[290px]',
     compactOfferBg: 'border-rose-500/15 bg-[linear-gradient(135deg,rgba(39,39,42,1),rgba(39,39,42,0.98),rgba(76,5,25,0.88))]',
     imageBg: 'relative h-44 cursor-pointer overflow-hidden bg-zinc-800',
     compactThumb: 'relative h-full w-[122px] shrink-0 cursor-pointer overflow-hidden bg-zinc-800',
@@ -248,7 +258,7 @@ const darkPremium: DeliveryCardapioTheme = {
   sacola: {
     overlay: 'absolute inset-0 bg-black/70 backdrop-blur-sm',
     panel:
-      'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-white/14 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.62)] ring-1 ring-cyan-500/10 sm:rounded-[28px]',
+      'relative flex max-h-[min(92dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-white/14 bg-zinc-950 pb-[env(safe-area-inset-bottom)] text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.62)] ring-1 ring-cyan-500/10 sm:rounded-[28px] sm:pb-0',
     headerRow: 'flex shrink-0 items-start justify-between gap-3 border-b border-white/12 px-4 py-4 sm:px-5',
     title: 'text-lg font-black tracking-tight text-white',
     subtitle: 'mt-0.5 text-xs text-zinc-400',
@@ -265,7 +275,7 @@ const darkPremium: DeliveryCardapioTheme = {
   checkout: {
     overlay: 'absolute inset-0 bg-black/70 backdrop-blur-sm',
     panel:
-      'relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-white/14 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.62)] ring-1 ring-cyan-500/10 sm:rounded-[28px]',
+      'relative flex max-h-[min(94dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-white/14 bg-zinc-950 pb-[env(safe-area-inset-bottom)] text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.62)] ring-1 ring-cyan-500/10 sm:rounded-[28px] sm:pb-0',
     header: 'shrink-0 border-b border-white/12 bg-zinc-950/98 px-4 pb-3 pt-4 sm:px-5',
     title: 'text-lg font-black tracking-tight text-white',
     subtitle: 'mt-0.5 text-xs font-medium text-zinc-400',
@@ -342,10 +352,10 @@ const darkPremium: DeliveryCardapioTheme = {
   },
   modalOpcoes: {
     sheet:
-      'relative flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-cyan-500/10 sm:rounded-[32px]',
+      'relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-cyan-500/10 sm:rounded-[32px]',
     headerBg: 'border-b border-white/14 bg-zinc-950',
     closeBtn:
-      'absolute right-4 top-4 z-20 rounded-2xl border border-white/18 bg-black/60 p-2 text-zinc-100 shadow-lg backdrop-blur transition-colors hover:border-white/25 hover:bg-black/75 hover:text-white',
+      'absolute right-3 top-3 z-20 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border border-white/18 bg-black/60 p-2 text-zinc-100 shadow-lg backdrop-blur transition-colors hover:border-white/25 hover:bg-black/75 hover:text-white sm:right-4 sm:top-4',
     title: 'text-2xl font-black leading-tight tracking-tight text-white drop-shadow-sm',
     desc: 'mt-2 text-sm leading-relaxed text-zinc-100/95',
     pricePanel:
@@ -413,13 +423,13 @@ const lightRed: DeliveryCardapioTheme = {
     inner: 'relative z-10 min-h-screen',
   },
   header: {
-    bar: 'sticky top-0 z-40 border-b border-red-800/35 bg-red-600 shadow-[0_10px_28px_rgba(185,28,28,0.38)]',
+    bar: 'sticky top-0 z-40 border-b border-red-800/35 bg-red-600 pt-[env(safe-area-inset-top)] shadow-[0_10px_28px_rgba(185,28,28,0.38)]',
     navBtn:
-      'whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-white/90 transition-colors hover:bg-white/15 hover:text-white',
+      'inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-white/90 transition-colors hover:bg-white/15 hover:text-white',
     navBtnActive:
-      'whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-red-700 transition-colors bg-white shadow-sm ring-1 ring-white/80 hover:bg-white hover:text-red-800',
+      'inline-flex min-h-[44px] items-center whitespace-nowrap rounded-full px-4 py-2.5 text-[15px] font-semibold text-red-700 transition-colors bg-white shadow-sm ring-1 ring-white/80 hover:bg-white hover:text-red-800',
     cartFab:
-      'absolute right-0 top-1/2 shrink-0 -translate-y-1/2 rounded-full bg-white p-2.5 text-red-600 shadow-[0_6px_22px_rgba(0,0,0,0.2)] ring-2 ring-white/90 transition-all hover:bg-red-50 hover:shadow-[0_8px_26px_rgba(0,0,0,0.22)] active:scale-95',
+      'absolute right-0 top-1/2 flex min-h-[48px] min-w-[48px] shrink-0 -translate-y-1/2 items-center justify-center rounded-full bg-white p-3 text-red-600 shadow-[0_6px_22px_rgba(0,0,0,0.2)] ring-2 ring-white/90 transition-all hover:bg-red-50 hover:shadow-[0_8px_26px_rgba(0,0,0,0.22)] active:scale-95',
     cartFabIcon: 'text-red-600 drop-shadow-sm',
   },
   hero: {
@@ -436,6 +446,10 @@ const lightRed: DeliveryCardapioTheme = {
     'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors text-zinc-950 hover:bg-zinc-50 hover:text-zinc-950',
   menuItemActive:
     'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-red-50 text-red-950 ring-1 ring-red-100',
+  menuCategoryActive:
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-red-100 text-red-950 ring-1 ring-red-200',
+  menuCategoryCountActive: 'text-xs font-black tabular-nums text-red-700',
+  menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-500',
   searchToggle:
     'inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-bold text-zinc-800 transition-colors hover:bg-zinc-50',
   searchInput:
@@ -443,9 +457,9 @@ const lightRed: DeliveryCardapioTheme = {
   vitrine: {
     ...darkPremium.vitrine,
     showcaseCard:
-      'group flex h-[348px] min-h-0 min-w-[280px] max-w-[320px] flex-col overflow-hidden rounded-[30px] border border-zinc-200/90 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-1 hover:border-red-200 hover:shadow-[0_22px_48px_rgba(220,38,38,0.12)]',
+      'group flex h-[min(348px,52vh)] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[30px] border border-zinc-200/90 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-1 hover:border-red-200 hover:shadow-[0_22px_48px_rgba(220,38,38,0.12)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px]',
     compactCard:
-      'group flex h-[164px] min-w-[290px] min-h-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-zinc-200/90 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_18px_40px_rgba(220,38,38,0.1)]',
+      'group flex h-[164px] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-zinc-200/90 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_18px_40px_rgba(220,38,38,0.1)] sm:min-w-[290px]',
     compactOfferBg: 'border-rose-200 bg-gradient-to-br from-white via-white to-rose-50/80',
     imageBg: 'relative h-44 cursor-pointer overflow-hidden bg-zinc-100',
     compactThumb: 'relative h-full w-[122px] shrink-0 cursor-pointer overflow-hidden bg-zinc-100',
@@ -466,7 +480,7 @@ const lightRed: DeliveryCardapioTheme = {
   sacola: {
     overlay: 'absolute inset-0 bg-black/50 backdrop-blur-sm',
     panel:
-      'relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-stone-700/70 bg-[#231f1d] text-stone-100 shadow-[0_32px_88px_rgba(0,0,0,0.45)] sm:rounded-[28px] ring-1 ring-black/30',
+      'relative flex max-h-[min(92dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-stone-700/70 bg-[#231f1d] pb-[env(safe-area-inset-bottom)] text-stone-100 shadow-[0_32px_88px_rgba(0,0,0,0.45)] ring-1 ring-black/30 sm:rounded-[28px] sm:pb-0',
     headerRow: 'flex shrink-0 items-start justify-between gap-3 border-b border-stone-600/70 bg-[#231f1d] px-4 py-4 sm:px-5',
     title: 'text-lg font-black tracking-tight text-white',
     subtitle: 'mt-0.5 text-xs text-stone-400',
@@ -487,7 +501,7 @@ const lightRed: DeliveryCardapioTheme = {
     ...darkPremium.checkout,
     overlay: 'absolute inset-0 bg-black/50 backdrop-blur-sm',
     panel:
-      'relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-zinc-200 bg-white text-zinc-900 shadow-[0_32px_80px_rgba(0,0,0,0.2)] sm:rounded-[28px]',
+      'relative flex max-h-[min(94dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] text-zinc-900 shadow-[0_32px_80px_rgba(0,0,0,0.2)] sm:rounded-[28px] sm:pb-0',
     header: 'shrink-0 border-b border-zinc-100 bg-white px-4 pb-3 pt-4 sm:px-5',
     title: 'text-lg font-black tracking-tight text-zinc-900',
     subtitle: 'mt-0.5 text-xs font-medium text-zinc-500',

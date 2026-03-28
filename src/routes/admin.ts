@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
 import { loginRateLimiter, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
+import { logError } from '../utils/logger';
 import { generatePublicId } from '../utils/publicIds';
 
 const TZ = 'America/Sao_Paulo';
@@ -28,6 +29,15 @@ function parseTrialDays(rawValue: unknown, fallback = 7): number {
   const parsed = Number(rawValue);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, Math.min(365, Math.floor(parsed)));
+}
+
+/** COUNT(*) no pg pode vir como string ou bigint; normaliza para número JSON-safe. */
+function sqlCount(row: { c?: unknown } | null | undefined): number {
+  const v = row?.c;
+  if (v == null) return 0;
+  if (typeof v === 'bigint') return Number(v);
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function buildTrialWindow(days: number) {
@@ -406,10 +416,20 @@ export function createAdminRouter() {
         q1("SELECT COUNT(*) as c FROM clientes WHERE status='ativo' AND vencimento IS NOT NULL AND vencimento<NOW()", []),
       ]);
       res.json({
-        total: total?.c||0, ativos: ativos?.c||0, bloqueados: bloqueados?.c||0,
-        pendentes: pendentes?.c||0, expirados: expirados?.c||0,
+        total: sqlCount(total),
+        ativos: sqlCount(ativos),
+        bloqueados: sqlCount(bloqueados),
+        pendentes: sqlCount(pendentes),
+        expirados: sqlCount(expirados),
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      logError('admin.dashboard', e, {
+        route: '/api/admin/dashboard',
+        code: e?.code,
+        detail: e?.detail,
+      });
+      res.status(500).json({ error: e?.message || 'Erro ao carregar dashboard admin' });
+    }
   });
 
   admin.get('/clientes/:id/usuarios', async (req, res) => {
@@ -446,6 +466,50 @@ export function createAdminRouter() {
       'INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
       [tenantId, 'Admin', 'admin', `ADMIN_ACTION_${action}`, detalhes]
     );
+  }
+
+  async function resetCaixaState(tenantId: number, reason: string) {
+    const caixasAbertos = await qAll<{ id: number; data: string; observacao?: string | null }>(
+      "SELECT id, data, observacao FROM caixa WHERE status='aberto' AND tenant_id=? ORDER BY data ASC",
+      [tenantId]
+    );
+
+    if (caixasAbertos.length === 0) {
+      await logAdminAction(
+        tenantId,
+        'reset_caixa',
+        `Reset de caixa solicitado sem caixas abertos. Motivo: ${reason}`
+      );
+
+      return {
+        reset_count: 0,
+        caixas_ids: [],
+        status: 'fechado',
+      };
+    }
+
+    await withTx(async (client) => {
+      for (const caixa of caixasAbertos) {
+        const observacoes = [caixa.observacao || '', `[Reset admin: ${reason}]`].filter(Boolean);
+        await txRun(
+          client,
+          "UPDATE caixa SET status='fechado', closed_at=COALESCE(closed_at, NOW()), valor_contado=COALESCE(valor_contado,0), observacao=? WHERE id=? AND tenant_id=?",
+          [observacoes.join(' '), caixa.id, tenantId]
+        );
+      }
+    });
+
+    await logAdminAction(
+      tenantId,
+      'reset_caixa',
+      `Reset de caixa concluiu ${caixasAbertos.length} fechamento(s) administrativo(s): ${caixasAbertos.map((caixa) => `#${caixa.id} (${caixa.data})`).join(', ')}. Motivo: ${reason}`
+    );
+
+    return {
+      reset_count: caixasAbertos.length,
+      caixas_ids: caixasAbertos.map((caixa) => caixa.id),
+      status: 'fechado',
+    };
   }
 
   const actionHandlers: Record<string, ActionHandler> = {
@@ -528,6 +592,14 @@ export function createAdminRouter() {
       );
 
       return { caixa_id: caixa.id, data: caixa.data, valor_contado: valorContado };
+    },
+
+    async reset_caixa({ tenantId, reason }) {
+      return resetCaixaState(tenantId, reason);
+    },
+
+    async reset_caixa_state({ tenantId, reason }) {
+      return resetCaixaState(tenantId, reason);
     },
 
     async force_cancel_order({ tenantId, payload, reason }) {
@@ -690,7 +762,7 @@ export function createAdminRouter() {
 
       const handler = actionHandlers[action];
       if (!handler) {
-        return res.status(404).json({ success: false, error: `Ação não reconhecida: ${action}` });
+        return res.status(400).json({ success: false, error: `Ação não reconhecida: ${action}` });
       }
 
       const result = await handler({
@@ -701,6 +773,13 @@ export function createAdminRouter() {
 
       res.json({ success: true, ...result });
     } catch (e: any) {
+      logError('admin.actions', e, {
+        route: '/api/admin/actions',
+        action: req.body?.action,
+        tenantId: req.body?.tenant_id,
+        code: e?.code,
+        detail: e?.detail,
+      });
       res.status(400).json({ success: false, error: e.message });
     }
   });
@@ -736,6 +815,32 @@ export function createAdminRouter() {
         [tenantId, 'Admin', 'admin', 'ADMIN_FORCE_CLOSE_CAIXA', `Caixa #${caixa.id} (data ${caixa.data}) fechado pelo painel admin`]);
       res.json({ success: true, caixa_id: caixa.id });
     } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+  });
+
+  admin.post('/caixa/reset', async (req, res) => {
+    try {
+      const tenantId = Number(req.body?.tenant_id);
+      const reason = String(req.body?.reason || '').trim();
+
+      if (!tenantId) return res.status(400).json({ success: false, error: 'tenant_id obrigatorio' });
+      if (reason.length < 10) {
+        return res.status(400).json({ success: false, error: 'reason obrigatorio (minimo 10 caracteres)' });
+      }
+
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ success: false, error: 'Cliente nao encontrado' });
+
+      const result = await resetCaixaState(tenantId, reason);
+      res.json({ success: true, ...result });
+    } catch (e: any) {
+      logError('admin.caixa.reset', e, {
+        route: '/api/admin/caixa/reset',
+        tenantId: req.body?.tenant_id,
+        code: e?.code,
+        detail: e?.detail,
+      });
+      res.status(500).json({ success: false, error: e?.message || 'Erro ao resetar caixa' });
+    }
   });
 
   admin.post('/pedidos/fix-status', async (req, res) => {

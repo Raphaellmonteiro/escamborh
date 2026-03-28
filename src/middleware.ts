@@ -312,13 +312,11 @@ export async function resolveAuthenticatedSession(req: Request, tokenOverride?: 
   }
 
   try {
-    const [userRecord, usuarioRecord] = await Promise.all([
-      q1('SELECT id, status, vencimento FROM clientes WHERE usuario=?', [user.username]),
-      q1(
-        'SELECT token_version, ativo, cliente_id, cargo, permissoes, nome FROM usuarios WHERE username=?',
-        [user.username]
-      ),
-    ]);
+    const userRecord = await q1('SELECT id, status, vencimento FROM clientes WHERE usuario=?', [user.username]);
+    const usuarioRecord = await q1(
+      'SELECT token_version, ativo, cliente_id, cargo, permissoes, nome FROM usuarios WHERE username=?',
+      [user.username]
+    );
 
     if (!usuarioRecord) {
       return { ok: false, status: 401, body: { error: 'Sessão inválida. Por favor, faça login novamente.' } };

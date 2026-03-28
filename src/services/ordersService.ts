@@ -32,6 +32,7 @@ import { splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { requireProductInventoryTargets } from './stockIdentification';
 import { parseAutomationFromDeliveryConfigJson, shouldAutoPrintForBalcaoOrder } from './automationConfig';
 import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService';
+import { touchStoreCustomerPurchase } from './storeCustomerService';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -180,6 +181,7 @@ type NormalizedCreateOrderInput = {
   tipo_retirada: string;
   canal: string;
   status: string;
+  cliente_id: number | null;
 };
 
 type OrderRow = {
@@ -451,6 +453,15 @@ function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrde
     throw new AppError('Status inválido', 400);
   }
 
+  let clienteId: number | null = null;
+  if (data.cliente_id !== undefined && data.cliente_id !== null && data.cliente_id !== '') {
+    const cid = Number(data.cliente_id);
+    if (!Number.isInteger(cid) || cid <= 0) {
+      throw new AppError('Cliente inválido', 400);
+    }
+    clienteId = cid;
+  }
+
   const normalizedInput = {
     items: data.items.map(normalizeOrderItem),
     payments: data.payments.map(normalizePayment),
@@ -460,6 +471,7 @@ function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrde
     tipo_retirada: data.tipo_retirada?.trim() || 'local',
     canal: deriveOrderChannel(data.tipo_retirada),
     status,
+    cliente_id: clienteId,
   };
 
   ensureFinancialConsistency(normalizedInput);
@@ -1035,12 +1047,29 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
       const paymentMethod = summarizePaymentMethod(input.payments);
       const subtotal = calculateItemsSubtotal(input.items);
 
+      let clienteNome: string | null = null;
+      let clienteTel: string | null = null;
+      let resolvedClienteId: number | null = input.cliente_id;
+      if (resolvedClienteId) {
+        const cust = await txQ1<{ id: number; nome: string | null; telefone: string | null }>(
+          client,
+          `SELECT id, nome, telefone FROM delivery_clientes
+           WHERE id=? AND tenant_id=? AND COALESCE(ativo,1)=1`,
+          [resolvedClienteId, tenantId]
+        );
+        if (!cust) {
+          throw new AppError('Cliente não encontrado', 404);
+        }
+        clienteNome = String(cust.nome || '').trim() || null;
+        clienteTel = cust.telefone ? String(cust.telefone) : null;
+      }
+
       const orderId = Number(
         await txInsert(
           client,
           `INSERT INTO pedidos
-            (order_number,status,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal,pagamento_tipo,pagamento_status,subtotal)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+            (order_number,status,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal,pagamento_tipo,pagamento_status,subtotal,cliente_id,cliente_nome,cliente_tel)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             orderNumber,
             input.status,
@@ -1053,6 +1082,9 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
             paymentMethod,
             'pago',
             subtotal,
+            resolvedClienteId,
+            clienteNome,
+            clienteTel,
           ]
         )
       );
@@ -1092,8 +1124,17 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         orderNumber,
         receipt,
         senhaPedido,
+        resolvedClienteId,
       };
     });
+
+    if (result.resolvedClienteId) {
+      void touchStoreCustomerPurchase({
+        clienteId: result.resolvedClienteId,
+        tenantId: Number(tenantId),
+        origemCadastro: 'balcao',
+      }).catch((err) => logError('ordersService.createOrder.touchCliente', err, { tenantId, orderId: result.orderId }));
+    }
 
     try {
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
@@ -1103,13 +1144,20 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
           : {};
       const automation = parseAutomationFromDeliveryConfigJson(parsed);
       if (shouldAutoPrintForBalcaoOrder(automation, input.canal, input.tipo_retirada)) {
-        void runAutomatedKitchenPrintForOrder(Number(tenantId), result.orderId, { trigger: 'balcao_order_create' });
+        void runAutomatedKitchenPrintForOrder(Number(tenantId), result.orderId, { trigger: 'balcao_order_create' }).catch(
+          (err) => logError('ordersService.createOrder.autoKitchenPrintUnhandled', err, { tenantId, orderId: result.orderId })
+        );
       }
     } catch (e) {
       logError('ordersService.createOrder.autoKitchenPrintConfig', e, { tenantId });
     }
 
-    return result;
+    return {
+      orderId: result.orderId,
+      orderNumber: result.orderNumber,
+      receipt: result.receipt,
+      senhaPedido: result.senhaPedido,
+    };
   } catch (error) {
     logError('ordersService.createOrder', error, { tenantId });
     throw error;

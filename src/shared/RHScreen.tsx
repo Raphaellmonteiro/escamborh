@@ -328,6 +328,8 @@ function TabLista({ token }: { token: string }) {
   const [rhSchedId, setRhSchedId] = useState<number | ''>('');
   const [rhValFerias, setRhValFerias] = useState('');
   const [rhGestaoLoading, setRhGestaoLoading] = useState(false);
+  const [rhDecimoConfirm, setRhDecimoConfirm] = useState<null | { parcela: 1 | 2 }>(null);
+  const [rhDecimoSaving, setRhDecimoSaving] = useState(false);
 
   const loadRhGestao = async (fid: number, ano: number) => {
     setRhGestaoLoading(true);
@@ -681,7 +683,15 @@ function TabLista({ token }: { token: string }) {
         <MBtns onCancel={()=>setModal(null)} onConfirm={handleAjuste} saving={saving} label="Confirmar Ajuste"/>
       </Modal>
 
-      <Modal open={modal==='rh_gestao'} onClose={()=>setModal(null)} title={`Gestão RH — ${selected?.nome}`} wide>
+      <Modal
+        open={modal === 'rh_gestao'}
+        onClose={() => {
+          setRhDecimoConfirm(null);
+          setModal(null);
+        }}
+        title={`Gestão RH — ${selected?.nome}`}
+        wide
+      >
         <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
           {rhGestaoLoading && <p className="text-xs text-zinc-400">Carregando…</p>}
           {selected && !isFixo(normalizeTipoContrato(selected.tipo_contrato)) && (
@@ -807,71 +817,22 @@ function TabLista({ token }: { token: string }) {
                         type="button"
                         disabled={!!d.pago_primeira}
                         className="px-3 py-2 bg-violet-700 text-white rounded-xl text-xs font-bold disabled:opacity-40"
-                        onClick={async () => {
-                          const r = await fetch(`/api/funcionarios/decimo-terceiro/${d.id}`, {
-                            method: 'PATCH',
-                            headers: jHdrs,
-                            body: JSON.stringify({ action: 'pay_primeira' }),
-                          });
-                          const x = await r.json();
-                          if (!r.ok) {
-                            alert(x.error || 'Erro');
-                            return;
-                          }
-                          const dec = x.decimo as any;
-                          await loadRhGestao(selected!.id, rhDecimoAno);
-                          const w = window.open('', '_blank', 'width=750,height=950');
-                          if (w && selected && dec) {
-                            w.document.write(
-                              generateDecimoReceiptHtml({
-                                employeeName: selected.nome,
-                                ano: rhDecimoAno,
-                                parcelaLabel: '1ª parcela',
-                                valor: Number(dec.valor_primeira_parcela) || 0,
-                                dataDocumentoLabel: new Date().toLocaleString('pt-BR'),
-                              })
-                            );
-                            w.document.close();
-                          }
-                        }}
+                        onClick={() => setRhDecimoConfirm({ parcela: 1 })}
                       >
-                        Pagar 1ª parcela
+                        Registrar 1ª parcela…
                       </button>
                       <button
                         type="button"
                         disabled={!d.pago_primeira || !!d.pago_segunda}
                         className="px-3 py-2 bg-violet-900 text-white rounded-xl text-xs font-bold disabled:opacity-40"
-                        onClick={async () => {
-                          const r = await fetch(`/api/funcionarios/decimo-terceiro/${d.id}`, {
-                            method: 'PATCH',
-                            headers: jHdrs,
-                            body: JSON.stringify({ action: 'pay_segunda' }),
-                          });
-                          const x = await r.json();
-                          if (!r.ok) {
-                            alert(x.error || 'Erro');
-                            return;
-                          }
-                          const dec = x.decimo as any;
-                          await loadRhGestao(selected!.id, rhDecimoAno);
-                          const w = window.open('', '_blank', 'width=750,height=950');
-                          if (w && selected && dec) {
-                            w.document.write(
-                              generateDecimoReceiptHtml({
-                                employeeName: selected.nome,
-                                ano: rhDecimoAno,
-                                parcelaLabel: '2ª parcela',
-                                valor: Number(dec.valor_segunda_parcela) || 0,
-                                dataDocumentoLabel: new Date().toLocaleString('pt-BR'),
-                              })
-                            );
-                            w.document.close();
-                          }
-                        }}
+                        onClick={() => setRhDecimoConfirm({ parcela: 2 })}
                       >
-                        Pagar 2ª parcela
+                        Registrar 2ª parcela…
                       </button>
                     </div>
+                    <p className="text-[10px] text-violet-700/80 pt-1">
+                      O sistema apenas marca o pagamento como registrado (controle gerencial). Confira o valor na etapa seguinte e abra o recibo depois de confirmar.
+                    </p>
                   </div>
                 );
               })()}
@@ -1046,10 +1007,120 @@ function TabLista({ token }: { token: string }) {
           )}
         </div>
         <div className="flex justify-end pt-2 border-t border-zinc-100 mt-2">
-          <button type="button" className="px-4 py-2 text-sm font-bold text-zinc-600" onClick={() => setModal(null)}>
+          <button
+            type="button"
+            className="px-4 py-2 text-sm font-bold text-zinc-600"
+            onClick={() => {
+              setRhDecimoConfirm(null);
+              setModal(null);
+            }}
+          >
             Fechar
           </button>
         </div>
+      </Modal>
+
+      <Modal
+        open={rhDecimoConfirm != null && !!selected && !!rhPackDecimo?.decimo}
+        onClose={() => !rhDecimoSaving && setRhDecimoConfirm(null)}
+        title="13º salário — revisar antes de registrar"
+      >
+        {rhDecimoConfirm && selected && rhPackDecimo?.decimo ? (
+          <div className="space-y-4 text-sm text-zinc-700">
+            {(() => {
+              const d = rhPackDecimo.decimo as any;
+              const p = rhDecimoConfirm.parcela;
+              const valor =
+                p === 1 ? Number(d.valor_primeira_parcela) || 0 : Number(d.valor_segunda_parcela) || 0;
+              const label = p === 1 ? '1ª parcela' : '2ª parcela';
+              return (
+                <>
+                  <p>
+                    <span className="text-zinc-500">Colaborador:</span>{' '}
+                    <span className="font-bold text-zinc-900">{selected.nome}</span>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Exercício:</span>{' '}
+                    <span className="font-mono font-bold">{rhDecimoAno}</span>
+                  </p>
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-violet-800">{label}</p>
+                    <p className="text-2xl font-black text-violet-900">{fmt(valor)}</p>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Ao confirmar, o FlowPDV marca esta parcela como <strong>paga no controle gerencial</strong> (data de
+                      hoje). Não há integração bancária: o pagamento efetivo continua sendo feito por você fora do
+                      sistema.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={rhDecimoSaving}
+                      className="px-4 py-2 rounded-xl text-sm font-bold border border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+                      onClick={() => setRhDecimoConfirm(null)}
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={rhDecimoSaving}
+                      className="px-4 py-2 rounded-xl text-sm font-bold bg-violet-700 text-white hover:bg-violet-800 disabled:opacity-50 flex items-center gap-2"
+                      onClick={async () => {
+                        const decRow = rhPackDecimo.decimo as any;
+                        setRhDecimoSaving(true);
+                        try {
+                          const r = await fetch(`/api/funcionarios/decimo-terceiro/${decRow.id}`, {
+                            method: 'PATCH',
+                            headers: jHdrs,
+                            body: JSON.stringify({
+                              action: p === 1 ? 'pay_primeira' : 'pay_segunda',
+                            }),
+                          });
+                          const x = await r.json();
+                          if (!r.ok) {
+                            alert(x.error || 'Erro ao registrar');
+                            return;
+                          }
+                          const dec = x.decimo as any;
+                          await loadRhGestao(selected.id, rhDecimoAno);
+                          setRhDecimoConfirm(null);
+                          const w = window.open('', '_blank', 'width=750,height=950');
+                          if (w && dec) {
+                            w.document.write(
+                              generateDecimoReceiptHtml({
+                                employeeName: selected.nome,
+                                ano: rhDecimoAno,
+                                parcelaLabel: label,
+                                valor:
+                                  p === 1
+                                    ? Number(dec.valor_primeira_parcela) || 0
+                                    : Number(dec.valor_segunda_parcela) || 0,
+                                dataDocumentoLabel: new Date().toLocaleString('pt-BR'),
+                                autoPrint: false,
+                              })
+                            );
+                            w.document.close();
+                          } else {
+                            alert(
+                              'Pagamento registrado. Se o recibo não abriu, verifique o bloqueador de pop-ups do navegador.'
+                            );
+                          }
+                        } finally {
+                          setRhDecimoSaving(false);
+                        }
+                      }}
+                    >
+                      {rhDecimoSaving ? (
+                        <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      ) : null}
+                      Confirmar registro
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        ) : null}
       </Modal>
     </>
   );
@@ -1190,6 +1261,7 @@ function TabEspelho({ token }: { token: string }) {
       observacao: horaExtraObs || null,
     };
     if (horaExtraDestino === 'banco') body.minutos_pago_folha = 0;
+    else if (horaExtraDestino === 'folha') body.minutos_pago_folha = total;
     else if (horaExtraDestino === 'dividir') {
       const p = parseInt(horaExtraPagoFolha, 10);
       if (!Number.isFinite(p) || p <= 0 || p >= total) {
@@ -1673,11 +1745,20 @@ function TabEspelho({ token }: { token: string }) {
                       <div className="flex items-center justify-between bg-white border border-orange-200 rounded-xl px-4 py-3">
                         <div>
                           <p className="text-sm font-black text-orange-700">{extraExistente.minutos} minutos aprovados</p>
-                          {extraExistente.minutos_pago_folha != null && (() => {
-                            const pagoF = Math.min(extraExistente.minutos, Math.max(0, Number(extraExistente.minutos_pago_folha)));
+                          {(() => {
+                            const pagoF =
+                              extraExistente.minutos_pago_folha == null
+                                ? extraExistente.minutos
+                                : Math.min(
+                                    extraExistente.minutos,
+                                    Math.max(0, Number(extraExistente.minutos_pago_folha))
+                                  );
                             return (
                               <p className="text-[11px] text-orange-600/90 mt-1">
                                 Na folha: {pagoF} min · Banco: {Math.max(0, extraExistente.minutos - pagoF)} min
+                                {extraExistente.minutos_pago_folha == null ? (
+                                  <span className="text-zinc-400"> (legado: destino não gravado — considerado 100% folha)</span>
+                                ) : null}
                               </p>
                             );
                           })()}

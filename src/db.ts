@@ -1,8 +1,17 @@
 // src/db.ts - reexport e migrações
-import { pool } from './db/pool';
-  import { normalizeProductProductionInput } from './utils/preparation';
+import { Client } from 'pg';
+import { normalizeProductProductionInput } from './utils/preparation';
 
 export * from './db/index';
+
+/** Conexão direta ao Postgres (recomendado: host db.* :5432). Evita Session pooler no boot das migrações. */
+export function resolveMigrationConnectionString(): string {
+  const dedicated = process.env.DATABASE_MIGRATION_URL?.trim();
+  if (dedicated) return dedicated;
+  const fallback = process.env.DATABASE_URL?.trim();
+  if (fallback) return fallback;
+  throw new Error('Defina DATABASE_URL ou DATABASE_MIGRATION_URL para executar migrações.');
+}
 
 // Backup (PostgreSQL — use pg_dump via cron ou backup da plataforma)
 export async function backupDatabase() {
@@ -10,7 +19,12 @@ export async function backupDatabase() {
 }
 
 export async function runMigrations() {
-  const client = await pool.connect();
+  const client = new Client({
+    connectionString: resolveMigrationConnectionString(),
+    connectionTimeoutMillis: 30000,
+    ssl: { rejectUnauthorized: false },
+  });
+  await client.connect();
 
   try {
     await client.query(`
@@ -504,6 +518,15 @@ export async function runMigrations() {
       ALTER TABLE itens_comanda ADD COLUMN IF NOT EXISTS variation_id INTEGER;
       ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS selecoes_json TEXT;
       ALTER TABLE itens_comanda ADD COLUMN IF NOT EXISTS selecoes_json TEXT;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS ativo INTEGER DEFAULT 1;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS cpf TEXT;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_id INTEGER;
+    `);
+
+    await client.query(`
+      UPDATE pedidos SET cliente_id = delivery_cliente_id
+      WHERE delivery_cliente_id IS NOT NULL AND cliente_id IS NULL;
     `);
 
     await client.query(`
@@ -586,6 +609,7 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_delivery_motoboys_tenant ON delivery_motoboys(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_delivery_clientes_recencia ON delivery_clientes(tenant_id, ultima_compra_at DESC);
       CREATE INDEX IF NOT EXISTS idx_pedidos_delivery_cliente ON pedidos(tenant_id, delivery_cliente_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_pedidos_tenant_cliente_loja ON pedidos(tenant_id, cliente_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_prod_var_vend_produto ON produto_variacoes_vendaveis(tenant_id, produto_id, ativo, ordem);
       CREATE INDEX IF NOT EXISTS idx_prod_var_vend_barcode ON produto_variacoes_vendaveis(tenant_id, codigo_barras);
     `);
@@ -602,7 +626,7 @@ export async function runMigrations() {
           ultima_compra_at = stats.ultima_compra_at
       FROM (
         SELECT
-          delivery_cliente_id AS cliente_id,
+          COALESCE(cliente_id, delivery_cliente_id) AS cliente_loja_id,
           tenant_id,
           MIN(created_at) FILTER (
             WHERE cancelado_at IS NULL
@@ -613,10 +637,10 @@ export async function runMigrations() {
               AND LOWER(COALESCE(status, '')) <> 'cancelado'
           ) AS ultima_compra_at
         FROM pedidos
-        WHERE delivery_cliente_id IS NOT NULL
-        GROUP BY delivery_cliente_id, tenant_id
+        WHERE cliente_id IS NOT NULL OR delivery_cliente_id IS NOT NULL
+        GROUP BY COALESCE(cliente_id, delivery_cliente_id), tenant_id
       ) stats
-      WHERE dc.id = stats.cliente_id
+      WHERE dc.id = stats.cliente_loja_id
         AND dc.tenant_id = stats.tenant_id
         AND (
           dc.primeira_compra_at IS DISTINCT FROM stats.primeira_compra_at
@@ -636,6 +660,10 @@ export async function runMigrations() {
         AND (opened_at AT TIME ZONE 'America/Sao_Paulo')::date < CURRENT_DATE
     `);
 
+    await client.query(`
+      ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente'
+    `);
+
     await client.query(`DELETE FROM usuarios WHERE username='admin'`);
 
     console.log('Migracoes PostgreSQL concluidas.');
@@ -643,6 +671,6 @@ export async function runMigrations() {
     console.error('Erro nas migracoes:', err.message);
     throw err;
   } finally {
-    client.release();
+    await client.end().catch(() => {});
   }
 }

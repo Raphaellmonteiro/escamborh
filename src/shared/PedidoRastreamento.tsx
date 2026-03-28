@@ -29,18 +29,18 @@ interface PedidoTrackingApiResponse {
   nome_estabelecimento?: string | null;
 }
 
-// Pipeline de status (ordem dos passos)
+// Pipeline de status (ordem dos passos): "Criado" = enviado pelo cliente; "Pedido Recebido" = aceito pelo restaurante
 const STEPS = [
-  { key: 'Criado',              label: 'Recebido',          emoji: '01', desc: 'Seu pedido foi recebido pelo restaurante.' },
-  { key: 'Em Preparo',          label: 'Em preparo',        emoji: '02', desc: 'A cozinha está preparando seu pedido.' },
-  { key: 'Pronto para Entrega', label: 'Pronto',            emoji: '03', desc: 'Pedido pronto e aguardando envio.' },
-  { key: 'Saiu para Entrega',   label: 'Saiu para entrega', emoji: '04', desc: 'Seu pedido está a caminho.' },
-  { key: 'Entregue',            label: 'Entregue',          emoji: '05', desc: 'Pedido entregue.' },
+  { key: 'Criado',              label: 'Pedido enviado',    emoji: '01', desc: 'Seu pedido foi enviado e aguarda confirmação do restaurante.' },
+  { key: 'Pedido Recebido',     label: 'Pedido recebido',   emoji: '02', desc: 'O restaurante aceitou seu pedido.' },
+  { key: 'Em Preparo',          label: 'Em preparo',        emoji: '03', desc: 'A cozinha está preparando seu pedido.' },
+  { key: 'Pronto para Entrega', label: 'Pronto',            emoji: '04', desc: 'Pedido pronto e aguardando envio.' },
+  { key: 'Saiu para Entrega',   label: 'Saiu para entrega', emoji: '05', desc: 'Seu pedido está a caminho.' },
+  { key: 'Entregue',            label: 'Entregue',          emoji: '06', desc: 'Pedido entregue.' },
 ];
 
 // Compatibiliza nomes de status com o pipeline (mesmos valores usados em Operações/Cozinha)
 const ALIAS: Record<string, string> = {
-  'Pedido Recebido': 'Criado',
   Pronto: 'Pronto para Entrega',
   'Concluído': 'Entregue',
   concluido: 'Entregue',
@@ -267,10 +267,10 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
                       {i === 0 && (
                         <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{fmtHora(pedido.created_at)}</div>
                       )}
-                      {i === 3 && pedido.saiu_entrega_at && (
+                      {i === 4 && pedido.saiu_entrega_at && (
                         <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{fmtHora(pedido.saiu_entrega_at)}</div>
                       )}
-                      {i === 4 && pedido.entregue_at && (
+                      {i === 5 && pedido.entregue_at && (
                         <div style={{ fontSize: 11, color: '#67e8f9', marginTop: 2 }}>{fmtHora(pedido.entregue_at)}</div>
                       )}
                     </div>

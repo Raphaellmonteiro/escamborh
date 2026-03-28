@@ -5,6 +5,7 @@ import {
   TableProperties,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { lightModalTitleClass } from '../../components/ui/screenChrome';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../../types';
 import type { Selecoes } from '../../shared/ProductOptionsModal';
 
@@ -231,23 +232,23 @@ export default function MesaPickerModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
       <motion.div
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.85, opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh]"
+        className="flex max-h-[min(88dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-6 sm:pb-6"
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-xl font-black text-zinc-900">Selecionar Mesa</h3>
-            <p className="text-sm text-zinc-400 mt-0.5">
-              {displayName} · <span className="font-bold text-zinc-700">R$ {unitPrice.toFixed(2)}</span>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className={lightModalTitleClass}>Selecionar Mesa</h3>
+            <p className="mt-0.5 text-sm text-zinc-500">
+              {displayName} · <span className="font-bold tabular-nums text-zinc-800">R$ {unitPrice.toFixed(2)}</span>
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400 transition-colors">
+          <button type="button" onClick={onClose} className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl p-2 text-zinc-400 transition-colors hover:bg-zinc-100" aria-label="Fechar">
             <X size={20} />
           </button>
         </div>
@@ -264,13 +265,13 @@ export default function MesaPickerModal({
           </div>
         ) : (
           <div className="overflow-y-auto flex-1 pr-1">
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {mesas.map(mesa => (
                 <button
                   key={mesa.id}
                   onClick={() => handleSelectMesa(mesa)}
                   disabled={adding !== null}
-                  className={`relative flex flex-col items-center justify-center gap-1 p-4 rounded-2xl border-2 transition-all active:scale-95 disabled:opacity-60 ${
+                  className={`relative flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border-2 p-4 transition-all active:scale-95 disabled:opacity-60 sm:min-h-0 ${
                     mesa.status === 'aberta'
                       ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 shadow-sm shadow-emerald-100'
                       : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100'

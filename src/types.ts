@@ -138,6 +138,15 @@ export interface Caixa {
   closed_at?: string | null;
 }
 
+/** Resposta de GET /api/caixa/hoje — inclui flags do backend para habilitar "Abrir Caixa". */
+export interface CaixaStatusApi extends Partial<Caixa> {
+  caixa_aberto: boolean;
+  can_open_caixa: boolean;
+  status: 'aberto' | 'fechado';
+  total_vendas?: number;
+  total_despesas?: number;
+}
+
 // â”€â”€ Estoque â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface Ingrediente {
   id: number;

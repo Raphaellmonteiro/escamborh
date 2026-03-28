@@ -114,5 +114,5 @@ O arquivo `restaurante.db` é gerado automaticamente na primeira execução.
 Copie `.env.example` para `.env` e preencha:
 ```
 JWT_SECRET=sua_chave_secreta_aqui
-GEMINI_API_KEY=opcional_para_funcoes_ia
+ANTHROPIC_API_KEY=opcional_FlowAI_analise_Claude
 ```

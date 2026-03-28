@@ -15,6 +15,7 @@ import type {
 } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Spinner } from '../components/ui/Spinner';
 
 // ─── helpers ────────────────────────────────────────────────────
@@ -561,37 +562,40 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
 
       {/* ── Header ── */}
       <div className="bg-white border-b border-zinc-200 px-4 sm:px-6 py-4 sm:py-5 flex-shrink-0">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-zinc-900">{tituloTela}</h2>
+        <ScreenHeader
+          rowFrom="md"
+          className="md:gap-4"
+          title={tituloTela}
+          subtitle={
             <p className="text-sm text-zinc-400 mt-0.5">
               {ingredientes.length} ingredientes
               {totalEsgotados > 0 && <span className="ml-2 text-red-600 font-bold">· {totalEsgotados} esgotado(s)</span>}
               {totalBaixos    > 0 && <span className="ml-1 text-amber-600 font-bold">· {totalBaixos} baixo(s)</span>}
             </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Tabs */}
-            <div className="flex bg-zinc-100 p-1 rounded-xl gap-0.5 overflow-x-auto max-w-full">
-              {([
-                { key: 'ingredientes',  label: 'Ingredientes', icon: <Package size={14}/> },
-                { key: 'movimentacoes', label: 'Movimentações', icon: <History size={14}/> },
-                { key: 'relatorio',     label: 'Relatório', icon: <BarChart2 size={14}/> },
-                { key: 'padronizacao',  label: 'Padronizacao', icon: <Link2 size={14}/> },
-                { key: 'ficha',         label: 'Ficha Técnica', icon: <BookOpen size={14}/> },
-              ] as { key: Tab; label: string; icon: React.ReactNode }[]).map(t => (
-                <button key={t.key} onClick={() => setTab(t.key)}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                  {t.icon}{t.label}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setEditing({ nome: '', unidade: 'kg', estoque_atual: 0, estoque_minimo: 0, custo_unitario: 0 })}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95">
-              <Plus size={16}/>{labelNovo}
-            </button>
-          </div>
-        </div>
+          }
+          actions={
+            <>
+              <div className="flex bg-zinc-100 p-1 rounded-xl gap-0.5 overflow-x-auto max-w-full">
+                {([
+                  { key: 'ingredientes',  label: 'Ingredientes', icon: <Package size={14}/> },
+                  { key: 'movimentacoes', label: 'Movimentações', icon: <History size={14}/> },
+                  { key: 'relatorio',     label: 'Relatório', icon: <BarChart2 size={14}/> },
+                  { key: 'padronizacao',  label: 'Padronizacao', icon: <Link2 size={14}/> },
+                  { key: 'ficha',         label: 'Ficha Técnica', icon: <BookOpen size={14}/> },
+                ] as { key: Tab; label: string; icon: React.ReactNode }[]).map(t => (
+                  <button key={t.key} onClick={() => setTab(t.key)}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
+                    {t.icon}{t.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setEditing({ nome: '', unidade: 'kg', estoque_atual: 0, estoque_minimo: 0, custo_unitario: 0 })}
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95">
+                <Plus size={16}/>{labelNovo}
+              </button>
+            </>
+          }
+        />
       </div>
 
       {/* ── Conteúdo ── */}
@@ -684,7 +688,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
               <>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {ingredientesVisiveis.map(ing => (
-                  <div key={ing.id} className={`rounded-xl border p-2 transition-all ${getStatusCls(ing.status)}`}>
+                  <div key={ing.id} className={`rounded-2xl border p-2 transition-all ${getStatusCls(ing.status)}`}>
                     {/* Linha 1: Header + ícones */}
                     <div className="flex justify-between items-start gap-2 mb-1">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -1172,7 +1176,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                 <div className="flex items-center gap-3">
                   {custoProduto > 0 && (
                     <div className="px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl">
-                      <p className="text-[9px] font-black text-zinc-400 uppercase">Custo da Receita</p>
+                      <p className="text-[10px] font-black text-zinc-400 uppercase">Custo da Receita</p>
                       <p className="text-base font-black text-zinc-900">{fmt(custoProduto)}</p>
                     </div>
                   )}

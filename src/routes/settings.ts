@@ -8,6 +8,17 @@ import { uploadLogo, checkMagicBytes } from '../middleware';
 import { getCompletePlanFeatures } from '../config/planFeatures';
 import { getTenantPlanContext } from '../services/tenantPlan';
 
+function resolveTenantLogoUrl(tenantId: number | string | undefined): string | null {
+  try {
+    const logoDir = path.join(process.cwd(), 'uploads', 'logo');
+    const files = fs.existsSync(logoDir) ? fs.readdirSync(logoDir) : [];
+    const file = files.find((f) => f.startsWith(`logo_${tenantId}.`));
+    return file ? `/uploads/logo/${file}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createSettingsRouter() {
   const router = Router();
 
@@ -20,8 +31,10 @@ export function createSettingsRouter() {
       const permissoes = (req as any).userPermissoes || (usuario?.permissoes ? JSON.parse(usuario.permissoes) : null);
       const nomeUsuario= (req as any).userName       || usuario?.nome       || '';
       const senhaPadrao = (cliente?.senha_admin === '123321') || (cliente?.senha_caixa === '123321');
+      const logo_url = resolveTenantLogoUrl(req.tenantId);
       res.json({
         nome_estabelecimento: cliente?.nome_estabelecimento || 'FlowPDV',
+        logo_url,
         senha_padrao: senhaPadrao,
         segmento:     cliente?.segmento    || 'Restaurante/Food',
         taxa_debito:  cliente?.taxa_debito  || 0,
@@ -35,8 +48,10 @@ export function createSettingsRouter() {
         cargo, permissoes, nome_usuario: nomeUsuario,
       });
     } catch {
+      const logo_url = resolveTenantLogoUrl(req.tenantId);
       res.json({
         nome_estabelecimento: 'FlowPDV',
+        logo_url,
         senha_padrao: true,
         segmento: 'Restaurante/Food',
         taxa_debito: 0,
@@ -102,12 +117,7 @@ export function createSettingsRouter() {
   });
 
   router.get('/logo', (req: Request, res) => {
-    try {
-      const logoDir = path.join(process.cwd(), 'uploads', 'logo');
-      const files   = fs.existsSync(logoDir) ? fs.readdirSync(logoDir) : [];
-      const file    = files.find(f => f.startsWith(`logo_${req.tenantId}.`));
-      res.json({ logo_url: file ? `/uploads/logo/${file}` : null });
-    } catch { res.json({ logo_url: null }); }
+    res.json({ logo_url: resolveTenantLogoUrl(req.tenantId) });
   });
 
   router.post('/logo', uploadLogo.single('logo'), checkMagicBytes, (req: any, res) => {

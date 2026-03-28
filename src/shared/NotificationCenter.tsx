@@ -1,279 +1,421 @@
-// src/shared/NotificationCenter.tsx
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
-  X, Bell, CheckCheck, TrendingUp, AlertTriangle,
-  Trophy, AlertCircle, Filter, Trash2,
+  AlertCircle,
+  AlertTriangle,
+  Bell,
+  CheckCheck,
+  ChevronRight,
+  TrendingUp,
+  Trophy,
+  X,
 } from 'lucide-react';
 import type { Aviso } from '../hooks/useFlowAI';
 
-// ── Config visual por tipo ───────────────────────────────────────────────────
-const TIPO_CFG = {
+type SeverityVariant = 'critical' | 'warning' | 'success';
+type FiltroTipo = 'todos' | 'nao_lidos' | 'alerta' | 'atencao' | 'oportunidade' | 'parabens';
+
+type TipoConfig = {
+  icon: React.ReactNode;
+  label: string;
+  severity: SeverityVariant;
+};
+
+const TIPO_CFG: Record<Aviso['tipo'], TipoConfig> = {
   oportunidade: {
-    icon:  <TrendingUp  size={14} />,
+    icon: <TrendingUp size={14} />,
     label: 'Oportunidade',
-    dot:   'bg-emerald-500',
-    badge: 'bg-emerald-100 text-emerald-700',
-    ring:  'border-l-emerald-400',
+    severity: 'success',
   },
   alerta: {
-    icon:  <AlertTriangle size={14} />,
+    icon: <AlertTriangle size={14} />,
     label: 'Alerta',
-    dot:   'bg-amber-500',
-    badge: 'bg-amber-100 text-amber-700',
-    ring:  'border-l-amber-400',
+    severity: 'warning',
   },
   parabens: {
-    icon:  <Trophy size={14} />,
-    label: 'Parabéns',
-    dot:   'bg-blue-500',
-    badge: 'bg-blue-100 text-blue-700',
-    ring:  'border-l-blue-400',
+    icon: <Trophy size={14} />,
+    label: 'Conquista',
+    severity: 'success',
   },
   atencao: {
-    icon:  <AlertCircle size={14} />,
-    label: 'Atenção',
-    dot:   'bg-red-500',
-    badge: 'bg-red-100 text-red-700',
-    ring:  'border-l-red-400',
+    icon: <AlertCircle size={14} />,
+    label: 'Critico',
+    severity: 'critical',
   },
-} as const;
+};
+
+const SEVERITY_CFG: Record<
+  SeverityVariant,
+  {
+    label: string;
+    dot: string;
+    rail: string;
+    iconWrap: string;
+    badge: string;
+    cta: string;
+    subtleLink: string;
+    activeFilter: string;
+  }
+> = {
+  critical: {
+    label: 'Critico',
+    dot: 'bg-red-400',
+    rail: 'bg-red-400/85',
+    iconWrap: 'border-red-500/25 bg-red-500/12 text-red-200',
+    badge: 'border-red-500/20 bg-red-500/10 text-red-200',
+    cta: 'border-red-500/25 bg-red-500/10 text-red-100 hover:border-red-400/35 hover:bg-red-500/14',
+    subtleLink: 'text-red-200/75 hover:text-red-100',
+    activeFilter: 'border-red-500/25 bg-red-500/12 text-red-100',
+  },
+  warning: {
+    label: 'Alerta',
+    dot: 'bg-amber-400',
+    rail: 'bg-amber-400/85',
+    iconWrap: 'border-amber-500/25 bg-amber-500/12 text-amber-200',
+    badge: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
+    cta: 'border-amber-500/25 bg-amber-500/10 text-amber-100 hover:border-amber-400/35 hover:bg-amber-500/14',
+    subtleLink: 'text-amber-200/75 hover:text-amber-100',
+    activeFilter: 'border-amber-500/25 bg-amber-500/12 text-amber-100',
+  },
+  success: {
+    label: 'Positivo',
+    dot: 'bg-emerald-400',
+    rail: 'bg-emerald-400/85',
+    iconWrap: 'border-emerald-500/25 bg-emerald-500/12 text-emerald-200',
+    badge: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200',
+    cta: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-100 hover:border-emerald-400/35 hover:bg-emerald-500/14',
+    subtleLink: 'text-emerald-200/75 hover:text-emerald-100',
+    activeFilter: 'border-emerald-500/25 bg-emerald-500/12 text-emerald-100',
+  },
+};
 
 const PRIORIDADE_LABEL: Record<number, string> = {
   1: 'Info',
   2: 'Aviso',
-  3: 'Crítico',
+  3: 'Alta',
 };
 
 const PRIORIDADE_COLOR: Record<number, string> = {
-  1: 'bg-zinc-100 text-zinc-500',
-  2: 'bg-amber-100 text-amber-700',
-  3: 'bg-red-100 text-red-700',
+  1: 'border-white/8 bg-white/[0.04] text-zinc-400',
+  2: 'border-amber-500/20 bg-amber-500/8 text-amber-200',
+  3: 'border-red-500/20 bg-red-500/8 text-red-200',
 };
 
-// ── Formata timestamp ────────────────────────────────────────────────────────
 function fmtDatetime(raw: string): string {
   try {
-    const d = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z');
+    const date = new Date(raw.includes('T') ? raw : `${raw.replace(' ', 'T')}Z`);
     const hoje = new Date();
-    const ontem = new Date(); ontem.setDate(hoje.getDate() - 1);
-    const isHoje  = d.toDateString() === hoje.toDateString();
-    const isOntem = d.toDateString() === ontem.toDateString();
-    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    if (isHoje)  return `Hoje, ${hora}`;
+    const ontem = new Date();
+    ontem.setDate(hoje.getDate() - 1);
+    const isHoje = date.toDateString() === hoje.toDateString();
+    const isOntem = date.toDateString() === ontem.toDateString();
+    const hora = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    if (isHoje) return `Hoje, ${hora}`;
     if (isOntem) return `Ontem, ${hora}`;
-    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ` ${hora}`;
-  } catch { return raw; }
+
+    return `${date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${hora}`;
+  } catch {
+    return raw;
+  }
 }
 
-// ── Props ────────────────────────────────────────────────────────────────────
+function normalizeText(text: string): string {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function shortenText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}...`;
+}
+
+function summarizeQuotedList(text: string, maxVisible = 2): string {
+  const match = text.match(/"[^"]+"(?:,\s*"[^"]+")+/);
+  if (!match) return text;
+
+  const items = Array.from(match[0].matchAll(/"([^"]+)"/g)).map(([, value]) => value.trim());
+  if (items.length <= maxVisible) return text;
+
+  const visible = items.slice(0, maxVisible).map((item) => `"${item}"`).join(', ');
+  const remaining = items.length - maxVisible;
+
+  return text.replace(
+    match[0],
+    `${visible} e mais ${remaining} item${remaining > 1 ? 's' : ''}`,
+  );
+}
+
+function compactTitle(text: string): string {
+  return shortenText(normalizeText(text), 84);
+}
+
+function compactMessage(text: string): string {
+  return shortenText(summarizeQuotedList(normalizeText(text)), 168);
+}
+
+function getSeverity(tipo: Aviso['tipo']): SeverityVariant {
+  return TIPO_CFG[tipo]?.severity ?? 'critical';
+}
+
+function getFiltroActiveClass(filtro: FiltroTipo): string {
+  if (filtro === 'atencao') return SEVERITY_CFG.critical.activeFilter;
+  if (filtro === 'alerta') return SEVERITY_CFG.warning.activeFilter;
+  if (filtro === 'oportunidade' || filtro === 'parabens') return SEVERITY_CFG.success.activeFilter;
+  return 'border-white/10 bg-white/[0.08] text-white';
+}
+
 interface NotificationCenterProps {
   open: boolean;
   onClose: () => void;
   historico: Aviso[];
   carregandoHist: boolean;
   avisosNaoLidos: number;
-  onMarcarLido:       (id: number) => void;
+  onMarcarLido: (id: number) => void;
   onMarcarTodosLidos: () => void;
-  onAcao:             (rota: string) => void;
-  onRefresh:          () => void;
+  onAcao: (rota: string) => void;
+  onRefresh: () => void;
 }
 
-// ── Filtro ───────────────────────────────────────────────────────────────────
-type FiltroTipo = 'todos' | 'nao_lidos' | 'alerta' | 'atencao' | 'oportunidade' | 'parabens';
-
-// ════════════════════════════════════════════════════════════════════════════
-// COMPONENTE PRINCIPAL
-// ════════════════════════════════════════════════════════════════════════════
 export default function NotificationCenter({
-  open, onClose, historico, carregandoHist, avisosNaoLidos,
-  onMarcarLido, onMarcarTodosLidos, onAcao, onRefresh,
+  open,
+  onClose,
+  historico,
+  carregandoHist,
+  avisosNaoLidos,
+  onMarcarLido,
+  onMarcarTodosLidos,
+  onAcao,
+  onRefresh,
 }: NotificationCenterProps) {
-
   const [filtro, setFiltro] = useState<FiltroTipo>('todos');
 
-  // Atualiza histórico ao abrir
-  useEffect(() => { if (open) onRefresh(); }, [open]);
+  useEffect(() => {
+    if (open) onRefresh();
+  }, [open, onRefresh]);
 
-  const filtrados = historico.filter(a => {
-    if (filtro === 'nao_lidos') return !a.lido;
-    if (filtro === 'todos')     return true;
-    return a.tipo === filtro;
+  const filtrados = historico.filter((aviso) => {
+    if (filtro === 'nao_lidos') return !aviso.lido;
+    if (filtro === 'todos') return true;
+    return aviso.tipo === filtro;
   });
 
-  const FILTROS: { key: FiltroTipo; label: string }[] = [
-    { key: 'todos',       label: 'Todos' },
-    { key: 'nao_lidos',   label: `Não lidos${avisosNaoLidos > 0 ? ` (${avisosNaoLidos})` : ''}` },
-    { key: 'atencao',     label: 'Críticos' },
-    { key: 'alerta',      label: 'Alertas' },
-    { key: 'oportunidade',label: 'Oportunidades' },
-    { key: 'parabens',    label: 'Conquistas' },
+  const filtros: { key: FiltroTipo; label: string }[] = [
+    { key: 'todos', label: 'Todos' },
+    { key: 'nao_lidos', label: `Nao lidos${avisosNaoLidos > 0 ? ` (${avisosNaoLidos})` : ''}` },
+    { key: 'atencao', label: 'Criticos' },
+    { key: 'alerta', label: 'Alertas' },
+    { key: 'oportunidade', label: 'Oportunidades' },
+    { key: 'parabens', label: 'Conquistas' },
   ];
 
   return (
     <AnimatePresence>
-      {open && (
+      {open ? (
         <>
-          {/* Overlay */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[200]"
+            className="fixed inset-0 z-[200] bg-black/55 backdrop-blur-[3px]"
           />
 
-          {/* Painel lateral */}
           <motion.aside
             initial={{ x: '100%', opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 h-screen w-full max-w-[420px] bg-white shadow-2xl z-[201] flex flex-col"
+            className="fixed right-0 top-0 z-[201] flex h-screen w-full max-w-[420px] flex-col border-l border-white/10 bg-[linear-gradient(180deg,rgba(18,18,21,0.98),rgba(10,10,12,1))] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
           >
-            {/* ── Header ── */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 flex-shrink-0">
+            <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-zinc-900 rounded-xl flex items-center justify-center">
-                  <Bell size={17} className="text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                  <Bell size={17} className="text-zinc-100" />
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-zinc-900 leading-none">Notificações</h2>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                  <h2 className="text-base font-black leading-none text-zinc-50">Notificacoes</h2>
+                  <p className="mt-1 text-[11px] text-zinc-400">
                     {historico.length} registro{historico.length !== 1 ? 's' : ''}
-                    {avisosNaoLidos > 0 && ` · ${avisosNaoLidos} não lido${avisosNaoLidos !== 1 ? 's' : ''}`}
+                    {avisosNaoLidos > 0 && ` - ${avisosNaoLidos} nao lido${avisosNaoLidos !== 1 ? 's' : ''}`}
                   </p>
                 </div>
               </div>
+
               <div className="flex items-center gap-2">
-                {avisosNaoLidos > 0 && (
+                {avisosNaoLidos > 0 ? (
                   <button
                     onClick={onMarcarTodosLidos}
                     title="Marcar todos como lidos"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-zinc-200 transition-colors hover:bg-white/[0.08] hover:text-white"
                   >
                     <CheckCheck size={13} />
-                    Marcar todos lidos
+                    Marcar lidos
                   </button>
-                )}
-                <button onClick={onClose} className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-400 hover:text-zinc-700 transition-all">
-                  <X size={18} />
+                ) : null}
+
+                <button
+                  onClick={onClose}
+                  className="rounded-xl border border-white/8 bg-white/[0.04] p-2 text-zinc-400 transition-colors hover:bg-white/[0.08] hover:text-zinc-100"
+                  aria-label="Fechar notificacoes"
+                >
+                  <X size={17} />
                 </button>
               </div>
             </div>
 
-            {/* ── Filtros ── */}
-            <div className="px-4 py-2.5 border-b border-zinc-100 flex gap-1.5 overflow-x-auto flex-shrink-0 scrollbar-hide">
-              {FILTROS.map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => setFiltro(f.key)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
-                    filtro === f.key
-                      ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
+            <div className="flex gap-2 overflow-x-auto border-b border-white/8 px-4 py-3 scrollbar-hide">
+              {filtros.map((item) => {
+                const isActive = filtro === item.key;
+
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setFiltro(item.key)}
+                    className={[
+                      'whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                      isActive
+                        ? getFiltroActiveClass(item.key)
+                        : 'border-white/8 bg-white/[0.03] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200',
+                    ].join(' ')}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* ── Lista ── */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-3 py-3">
               {carregandoHist ? (
-                <div className="flex justify-center items-center py-20">
-                  <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-700 rounded-full animate-spin" />
+                <div className="flex items-center justify-center py-24">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-zinc-200" />
                 </div>
               ) : filtrados.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-                  <Bell size={40} className="mb-3 opacity-20" />
-                  <p className="font-semibold text-sm">
-                    {filtro === 'nao_lidos' ? 'Nenhuma notificação não lida' : 'Nenhuma notificação aqui'}
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-20 text-center">
+                  <Bell size={40} className="mb-3 text-zinc-500/60" />
+                  <p className="text-sm font-semibold text-zinc-200">
+                    {filtro === 'nao_lidos' ? 'Nenhuma notificacao nao lida' : 'Nenhuma notificacao aqui'}
                   </p>
-                  <p className="text-xs mt-1 text-zinc-300">
-                    {filtro === 'nao_lidos' ? 'Você está em dia! ✅' : 'As notificações aparecerão aqui conforme o sistema detecta eventos.'}
+                  <p className="mt-1 max-w-[240px] text-xs leading-relaxed text-zinc-500">
+                    {filtro === 'nao_lidos'
+                      ? 'Tudo em dia por aqui.'
+                      : 'Os avisos aparecerao aqui conforme o sistema detectar eventos.'}
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-zinc-50">
-                  {filtrados.map(aviso => {
-                    const cfg = TIPO_CFG[aviso.tipo] ?? TIPO_CFG.atencao;
+                <div className="flex flex-col gap-2.5">
+                  {filtrados.map((aviso) => {
+                    const tipoCfg = TIPO_CFG[aviso.tipo] ?? TIPO_CFG.atencao;
+                    const severity = SEVERITY_CFG[getSeverity(aviso.tipo)];
+                    const isUnread = !aviso.lido;
+                    const title = compactTitle(aviso.titulo);
+                    const message = compactMessage(aviso.mensagem);
+
                     return (
-                      <div
+                      <article
                         key={aviso.id}
-                        className={`flex gap-3 px-4 py-3.5 transition-all hover:bg-zinc-50 border-l-4 ${cfg.ring} ${aviso.lido ? 'opacity-60' : ''}`}
+                        className={[
+                          'group relative overflow-hidden rounded-2xl border border-white/8 bg-zinc-900/78 px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] transition-colors hover:border-white/12 hover:bg-zinc-900',
+                          isUnread ? 'opacity-100' : 'opacity-72',
+                        ].join(' ')}
                       >
-                        {/* Dot não-lido */}
-                        <div className="flex flex-col items-center gap-1 pt-0.5 flex-shrink-0">
-                          {!aviso.lido && (
-                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-                          )}
-                          {aviso.lido && <div className="w-2 h-2" />}
-                        </div>
+                        <div className={`absolute inset-y-4 left-0 w-[3px] rounded-r-full ${severity.rail}`} />
 
-                        {/* Conteúdo */}
-                        <div className="flex-1 min-w-0">
-                          {/* Badges */}
-                          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${cfg.badge}`}>
-                              {cfg.icon}
-                              {cfg.label}
-                            </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${PRIORIDADE_COLOR[aviso.prioridade] || PRIORIDADE_COLOR[1]}`}>
-                              {PRIORIDADE_LABEL[aviso.prioridade] || 'Info'}
-                            </span>
-                            <span className="text-[10px] text-zinc-400 ml-auto flex-shrink-0">
-                              {fmtDatetime(aviso.created_at)}
-                            </span>
+                        <div className="flex gap-3 pl-1">
+                          <div className="flex flex-col items-center pt-0.5">
+                            <div
+                              className={[
+                                'flex h-9 w-9 items-center justify-center rounded-xl border',
+                                severity.iconWrap,
+                              ].join(' ')}
+                            >
+                              {tipoCfg.icon}
+                            </div>
+                            <div className="mt-2 h-2 w-2">
+                              {isUnread ? <div className={`h-2 w-2 rounded-full ${severity.dot}`} /> : null}
+                            </div>
                           </div>
 
-                          {/* Título */}
-                          <p className={`text-sm font-bold leading-snug ${aviso.lido ? 'text-zinc-500' : 'text-zinc-900'}`}>
-                            {aviso.titulo}
-                          </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex items-start gap-2">
+                              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                                <span
+                                  className={[
+                                    'inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em]',
+                                    severity.badge,
+                                  ].join(' ')}
+                                >
+                                  {severity.label}
+                                </span>
+                                <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+                                  {tipoCfg.label}
+                                </span>
+                                <span
+                                  className={[
+                                    'inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]',
+                                    PRIORIDADE_COLOR[aviso.prioridade] || PRIORIDADE_COLOR[1],
+                                  ].join(' ')}
+                                >
+                                  {PRIORIDADE_LABEL[aviso.prioridade] || 'Info'}
+                                </span>
+                              </div>
 
-                          {/* Mensagem */}
-                          <p className="text-[12px] text-zinc-400 mt-0.5 leading-relaxed line-clamp-2">
-                            {aviso.mensagem}
-                          </p>
+                              <span className="shrink-0 pt-0.5 text-[10px] font-medium text-zinc-500">
+                                {fmtDatetime(aviso.created_at)}
+                              </span>
+                            </div>
 
-                          {/* Ações */}
-                          <div className="flex items-center gap-2 mt-2">
-                            {aviso.acao && aviso.acao_rota && (
-                              <button
-                                onClick={() => { onAcao(aviso.acao_rota!); if (!aviso.lido) onMarcarLido(aviso.id); onClose(); }}
-                                className="flex items-center gap-1 text-[11px] font-bold text-zinc-700 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1 rounded-lg transition-all"
-                              >
-                                {aviso.acao} →
-                              </button>
-                            )}
-                            {!aviso.lido && (
-                              <button
-                                onClick={() => onMarcarLido(aviso.id)}
-                                className="text-[11px] text-zinc-400 hover:text-zinc-600 transition-all"
-                              >
-                                Marcar lido
-                              </button>
-                            )}
+                            <p className="line-clamp-2 text-sm font-black leading-snug text-zinc-50">{title}</p>
+                            <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-zinc-400">{message}</p>
+
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              {aviso.acao && aviso.acao_rota ? (
+                                <button
+                                  onClick={() => {
+                                    onAcao(aviso.acao_rota!);
+                                    if (isUnread) onMarcarLido(aviso.id);
+                                    onClose();
+                                  }}
+                                  className={[
+                                    'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                                    severity.cta,
+                                  ].join(' ')}
+                                >
+                                  {aviso.acao}
+                                  <ChevronRight size={13} />
+                                </button>
+                              ) : null}
+
+                              {isUnread ? (
+                                <button
+                                  onClick={() => onMarcarLido(aviso.id)}
+                                  className={[
+                                    'text-[11px] font-medium transition-colors',
+                                    severity.subtleLink,
+                                  ].join(' ')}
+                                >
+                                  Marcar lido
+                                </button>
+                              ) : (
+                                <span className="text-[11px] font-medium text-zinc-500">Lido</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      </article>
                     );
                   })}
                 </div>
               )}
             </div>
 
-            {/* ── Footer ── */}
-            <div className="px-5 py-3 border-t border-zinc-100 flex-shrink-0 bg-zinc-50/50">
-              <p className="text-[10px] text-zinc-400 text-center">
-                Notificações dos últimos 30 dias · Geradas automaticamente pelo FlowAI
+            <div className="border-t border-white/8 bg-black/10 px-5 py-3">
+              <p className="text-center text-[10px] text-zinc-500">
+                Notificacoes dos ultimos 30 dias - Geradas automaticamente pelo FlowPDV
               </p>
             </div>
           </motion.aside>
         </>
-      )}
+      ) : null}
     </AnimatePresence>
   );
 }

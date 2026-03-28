@@ -4,10 +4,24 @@ import { buildPublicOrderItemFromPersisted, serializeOrderItemSelecoes } from '.
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
 import { requireAnyPermission } from '../middleware';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
+import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
 import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomationService';
+import { isAppError } from '../utils/errors';
+import { getCustomerLoyaltyTier } from '../services/customerLoyaltyTier';
+import { buildValidOrderSqlClause } from '../services/orderValiditySql';
+import {
+  findOrCreateStoreCustomerByPhone,
+  touchStoreCustomerPurchase,
+} from '../services/storeCustomerService';
 
 const TZ = 'America/Sao_Paulo';
+const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
+const MANUAL_ORDER_NUMBER_RETRY_MAX = 5;
+
+function isPgUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
+}
 const ACTIVE_CUSTOMER_DAYS = 30;
 const INACTIVE_CUSTOMER_DAYS = 60;
 
@@ -15,13 +29,12 @@ function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string
   return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
 }
 
-function buildNotCanceledOrderClause(alias?: string) {
-  const prefix = alias ? `${alias}.` : '';
-  return `${prefix}cancelado_at IS NULL AND LOWER(COALESCE(${prefix}status,'')) <> 'cancelado'`;
-}
-
 function normalizePhone(value: unknown) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function pedidoVinculoCliente(aliasP = 'p', aliasC = 'c') {
+  return `${aliasP}.tenant_id = ${aliasC}.tenant_id AND (${aliasP}.cliente_id = ${aliasC}.id OR ${aliasP}.delivery_cliente_id = ${aliasC}.id)`;
 }
 
 function classifyCustomerActivity(totalValidOrders: number, daysWithoutPurchase: number | null) {
@@ -29,71 +42,6 @@ function classifyCustomerActivity(totalValidOrders: number, daysWithoutPurchase:
   if (daysWithoutPurchase <= ACTIVE_CUSTOMER_DAYS) return 'ativo';
   if (daysWithoutPurchase <= INACTIVE_CUSTOMER_DAYS) return 'em_risco';
   return 'inativo';
-}
-
-async function findOrCreateDeliveryCustomerFromOrder(input: {
-  tenantId: number;
-  nome?: unknown;
-  telefone?: unknown;
-  origemCadastro: string;
-}) {
-  const telefone = normalizePhone(input.telefone);
-  const nome = String(input.nome || '').trim();
-
-  if (!telefone) return null;
-
-  const existing = await q1(
-    'SELECT id, nome, origem_cadastro FROM delivery_clientes WHERE tenant_id=? AND telefone=?',
-    [input.tenantId, telefone]
-  );
-
-  if (existing) {
-    if ((!existing.nome || !String(existing.nome).trim()) && nome) {
-      await qRun('UPDATE delivery_clientes SET nome=? WHERE id=? AND tenant_id=?', [nome, existing.id, input.tenantId]);
-    }
-
-    if (!existing.origem_cadastro || !String(existing.origem_cadastro).trim()) {
-      await qRun('UPDATE delivery_clientes SET origem_cadastro=? WHERE id=? AND tenant_id=?', [input.origemCadastro, existing.id, input.tenantId]);
-    }
-
-    return Number(existing.id);
-  }
-
-  if (!nome) return null;
-
-  const createdId = await qInsert(
-    `INSERT INTO delivery_clientes
-      (tenant_id, nome, telefone, origem_cadastro, primeira_compra_at, ultima_compra_at)
-     VALUES (?, ?, ?, ?, NOW(), NOW())`,
-    [input.tenantId, nome, telefone, input.origemCadastro]
-  );
-
-  return Number(createdId);
-}
-
-async function touchDeliveryCustomerPurchase(params: {
-  clienteId: number;
-  tenantId: number;
-  origemCadastro?: string | null;
-}) {
-  await qRun(
-    `UPDATE delivery_clientes
-     SET primeira_compra_at = COALESCE(primeira_compra_at, NOW()),
-         ultima_compra_at = NOW(),
-         origem_cadastro = CASE
-           WHEN (origem_cadastro IS NULL OR BTRIM(origem_cadastro) = '')
-             AND COALESCE(?, '') <> ''
-           THEN ?
-           ELSE COALESCE(origem_cadastro, 'delivery_online')
-         END
-     WHERE id=? AND tenant_id=?`,
-    [
-      params.origemCadastro || null,
-      params.origemCadastro || null,
-      params.clienteId,
-      params.tenantId,
-    ]
-  );
 }
 
 export function createDeliveryRouter() {
@@ -339,7 +287,7 @@ router.get('/pedidos', async (req: Request, res) => {
 router.get('/dashboard', async (req: Request, res) => {
     try {
       // Usamos a data do banco (Postgres) para evitar diferença de fuso horário com o Node.js
-      const notCanceledOrderClause = buildNotCanceledOrderClause();
+      const notCanceledOrderClause = buildValidOrderSqlClause();
       const [pedidosHoje, emPreparo, emRota, ticketMedio, topMotoboy] = await Promise.all([
         q1(`SELECT COUNT(*) as n, COALESCE(SUM(total_amount),0) as fat FROM pedidos WHERE tenant_id=? AND canal='delivery' AND ${notCanceledOrderClause} AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`, [req.tenantId]),
         q1(`SELECT COUNT(*) as n FROM pedidos WHERE tenant_id=? AND canal='delivery' AND ${notCanceledOrderClause} AND status IN ('Criado','Pedido Recebido','Em Preparo')`, [req.tenantId]),
@@ -363,7 +311,7 @@ router.get('/dashboard', async (req: Request, res) => {
 router.get('/clientes', async (req: Request, res) => {
     try {
       const { search } = req.query;
-      const notCanceledOrderClauseSummary = buildNotCanceledOrderClause('p');
+      const notCanceledOrderClauseSummary = buildValidOrderSqlClause('p');
       let summaryQuery = `
         SELECT c.*,
           metrics.total_pedidos,
@@ -391,8 +339,7 @@ router.get('/clientes', async (req: Request, res) => {
             MIN(created_at) FILTER (WHERE ${notCanceledOrderClauseSummary}) as primeira_compra_at,
             MAX(created_at) FILTER (WHERE ${notCanceledOrderClauseSummary}) as ultima_compra_at
           FROM pedidos p
-          WHERE p.delivery_cliente_id = c.id
-            AND p.tenant_id = c.tenant_id
+          WHERE ${pedidoVinculoCliente('p', 'c')}
         ) metrics ON TRUE
         WHERE c.tenant_id=?
       `;
@@ -412,6 +359,7 @@ router.get('/clientes', async (req: Request, res) => {
           : Number(row.dias_sem_comprar);
         const ultimaCompraAt = row.ultima_compra_at_calc || null;
 
+        const fidelizacao = getCustomerLoyaltyTier(totalPedidosValidos);
         return {
           ...row,
           total_pedidos: totalPedidos,
@@ -422,42 +370,18 @@ router.get('/clientes', async (req: Request, res) => {
           ultimo_pedido: ultimaCompraAt,
           dias_sem_comprar: diasSemComprar,
           cliente_recorrente: totalPedidosValidos >= 3,
+          fidelizacao,
           status_atividade: classifyCustomerActivity(totalPedidosValidos, diasSemComprar),
           sem_historico: totalPedidos <= 0,
         };
       }));
-      // Adicionamos as subqueries para puxar o Total Gasto (ignorando cancelados) e o Último Pedido
-      const notCanceledOrderClause = buildNotCanceledOrderClause('p');
-      let q = `
-        SELECT c.*,
-          (SELECT COUNT(*) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id) as total_pedidos,
-          (SELECT COALESCE(SUM(total_amount), 0) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id AND ${notCanceledOrderClause}) as total_gasto,
-          (SELECT MAX(created_at) FROM pedidos p WHERE p.delivery_cliente_id = c.id AND p.tenant_id = c.tenant_id) as ultimo_pedido
-        FROM delivery_clientes c
-        WHERE c.tenant_id=?
-      `;
-      const params: any[] = [req.tenantId];
-      if (search) { 
-        q += ' AND (c.nome ILIKE ? OR c.telefone ILIKE ?)'; 
-        const t=`%${search}%`; params.push(t,t); 
-      }
-      q += ' ORDER BY c.nome ASC LIMIT 200';
-      const rows = await qAll(q, params);
-      
-      // Converte os valores financeiros para Number (exigência do Postgres)
-      res.json(rows.map((r: any) => ({ 
-        ...r, 
-        total_pedidos: Number(r.total_pedidos || 0),
-        total_gasto: Number(r.total_gasto || 0),
-        ultimo_pedido: r.ultimo_pedido || null
-      })));
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   router.get('/clientes/resumo', async (req: Request, res) => {
     try {
       const { search } = req.query;
-      const notCanceledOrderClause = buildNotCanceledOrderClause('p');
+      const notCanceledOrderClause = buildValidOrderSqlClause('p');
       let q = `
         SELECT c.*,
           metrics.total_pedidos,
@@ -485,8 +409,7 @@ router.get('/clientes', async (req: Request, res) => {
             MIN(created_at) FILTER (WHERE ${notCanceledOrderClause}) as primeira_compra_at,
             MAX(created_at) FILTER (WHERE ${notCanceledOrderClause}) as ultima_compra_at
           FROM pedidos p
-          WHERE p.delivery_cliente_id = c.id
-            AND p.tenant_id = c.tenant_id
+          WHERE ${pedidoVinculoCliente('p', 'c')}
         ) metrics ON TRUE
         WHERE c.tenant_id=?
       `;
@@ -507,6 +430,7 @@ router.get('/clientes', async (req: Request, res) => {
           : Number(r.dias_sem_comprar);
         const ultimaCompraAt = r.ultima_compra_at_calc || null;
 
+        const fidelizacao = getCustomerLoyaltyTier(totalPedidosValidos);
         return {
           ...r,
           total_pedidos: totalPedidos,
@@ -517,6 +441,7 @@ router.get('/clientes', async (req: Request, res) => {
           ultimo_pedido: ultimaCompraAt,
           dias_sem_comprar: diasSemComprar,
           cliente_recorrente: totalPedidosValidos >= 3,
+          fidelizacao,
           status_atividade: classifyCustomerActivity(totalPedidosValidos, diasSemComprar),
           sem_historico: totalPedidos <= 0,
         };
@@ -548,7 +473,7 @@ router.get('/clientes', async (req: Request, res) => {
 
       await qRun(
         `UPDATE delivery_clientes
-         SET nome=?, email=?, origem_cadastro=?, observacoes=?
+         SET nome=?, email=?, origem_cadastro=?, observacoes=?, updated_at=NOW()
          WHERE id=? AND tenant_id=?`,
         [nome, email, origemCadastro, observacoes, req.params.id, req.tenantId]
       );
@@ -561,8 +486,8 @@ router.get('/clientes', async (req: Request, res) => {
     try {
       res.json(await qAll(
         `SELECT p.*, (SELECT STRING_AGG(pr.name||' x'||ip.quantity::text,', ') FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens
-         FROM pedidos p WHERE p.tenant_id=? AND p.delivery_cliente_id=? ORDER BY p.created_at DESC LIMIT 50`,
-        [req.tenantId, req.params.id]
+         FROM pedidos p WHERE p.tenant_id=? AND (p.cliente_id=? OR p.delivery_cliente_id=?) ORDER BY p.created_at DESC LIMIT 50`,
+        [req.tenantId, req.params.id, req.params.id]
       ));
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -570,48 +495,114 @@ router.get('/clientes', async (req: Request, res) => {
   router.post('/pedidos', async (req: Request, res) => {
     try {
       const { items, cliente_nome, cliente_tel, endereco, pagamento_tipo, total_amount, taxa_entrega, observation } = req.body;
+      const tenantId = Number(req.tenantId);
+
+      let subtotal: number;
+      let itensValidados: any[];
+      try {
+        const v = await validateDeliveryItems(tenantId, items || []);
+        subtotal = v.subtotal;
+        itensValidados = v.itensValidados;
+      } catch (e) {
+        if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message });
+        throw e;
+      }
+
+      const taxa = Number(taxa_entrega) || 0;
+      const serverTotal = subtotal + taxa;
+      const clientTotal = Number(total_amount);
+      if (!Number.isFinite(clientTotal) || Math.abs(serverTotal - clientTotal) > MANUAL_DELIVERY_TOTAL_TOLERANCE) {
+        return res.status(400).json({
+          success: false,
+          error: 'Total do pedido diverge do calculo no servidor',
+        });
+      }
+
       const clienteTelNormalizado = normalizePhone(cliente_tel);
-      const deliveryClienteId = await findOrCreateDeliveryCustomerFromOrder({
-        tenantId: Number(req.tenantId),
+      const deliveryClienteId = await findOrCreateStoreCustomerByPhone({
+        tenantId,
         nome: cliente_nome,
         telefone: clienteTelNormalizado,
         origemCadastro: 'pedido_manual',
       });
-      
+
       const dateObj = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
       const y = String(dateObj.getFullYear()).slice(-2);
       const m = String(dateObj.getMonth() + 1).padStart(2, '0');
       const d = String(dateObj.getDate()).padStart(2, '0');
       const prefix = `D${y}${m}${d}`;
 
-      const todayCount = await q1(`SELECT COUNT(*) as c FROM pedidos WHERE tenant_id=? AND order_number LIKE ?`, [req.tenantId, `${prefix}-%`]);
-      const n = Number(todayCount?.c||0)+1;
-      const on = `${prefix}-${String(n).padStart(3,'0')}`;
-
-      const orderId = await qInsert(
-        `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id) VALUES (?,?,?,?,?,'delivery',?,?,?,?,?,?,?)`,
-        [on, total_amount, taxa_entrega||0, observation||null, req.tenantId, cliente_nome||null, clienteTelNormalizado||null, endereco||null, pagamento_tipo||'dinheiro', pagamento_tipo==='pix'?'aguardando_confirmacao':'pendente', 'Pedido Recebido', deliveryClienteId]
-      );
-      for (const item of (items||[])) {
-        const lineObsRaw = item?.obs_opcoes ?? item?.observation;
-        const lineObs =
-          lineObsRaw === undefined || lineObsRaw === null
-            ? null
-            : (() => {
-                const s = String(lineObsRaw).trim();
-                if (!s) return null;
-                return s.length > 4000 ? s.slice(0, 4000) : s;
-              })();
-        const selecoesJson = serializeOrderItemSelecoes(item?.selecoes);
-        await qRun(
-          'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,observation,selecoes_json) VALUES (?,?,?,?,?,?,?,?)',
-          [orderId, item.product_id, item.quantity, 'Delivery', item.price_at_time, req.tenantId, lineObs, selecoesJson]
-        );
+      let orderId = 0;
+      let on = '';
+      let inserted = false;
+      for (let attempt = 0; attempt < MANUAL_ORDER_NUMBER_RETRY_MAX; attempt++) {
+        try {
+          const r = await withTx(async (client) => {
+            const todayCount = await txQ1<{ c: number }>(
+              client,
+              `SELECT COUNT(*)::int as c FROM pedidos WHERE tenant_id=? AND order_number LIKE ?`,
+              [tenantId, `${prefix}-%`]
+            );
+            const n = Number(todayCount?.c || 0) + 1;
+            const ordNum = `${prefix}-${String(n).padStart(3, '0')}`;
+            const oid = await txInsert(
+              client,
+              `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,cliente_id) VALUES (?,?,?,?,?,'delivery',?,?,?,?,?,?,?,?)`,
+              [
+                ordNum,
+                serverTotal,
+                taxa,
+                observation || null,
+                tenantId,
+                cliente_nome || null,
+                clienteTelNormalizado || null,
+                endereco || null,
+                pagamento_tipo || 'dinheiro',
+                pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente',
+                'Pedido Recebido',
+                deliveryClienteId,
+                deliveryClienteId,
+              ]
+            );
+            for (const item of itensValidados) {
+              const lineObsRaw = item?.obs_opcoes ?? item?.observation;
+              const lineObs =
+                lineObsRaw === undefined || lineObsRaw === null
+                  ? null
+                  : (() => {
+                      const s = String(lineObsRaw).trim();
+                      if (!s) return null;
+                      return s.length > 4000 ? s.slice(0, 4000) : s;
+                    })();
+              const selecoesJson = serializeOrderItemSelecoes(item?.selecoes);
+              const vidRaw = item?.variation_id;
+              const vidNum = vidRaw != null ? Number(vidRaw) : null;
+              const variationIdForDb = Number.isInteger(vidNum) && vidNum! > 0 ? vidNum : null;
+              await txRun(
+                client,
+                'INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation,selecoes_json) VALUES (?,?,?,?,?,?,?,?,?)',
+                [oid, item.product_id, item.quantity, 'Delivery', item.price_at_time, tenantId, variationIdForDb, lineObs, selecoesJson]
+              );
+            }
+            return { orderId: Number(oid), orderNumber: ordNum };
+          });
+          orderId = r.orderId;
+          on = r.orderNumber;
+          inserted = true;
+          break;
+        } catch (e) {
+          if (isPgUniqueViolation(e) && attempt < MANUAL_ORDER_NUMBER_RETRY_MAX - 1) continue;
+          throw e;
+        }
       }
+      if (!inserted) {
+        return res.status(500).json({ success: false, error: 'Nao foi possivel gerar numero do pedido' });
+      }
+
       if (deliveryClienteId) {
-        await touchDeliveryCustomerPurchase({
+        await touchStoreCustomerPurchase({
           clienteId: Number(deliveryClienteId),
-          tenantId: Number(req.tenantId),
+          tenantId,
           origemCadastro: 'pedido_manual',
         });
       }
@@ -640,7 +631,10 @@ router.get('/clientes', async (req: Request, res) => {
         orderNumber: on,
         automation: kitchenPrintAutomation ? { kitchen_print: kitchenPrintAutomation } : undefined,
       });
-    } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+    } catch (e: any) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message });
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   router.get('/cupons', async (req: Request, res) => {
@@ -694,9 +688,9 @@ router.get('/clientes', async (req: Request, res) => {
 
       const baseFilter = `tenant_id=? AND canal='delivery' AND ${dateCond}`;
       const baseFilterP = `p.tenant_id=? AND p.canal='delivery' AND ${dateCondP}`;
-      const notCanceledCondition = buildNotCanceledOrderClause();
+      const notCanceledCondition = buildValidOrderSqlClause();
       const operationalFilter = `${baseFilter} AND ${notCanceledCondition}`;
-      const operationalFilterP = `${baseFilterP} AND ${buildNotCanceledOrderClause('p')}`;
+      const operationalFilterP = `${baseFilterP} AND ${buildValidOrderSqlClause('p')}`;
       const canceledCondition = `LOWER(COALESCE(status,'')) = 'cancelado' OR cancelado_at IS NOT NULL`;
       const deliveredOperationalCondition = `status='Entregue' AND ${notCanceledCondition}`;
 
@@ -705,7 +699,7 @@ router.get('/clientes', async (req: Request, res) => {
           `SELECT SUM(CASE WHEN ${notCanceledCondition} THEN 1 ELSE 0 END) as total_pedidos,
                   COALESCE(SUM(CASE WHEN ${notCanceledCondition} THEN total_amount ELSE 0 END),0) as faturamento_total,
                   COALESCE(AVG(CASE WHEN ${notCanceledCondition} THEN total_amount END),0) as ticket_medio,
-                  COUNT(DISTINCT CASE WHEN ${notCanceledCondition} THEN delivery_cliente_id END) as clientes_unicos,
+                  COUNT(DISTINCT CASE WHEN ${notCanceledCondition} THEN COALESCE(cliente_id, delivery_cliente_id) END) as clientes_unicos,
                   SUM(CASE WHEN ${deliveredOperationalCondition} THEN 1 ELSE 0 END) as entregues,
                   SUM(CASE WHEN ${canceledCondition} THEN 1 ELSE 0 END) as cancelados
            FROM pedidos WHERE ${baseFilter}`,

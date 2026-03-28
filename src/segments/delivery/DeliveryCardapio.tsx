@@ -1254,12 +1254,18 @@ export default function DeliveryCardapio() {
               </div>
             )}
           </div>
-          <div className="mt-1.5 flex shrink-0 items-end justify-between gap-2.5 pt-0.5 sm:gap-3">
+          <div className="mt-1.5 grid shrink-0 grid-cols-1 gap-2 pt-0.5 min-[400px]:grid-cols-[1fr_auto] min-[400px]:items-end min-[400px]:gap-3">
             <div className="min-w-0">
               {(temVariacoes || temPrecoVariavel) ? (
                 <>
                   <span className={vt.priceFrom}>A partir de</span>
-                  <p className={`mt-0.5 text-[26px] font-black tabular-nums leading-tight ${cardapioTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
+                  <p
+                    className={`mt-0.5 text-[22px] font-black tabular-nums leading-none tracking-tight min-[400px]:text-[24px] ${
+                      cardapioTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-100'
+                    }`}
+                  >
+                    {fmt(precoMinimo)}
+                  </p>
                 </>
               ) : (
                 <>
@@ -1269,12 +1275,24 @@ export default function DeliveryCardapio() {
                       <span className="shrink-0 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-black tabular-nums text-emerald-200">-{percentualDesconto}%</span>
                     </div>
                   )}
-                  <p className={`mt-0.5 text-[26px] font-black tabular-nums leading-tight ${promoValida ? (cardapioTheme.mode === 'light_red' ? 'text-emerald-600' : 'text-emerald-400 drop-shadow-[0_0_18px_rgba(52,211,153,0.32)]') : (cardapioTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.28)]')}`}>{fmt(p.price)}</p>
+                  <p
+                    className={`mt-0.5 text-[22px] font-black tabular-nums leading-none tracking-tight min-[400px]:text-[24px] ${
+                      promoValida
+                        ? cardapioTheme.mode === 'light_red'
+                          ? 'text-emerald-600'
+                          : 'text-emerald-300'
+                        : cardapioTheme.mode === 'light_red'
+                          ? 'text-red-700'
+                          : 'text-cyan-100'
+                    }`}
+                  >
+                    {fmt(p.price)}
+                  </p>
                 </>
               )}
             </div>
-            <button onClick={() => ativo && handleAddProduto(p)} disabled={!ativo} className={`${vt.btnAdd} min-h-[44px] text-sm`}>
-              <Plus size={14} />
+            <button onClick={() => ativo && handleAddProduto(p)} disabled={!ativo} className={`${vt.btnAdd} w-full min-[400px]:w-auto justify-self-stretch min-[400px]:justify-self-end`}>
+              <Plus size={14} className="shrink-0" />
               {temOpcoes || temVariacoes ? 'Escolher' : 'Adicionar'}
             </button>
           </div>
@@ -1410,7 +1428,7 @@ export default function DeliveryCardapio() {
         </div>
       )}
 
-      <div className="mx-auto max-w-[1440px] px-4 py-4 pb-32 lg:px-6 lg:pb-10">
+      <div className="mx-auto max-w-[1440px] px-3 py-4 pb-32 sm:px-4 lg:px-6 lg:pb-10">
         <section className={cardapioTheme.mode === 'light_red'
           ? 'w-full overflow-hidden rounded-[34px] border border-zinc-200/90 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]'
           : 'w-full overflow-hidden rounded-[34px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] shadow-[0_28px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05]'}>
@@ -1448,9 +1466,9 @@ export default function DeliveryCardapio() {
           </div>
 
           <div className={cardapioTheme.lojaBlock}>
-            <div className="flex min-h-[88px] items-center pl-[118px] sm:min-h-[104px] sm:pl-[150px]">
-              <div className="min-w-0">
-                <h2 className={`text-4xl font-black tracking-tight sm:text-[52px] sm:leading-none ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.08)]'}`}>{nome}</h2>
+            <div className="flex min-h-[80px] items-center pl-[104px] sm:min-h-[104px] sm:pl-[150px]">
+              <div className="min-w-0 pr-1">
+                <h2 className={`text-2xl font-black leading-tight tracking-tight sm:text-4xl md:text-[52px] md:leading-none ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.08)]'}`}>{nome}</h2>
                 <div className={`mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm sm:text-base ${cardapioTheme.mode === 'light_red' ? 'text-zinc-700' : 'text-zinc-100'}`}>
                   <p className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 ${ativo ? cardapioTheme.statusPillOpen : cardapioTheme.statusPillClosed}`}>
                     <Clock size={15} className={ativo ? 'text-emerald-300' : 'text-zinc-300'} />
@@ -1533,7 +1551,21 @@ export default function DeliveryCardapio() {
                           className={abaCardapio === 'favoritos' ? cardapioTheme.menuItemActive : cardapioTheme.menuItem}
                         >
                           <span>Favoritos</span>
-                          {cliente && <span className={`text-xs font-semibold ${cardapioTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-200'}`}>{cliente.favoritos.length}</span>}
+                          {cliente && (
+                            <span
+                              className={`text-xs font-semibold tabular-nums ${
+                                abaCardapio === 'favoritos'
+                                  ? isLightRed
+                                    ? 'text-white/90'
+                                    : 'text-cyan-100'
+                                  : isLightRed
+                                    ? 'text-zinc-500'
+                                    : 'text-zinc-400'
+                              }`}
+                            >
+                              {cliente.favoritos.length}
+                            </span>
+                          )}
                         </button>
                         <button
                           type="button"
@@ -1563,18 +1595,22 @@ export default function DeliveryCardapio() {
                                     catRefs.current[c.nome]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                   });
                                 }}
-                                className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors ${
+                                className={
                                   catAtiva === c.nome && abaCardapio === 'todos'
-                                    ? (cardapioTheme.mode === 'light_red' ? 'bg-red-50 text-red-950 ring-1 ring-red-100 hover:bg-red-50 hover:text-red-950' : 'bg-white text-zinc-950')
+                                    ? cardapioTheme.menuCategoryActive
                                     : cardapioTheme.menuItem
-                                }`}
+                                }
                               >
-                                <span>{c.nome}</span>
-                                <span className={`text-xs font-semibold ${
-                                  catAtiva === c.nome && abaCardapio === 'todos'
-                                    ? (cardapioTheme.mode === 'light_red' ? 'text-red-700' : 'text-zinc-600')
-                                    : (cardapioTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-200')
-                                }`}>{c.itens.length}</span>
+                                <span className="min-w-0 truncate pr-2">{c.nome}</span>
+                                <span
+                                  className={
+                                    catAtiva === c.nome && abaCardapio === 'todos'
+                                      ? cardapioTheme.menuCategoryCountActive
+                                      : cardapioTheme.menuCategoryCountIdle
+                                  }
+                                >
+                                  {c.itens.length}
+                                </span>
                               </button>
                             ))}
                           </div>
@@ -2008,12 +2044,12 @@ export default function DeliveryCardapio() {
                               {temVariacoes ? (
                                 <div>
                                   <span className={`text-[10px] font-semibold uppercase tracking-wide ${isLightRed ? 'text-zinc-500' : 'text-zinc-300'}`}>A partir de</span>
-                                  <p className={`mt-0.5 text-[28px] font-black tabular-nums leading-tight ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
+                                  <p className={`mt-0.5 text-[22px] font-black tabular-nums leading-tight sm:text-[28px] ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
                                 </div>
                               ) : temPrecoVariavel ? (
                                 <div>
                                   <span className={`text-[10px] font-semibold uppercase tracking-wide ${isLightRed ? 'text-zinc-500' : 'text-zinc-300'}`}>A partir de</span>
-                                  <p className={`mt-0.5 text-[28px] font-black tabular-nums leading-tight ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
+                                  <p className={`mt-0.5 text-[22px] font-black tabular-nums leading-tight sm:text-[28px] ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
                                 </div>
                               ) : (
                                 <div>
@@ -2023,7 +2059,7 @@ export default function DeliveryCardapio() {
                                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${isLightRed ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'}`}>-{percentualDesconto}%</span>
                                     </div>
                                   )}
-                                  <p className={`text-[28px] font-black tabular-nums leading-tight ${promoValida ? (isLightRed ? 'text-emerald-600' : 'text-emerald-400 drop-shadow-[0_0_22px_rgba(52,211,153,0.35)]') : (isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]')}`}>{fmt(p.price)}</p>
+                                  <p className={`text-[22px] font-black tabular-nums leading-tight sm:text-[28px] ${promoValida ? (isLightRed ? 'text-emerald-600' : 'text-emerald-400 drop-shadow-[0_0_22px_rgba(52,211,153,0.35)]') : (isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]')}`}>{fmt(p.price)}</p>
                                   {promoValida && (
                                     <p className={`mt-0.5 line-clamp-2 text-[11px] font-bold leading-snug ${isLightRed ? 'text-emerald-800' : 'text-emerald-100/95'}`}>
                                       ✨ Economia de {fmt(Math.max(0, Number(p.preco_original || 0) - Number(p.price)))}
@@ -2264,8 +2300,8 @@ export default function DeliveryCardapio() {
               transition={{ type: 'spring', damping: 30, stiffness: 360 }}
               className={
                 isLightRed
-                  ? 'relative flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-zinc-200 bg-white shadow-[0_28px_80px_rgba(0,0,0,0.18)] sm:rounded-[32px]'
-                  : 'relative flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/12 bg-zinc-950 shadow-[0_28px_80px_rgba(0,0,0,0.54)] sm:rounded-[32px]'
+                  ? 'relative flex max-h-[min(85dvh,100%)] w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_28px_80px_rgba(0,0,0,0.18)] sm:rounded-[32px] sm:pb-0'
+                  : 'relative flex max-h-[min(85dvh,100%)] w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/12 bg-zinc-950 pb-[env(safe-area-inset-bottom)] shadow-[0_28px_80px_rgba(0,0,0,0.54)] sm:rounded-[32px] sm:pb-0'
               }
             >
               <div className={`flex items-start justify-between gap-3 border-b p-5 ${isLightRed ? 'border-zinc-100' : 'border-white/12'}`}>
@@ -2328,8 +2364,8 @@ export default function DeliveryCardapio() {
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               className={
                 isLightRed
-                  ? 'relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-zinc-200 bg-white shadow-2xl sm:rounded-3xl'
-                  : 'relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-zinc-950 shadow-2xl sm:rounded-3xl'
+                  ? 'relative flex max-h-[min(85dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl sm:rounded-3xl sm:pb-0'
+                  : 'relative flex max-h-[min(85dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-zinc-950 pb-[env(safe-area-inset-bottom)] shadow-2xl sm:rounded-3xl sm:pb-0'
               }
             >
               <div className={`flex items-start justify-between gap-3 border-b p-5 ${isLightRed ? 'border-zinc-100' : 'border-white/12'}`}>
@@ -2385,7 +2421,7 @@ export default function DeliveryCardapio() {
       {/* Barra fixa do carrinho — visível enquanto navega no cardápio */}
       <AnimatePresence>
         {cart.length > 0 && (
-          <motion.div initial={{y:100,opacity:0}} animate={{y:0,opacity:1}} exit={{y:100,opacity:0}} className="fixed bottom-5 left-4 right-4 mx-auto max-w-[1440px] z-30 xl:hidden">
+          <motion.div initial={{y:100,opacity:0}} animate={{y:0,opacity:1}} exit={{y:100,opacity:0}} className="fixed left-4 right-4 z-30 mx-auto max-w-[1440px] bottom-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] xl:hidden">
             <button type="button" onClick={() => setSacolaOpen(true)} className={cardapioTheme.barraFlutuante}>
               <span className="flex items-center gap-2.5">
                 <span className={cardapioTheme.barraFlutuanteIconWrap}>
@@ -2666,9 +2702,9 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, onAdd, 
                   {(item.preco_final!==item.price || isPromocaoProdutoValida(item)) && <p className={`text-xs ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{fmt(item.preco_final)} un.</p>}
                 </div>
                 <div className={`flex shrink-0 items-center gap-2 rounded-2xl border p-1 ${isLightRed ? 'border-stone-400/50 bg-[#ebe6df]' : 'border-white/10 bg-zinc-950'}`}>
-                  <button onClick={()=>onRemove(item.cart_key)} className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors hover:text-rose-400 ${isLightRed ? 'bg-[#fffefc] text-stone-700 shadow-sm' : 'bg-zinc-800 text-zinc-200'}`}><Minus size={13}/></button>
+                <button onClick={()=>onRemove(item.cart_key)} className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors hover:text-rose-400 sm:h-10 sm:w-10 ${isLightRed ? 'bg-[#fffefc] text-stone-700 shadow-sm' : 'bg-zinc-800 text-zinc-200'}`}><Minus size={13}/></button>
                   <span className={`w-7 text-center text-sm font-black ${isLightRed ? 'text-stone-900' : 'text-white'}`}>{item.qty}</span>
-                  <button onClick={()=>onAdd({...item,qty:1})} className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${isLightRed ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-cyan-400 text-zinc-950 hover:bg-cyan-300'}`}><Plus size={13}/></button>
+                <button onClick={()=>onAdd({...item,qty:1})} className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors sm:h-10 sm:w-10 ${isLightRed ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-cyan-400 text-zinc-950 hover:bg-cyan-300'}`}><Plus size={13}/></button>
                 </div>
               </div>
             ))}
@@ -2947,7 +2983,7 @@ function ModalAcompanharPedido({
         aria-label="Fechar acompanhamento"
       />
       <div
-        className="relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 shadow-2xl sm:max-h-[85vh] sm:rounded-2xl"
+        className="relative flex max-h-[min(88dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 pb-[env(safe-area-inset-bottom)] shadow-2xl sm:max-h-[85vh] sm:rounded-2xl sm:pb-0"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
@@ -2957,7 +2993,7 @@ function ModalAcompanharPedido({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
             aria-label="Fechar"
           >
             <X size={20} />
@@ -4424,13 +4460,13 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
 
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-3">Abrir direto no seu banco</p>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {BANCOS_DEEPLINK.map(b => (
                   <button
                     key={b.nome}
                     type="button"
                     onClick={() => window.location.assign(b.link(pixPayload))}
-                    className="flex flex-col items-center gap-1 rounded-xl border border-zinc-100 py-2 px-1 transition-all hover:bg-zinc-50 active:scale-95"
+                    className="flex min-h-[44px] flex-col items-center gap-1 rounded-xl border border-zinc-100 py-2 px-1 transition-all hover:bg-zinc-50 active:scale-95"
                   >
                     <span className="text-xl leading-none">{b.logo}</span>
                     <span className="text-[9px] font-bold text-zinc-500 text-center leading-tight">{b.nome}</span>
@@ -4694,8 +4730,8 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
             )}
             <div className={`bg-white rounded-2xl p-4 shadow-sm space-y-3 ${tipoAtendimento !== 'entrega' ? 'hidden' : ''}`}> 
               <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><MapPin size={14} className="text-cyan-600"/>Endereço de entrega *</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2"><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Rua / Avenida *</label><input value={endLogradouro} onChange={e=>setEndLogradouro(e.target.value)} placeholder="Rua das Flores" className={inp}/></div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="sm:col-span-2"><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Rua / Avenida *</label><input value={endLogradouro} onChange={e=>setEndLogradouro(e.target.value)} placeholder="Rua das Flores" className={inp}/></div>
                 <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nº</label><input value={endNumero} onChange={e=>setEndNumero(e.target.value)} placeholder="123" className={inp}/></div>
               </div>
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Bairro</label><input value={endBairro} onChange={e=>setEndBairro(e.target.value)} placeholder="Centro" className={inp}/></div>
@@ -4904,5 +4940,4 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
     </div>
   );
 }
-
 

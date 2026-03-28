@@ -36,6 +36,7 @@ import {
   ShoppingCart,
   QrCode,
   RefreshCw,
+  Unlock,
   Menu,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -61,6 +62,13 @@ function toDateInputValue(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toISOString().split('T')[0];
+}
+
+/** Reset de caixa usa rota dedicada (POST /api/admin/caixa/reset), não o motor genérico /actions. */
+const ADMIN_CAIXA_RESET_ACTIONS = new Set(['reset_caixa', 'reset_caixa_state']);
+
+function adminActionPostUrl(action: string): string {
+  return ADMIN_CAIXA_RESET_ACTIONS.has(action) ? '/api/admin/caixa/reset' : '/api/admin/actions';
 }
 
 export default function AdminPanel() {
@@ -393,18 +401,26 @@ export default function AdminPanel() {
           }
         }
       }
-      const res = await fetch('/api/admin/actions', {
+      const acted = actionConfirmModal.action;
+      const useCaixaReset = ADMIN_CAIXA_RESET_ACTIONS.has(acted);
+      const res = await fetch(adminActionPostUrl(acted), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          action: actionConfirmModal.action,
-          tenant_id: selectedTenantId,
-          payload: Object.keys(payload).length ? payload : undefined,
-          reason: actionConfirmReason.trim(),
-        }),
+        body: JSON.stringify(
+          useCaixaReset
+            ? {
+                tenant_id: selectedTenantId,
+                reason: actionConfirmReason.trim(),
+              }
+            : {
+                action: acted,
+                tenant_id: selectedTenantId,
+                payload: Object.keys(payload).length ? payload : undefined,
+                reason: actionConfirmReason.trim(),
+              }
+        ),
       });
       const data = await res.json();
-      const acted = actionConfirmModal.action;
       if (res.ok && data.success) {
         setActionConfirmModal(null);
         setActionConfirmReason('');
@@ -435,8 +451,9 @@ export default function AdminPanel() {
         }
         pendingEstoqueDeeplinkRef.current = null;
         pendingPedidoPdvRef.current = null;
-        if (acted === 'open_caixa' || acted === 'force_close_caixa' || acted === 'force_cancel_order' || acted === 'force_pix_check') {
+        if (acted === 'open_caixa' || acted === 'force_close_caixa' || ADMIN_CAIXA_RESET_ACTIONS.has(acted) || acted === 'force_cancel_order' || acted === 'force_pix_check') {
           fetchDiagnosticsForTenant(selectedTenantId);
+          fetchStats();
           if (tenantModule !== 'diagnostico') fetchTenantModuleData(selectedTenantId, tenantModule);
         }
         if (acted === 'recalculate_stock') {
@@ -847,6 +864,13 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     })} className="w-full px-4 py-2 text-left text-sm text-amber-600 hover:bg-amber-900 flex items-center gap-2">
                       <Wallet size={16} /> Forçar fechamento de caixa
                     </button>
+                    <button type="button" onClick={() => openActionConfirm({
+                      action: 'reset_caixa',
+                      label: 'Resetar Caixa',
+                      impact: 'Libera o caixa da loja para que o cliente possa abrir novamente pelo fluxo normal. Encerra administrativamente registros ainda em status aberto, sem abrir um caixa novo. O cliente deve atualizar a página.',
+                    })} className="w-full px-4 py-2 text-left text-sm text-sky-400 hover:bg-sky-950 flex items-center gap-2">
+                      <Unlock size={16} /> Resetar Caixa
+                    </button>
                     <button onClick={() => openActionConfirm({ action: 'force_cancel_order', label: 'Forçar cancelamento de pedido', impact: 'O pedido será cancelado permanentemente. Informe o ID do pedido abaixo.', payloadTemplate: { order_id: { type: 'number', label: 'ID do pedido', required: true } } })} className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-900 flex items-center gap-2">
                       <Package size={16} /> Forçar cancelamento de pedido
                     </button>
@@ -1184,6 +1208,20 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                       Forçar fechamento
                     </Button>
                   )}
+                  <Button
+                    variant="secondary"
+                    className="text-sky-300 border-sky-800 bg-sky-950 hover:bg-sky-900"
+                    onClick={() =>
+                      openActionConfirm({
+                        action: 'reset_caixa',
+                        label: 'Resetar Caixa',
+                        impact: 'Libera o caixa da loja para que o cliente possa abrir novamente pelo fluxo normal. Encerra administrativamente registros ainda em status aberto, sem abrir um caixa novo. O cliente deve atualizar a página.',
+                      })
+                    }
+                  >
+                    <Unlock size={16} className="inline mr-1.5 -mt-0.5" />
+                    Resetar Caixa
+                  </Button>
                 </div>
               </div>
               <div className="space-y-4">

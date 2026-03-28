@@ -6,7 +6,6 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
 
 // ── Banco e migrações ─────────────────────────────────────────────────────────
@@ -30,10 +29,6 @@ const PORT = Number(process.env.PORT) || 3001;
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 backupDatabase();
-runMigrations().catch((err) => {
-  console.error('❌ Falha nas migrações:', err);
-  process.exit(1);
-});
 
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 if (!fs.existsSync('uploads/logo')) fs.mkdirSync('uploads/logo', { recursive: true });
@@ -102,8 +97,34 @@ app.use((err: any, _req: any, res: any, next: any) => {
 // ── Erro global ───────────────────────────────────────────────────────────────
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+function shouldRunMigrationsOnBoot(): boolean {
+  const v = String(process.env.RUN_MIGRATIONS_ON_BOOT ?? '').trim().toLowerCase();
+  if (v === 'false' || v === '0' || v === 'no') return false;
+  return true;
+}
+
 async function startServer() {
+  if (shouldRunMigrationsOnBoot()) {
+    try {
+      await runMigrations();
+    } catch (err) {
+      console.error('❌ Falha nas migrações:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('MaxClientsInSessionMode')) {
+        console.error(
+          '   → Use DATABASE_MIGRATION_URL (URI direta db.*:5432) ou RUN_MIGRATIONS_ON_BOOT=false e `npm run migrate`.'
+        );
+      }
+      process.exit(1);
+    }
+  } else {
+    console.warn(
+      '⚠️  RUN_MIGRATIONS_ON_BOOT desligado — o servidor sobe sem migrar. Rode `npm run migrate` quando precisar.'
+    );
+  }
+
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

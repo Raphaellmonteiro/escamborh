@@ -214,6 +214,53 @@ function kdsLineFromComandaRow(row: {
 }
 
 // â”€â”€ Sincroniza item entre comanda e pedido KDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const KDS_SYNC_ERROR_TIPO = 'KDS_SYNC_ERROR';
+
+async function persistKdsSyncFailureAudit(params: {
+  tenantId: number;
+  mesaId: string | number;
+  pedidoKdsId: number | null;
+  productId: number;
+  errMessage: string;
+}) {
+  const payload = {
+    tipo: KDS_SYNC_ERROR_TIPO,
+    message: params.errMessage,
+    mesa_id: Number(params.mesaId),
+    product_id: params.productId,
+    pedido_kds_id: params.pedidoKdsId,
+    momento: new Date().toISOString(),
+  };
+  try {
+    if (params.pedidoKdsId != null) {
+      await qRun(
+        `INSERT INTO pedido_eventos
+          (pedido_id,tenant_id,tipo,status_anterior,status_novo,valor,motivo,estoque_reposto,payload,usuario_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        [
+          params.pedidoKdsId,
+          params.tenantId,
+          KDS_SYNC_ERROR_TIPO,
+          null,
+          null,
+          0,
+          params.errMessage,
+          0,
+          JSON.stringify(payload),
+          null,
+        ]
+      );
+    } else {
+      await qRun(
+        'INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
+        [params.tenantId, 'Sistema', 'automacao', KDS_SYNC_ERROR_TIPO, JSON.stringify(payload)]
+      );
+    }
+  } catch (logErr) {
+    logError('mesas.persistKdsSyncFailureAudit', logErr, { tenantId: params.tenantId, mesaId: params.mesaId });
+  }
+}
+
 async function syncKdsItem(
   tenantId: number,
   mesaId: string | number,
@@ -222,6 +269,7 @@ async function syncKdsItem(
   priceAtTime: number,
   mode: 'add' | 'remove'
 ) {
+  let pedidoKdsId: number | null = null;
   try {
     const productId = line.product_id;
     const produto = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [productId, tenantId]);
@@ -231,6 +279,7 @@ async function syncKdsItem(
     if (!mesa) return;
     const mesaLabel = `Mesa ${mesa.numero}`;
     let kdsOrder = await q1(`SELECT * FROM pedidos WHERE tenant_id=? AND observation=? AND ${buildOperationalKdsOrderClause()} ORDER BY id DESC LIMIT 1`, [tenantId, mesaLabel]);
+    if (kdsOrder) pedidoKdsId = Number(kdsOrder.id);
     if (!kdsOrder && mode === 'remove') return;
     if (!kdsOrder) {
       // CORREÃ‡ÃƒO: Data baseada no fuso de SP para o order_number do KDS
@@ -243,6 +292,7 @@ async function syncKdsItem(
       const maxOrd = await q1('SELECT MAX(id) as maxId FROM pedidos WHERE tenant_id=?', [tenantId]);
       const on = `${dateStr}-${tenantId}-KDS-${((maxOrd?.maxId||0)+1).toString().padStart(4,'0')}-${Date.now()}`;
       const newId = await qInsert("INSERT INTO pedidos (order_number,total_amount,observation,tenant_id,senha_pedido,tipo_retirada,canal,status) VALUES (?,?,?,?,?,'mesa','mesa','Criado')", [on, priceAtTime*Math.abs(diffQtd), mesaLabel, tenantId, mesa.numero]);
+      pedidoKdsId = Number(newId);
       await qRun(
         "INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation,selecoes_json) VALUES (?,?,?,'Mesa',?,?,?,?,?)",
         [newId, productId, Math.abs(diffQtd), priceAtTime, tenantId, line.variation_id, line.observation, line.selecoes_json]
@@ -275,7 +325,21 @@ async function syncKdsItem(
       );
     }
     await qRun('UPDATE pedidos SET total_amount=total_amount+? WHERE id=? AND tenant_id=?', [priceAtTime*diffQtd, kdsOrder.id, tenantId]);
-  } catch (e: any) { console.error('[KDS] syncKdsItem error:', e.message); }
+  } catch (e: unknown) {
+    const errMessage = e instanceof Error ? e.message : String(e);
+    logError(
+      'mesas.syncKdsItem',
+      e instanceof Error ? e : new Error(errMessage),
+      { tenantId, mesaId, productId: line.product_id, mode, pedidoKdsId }
+    );
+    await persistKdsSyncFailureAudit({
+      tenantId,
+      mesaId,
+      pedidoKdsId,
+      productId: line.product_id,
+      errMessage,
+    });
+  }
 }
 
 export function createMesasRouter() {
@@ -686,7 +750,9 @@ export function createMesasRouter() {
         void runAutomatedKitchenPrintForMesa(Number(req.tenantId), Number(req.params.id), {
           trigger: 'mesa_comanda_item',
           printEvenWithKds: automation.print_production_even_with_kds,
-        });
+        }).catch((err) =>
+          logError('mesas.autoKitchenPrintMesa.unhandled', err, { tenantId: req.tenantId, mesaId: req.params.id })
+        );
       }
 
       res.json({ success:true, comanda_id: result.comanda_id });

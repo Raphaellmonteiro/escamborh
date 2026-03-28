@@ -16,6 +16,7 @@ import {
   recordDeliveryAutoAcceptOnline,
   runAutomatedKitchenPrintForOrder,
 } from '../services/operationalAutomationService';
+import { validateDeliveryItems } from '../services/deliveryItemValidation';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -90,8 +91,6 @@ type CheckoutSummary = {
   total: number;
   itensValidados: any[];
 };
-
-type DeliverySelections = Record<number, Record<number, number>>;
 
 const MAX_ITEM_OBSERVATION_LEN = 4000;
 
@@ -275,226 +274,6 @@ function formatSavedDeliveryAddress(endereco: DeliveryAddressRecord) {
     endereco.bairro ? `Bairro: ${endereco.bairro}` : '',
     endereco.referencia ? `Ref: ${endereco.referencia}` : '',
   ].filter(Boolean).join(' - ');
-}
-
-async function validateDeliveryItems(tenantId: number, items: any[]) {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new AppError('Pedido sem itens', 400);
-  }
-
-  let subtotal = 0;
-  const itensValidados: any[] = [];
-
-  for (const item of items) {
-    const productId = Number(item?.product_id);
-    const quantity = Number(item?.quantity);
-
-    if (!Number.isInteger(productId) || productId <= 0) {
-      throw new AppError('Produto invalido', 400);
-    }
-
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new AppError(`Quantidade invalida para o produto ${productId}`, 400);
-    }
-
-    const vid = Number(item?.variation_id);
-    const variation_id = Number.isInteger(vid) && vid > 0 ? vid : null;
-    const resolvedItem = await resolveAuthoritativeDeliveryItem({
-      tenantId,
-      productId,
-      variationId: variation_id,
-      selecoes: item?.selecoes,
-    });
-
-    subtotal += resolvedItem.priceAtTime * quantity;
-    itensValidados.push({
-      ...item,
-      product_id: productId,
-      quantity,
-      price_at_time: resolvedItem.priceAtTime,
-      variation_id,
-      name: resolvedItem.name,
-      selecoes: resolvedItem.selecoes,
-    });
-  }
-
-  return { subtotal, itensValidados };
-}
-
-function normalizeDeliverySelections(raw: unknown): DeliverySelections {
-  if (!raw || typeof raw !== 'object') return {};
-
-  const normalized: DeliverySelections = {};
-  for (const [groupIdRaw, itemMap] of Object.entries(raw as Record<string, unknown>)) {
-    const groupId = Number(groupIdRaw);
-    if (!Number.isInteger(groupId) || groupId <= 0 || !itemMap || typeof itemMap !== 'object') continue;
-
-    const itemSelections: Record<number, number> = {};
-    for (const [itemIdRaw, qtyRaw] of Object.entries(itemMap as Record<string, unknown>)) {
-      const itemId = Number(itemIdRaw);
-      const qty = Number(qtyRaw);
-      if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isFinite(qty) || qty <= 0) continue;
-      itemSelections[itemId] = Math.floor(qty);
-    }
-
-    if (Object.keys(itemSelections).length > 0) {
-      normalized[groupId] = itemSelections;
-    }
-  }
-
-  return normalized;
-}
-
-async function resolveAuthoritativeDeliveryItem(params: {
-  tenantId: number;
-  productId: number;
-  variationId: number | null;
-  selecoes?: unknown;
-}) {
-  const product = await q1<{
-    id: number;
-    name: string;
-    price: number;
-    active: number;
-  }>(
-    'SELECT id, name, price, active FROM produtos WHERE id=? AND tenant_id=? AND active=1',
-    [params.productId, params.tenantId]
-  );
-  if (!product) {
-    throw new AppError(`Produto ${params.productId} invalido`, 400);
-  }
-
-  if (params.variationId !== null) {
-    const variation = await q1<{ id: number; nome: string; preco: number }>(
-      `SELECT id, nome, preco
-       FROM produto_variacoes_vendaveis
-       WHERE id=? AND tenant_id=? AND produto_id=? AND ativo=1`,
-      [params.variationId, params.tenantId, params.productId]
-    );
-    if (!variation) {
-      throw new AppError(
-        `Variacao ${params.variationId} invalida ou nao pertence ao produto ${params.productId}`,
-        400
-      );
-    }
-
-    return {
-      priceAtTime: Number(variation.preco || 0),
-      name: `${product.name} - ${variation.nome}`,
-      selecoes: {} as DeliverySelections,
-    };
-  }
-
-  const grupos = await qAll<{
-    id: number;
-    tipo: 'radio' | 'checkbox' | 'quantidade';
-    min_selecoes: number;
-    max_selecoes: number;
-    obrigatorio: number;
-    modo_preco?: 'adicional' | 'final' | null;
-  }>(
-    `SELECT id, tipo, min_selecoes, max_selecoes, obrigatorio, modo_preco
-     FROM produto_grupos_opcao
-     WHERE produto_id=? AND tenant_id=? AND ativo=1
-     ORDER BY ordem ASC, id ASC`,
-    [params.productId, params.tenantId]
-  );
-
-  if (!grupos.length) {
-    return {
-      priceAtTime: Number(product.price || 0),
-      name: product.name,
-      selecoes: {} as DeliverySelections,
-    };
-  }
-
-  const selecoes = normalizeDeliverySelections(params.selecoes);
-  let substitutoFinal = 0;
-  let temGrupoFinalComSelecao = false;
-  let somaAdicional = 0;
-  const selecoesValidadas: DeliverySelections = {};
-
-  for (const grupo of grupos) {
-    const itens = await qAll<{ id: number; preco_adicional: number }>(
-      `SELECT id, preco_adicional
-       FROM produto_opcao_itens
-       WHERE grupo_id=? AND tenant_id=? AND ativo=1
-       ORDER BY ordem ASC, id ASC`,
-      [grupo.id, params.tenantId]
-    );
-
-    const itemIds = new Set(itens.map((item) => Number(item.id)));
-    const itemSelections = selecoes[grupo.id] || {};
-    const normalizedGroupSelections: Record<number, number> = {};
-
-    for (const [itemIdRaw, qtyRaw] of Object.entries(itemSelections)) {
-      const itemId = Number(itemIdRaw);
-      const qty = Number(qtyRaw);
-      if (!itemIds.has(itemId)) {
-        throw new AppError(`Opcao invalida para o produto ${params.productId}`, 400);
-      }
-      if (!Number.isFinite(qty) || qty <= 0) {
-        continue;
-      }
-      if (grupo.tipo !== 'quantidade' && qty !== 1) {
-        throw new AppError(`Quantidade invalida nas opcoes do produto ${params.productId}`, 400);
-      }
-      normalizedGroupSelections[itemId] = qty;
-    }
-
-    const totalSelecionado = Object.values(normalizedGroupSelections).reduce((acc, qty) => acc + qty, 0);
-    const minSelecoes = Math.max(0, Number(grupo.min_selecoes || 0));
-    const maxSelecoes = Math.max(0, Number(grupo.max_selecoes || 0));
-
-    if (Number(grupo.obrigatorio) === 1 && totalSelecionado < minSelecoes) {
-      throw new AppError(`Selecao obrigatoria incompleta para o produto ${params.productId}`, 400);
-    }
-
-    if (maxSelecoes > 0 && totalSelecionado > maxSelecoes) {
-      throw new AppError(`Selecao acima do limite para o produto ${params.productId}`, 400);
-    }
-
-    if (grupo.tipo === 'radio' && totalSelecionado > 1) {
-      throw new AppError(`Selecao invalida para o produto ${params.productId}`, 400);
-    }
-
-    if (totalSelecionado > 0) {
-      selecoesValidadas[grupo.id] = normalizedGroupSelections;
-    }
-
-    if ((grupo.modo_preco || 'adicional') === 'final') {
-      let grupoSoma = 0;
-      let temSelNesteGrupo = false;
-      for (const item of itens) {
-        const qty = normalizedGroupSelections[item.id] || 0;
-        if (qty > 0) {
-          temSelNesteGrupo = true;
-          grupoSoma += Number(item.preco_adicional || 0) * qty;
-        }
-      }
-      if (temSelNesteGrupo) {
-        temGrupoFinalComSelecao = true;
-        substitutoFinal += grupoSoma;
-      }
-    } else {
-      for (const item of itens) {
-        const qty = normalizedGroupSelections[item.id] || 0;
-        if (qty > 0) {
-          somaAdicional += Number(item.preco_adicional || 0) * qty;
-        }
-      }
-    }
-  }
-
-  const priceAtTime = temGrupoFinalComSelecao
-    ? substitutoFinal + somaAdicional
-    : Number(product.price || 0) + somaAdicional;
-
-  return {
-    priceAtTime,
-    name: product.name,
-    selecoes: selecoesValidadas,
-  };
 }
 
 async function resolveDeliveryFee(params: {
@@ -893,10 +672,13 @@ export function createDeliveryPublicRouter() {
              OR p.delivery_cliente_id IN (
                SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
              )
+             OR p.cliente_id IN (
+               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
+             )
            )
          ORDER BY p.created_at DESC
          LIMIT 50`,
-        [tenant.id, tel, tenant.id, tel]
+        [tenant.id, tel, tenant.id, tel, tenant.id, tel]
       );
 
       res.json(
@@ -944,8 +726,11 @@ export function createDeliveryPublicRouter() {
              OR p.delivery_cliente_id IN (
                SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
              )
+             OR p.cliente_id IN (
+               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
+             )
            )`,
-        [orderId, tenant.id, tel, tenant.id, tel]
+        [orderId, tenant.id, tel, tenant.id, tel, tenant.id, tel]
       );
 
       if (!pedido) {
@@ -1202,8 +987,8 @@ export function createDeliveryPublicRouter() {
         `SELECT p.*,
           (SELECT STRING_AGG(pr.name||' x'||ip.quantity::text,', ') FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens,
           (SELECT COALESCE(JSON_AGG(json_build_object('product_id', ip.product_id, 'quantity', ip.quantity, 'price_at_time', ip.price_at_time, 'variation_id', ip.variation_id)), '[]') FROM itens_pedido ip WHERE ip.order_id=p.id) as itens
-         FROM pedidos p WHERE p.delivery_cliente_id=? AND p.tenant_id=? ORDER BY p.created_at DESC LIMIT 30`,
-        [req.clienteId, req.tenantId]
+         FROM pedidos p WHERE p.tenant_id=? AND (p.cliente_id=? OR p.delivery_cliente_id=?) ORDER BY p.created_at DESC LIMIT 30`,
+        [req.tenantId, req.clienteId, req.clienteId]
       );
       const parsed = rows.map((r: any) => ({ ...r, itens: Array.isArray(r.itens) ? r.itens : (typeof r.itens === 'string' ? JSON.parse(r.itens || '[]') : []) }));
       res.json(parsed);
@@ -1307,8 +1092,8 @@ export function createDeliveryPublicRouter() {
 
         const orderId = await txInsert(
           client,
-          `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,delivery_checkout_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, enderecoFinal, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', initialOrderStatus, clienteId, JSON.stringify(checkoutSnapshot)]
+          `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,cliente_id,delivery_checkout_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, enderecoFinal, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', initialOrderStatus, clienteId, clienteId, JSON.stringify(checkoutSnapshot)]
         );
 
           for (const item of itensValidados) {
@@ -1360,6 +1145,7 @@ export function createDeliveryPublicRouter() {
              SET primeira_compra_at = COALESCE(primeira_compra_at, NOW()),
                  ultima_compra_at = NOW(),
                  ultimo_acesso = NOW(),
+                 updated_at = NOW(),
                  origem_cadastro = COALESCE(NULLIF(BTRIM(origem_cadastro), ''), 'delivery_online')
              WHERE id=? AND tenant_id=?`,
             [clienteId, tenant.id]
@@ -1388,18 +1174,32 @@ export function createDeliveryPublicRouter() {
       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;
 
       if (canalPedido === 'delivery' && automation.delivery_auto_accept_orders) {
-        void recordDeliveryAutoAcceptOnline(tenant.id, Number(result.orderId));
+        void recordDeliveryAutoAcceptOnline(tenant.id, Number(result.orderId)).catch((err) =>
+          logError('delivery-public.recordDeliveryAutoAcceptOnline.unhandled', err, { tenantId: tenant.id, orderId: result.orderId })
+        );
       }
 
       if (canalPedido === 'retirada' && automation.retirada_auto_print_production) {
-        void runAutomatedKitchenPrintForOrder(tenant.id, Number(result.orderId), { trigger: 'retirada_public_create' });
+        void runAutomatedKitchenPrintForOrder(tenant.id, Number(result.orderId), { trigger: 'retirada_public_create' }).catch((err) =>
+          logError('delivery-public.autoKitchenPrint.unhandled', err, {
+            tenantId: tenant.id,
+            orderId: result.orderId,
+            trigger: 'retirada_public_create',
+          })
+        );
       }
       if (
         canalPedido === 'delivery' &&
         automation.delivery_auto_print_production &&
         automation.delivery_auto_accept_orders
       ) {
-        void runAutomatedKitchenPrintForOrder(tenant.id, Number(result.orderId), { trigger: 'delivery_public_create' });
+        void runAutomatedKitchenPrintForOrder(tenant.id, Number(result.orderId), { trigger: 'delivery_public_create' }).catch((err) =>
+          logError('delivery-public.autoKitchenPrint.unhandled', err, {
+            tenantId: tenant.id,
+            orderId: result.orderId,
+            trigger: 'delivery_public_create',
+          })
+        );
       }
 
       res.json({

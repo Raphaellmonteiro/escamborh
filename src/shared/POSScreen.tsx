@@ -1,28 +1,30 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import {
   ShoppingCart, Plus, Minus, Trash2, CheckCircle2, ShoppingBag,
-  X, Search, Printer, Barcode, ScanLine, ChefHat,
+  X, Search, Printer, Barcode, ScanLine, ChefHat, UserPlus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, OrderItem, PaymentMethod } from '../types';
 import { getSegCfg } from '../config/segmentos';
 import type { TipoItem } from '../config/segmentos';
-import MesaPickerModal from '../segments/bar/MesaPickerModal';
 import { normalizeBarcode } from '../utils/barcode';
 import { openPrintPreview } from '../utils/print';
 import { resolveRequiresPreparation } from '../utils/preparation';
 import { useDebounce } from '../hooks/useDebounce';
+import { BREAKPOINT_MD_PX } from '../hooks/useBreakpoint';
 import { usePOSKeyboard } from '../hooks/usePOSKeyboard';
-import { buildDeliveryCardapioTheme } from '../segments/delivery/deliveryCardapioTheme';
-import { CardapioThemeShell } from '../segments/delivery/DeliveryCardapioThemeContext';
 import {
-  ProductOptionsModal,
   type ProductOptionsProduto,
   type ProductOptionsCartItem,
   type GrupoOpcao,
   type VariacaoVendavel,
   type Selecoes,
 } from './ProductOptionsModal';
+import type { PosClienteSelecionado } from './PosClienteModal';
+
+const MesaPickerModal = lazy(() => import('../segments/bar/MesaPickerModal'));
+const POSProductOptionsDialog = lazy(() => import('./POSProductOptionsDialog'));
+const PosClienteModal = lazy(() => import('./PosClienteModal'));
 
 // ── Constantes de estilo ──────────────────────────────────────────────────────
 const PAY_METHODS: PaymentMethod[] = ['Dinheiro', 'PIX', 'Débito', 'Crédito'];
@@ -161,21 +163,21 @@ const ProductCard = React.memo(function ProductCard({
         )}
         <div className="absolute bottom-1.5 left-1.5 flex flex-wrap gap-1">
           {isDestaque && (
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-amber-500/95 text-zinc-900 tracking-wide">MAIS VENDIDO</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/95 text-zinc-900 tracking-wide">MAIS VENDIDO</span>
           )}
           {isRecomend && (
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-blue-500/95 text-white tracking-wide">RECOMENDADO</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/95 text-white tracking-wide">RECOMENDADO</span>
           )}
           {isPromo && (
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-red-500/95 text-white tracking-wide">PROMOÇÃO</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/95 text-white tracking-wide">PROMOÇÃO</span>
           )}
         </div>
       </div>
       <div className="p-2 flex-1 flex flex-col min-w-0">
-        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">{product.category}</p>
+        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">{product.category}</p>
         <h3 className="font-bold text-zinc-100 text-xs leading-snug line-clamp-2 mb-1">{product.name}</h3>
         {(product as any).codigo_barras && (
-          <span className="text-[9px] text-zinc-500 flex items-center gap-0.5 mb-1">
+          <span className="text-[10px] text-zinc-500 flex items-center gap-0.5 mb-1">
             <Barcode size={8} />{(product as any).codigo_barras}
           </span>
         )}
@@ -223,6 +225,8 @@ export default function POSScreen({
   const [confirmLimpar, setConfirmLimpar]                 = useState(false);
   const [mobileCartOpen, setMobileCartOpen]               = useState(false);
   const [selectedCartIndex, setSelectedCartIndex]         = useState<number | null>(null);
+  const [posCliente, setPosCliente]                         = useState<PosClienteSelecionado | null>(null);
+  const [showClienteModal, setShowClienteModal]           = useState(false);
 
   // ─── Estado de UI ─────────────────────────────────────────────────────────
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
@@ -432,6 +436,7 @@ export default function POSScreen({
     setPayments([]);
     setObservation('');
     setCurrentAmount(0);
+    setPosCliente(null);
     setSelectedCartIndex(null);
     setConfirmLimpar(false);
   }, []);
@@ -455,7 +460,8 @@ export default function POSScreen({
     showMesaPicker ||
     showTipoRetirada ||
     showSuccess ||
-    confirmLimpar
+    confirmLimpar ||
+    showClienteModal
   );
 
   useEffect(() => {
@@ -526,6 +532,10 @@ export default function POSScreen({
       searchRef.current?.focus();
       return;
     }
+    if (showClienteModal) {
+      setShowClienteModal(false);
+      return;
+    }
     if (showTipoRetirada) {
       setShowTipoRetirada(false);
       return;
@@ -549,7 +559,7 @@ export default function POSScreen({
     if (mobileCartOpen) {
       setMobileCartOpen(false);
     }
-  }, [confirmLimpar, showSuccess, showTipoRetirada, showMesaPicker, opcaoModalProduto, pendingProduct, mobileCartOpen]);
+  }, [confirmLimpar, showSuccess, showClienteModal, showTipoRetirada, showMesaPicker, opcaoModalProduto, pendingProduct, mobileCartOpen]);
 
   const handleQtyIncrease = useCallback(() => {
     if (selectedCartIndex === null) return;
@@ -562,7 +572,7 @@ export default function POSScreen({
   }, [selectedCartIndex, updateQuantity]);
 
   const handleToggleCart = useCallback(() => {
-    if (window.innerWidth >= 768) return;
+    if (window.innerWidth >= BREAKPOINT_MD_PX) return;
     setMobileCartOpen((current) => !current);
   }, []);
 
@@ -609,6 +619,7 @@ export default function POSScreen({
       taxa_total: taxasAcumuladas, // auxiliar: permite o servidor separar produto de taxa
       tipo_retirada: tipo,
       payments: payments.map((p, i) => ({ ...p, change_given: i === payments.length - 1 ? change : 0 })),
+      ...(posCliente ? { cliente_id: posCliente.id } : {}),
     };
     try {
       const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(orderData) });
@@ -616,6 +627,7 @@ export default function POSScreen({
       if (data.success) {
         setShowSuccess({ number: data.orderNumber, receipt: data.receipt, senha: data.senhaPedido || 0, tipo, orderId: data.orderId });
         setCart([]); setPayments([]); setObservation(''); setCurrentAmount(0); setTipoRetirada('local');
+        setPosCliente(null);
         setSelectedCartIndex(null);
         setMobileCartOpen(false);
       } else { alert('Erro ao finalizar pedido: ' + (data.error || 'Erro desconhecido')); }
@@ -632,7 +644,7 @@ export default function POSScreen({
           {cart.length > 0 && (
             <button
               onClick={() => setConfirmLimpar(true)}
-              className="ml-auto text-[10px] font-bold text-zinc-400 hover:text-red-400 transition-colors px-2 py-1 hover:bg-red-500/10 rounded-lg min-h-[36px] min-w-[36px] flex items-center justify-center"
+                className="ml-auto text-[10px] font-bold text-zinc-400 hover:text-red-400 transition-colors px-2 py-1 hover:bg-red-500/10 rounded-lg min-h-[40px] min-w-[40px] lg:min-h-[36px] lg:min-w-[36px] flex items-center justify-center"
               title="Limpar carrinho"
             >
               <Trash2 size={13} />
@@ -640,6 +652,48 @@ export default function POSScreen({
           )}
         </div>
       )}
+
+      <div className="px-4 pt-3 pb-2 shrink-0 bg-zinc-950 border-b border-zinc-800/80">
+        {!posCliente ? (
+          <button
+            type="button"
+            onClick={() => setShowClienteModal(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 text-amber-400 text-xs font-black uppercase tracking-wide transition-colors"
+          >
+            <UserPlus size={16} /> Adicionar cliente
+          </button>
+        ) : (
+          <div className="flex items-start gap-2 rounded-xl bg-zinc-800/80 border border-zinc-700 px-3 py-2.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">Cliente</p>
+              <p className="text-sm font-bold text-zinc-100 truncate">{posCliente.nome || 'Cliente'}</p>
+              <p className="text-xs text-zinc-400 tabular-nums">{posCliente.telefone}</p>
+              {posCliente.metricas && (
+                <p className="text-[10px] text-zinc-500 mt-1 leading-snug">
+                  <span className="font-semibold text-zinc-400">{posCliente.metricas.total_pedidos}</span> pedidos
+                  <span className="text-zinc-600 mx-1">·</span>
+                  <span className="tabular-nums">
+                    {posCliente.metricas.total_gasto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                  {posCliente.fidelizacao?.label ? (
+                    <>
+                      <span className="text-zinc-600 mx-1">·</span>
+                      <span className="text-amber-500/90 font-semibold">{posCliente.fidelizacao.label}</span>
+                    </>
+                  ) : null}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowClienteModal(true)}
+              className="shrink-0 text-[10px] font-black uppercase text-amber-400 hover:text-amber-300 px-2 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-600"
+            >
+              Trocar
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0 bg-zinc-950">
         {cart.length === 0 ? (
@@ -671,10 +725,10 @@ export default function POSScreen({
                   <p className="text-amber-400 font-black text-xs mt-0.5">R$ {(item.price_at_time * item.quantity).toFixed(2)}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Minus size={11} /></button>
-                  <span className="w-7 md:w-6 text-center font-black text-xs text-zinc-100">{item.quantity}</span>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Plus size={11} /></button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-9 h-9 md:w-6 md:h-6 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Minus size={11} /></button>
+                  <span className="w-8 lg:w-6 text-center font-black text-xs text-zinc-100">{item.quantity}</span>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Plus size={11} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
                 </div>
               </motion.div>
             ))}
@@ -691,7 +745,7 @@ export default function POSScreen({
                 <span className="font-bold text-zinc-400">{p.method}</span>
                 <div className="flex items-center gap-2">
                   <span className="font-black text-zinc-100">R$ {p.amount_paid.toFixed(2)}</span>
-                  <button type="button" onClick={() => removePayment(i)} className="text-zinc-500 hover:text-red-400 transition-colors p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"><Trash2 size={11} /></button>
+                  <button type="button" onClick={() => removePayment(i)} className="text-zinc-500 hover:text-red-400 transition-colors p-1 min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center"><Trash2 size={11} /></button>
                 </div>
               </div>
             ))}
@@ -700,7 +754,7 @@ export default function POSScreen({
         <div className="grid grid-cols-3 gap-2">
           {PAY_METHODS.map(m => (
             <button key={m} type="button" onClick={() => setCurrentPaymentMethod(m)}
-              className={`py-2 md:py-1.5 rounded-lg text-[10px] font-bold border transition-all min-h-[40px] md:min-h-0 ${
+              className={`py-2 lg:py-1.5 rounded-lg text-[10px] font-bold border transition-all min-h-[40px] lg:min-h-0 ${
                 currentPaymentMethod === m
                   ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
                   : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -807,7 +861,7 @@ export default function POSScreen({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col md:flex-row overflow-hidden bg-zinc-950">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col md:flex-row overflow-hidden bg-zinc-950 pb-[env(safe-area-inset-bottom)] md:pb-0">
 
       {/* ═══════════════════════════════════════════════════════════════
           PAINEL ESQUERDO — Catálogo
@@ -822,7 +876,7 @@ export default function POSScreen({
               ref={searchRef} type="text" value={searchTerm}
               onChange={e => { setSearchTerm(e.target.value); setSelectedCategory('Todas'); }}
               placeholder="Buscar por nome, marca... ou bipe o código"
-              className="w-full pl-11 pr-10 py-2.5 bg-zinc-800/80 border border-zinc-600 rounded-xl text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 transition-all"
+              className="w-full min-h-[48px] md:min-h-0 pl-11 pr-10 py-3 md:py-2.5 bg-zinc-800/80 border border-zinc-600 rounded-xl text-base md:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 transition-all"
             />
             {searchTerm && (
               <button onClick={() => { setSearchTerm(''); searchRef.current?.focus(); }}
@@ -863,7 +917,7 @@ export default function POSScreen({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap border transition-all duration-200 shrink-0 ${
+                className={`px-4 py-2.5 md:px-3 md:py-1.5 min-h-[44px] md:min-h-0 flex items-center rounded-lg text-sm font-bold whitespace-nowrap border transition-all duration-200 shrink-0 ${
                   selectedCategory === cat
                     ? 'bg-amber-400 border-amber-400 text-zinc-900 shadow-md shadow-amber-500/20 ring-2 ring-amber-300/50'
                     : 'bg-zinc-800/70 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
@@ -878,13 +932,13 @@ export default function POSScreen({
         {/* Grade de Produtos */}
         <div className="flex-1 overflow-y-auto px-3 pb-24 md:pb-3">
           {displayProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
-              <ScanLine size={36} className="mb-2.5 opacity-40" />
-              <p className="font-semibold text-zinc-300">Nenhum produto encontrado</p>
-              {searchTerm && <p className="text-xs mt-1 text-zinc-600">"{searchTerm}"</p>}
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-zinc-500" role="status">
+              <ScanLine size={36} className="mb-3 opacity-40" aria-hidden />
+              <p className="text-base font-semibold text-zinc-300">Nenhum produto encontrado</p>
+              {searchTerm && <p className="text-sm mt-1.5 text-zinc-500">Termo: {searchTerm}</p>}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 min-[1728px]:grid-cols-7 gap-2.5">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 min-[1728px]:grid-cols-7 gap-2.5 md:gap-3">
               {displayProducts.map(product => (
                 <ProductCard
                   key={product.id}
@@ -906,7 +960,7 @@ export default function POSScreen({
       <AnimatePresence>
         {barcodeToast && (
           <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-zinc-900 text-white px-6 py-3 rounded-2xl shadow-2xl z-[200] font-semibold text-sm whitespace-nowrap">
+            className="fixed left-1/2 z-[200] -translate-x-1/2 rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-semibold whitespace-nowrap text-white shadow-2xl max-md:bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-8">
             {barcodeToast}
           </motion.div>
         )}
@@ -916,7 +970,7 @@ export default function POSScreen({
           PAINEL DIREITO — Pedido + Pagamento (tablet/desktop)
           Usa bg-zinc-950 para evitar override .flowpdv-dark .bg-zinc-900 → #f0f0f0
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="hidden md:flex md:flex-col h-full min-h-0 w-full md:w-[300px] lg:w-[340px] bg-zinc-950 border-l border-zinc-800 shrink-0 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
+      <div className="hidden md:flex md:flex-col h-full min-h-0 w-full md:w-[min(360px,38vw)] lg:w-[380px] xl:w-[400px] bg-zinc-950 border-l border-zinc-800 shrink-0 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
         {renderCartColumn('desktop')}
       </div>
 
@@ -950,7 +1004,7 @@ export default function POSScreen({
             className="absolute inset-0 bg-black/60"
             onClick={() => setMobileCartOpen(false)}
           />
-          <div className="relative flex flex-col max-h-[min(92dvh,100%)] rounded-t-2xl bg-zinc-950 border border-zinc-800 border-b-0 shadow-2xl overflow-hidden mx-0">
+          <div className="relative mx-0 flex max-h-[min(92dvh,100%)] flex-col overflow-hidden rounded-t-2xl border border-b-0 border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] shadow-2xl">
             <div className="flex items-center justify-between px-3 py-3 border-b border-zinc-800 shrink-0">
               <button
                 type="button"
@@ -983,9 +1037,9 @@ export default function POSScreen({
 
       <AnimatePresence>
         {pendingProduct && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={{ duration: 0.15 }}
-              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+              className="max-h-[min(92dvh,100%)] w-full max-w-sm overflow-y-auto rounded-t-3xl bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8">
               <div className="text-center mb-6">
                 {pendingProduct.photo_url && <div className="w-full h-40 rounded-2xl overflow-hidden mb-4"><img src={pendingProduct.photo_url} alt={pendingProduct.name} className="w-full h-full object-cover" /></div>}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>
@@ -1011,43 +1065,39 @@ export default function POSScreen({
       </AnimatePresence>
 
       {opcaoModalProduto && (
-        <CardapioThemeShell theme={buildDeliveryCardapioTheme('dark_premium')}>
-          <AnimatePresence>
-            <Fragment key={opcaoModalProduto.id}>
-              <ProductOptionsModal
-                produto={opcaoModalProduto}
-                addDestination="pedido"
-                visualVariant="pos"
-                onClose={() => { setOpcaoModalProduto(null); setOpcaoModalBaseProduct(null); }}
-                onAdicionar={applyModalItemToPedido}
-              />
-            </Fragment>
-          </AnimatePresence>
-        </CardapioThemeShell>
+        <Suspense fallback={null}>
+          <POSProductOptionsDialog
+            produto={opcaoModalProduto}
+            onClose={() => { setOpcaoModalProduto(null); setOpcaoModalBaseProduct(null); }}
+            onAdicionar={applyModalItemToPedido}
+          />
+        </Suspense>
       )}
 
       {showMesaPicker && pendingMesaProduct && (
-        <MesaPickerModal
-          product={pendingMesaProduct}
-          lineSeed={pendingMesaSeed ?? undefined}
-          token={token}
-          onClose={() => {
+        <Suspense fallback={null}>
+          <MesaPickerModal
+            product={pendingMesaProduct}
+            lineSeed={pendingMesaSeed ?? undefined}
+            token={token}
+            onClose={() => {
             setShowMesaPicker(false);
             setPendingMesaProduct(null);
             setPendingMesaSeed(null);
           }}
-          onSuccess={n => {
+            onSuccess={n => {
             setShowMesaPicker(false);
             setPendingMesaProduct(null);
             setPendingMesaSeed(null);
             setMesaToast(`✓ Adicionado à Mesa ${n}`);
             setTimeout(() => setMesaToast(null), 2500);
           }}
-        />
+            />
+        </Suspense>
       )}
       <AnimatePresence>
         {mesaToast && (          <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-zinc-900 text-white px-6 py-3 rounded-2xl shadow-2xl z-[200] font-bold text-sm">
+            className="fixed left-1/2 z-[200] -translate-x-1/2 rounded-2xl bg-zinc-900 px-6 py-3 text-sm font-bold text-white shadow-2xl max-md:bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] md:bottom-8">
             {mesaToast}
           </motion.div>
         )}
@@ -1055,9 +1105,9 @@ export default function POSScreen({
 
       <AnimatePresence>
         {showTipoRetirada && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              className="rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center" style={{ background: '#fff', color: '#18181b' }}>
+              className="max-h-[min(92dvh,100%)] w-full max-w-sm overflow-y-auto rounded-t-3xl p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-3xl sm:p-8" style={{ background: '#fff', color: '#18181b' }}>
               <div className="text-4xl mb-3">🍽️</div>
               <h3 className="text-xl font-black mb-1">Como vai consumir?</h3>
               <p className="text-sm mb-6" style={{ color: '#71717a' }}>Escolha para gerar a comanda correta</p>
@@ -1075,9 +1125,9 @@ export default function POSScreen({
         )}
 
         {showSuccess && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-4">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl text-center">
+              className="max-h-[min(92dvh,100%)] w-full max-w-xs overflow-y-auto rounded-t-2xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-2xl">
 
               {/* Ícone + título */}
               <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: '#d1fae5', color: '#059669' }}>
@@ -1167,12 +1217,12 @@ export default function POSScreen({
       {/* ── Modal confirmação limpar carrinho ────────────────────────── */}
       <AnimatePresence>
         {confirmLimpar && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl text-center"
+              className="max-h-[min(88dvh,100%)] w-full max-w-xs overflow-y-auto rounded-t-2xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-2xl"
             >
               <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Trash2 size={22} className="text-red-600" />
@@ -1202,6 +1252,18 @@ export default function POSScreen({
           </div>
         )}
       </AnimatePresence>
+
+      {showClienteModal && (
+        <Suspense fallback={null}>
+          <PosClienteModal
+            open={showClienteModal}
+            token={token}
+            clienteAtual={posCliente}
+            onClose={() => setShowClienteModal(false)}
+            onSelect={(c) => setPosCliente(c)}
+          />
+        </Suspense>
+      )}
     </motion.div>
   );
 }

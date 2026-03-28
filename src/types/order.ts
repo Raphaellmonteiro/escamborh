@@ -41,6 +41,8 @@ export interface CreateOrderInput {
   taxa_total?: number;
   tipo_retirada?: string;
   status?: OrderStatus;
+  /** ID em `delivery_clientes` (cliente da loja); opcional. */
+  cliente_id?: number | string | null;
 }
 
 export interface DeleteOrderInput {

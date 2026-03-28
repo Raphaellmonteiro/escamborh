@@ -17,8 +17,18 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category, OrderItem, OrderType, PaymentMethod, Order, DashboardStats, CashReport, Expense, Caixa, Ingrediente, MovimentacaoEstoque } from '../types';
 import { getSegCfg } from '../config/segmentos';
-import { Card, Button, Input } from '../components/ui/Card';
+import { Button, Input } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { StatusChip } from '../components/ui/StatusChip';
+import {
+  adminFormLabelClass,
+  adminOpsDashedEmptyClass,
+  adminOpsFilterCardClass,
+  adminOpsInsetPanelClass,
+  adminOpsSurfaceCardClass,
+  adminScreenPagePaddingClass,
+} from '../components/ui/screenChrome';
 import { getNonDeliveryNextStatus, normalizeStatusForPipeline, ORDER_PIPELINE_STEPS } from '../utils/orderNonDeliveryNextStatus';
 import { openPrintPreview, ensurePrintableHtmlDocument, isPrintableHtmlDocument } from '../utils/print';
 import {
@@ -314,13 +324,13 @@ export default function OrdersScreen({
   };
 
   const primaryActionClassName =
-    'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-colors';
+    'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold transition-colors lg:min-h-0 lg:py-2';
   const secondaryActionClassName =
-    'inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50';
+    'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 lg:min-h-0 lg:py-2';
   const warningActionClassName =
-    'inline-flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100';
+    'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 lg:min-h-0 lg:py-2';
   const dangerActionClassName =
-    'inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100';
+    'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 lg:min-h-0 lg:py-2';
 
   const closeRefundModal = () => {
     setShowRefundModal(false);
@@ -698,97 +708,88 @@ const handleConfirmOrder = async (id: number) => {
   const activeOrders = orders.filter((order) => !isFinalOrderStatus(order.status));
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{cfg.tituloPedidos}</h2>
-          <p className="text-zinc-400 dark:text-zinc-500 text-sm">Consulta detalhada e histórico — a fila ao vivo está em Operação</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-
-          {/* Tela Cliente — só para restaurante/bar com slug */}
-          {displaySlug && (
-            <a
-              href={`/display/${displaySlug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-700 transition-all"
-            >
-              <Monitor size={15} /> Tela Cliente
-            </a>
-          )}
-
-          {/* QR das Mesas */}
-          {onShowQR && (
-            <button
-              onClick={onShowQR}
-              className="flex items-center gap-2 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-700 transition-all"
-            >
-              <span className="text-base leading-none">🪑</span> QR das Mesas
-            </button>
-          )}
-
-          {/* Tela da Cozinha (KDS) */}
-          {kdsSlug && (
-            <button
-              onClick={() => window.open(`/kds/${kdsSlug}`, '_blank', 'noopener')}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all"
-              style={{ background: '#18181b', color: '#fff' }}
-            >
-              <Monitor size={15} /> Tela da Cozinha
-            </button>
-          )}
-
-          {/* Tabs Pedidos / Histórico */}
-          <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200 gap-0.5">
-            <button
-              onClick={() => setActiveTab('active')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'active' ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-200'}`}
-            >
-              {cfg.tituloAtivos}
-            </button>
-            <button
-              onClick={() => setActiveTab('receipts')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'receipts' ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-200'}`}
-            >
-              Histórico
-            </button>
-          </div>
-
-        </div>
-      </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={adminScreenPagePaddingClass}>
+      <ScreenHeader
+        className="mb-6"
+        title={cfg.tituloPedidos}
+        subtitle="Consulta detalhada e histórico — a fila ao vivo está em Operação"
+        actions={
+          <>
+            {displaySlug && (
+              <a
+                href={`/display/${displaySlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm font-semibold text-zinc-700 transition-all hover:bg-zinc-200 lg:min-h-0"
+              >
+                <Monitor size={15} /> Tela Cliente
+              </a>
+            )}
+            {onShowQR && (
+              <button
+                onClick={onShowQR}
+                className="flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm font-semibold text-zinc-700 transition-all hover:bg-zinc-200 lg:min-h-0"
+              >
+                <span className="text-base leading-none">🪑</span> QR das Mesas
+              </button>
+            )}
+            {kdsSlug && (
+              <button
+                onClick={() => window.open(`/kds/${kdsSlug}`, '_blank', 'noopener')}
+                className="flex min-h-[44px] items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-all lg:min-h-0"
+                style={{ background: '#18181b', color: '#fff' }}
+              >
+                <Monitor size={15} /> Tela da Cozinha
+              </button>
+            )}
+            <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200 gap-0.5">
+              <button
+                onClick={() => setActiveTab('active')}
+                className={`min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold transition-all lg:min-h-0 ${activeTab === 'active' ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-200'}`}
+              >
+                {cfg.tituloAtivos}
+              </button>
+              <button
+                onClick={() => setActiveTab('receipts')}
+                className={`min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold transition-all lg:min-h-0 ${activeTab === 'receipts' ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-200'}`}
+              >
+                Histórico
+              </button>
+            </div>
+          </>
+        }
+      />
 
       {/* Filtros (histórico) */}
       {activeTab === 'receipts' && (
-        <Card className="p-4 mb-5 flex flex-wrap items-end gap-4 bg-zinc-50">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase">Dia</label>
-            <input type="number" placeholder="Ex: 05" className="w-20 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm focus:outline-none"
+        <div className={`mb-5 flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-end ${adminOpsFilterCardClass}`}>
+          <div className="w-full space-y-1 sm:w-auto">
+            <label className={adminFormLabelClass}>Dia</label>
+            <input type="number" placeholder="Ex: 05" className="w-full min-h-[44px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none sm:w-20"
               value={filters.day} onChange={e => setFilters({...filters, day: e.target.value})} />
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase">Mês</label>
-            <select className="w-32 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm focus:outline-none"
+          <div className="w-full space-y-1 sm:w-auto">
+            <label className={adminFormLabelClass}>Mês</label>
+            <select className="w-full min-h-[44px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none sm:w-32"
               value={filters.month} onChange={e => setFilters({...filters, month: e.target.value})}>
               <option value="">Todos</option>
               {Array.from({length:12},(_,i) => <option key={i+1} value={i+1}>{new Date(0,i).toLocaleString('pt-BR',{month:'long'})}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase">Ano</label>
-            <input type="number" className="w-24 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm focus:outline-none"
+          <div className="w-full space-y-1 sm:w-auto">
+            <label className={adminFormLabelClass}>Ano</label>
+            <input type="number" className="w-full min-h-[44px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none sm:w-24"
               value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} />
           </div>
-          <Button onClick={fetchOrders} variant="secondary" className="h-9">Filtrar</Button>
-        </Card>
+          <Button onClick={fetchOrders} variant="secondary" className="w-full !h-auto !min-h-[44px] sm:w-auto">Filtrar</Button>
+        </div>
       )}
 
       {/* PEDIDOS ATIVOS — Kanban visual */}
       {activeTab === 'active' && (
         <div className="space-y-3">
           {activeOrders.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-900/40">
+            <div className={adminOpsDashedEmptyClass}>
               <EmptyState
                 icon={UtensilsCrossed}
                 title="Nenhum pedido ativo"
@@ -814,7 +815,7 @@ const handleConfirmOrder = async (id: number) => {
               <div
                 key={order.id}
                 data-pdv-order-id={order.id}
-                className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isDelivery ? 'border-orange-200' : 'border-zinc-100'}`}
+                className={`${adminOpsSurfaceCardClass} overflow-hidden ${isDelivery ? 'border-orange-200 dark:border-orange-500/35' : ''}`}
               >
                 {/* Top stripe — laranja para delivery */}
                 <div className="h-1.5" style={{ background: isDelivery ? '#f97316' : sc.dot }} />
@@ -827,20 +828,26 @@ const handleConfirmOrder = async (id: number) => {
                     {(order as any).cliente_nome && <span className="text-xs text-orange-600 font-semibold">— {(order as any).cliente_nome}</span>}
                     {(order as any).cliente_tel && <span className="text-xs text-orange-500 ml-1">({(order as any).cliente_tel})</span>}
                     {(order as any).pagamento_status === 'aguardando' && (
-                      <span className="ml-auto text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">⏳ PIX AGUARDANDO</span>
+                      <StatusChip variant="warning" size="sm" className="ml-auto">
+                        ⏳ PIX AGUARDANDO
+                      </StatusChip>
                     )}
                     {(order as any).pagamento_status === 'pago' && (
-                      <span className="ml-auto text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">✅ PIX PAGO</span>
+                      <StatusChip variant="success" size="sm" className="ml-auto">
+                        ✅ PIX PAGO
+                      </StatusChip>
                     )}
                     {(order as any).pagamento_status === 'na_entrega' && (
-                      <span className="ml-auto text-[10px] font-black bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full">💳 PAGAR NA ENTREGA</span>
+                      <StatusChip variant="neutral" size="sm" className="ml-auto">
+                        💳 PAGAR NA ENTREGA
+                      </StatusChip>
                     )}
                   </div>
                 )}
                 <div className="p-4">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
                     {/* Esquerda: senha + tipo */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       {/* Senha */}
                       <div className="flex flex-col items-center justify-center w-14 h-14 rounded-2xl shrink-0 font-black"
                         style={{ background: isDelivery ? '#fff7ed' : sc.bg, color: isDelivery ? '#ea580c' : sc.color }}>
@@ -850,25 +857,25 @@ const handleConfirmOrder = async (id: number) => {
                           const hasSenha  = (order as any).senha_pedido && (order as any).senha_pedido !== 0;
                           if (isDelivery) return (
                             <>
-                              <span className="text-[8px] uppercase tracking-widest opacity-70">Canal</span>
+                              <span className="text-[10px] uppercase tracking-widest opacity-70">Canal</span>
                               <span className="text-lg leading-none">🛵</span>
                             </>
                           );
                           if (hasSenha) return (
                             <>
-                              <span className="text-[9px] uppercase tracking-widest opacity-70">Senha</span>
+                              <span className="text-[10px] uppercase tracking-widest opacity-70">Senha</span>
                               <span className="text-2xl leading-none">{String((order as any).senha_pedido).padStart(2,'0')}</span>
                             </>
                           );
                           if (mesaMatch) return (
                             <>
-                              <span className="text-[9px] uppercase tracking-widest opacity-70">Mesa</span>
+                              <span className="text-[10px] uppercase tracking-widest opacity-70">Mesa</span>
                               <span className="text-2xl leading-none">{mesaMatch[1]}</span>
                             </>
                           );
                           return (
                             <>
-                              <span className="text-[9px] uppercase tracking-widest opacity-70">Pedido</span>
+                              <span className="text-[10px] uppercase tracking-widest opacity-70">Pedido</span>
                               <span className="text-xl leading-none">#{order.id}</span>
                             </>
                           );
@@ -907,13 +914,14 @@ const handleConfirmOrder = async (id: number) => {
                             </span>
                           )}
                           {orderHasAnyItemCustomization(order) && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-800"
+                            <StatusChip
+                              size="sm"
+                              icon={ListTree}
+                              toneClassName="border-violet-200 bg-violet-50 text-violet-800"
                               title="Um ou mais itens têm observação ou adicionais"
                             >
-                              <ListTree size={12} />
                               Itens personalizados
-                            </span>
+                            </StatusChip>
                           )}
                           <OrderAutomationBadges order={order} />
                         </div>
@@ -927,7 +935,7 @@ const handleConfirmOrder = async (id: number) => {
                       </div>
                     </div>
                     {/* Direita: ações */}
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <div className="flex w-full flex-wrap items-stretch gap-2 lg:w-auto lg:shrink-0">
                       {/* Avançar / Confirmar status */}
                       {order.status === 'Aguardando confirmação' ? (
                         <button onClick={() => handleConfirmOrder(order.id)}
@@ -998,14 +1006,14 @@ const handleConfirmOrder = async (id: number) => {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-3`}>
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Operacao</p>
                       <p className="mt-1 text-sm font-bold" style={{ color: sc.color }}>
                         {order.status}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-3`}>
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Canal</p>
                       <div className={`mt-1 inline-flex items-center gap-2 text-sm font-bold ${channelMeta.detailClassName}`}>
                         <ChannelIcon size={14} />
@@ -1018,11 +1026,11 @@ const handleConfirmOrder = async (id: number) => {
                         Aberto ha {getElapsedLabel(order.created_at)}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-3`}>
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Valor total</p>
                       <p className="mt-1 text-sm font-bold text-zinc-900">{formatMoney(order.total_amount)}</p>
                     </div>
-                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-3`}>
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Reembolso</p>
                       <p className="mt-1 text-sm font-bold" style={{ color: refundMeta ? refundMeta.tone.color : '#18181b' }}>
                         {refundMeta ? formatMoney(refundMeta.refundedAmount) : 'Sem reembolso'}
@@ -1034,7 +1042,8 @@ const handleConfirmOrder = async (id: number) => {
                   </div>
 
                   {/* Pipeline progress */}
-                  <div className="mt-3 flex items-center gap-1">
+                  <div className="mt-3 -mx-1 overflow-x-auto overflow-y-hidden px-1 pb-1 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+                  <div className="flex min-w-max items-center gap-1 sm:min-w-0">
                     {ORDER_PIPELINE_STEPS.map((step, i) => (
                       <React.Fragment key={step}>
                         <div className="flex flex-col items-center gap-0.5">
@@ -1052,6 +1061,7 @@ const handleConfirmOrder = async (id: number) => {
                       </React.Fragment>
                     ))}
                   </div>
+                  </div>
 
                   {/* Itens */}
                   {(order.items || []).length > 0 && (
@@ -1067,7 +1077,7 @@ const handleConfirmOrder = async (id: number) => {
                         return (
                           <div
                             key={i}
-                            className="rounded-xl border border-zinc-100 bg-zinc-50/90 px-3 py-2 text-left"
+                            className={`${adminOpsInsetPanelClass} px-3 py-2 text-left`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <p className="text-[11px] font-bold text-zinc-800 min-w-0">
@@ -1164,7 +1174,7 @@ const handleConfirmOrder = async (id: number) => {
       {activeTab === 'receipts' && (
         <div className="space-y-2">
           {orders.length === 0 && (
-            <div className="rounded-3xl border-2 border-dashed border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-900/40">
+            <div className={adminOpsDashedEmptyClass}>
               <EmptyState
                 icon={Clock}
                 title="Nenhum pedido encontrado"
@@ -1180,7 +1190,7 @@ const handleConfirmOrder = async (id: number) => {
             const ChannelIcon = channelMeta.icon;
             const refundMeta = getRefundMeta(orderWithRefund);
             return (
-              <div key={order.id} data-pdv-order-id={order.id} className="bg-white rounded-xl border border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+              <div key={order.id} data-pdv-order-id={order.id} className={`flex flex-col gap-3 ${adminOpsSurfaceCardClass} px-4 py-3 sm:flex-row sm:items-center`}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-black text-sm"
                   style={{ background: sc.bg, color: sc.color }}>
                   {(() => {
@@ -1195,30 +1205,37 @@ const handleConfirmOrder = async (id: number) => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-black text-zinc-700">#{order.order_number}</span>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: sc.bg, color: sc.color }}>Operacao: {order.status}</span>
-                    {false && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                    {false && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: isLevar ? '#fef3c7' : '#eff6ff', color: isLevar ? '#92400e' : '#1d4ed8' }}>
                       {isLevar ? '🛍️' : '🪑'}
                     </span>}
-                    <span className={`inline-flex items-center gap-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${channelMeta.badgeClassName}`}>
-                      <ChannelIcon size={11} />
+                    <StatusChip
+                      size="sm"
+                      emphasis="bold"
+                      toneClassName={channelMeta.badgeClassName}
+                      className="inline-flex items-center gap-1.5"
+                    >
+                      <ChannelIcon size={11} className="shrink-0" />
                       {channelMeta.label}
-                    </span>
+                    </StatusChip>
                     {orderHasAnyItemCustomization(order) && (
-                      <span
-                        className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-violet-200 bg-violet-50 text-violet-800"
+                      <StatusChip
+                        size="sm"
+                        emphasis="bold"
+                        icon={ListTree}
+                        toneClassName="border-violet-200 bg-violet-50 text-violet-800"
                         title="Itens com observações ou adicionais"
                       >
-                        <ListTree size={10} />
                         Pers.
-                      </span>
+                      </StatusChip>
                     )}
                     <OrderAutomationBadges order={order} />
                   </div>
                   {refundMeta && (
                     <span
-                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border"
                       style={{
                         background: refundMeta.tone.bg,
                         color: refundMeta.tone.color,
@@ -1243,7 +1260,7 @@ const handleConfirmOrder = async (id: number) => {
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2 flex-wrap justify-end">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
                       <button onClick={async () => {
                           try {
                             const r = await fetch(`/api/print/cupom-html/${order.id}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -1309,12 +1326,12 @@ const handleConfirmOrder = async (id: number) => {
       {/* Modal de Recibo */}
       <AnimatePresence>
         {selectedReceipt && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col max-h-[90vh]">
-              <div className="flex items-center justify-between mb-4">
+              className="flex max-h-[min(92dvh,100%)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-8">
+              <div className="mb-4 flex items-center justify-between gap-2">
                 <h3 className="text-xl font-bold text-zinc-900">Recibo do Pedido</h3>
-                <button onClick={() => setSelectedReceipt(null)} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18} /></button>
+                <button type="button" onClick={() => setSelectedReceipt(null)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-zinc-400 hover:bg-zinc-100"><X size={18} /></button>
               </div>
               <div className="flex-1 overflow-auto rounded-2xl border border-zinc-200 mb-5 bg-white" style={{minHeight: 220}}>
                 <iframe
@@ -1336,14 +1353,14 @@ const handleConfirmOrder = async (id: number) => {
 
 <AnimatePresence>
   {showHistoryModal && historyOrder && (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[112] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[112] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
       <motion.div
         initial={{ scale: 0.94, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.94, opacity: 0 }}
-        className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="flex max-h-[min(94dvh,100%)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
       >
-        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-zinc-100">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-4 py-4 sm:px-6 sm:py-5">
           <div>
             <h3 className="text-xl font-bold text-zinc-900">Historico do Pedido</h3>
             <p className="text-sm text-zinc-500 mt-1">
@@ -1351,14 +1368,15 @@ const handleConfirmOrder = async (id: number) => {
             </p>
           </div>
           <button
+            type="button"
             onClick={closeHistoryModal}
-            className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-zinc-400 hover:bg-zinc-100"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {historyLoading && (
             <div className="text-center py-16 text-zinc-400">
               <Clock size={28} className="mx-auto mb-3 opacity-50" />
@@ -1431,7 +1449,7 @@ const handleConfirmOrder = async (id: number) => {
           })}
         </div>
 
-        <div className="px-6 py-4 border-t border-zinc-100">
+        <div className="border-t border-zinc-100 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-4">
           <Button onClick={closeHistoryModal} className="w-full">
             Fechar
           </Button>
@@ -1444,12 +1462,12 @@ const handleConfirmOrder = async (id: number) => {
 {/* Modal de Autenticação para Exclusão */}
 <AnimatePresence>
   {showRefundModal && orderToRefund && (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[115] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[115] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl"
+        className="max-h-[min(92dvh,100%)] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-8"
       >
         <form onSubmit={submitRefundOrder} className="space-y-4">
           <div>
@@ -1520,12 +1538,12 @@ const handleConfirmOrder = async (id: number) => {
 {/* Modal de Cancelamento */}
 <AnimatePresence>
   {showCancelModal && orderToCancel && (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[121] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[121] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl"
+        className="max-h-[min(92dvh,100%)] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-8"
       >
         <form onSubmit={submitCancelOrder} className="space-y-4">
           <div>
@@ -1593,12 +1611,12 @@ const handleConfirmOrder = async (id: number) => {
 {/* Modal de AutenticaÃ§Ã£o para ExclusÃ£o */}
 <AnimatePresence>
   {showAuthModal && (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl"
+        className="max-h-[min(90dvh,100%)] w-full max-w-sm overflow-y-auto rounded-t-3xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-8"
       >
         {deleteStep === 'password' && (
           <form onSubmit={handleAuthSubmit} className="space-y-4">
