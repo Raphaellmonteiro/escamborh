@@ -527,6 +527,95 @@ async function buildCheckoutSummary(params: {
   return summary;
 }
 
+/** Limite conservador de placeholders por query SQLite (evita SQLITE_MAX_VARIABLE_NUMBER). */
+const CARDAPIO_IN_CHUNK = 400;
+
+function chunkIds<T>(arr: T[], size: number): T[][] {
+  if (!arr.length) return [];
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Monta `grupos_opcao` + `variacoes_vendaveis` para todos os produtos em poucas queries,
+ * em vez de N+1 por produto/grupo (principal gargalo do GET /delivery/:slug/cardapio).
+ */
+async function buildProdutosComOpcoesBatched(tenantId: number, produtos: any[]): Promise<any[]> {
+  if (!produtos.length) return [];
+
+  const tid = Number(tenantId);
+  const produtoIds = produtos.map((p) => Number(p.id));
+
+  const allGrupos: any[] = [];
+  for (const ids of chunkIds(produtoIds, CARDAPIO_IN_CHUNK)) {
+    const ph = ids.map(() => '?').join(',');
+    const rows = await qAll(
+      `SELECT * FROM produto_grupos_opcao WHERE produto_id IN (${ph}) AND tenant_id=? AND ativo=1 ORDER BY produto_id ASC, ordem ASC`,
+      [...ids, tid]
+    );
+    allGrupos.push(...rows);
+  }
+
+  const allItens: any[] = [];
+  for (const gids of chunkIds(
+    allGrupos.map((g) => Number(g.id)),
+    CARDAPIO_IN_CHUNK
+  )) {
+    if (!gids.length) continue;
+    const ph = gids.map(() => '?').join(',');
+    const rows = await qAll(
+      `SELECT * FROM produto_opcao_itens WHERE grupo_id IN (${ph}) AND tenant_id=? AND ativo=1 ORDER BY grupo_id ASC, ordem ASC`,
+      [...gids, tid]
+    );
+    allItens.push(...rows);
+  }
+
+  const itensByGrupo = new Map<number, any[]>();
+  for (const it of allItens) {
+    const gid = Number(it.grupo_id);
+    if (!itensByGrupo.has(gid)) itensByGrupo.set(gid, []);
+    itensByGrupo.get(gid)!.push(it);
+  }
+
+  const gruposByProduto = new Map<number, any[]>();
+  for (const g of allGrupos) {
+    const pid = Number(g.produto_id);
+    if (!gruposByProduto.has(pid)) gruposByProduto.set(pid, []);
+    const itens = itensByGrupo.get(Number(g.id)) || [];
+    gruposByProduto.get(pid)!.push({ ...g, itens });
+  }
+
+  const allVariacoes: any[] = [];
+  for (const ids of chunkIds(produtoIds, CARDAPIO_IN_CHUNK)) {
+    const ph = ids.map(() => '?').join(',');
+    const rows = await qAll(
+      `SELECT id, nome, preco, produto_id FROM produto_variacoes_vendaveis WHERE produto_id IN (${ph}) AND tenant_id=? AND ativo=1 ORDER BY produto_id ASC, ordem ASC, nome ASC`,
+      [...ids, tid]
+    );
+    allVariacoes.push(...rows);
+  }
+
+  const variacoesByProduto = new Map<number, any[]>();
+  for (const v of allVariacoes) {
+    const pid = Number(v.produto_id);
+    if (!variacoesByProduto.has(pid)) variacoesByProduto.set(pid, []);
+    variacoesByProduto.get(pid)!.push({ id: v.id, nome: v.nome, preco: Number(v.preco) });
+  }
+
+  return produtos.map((p) => {
+    const id = Number(p.id);
+    return {
+      ...p,
+      description: p.descricao || null,
+      em_promocao: Number(p.em_promocao || 0),
+      preco_original: p.preco_original == null ? null : Number(p.preco_original),
+      grupos_opcao: gruposByProduto.get(id) || [],
+      variacoes_vendaveis: variacoesByProduto.get(id) || [],
+    };
+  });
+}
+
 export function createDeliveryPublicRouter() {
   const router = Router();
 
@@ -574,24 +663,7 @@ export function createDeliveryPublicRouter() {
       }
 
       const produtos = await qAll('SELECT * FROM produtos WHERE tenant_id=? AND active=1 ORDER BY COALESCE(ordem,0) ASC, name ASC', [tenant.id]);
-      const produtosComOpcoes = [];
-      for (const p of produtos) {
-        const grupos = await qAll('SELECT * FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC', [p.id, tenant.id]);
-        const gruposComItens = [];
-        for (const g of grupos) {
-          const itens = await qAll('SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC', [g.id, tenant.id]);
-          gruposComItens.push({ ...g, itens });
-        }
-        const variacoes = await qAll('SELECT id, nome, preco FROM produto_variacoes_vendaveis WHERE produto_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC, nome ASC', [p.id, tenant.id]);
-        produtosComOpcoes.push({
-          ...p,
-          description: p.descricao || null,
-          em_promocao: Number(p.em_promocao || 0),
-          preco_original: p.preco_original == null ? null : Number(p.preco_original),
-          grupos_opcao: gruposComItens,
-          variacoes_vendaveis: variacoes,
-        });
-      }
+      const produtosComOpcoes = await buildProdutosComOpcoesBatched(tenant.id, produtos);
 
       const logoPadrao = (() => {
         const dir = path.join(process.cwd(), 'uploads', 'logo');
@@ -641,7 +713,6 @@ export function createDeliveryPublicRouter() {
           cardapio_banner_slots: cardapioBannerSlots,
         },
         categorias,
-        produtos: produtosComOpcoes,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

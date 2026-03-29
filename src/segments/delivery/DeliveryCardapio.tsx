@@ -620,7 +620,7 @@ function useClienteAuth(slug: string) {
 
 export default function DeliveryCardapio() {
   const slug = getSlug();
-  const { token: cliToken, cliente, carregando: authLoad, salvar: salvarToken, logout, atualizarFavoritos } = useClienteAuth(slug);
+  const { token: cliToken, cliente, salvar: salvarToken, logout, atualizarFavoritos } = useClienteAuth(slug);
   const [nome, setNome] = useState('');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [config, setConfig] = useState<Config>({ taxa_entrega:0, pedido_minimo:0, tempo_preparo:40 });
@@ -658,12 +658,42 @@ export default function DeliveryCardapio() {
 
   useEffect(() => {
     if (!slug) return;
-    fetch(`/public/delivery/${slug}/cardapio`).then(r=>r.json()).then(d => {
-      setNome(d.estabelecimento||''); setAtivo(d.ativo);
-      setLogoUrl(d.logo_url || null);
-      setCategorias(d.categorias||[]); setConfig(d.config||{});
-      if (d.categorias?.length) setCatAtiva(d.categorias[0].nome);
-    }).catch(()=>{}).finally(()=>setLoading(false));
+    setLoading(true);
+    let cancelled = false;
+    fetch(`/public/delivery/${slug}/cardapio`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error('cardapio');
+        return r.json() as Promise<{
+          estabelecimento?: string;
+          ativo?: boolean;
+          logo_url?: string | null;
+          categorias?: Categoria[];
+          config?: Config;
+        }>;
+      })
+      .then((d) => {
+        if (cancelled) return;
+        setNome(d.estabelecimento || '');
+        setAtivo(d.ativo !== false);
+        setLogoUrl(d.logo_url || null);
+        setCategorias(Array.isArray(d.categorias) ? d.categorias : []);
+        setConfig((prev) => ({
+          ...prev,
+          ...(d.config && typeof d.config === 'object' ? d.config : {}),
+        }));
+        if (d.categorias?.length) setCatAtiva(d.categorias[0].nome);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCategorias([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
@@ -817,7 +847,10 @@ export default function DeliveryCardapio() {
 
   useEffect(() => {
     if (!cliToken || !slug) return;
-    void buscarMeusPedidos({ silent: true, keepDetail: true });
+    const id = window.setTimeout(() => {
+      void buscarMeusPedidos({ silent: true, keepDetail: true });
+    }, 1200);
+    return () => clearTimeout(id);
   }, [cliToken, slug, buscarMeusPedidos]);
 
   const pedidoEmAndamento = useMemo(() => {
@@ -1217,7 +1250,7 @@ export default function DeliveryCardapio() {
           </div>
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between px-3.5 py-3 sm:px-4 sm:py-3.5">
-          <div className="min-h-0 flex-1 flex flex-col">
+          <div className="min-h-0 min-w-0 flex-1 flex flex-col">
             <div className="flex shrink-0 items-center justify-between gap-3">
               <div className="min-w-0 flex-1 pr-1">
                 {promoValida ? (
@@ -1256,13 +1289,17 @@ export default function DeliveryCardapio() {
               </div>
             )}
           </div>
-          <div className="mt-1.5 grid shrink-0 grid-cols-1 gap-2 pt-0.5 min-[400px]:grid-cols-[1fr_auto] min-[400px]:items-end min-[400px]:gap-3">
+          <div
+            className={`mt-2 flex shrink-0 flex-col gap-2.5 border-t pt-2.5 ${
+              cardapioTheme.mode === 'light_red' ? 'border-zinc-200/80' : 'border-white/10'
+            }`}
+          >
             <div className="min-w-0">
               {(temVariacoes || temPrecoVariavel) ? (
                 <>
                   <span className={vt.priceFrom}>A partir de</span>
                   <p
-                    className={`mt-0.5 text-[22px] font-black tabular-nums leading-none tracking-tight min-[400px]:text-[24px] ${
+                    className={`mt-1 text-[22px] font-black tabular-nums leading-tight tracking-tight sm:text-[23px] ${
                       cardapioTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-100'
                     }`}
                   >
@@ -1278,7 +1315,7 @@ export default function DeliveryCardapio() {
                     </div>
                   )}
                   <p
-                    className={`mt-0.5 text-[22px] font-black tabular-nums leading-none tracking-tight min-[400px]:text-[24px] ${
+                    className={`mt-1 text-[22px] font-black tabular-nums leading-tight tracking-tight sm:text-[23px] ${
                       promoValida
                         ? cardapioTheme.mode === 'light_red'
                           ? 'text-emerald-600'
@@ -1293,7 +1330,12 @@ export default function DeliveryCardapio() {
                 </>
               )}
             </div>
-            <button onClick={() => ativo && handleAddProduto(p)} disabled={!ativo} className={`${vt.btnAdd} w-full min-[400px]:w-auto justify-self-stretch min-[400px]:justify-self-end`}>
+            <button
+              type="button"
+              onClick={() => ativo && handleAddProduto(p)}
+              disabled={!ativo}
+              className={`${vt.btnAdd} w-full min-w-0 justify-center whitespace-nowrap`}
+            >
               <Plus size={14} className="shrink-0" />
               {temOpcoes || temVariacoes ? 'Escolher' : 'Adicionar'}
             </button>
@@ -1303,16 +1345,69 @@ export default function DeliveryCardapio() {
     );
   };
 
-  if (loading||authLoad) return (
-    <CardapioThemeShell theme={cardapioTheme}>
-      <div className={cardapioTheme.pageLoading.wrap}>
-        <div className="flex flex-col items-center gap-3">
-          <div className={cardapioTheme.pageLoading.spin} />
-          <p className={cardapioTheme.pageLoading.text}>Carregando cardápio...</p>
+  /** Só o cardápio bloqueia a vitrine; perfil do cliente hidrata em segundo plano (evita somar latências no mobile). */
+  if (loading) {
+    const sk =
+      cardapioTheme.mode === 'light_red'
+        ? {
+            header: 'bg-zinc-200/90',
+            heroCell: 'bg-zinc-200',
+            heroWrap: 'border-zinc-200/90 bg-white',
+            logo: 'bg-zinc-100',
+            line: 'bg-zinc-200',
+            lineSm: 'bg-zinc-200/80',
+            card: 'bg-zinc-100',
+            menu: 'bg-zinc-200/70',
+          }
+        : {
+            header: 'bg-white/10',
+            heroCell: 'bg-zinc-800/85',
+            heroWrap: 'border-white/12 bg-zinc-900/45',
+            logo: 'bg-zinc-800',
+            line: 'bg-zinc-700/90',
+            lineSm: 'bg-zinc-800/80',
+            card: 'bg-zinc-800/55',
+            menu: 'bg-white/8',
+          };
+    return (
+      <CardapioThemeShell theme={cardapioTheme}>
+        <div className={`${cardapioTheme.shell.root} min-h-[100dvh]`}>
+          <div className={cardapioTheme.shell.inner}>
+            <header className={cardapioTheme.header.bar}>
+              <div className="mx-auto max-w-[1440px] px-4 py-3 lg:px-6">
+                <div className={`h-10 w-full max-w-2xl animate-pulse rounded-xl ${sk.header}`} />
+              </div>
+            </header>
+            <div className="mx-auto max-w-[1440px] px-3 py-4 pb-28 sm:px-4 lg:px-6">
+              <section className={`w-full overflow-hidden rounded-[34px] border p-0 shadow-none ${sk.heroWrap}`}>
+                <div className="grid grid-cols-2 gap-px bg-black/5 dark:bg-white/5">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className={`aspect-[4/3] animate-pulse ${sk.heroCell}`} />
+                  ))}
+                </div>
+                <div className="flex min-h-[96px] items-center gap-4 px-4 py-5 sm:min-h-[104px] sm:px-6">
+                  <div className={`h-28 w-28 shrink-0 animate-pulse rounded-[36px] sm:h-36 sm:w-36 ${sk.logo}`} />
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div className={`h-9 w-[78%] max-w-md animate-pulse rounded-lg ${sk.line}`} />
+                    <div className={`h-4 w-[52%] animate-pulse rounded ${sk.lineSm}`} />
+                  </div>
+                </div>
+              </section>
+              <div className="mt-6 space-y-4">
+                <div className={`h-12 w-full animate-pulse rounded-2xl ${sk.menu}`} />
+                <div className="grid gap-3 min-[480px]:grid-cols-2">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className={`h-40 animate-pulse rounded-3xl ${sk.card}`} />
+                  ))}
+                </div>
+              </div>
+              <p className={`mt-8 text-center text-sm ${cardapioTheme.pageLoading.text}`}>Carregando cardápio...</p>
+            </div>
+          </div>
         </div>
-      </div>
-    </CardapioThemeShell>
-  );
+      </CardapioThemeShell>
+    );
+  }
   if (!slug) return (
     <CardapioThemeShell theme={cardapioTheme}>
       <div className={cardapioTheme.pageEmpty}><Package size={48}/></div>
@@ -1461,9 +1556,9 @@ export default function DeliveryCardapio() {
         <section className={cardapioTheme.mode === 'light_red'
           ? 'w-full overflow-hidden rounded-[34px] border border-zinc-200/90 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]'
           : 'w-full overflow-hidden rounded-[34px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] shadow-[0_28px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05]'}>
-          <div className="relative">
+            <div className="relative">
             <div className={cardapioTheme.hero.gridBg}>
-              {galeriaTopo.slice(0, 4).map((item) => (
+              {galeriaTopo.slice(0, 4).map((item, heroIdx) => (
                 <div key={item.key} className={cardapioTheme.hero.cellBg}>
                   {item.tipo === 'fallback' ? (
                     <div className={cardapioTheme.hero.fallbackLetter}>
@@ -1474,6 +1569,9 @@ export default function DeliveryCardapio() {
                       src={item.src}
                       alt={item.alt}
                       className="h-full w-full object-cover object-center"
+                      loading={heroIdx === 0 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={heroIdx === 0 ? 'high' : 'low'}
                     />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
@@ -1486,7 +1584,7 @@ export default function DeliveryCardapio() {
                 ? 'flex h-32 w-32 items-center justify-center overflow-hidden rounded-[36px] border-4 border-white bg-white shadow-[0_14px_36px_rgba(0,0,0,0.12)] sm:h-36 sm:w-36'
                 : 'flex h-32 w-32 items-center justify-center overflow-hidden rounded-[36px] border-4 border-zinc-900 bg-zinc-950 shadow-[0_18px_40px_rgba(0,0,0,0.38)] sm:h-36 sm:w-36'}>
                 {logoResolvido ? (
-                  <img src={logoResolvido} alt={nome} className="h-full w-full object-cover" />
+                  <img src={logoResolvido} alt={nome} className="h-full w-full object-cover" decoding="async" loading="eager" fetchPriority="high" />
                 ) : (
                   <span className={`text-3xl font-black ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
                 )}

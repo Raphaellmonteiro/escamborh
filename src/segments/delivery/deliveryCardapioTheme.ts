@@ -235,10 +235,10 @@ const darkPremium: DeliveryCardapioTheme = {
     showcaseCard:
       'group flex h-[min(348px,52vh)] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[30px] border border-white/14 bg-[linear-gradient(180deg,rgba(52,52,60,0.98),rgba(28,28,34,1))] shadow-[0_24px_56px_rgba(0,0,0,0.38)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_28px_64px_rgba(34,211,238,0.18)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px]',
     compactCard:
-      'group flex h-[164px] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] shadow-[0_20px_52px_rgba(0,0,0,0.32)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-cyan-400/32 hover:shadow-[0_26px_60px_rgba(34,211,238,0.14)] sm:min-w-[290px]',
+      'group flex min-h-[184px] w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] shadow-[0_20px_52px_rgba(0,0,0,0.32)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-cyan-400/32 hover:shadow-[0_26px_60px_rgba(34,211,238,0.14)] sm:min-w-[290px]',
     compactOfferBg: 'border-rose-500/15 bg-[linear-gradient(135deg,rgba(39,39,42,1),rgba(39,39,42,0.98),rgba(76,5,25,0.88))]',
     imageBg: 'relative h-44 cursor-pointer overflow-hidden bg-zinc-800',
-    compactThumb: 'relative h-full w-[122px] shrink-0 cursor-pointer overflow-hidden bg-zinc-800',
+    compactThumb: 'relative min-h-[184px] w-[122px] shrink-0 cursor-pointer overflow-hidden bg-zinc-800 self-stretch',
     noPhoto: 'flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950',
     title: 'line-clamp-2 min-h-[2.5rem] break-words text-lg font-black leading-tight tracking-tight text-white drop-shadow-sm',
     desc: 'line-clamp-1 text-sm leading-relaxed text-zinc-200/95',
@@ -460,10 +460,10 @@ const lightRed: DeliveryCardapioTheme = {
     showcaseCard:
       'group flex h-[min(348px,52vh)] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[30px] border border-zinc-200/90 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-1 hover:border-red-200 hover:shadow-[0_22px_48px_rgba(220,38,38,0.12)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px]',
     compactCard:
-      'group flex h-[164px] min-h-0 w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-zinc-200/90 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_18px_40px_rgba(220,38,38,0.1)] sm:min-w-[290px]',
+      'group flex min-h-[184px] w-[min(calc(100vw-2rem),320px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[28px] border border-zinc-200/90 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_18px_40px_rgba(220,38,38,0.1)] sm:min-w-[290px]',
     compactOfferBg: 'border-rose-200 bg-gradient-to-br from-white via-white to-rose-50/80',
     imageBg: 'relative h-44 cursor-pointer overflow-hidden bg-zinc-100',
-    compactThumb: 'relative h-full w-[122px] shrink-0 cursor-pointer overflow-hidden bg-zinc-100',
+    compactThumb: 'relative min-h-[184px] w-[122px] shrink-0 cursor-pointer overflow-hidden bg-zinc-100 self-stretch',
     noPhoto: 'flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100',
     title: 'line-clamp-2 min-h-[2.5rem] break-words text-lg font-black leading-tight tracking-tight text-zinc-900',
     desc: 'line-clamp-1 text-sm leading-relaxed text-zinc-600',
