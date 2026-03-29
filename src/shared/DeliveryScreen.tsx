@@ -1791,8 +1791,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
   const hdrs = { Authorization: `Bearer ${token}` };
 
   const logoFileRef = useRef<HTMLInputElement>(null);
-  const bannerFileRef = useRef<HTMLInputElement>(null);
-  const [bannerPickIdx, setBannerPickIdx] = useState<number | null>(null);
+  const bannerInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
   const [fallbackLogoUrl, setFallbackLogoUrl] = useState<string | null>(null);
   const [cvBusy, setCvBusy] = useState<'logo' | number | null>(null);
 
@@ -1829,38 +1828,42 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
     setCvBusy(null);
   };
 
-  const pickBanner = (idx: number) => {
-    setBannerPickIdx(idx);
-    setTimeout(() => bannerFileRef.current?.click(), 0);
-  };
-
-  const onBannerFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const idx = bannerPickIdx;
-    e.target.value = '';
-    setBannerPickIdx(null);
-    if (idx === null) return;
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setCvBusy(idx);
-    try {
-      const fd = new FormData();
-      fd.append('banner', f);
-      const res = await fetch(`/api/delivery/cardapio-visual/banner/${idx}`, {
-        method: 'POST',
-        headers: hdrs,
-        body: fd,
-      });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok && d.url) {
-        setCfg((c) => {
-          const slots = [...normalizeCardapioOnlineBannerSlots(c.cardapio_online_banner_urls)];
-          slots[idx] = d.url;
-          return { ...c, cardapio_online_banner_urls: slots };
+  const handleBannerUpload = useCallback(
+    async (slotIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      setCvBusy(slotIndex);
+      try {
+        const fd = new FormData();
+        fd.append('banner', file);
+        const res = await fetch(`/api/delivery/cardapio-visual/banner/${slotIndex}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
         });
-      } else alert(d.message || d.error || 'Falha no envio do banner');
-    } catch {}
-    setCvBusy(null);
-  };
+        const d = (await res.json().catch(() => ({}))) as {
+          url?: string;
+          message?: string;
+          error?: string;
+        };
+        if (res.ok && typeof d.url === 'string' && d.url.length > 0) {
+          const uploadedUrl = d.url;
+          setCfg((c) => {
+            const slots = [...normalizeCardapioOnlineBannerSlots(c.cardapio_online_banner_urls)];
+            slots[slotIndex] = uploadedUrl;
+            return { ...c, cardapio_online_banner_urls: slots };
+          });
+        } else {
+          alert(d.message || d.error || 'Falha no envio do banner');
+        }
+      } catch {
+        /* ignore */
+      }
+      setCvBusy(null);
+    },
+    [token]
+  );
 
   const removeBannerSlot = async (idx: number) => {
     setCvBusy(idx);
@@ -2223,7 +2226,6 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
               </div>
 
               <input ref={logoFileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onCardapioLogoFile} />
-              <input ref={bannerFileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onBannerFile} />
 
               <div>
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Logo do cardápio online</p>
@@ -2279,6 +2281,17 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                       key={idx}
                       className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800"
                     >
+                      <input
+                        ref={(el) => {
+                          bannerInputRefs.current[idx] = el;
+                        }}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        aria-hidden
+                        tabIndex={-1}
+                        onChange={(ev) => handleBannerUpload(idx, ev)}
+                      />
                       <div className="relative aspect-[4/3] w-full bg-zinc-200 dark:bg-zinc-900">
                         {url ? (
                           <img src={url} alt="" className="h-full w-full object-cover" />
@@ -2293,7 +2306,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                         <button
                           type="button"
                           disabled={cvBusy === idx}
-                          onClick={() => pickBanner(idx)}
+                          onClick={() => bannerInputRefs.current[idx]?.click()}
                           className="flex-1 rounded-lg bg-zinc-900 py-1.5 text-[10px] font-black text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
                         >
                           {cvBusy === idx ? '…' : 'Trocar'}
