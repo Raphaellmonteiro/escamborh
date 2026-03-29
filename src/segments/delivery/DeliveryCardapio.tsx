@@ -1683,10 +1683,10 @@ export default function DeliveryCardapio() {
                               className={`text-xs font-semibold tabular-nums ${
                                 abaCardapio === 'favoritos'
                                   ? isLightRed
-                                    ? 'text-white/90'
-                                    : 'text-cyan-100'
+                                    ? 'text-red-800'
+                                    : 'text-cyan-800'
                                   : isLightRed
-                                    ? 'text-zinc-500'
+                                    ? 'text-zinc-400'
                                     : 'text-zinc-400'
                               }`}
                             >
@@ -1708,7 +1708,7 @@ export default function DeliveryCardapio() {
 
                       {categorias.length > 0 && (
                         <>
-                          <div className={`my-3 h-px ${cardapioTheme.mode === 'light_red' ? 'bg-zinc-200' : 'bg-white/10'}`} />
+                          <div className="my-3 h-px bg-white/10" />
                           <div className="max-h-[260px] space-y-1 overflow-y-auto pr-1">
                             {categorias.map((c) => (
                               <button

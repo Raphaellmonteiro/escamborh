@@ -218,14 +218,14 @@ const darkPremium: DeliveryCardapioTheme = {
   statusPillOpen: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-emerald-400/30 bg-emerald-500/12 text-emerald-100',
   statusPillClosed: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-white/10 bg-white/5 text-zinc-100',
   menuDropdown:
-    'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-white/12 bg-zinc-950 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.38)]',
+    'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-white/12 bg-zinc-950 p-3 text-zinc-100 shadow-[0_24px_70px_rgba(0,0,0,0.38)]',
   menuItem:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors text-white hover:bg-white/5',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-zinc-100 transition-colors hover:bg-white/10 hover:text-white active:bg-white/[0.12]',
   menuItemActive:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/10 text-white',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-white/25 transition-colors hover:bg-[#ececee]',
   menuCategoryActive:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/15 text-cyan-50 ring-1 ring-cyan-400/25',
-  menuCategoryCountActive: 'text-xs font-black tabular-nums text-cyan-200',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-cyan-400/40 transition-colors hover:bg-[#ececee]',
+  menuCategoryCountActive: 'text-xs font-black tabular-nums text-cyan-800',
   menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
     'inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 transition-colors hover:bg-white/8',
@@ -442,15 +442,15 @@ const lightRed: DeliveryCardapioTheme = {
   statusPillOpen: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-emerald-200 bg-emerald-50 text-emerald-800',
   statusPillClosed: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-zinc-200 bg-zinc-50 text-zinc-700',
   menuDropdown:
-    'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-zinc-200 bg-white p-3 shadow-[0_20px_50px_rgba(0,0,0,0.12)]',
+    'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-white/12 bg-zinc-950 p-3 text-zinc-100 shadow-[0_24px_70px_rgba(0,0,0,0.38)] ring-1 ring-red-950/20',
   menuItem:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors text-zinc-950 hover:bg-zinc-50 hover:text-zinc-950',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold text-zinc-100 transition-colors hover:bg-white/10 hover:text-white active:bg-white/[0.12]',
   menuItemActive:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-red-50 text-red-950 ring-1 ring-red-100',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-red-200/90 transition-colors hover:bg-[#ececee]',
   menuCategoryActive:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-red-100 text-red-950 ring-1 ring-red-200',
-  menuCategoryCountActive: 'text-xs font-black tabular-nums text-red-700',
-  menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-500',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-red-300/80 transition-colors hover:bg-[#ececee]',
+  menuCategoryCountActive: 'text-xs font-black tabular-nums text-red-800',
+  menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
     'inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-bold text-zinc-800 transition-colors hover:bg-zinc-50',
   searchInput:
