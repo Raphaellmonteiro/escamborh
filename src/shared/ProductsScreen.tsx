@@ -12,7 +12,7 @@ import type { Product, Category } from '../types';
 import { Card, Button, Input } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { adminOpsListRowClass, adminOpsMutedBlockClass } from '../components/ui/screenChrome';
+import { adminOpsListRowClass, adminOpsMutedBlockClass, adminScreenPagePaddingClass } from '../components/ui/screenChrome';
 import type { ProductionType } from '../utils/preparation';
 import { resolveProductionType, resolveRequiresPreparation } from '../utils/preparation';
 
@@ -552,13 +552,13 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   // RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col bg-zinc-50">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 min-w-0 flex-col bg-zinc-50">
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-zinc-200 px-3 sm:px-6 py-3 sm:py-5 flex-shrink-0">
+      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-2 sm:px-3 sm:py-2.5 lg:px-4 lg:py-2.5 2xl:px-6 2xl:py-3.5">
         <ScreenHeader
           rowFrom="lg"
-          className="lg:gap-4"
+          className="gap-2 lg:gap-2 2xl:gap-4"
           title="Cardápio"
           subtitle={
             <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 leading-snug">
@@ -570,20 +570,20 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:shrink-0">
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                 <button type="button" onClick={handleExportPDF}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
                   <Download size={13}/> PDF
                 </button>
                 <button type="button" onClick={() => setShowCategoryModal(true)}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
                   <Filter size={13}/> Categorias
                 </button>
                 <div className="flex bg-zinc-100 p-0.5 rounded-xl shrink-0">
-                  <button type="button" aria-label="Lista" onClick={() => setViewMode('list')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
-                  <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
+                  <button type="button" aria-label="Lista" onClick={() => setViewMode('list')} className={`p-2.5 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:p-2 lg:px-2.5 flex items-center justify-center rounded-lg transition-all ${viewMode==='list'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutList size={15}/></button>
+                  <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:p-2 lg:px-2.5 flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
                 </div>
               </div>
               <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
+                className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
                 <Plus size={16}/> Novo Produto
               </button>
             </div>
@@ -591,24 +591,24 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
         />
 
         {/* ── Filtros ── */}
-        <div className="flex flex-col gap-3 mt-3 sm:mt-4">
+        <div className="flex flex-col gap-2 mt-2 sm:mt-3 2xl:mt-4 2xl:gap-3">
           <div className="relative w-full max-w-none sm:max-w-sm sm:min-w-[200px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto..."
-              className="w-full pl-8 pr-4 py-2.5 min-h-[44px] border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400 bg-zinc-50"/>
+              className="w-full pl-8 pr-4 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400 bg-zinc-50"/>
           </div>
           <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
-            <button type="button" onClick={() => setCatFiltro('todas')} className={`px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${catFiltro==='todas'?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>Todas</button>
+            <button type="button" onClick={() => setCatFiltro('todas')} className={`px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${catFiltro==='todas'?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>Todas</button>
             {catList.map(c => (
-              <button type="button" key={c} onClick={() => setCatFiltro(c)} className={`px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 max-w-[12rem] truncate ${catFiltro===c?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`} title={c}>{c}</button>
+              <button type="button" key={c} onClick={() => setCatFiltro(c)} className={`px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 max-w-[12rem] truncate ${catFiltro===c?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`} title={c}>{c}</button>
             ))}
           </div>
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 sm:gap-2">
             <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden flex-1 min-w-0 touch-pan-x pb-0.5 -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible">
               {(['todos','ativo','inativo'] as const).map(s => (
-                <button type="button" key={s} onClick={() => setStatusFiltro(s)} className={`px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold capitalize transition-all shrink-0 ${statusFiltro===s?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>{s}</button>
+                <button type="button" key={s} onClick={() => setStatusFiltro(s)} className={`px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold capitalize transition-all shrink-0 ${statusFiltro===s?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>{s}</button>
               ))}
-              <button type="button" onClick={() => setDestaqueFiltro(!destaqueFiltro)} className={`flex items-center gap-1 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-bold transition-all shrink-0 ${destaqueFiltro?'bg-amber-500 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>
+              <button type="button" onClick={() => setDestaqueFiltro(!destaqueFiltro)} className={`flex items-center gap-1 px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${destaqueFiltro?'bg-amber-500 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>
                 <Star size={11}/> Destaque
               </button>
             </div>
@@ -618,7 +618,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       </div>
 
       {/* ── Lista / Grid ── */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto p-3 sm:p-6 min-w-0">
+      <div className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden ${adminScreenPagePaddingClass}`}>
         {produtosVisiveis.length === 0 ? (
           <EmptyState
             icon={Package}
@@ -635,7 +635,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
             {produtosVisiveis.map((p, idx) => {
               const mg = margem(p);
               return (
-                <div key={p.id} className={`${adminOpsListRowClass} p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 hover:border-zinc-300 transition-all ${!p.active ? 'opacity-60' : ''}`}>
+                <div key={p.id} className={`${adminOpsListRowClass} flex flex-col gap-2 p-3 hover:border-zinc-300 transition-all lg:flex-row lg:items-center lg:gap-3 2xl:gap-4 2xl:p-4 ${!p.active ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="flex flex-col gap-0.5 flex-shrink-0">
                       <button type="button" onClick={() => handleReorder(p, 'up')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === 0}><ChevronUp size={13}/></button>
@@ -645,20 +645,22 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                       {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={20} className="text-zinc-400"/>}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-zinc-900 text-sm break-words">{p.name}</span>
-                        {p.destaque ? <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0"/> : null}
-                        {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 bg-rose-100 text-rose-700">
-                            Promocao
+                      <div className="flex min-w-0 items-start gap-2">
+                        <span className="min-w-0 flex-1 truncate font-black text-zinc-900 text-sm" title={p.name}>{p.name}</span>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                          {p.destaque ? <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0"/> : null}
+                          {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 bg-rose-100 text-rose-700">
+                              Promocao
+                            </span>
+                          ) : null}
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                            {p.active ? 'Ativo' : 'Inativo'}
                           </span>
-                        ) : null}
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${p.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
-                          {p.active ? 'Ativo' : 'Inativo'}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${getProductionMeta(p).badgeClass}`}>
-                          {getProductionMeta(p).label}
-                        </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 ${getProductionMeta(p).badgeClass}`}>
+                            {getProductionMeta(p).label}
+                          </span>
+                        </div>
                       </div>
                       <p className="text-xs text-zinc-400 mt-0.5 break-words">
                         {p.category} · {fmtR$(p.price)}
@@ -704,7 +706,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
           </div>
         ) : (
           /* ── GRID ── */
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 min-[1100px]:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
             {produtosVisiveis.map(p => {
               const mg = margem(p);
               const cc = COLOR_MAP[p.color || 'zinc'] || COLOR_MAP.zinc;
@@ -768,16 +770,16 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
       {/* Modal: Editar / Novo Produto */}
       <AnimatePresence>
         {editing && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto overscroll-contain">
             <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full shadow-2xl flex flex-col max-h-[min(100dvh,100svh)] sm:max-h-[min(92vh,900px)] my-auto min-h-0">
-              <div className="flex items-center justify-between px-4 sm:px-7 pt-4 sm:pt-7 pb-3 border-b border-zinc-100 shrink-0">
-                <h3 className="text-lg sm:text-xl font-black text-zinc-900 pr-2">{editing.id ? 'Editar Produto' : 'Novo Produto'}</h3>
+              className="my-auto flex min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl max-h-[min(92dvh,100svh)] sm:max-h-[min(90vh,900px)] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 pt-3 pb-2 sm:px-5 sm:pt-4 2xl:px-7 2xl:pt-7 2xl:pb-3">
+                <h3 className="pr-2 text-base font-black text-zinc-900 sm:text-lg 2xl:text-xl">{editing.id ? 'Editar Produto' : 'Novo Produto'}</h3>
                 <button type="button" onClick={() => { setEditing(null); setPendingPhoto(null); }} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-zinc-100 rounded-xl text-zinc-400 shrink-0"><X size={18}/></button>
               </div>
 
               <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 min-w-0">
-              <div className="space-y-4 px-4 sm:px-7 pt-4 pb-2 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pt-3 pb-2 sm:px-5 sm:pt-3 2xl:space-y-4 2xl:px-7 2xl:pt-4">
                 {/* Nome */}
                 <div>
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nome do produto *</label>
@@ -1208,11 +1210,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                 </div>
               </div>
 
-                <div className="flex gap-3 px-4 sm:px-7 pt-3 pb-4 sm:pb-6 border-t border-zinc-100 shrink-0 bg-white">
+                <div className="flex shrink-0 gap-2 border-t border-zinc-100 bg-white px-3 pt-2.5 pb-3 sm:gap-3 sm:px-5 sm:pb-4 2xl:px-7 2xl:pt-3 2xl:pb-6">
                   <button type="button" onClick={() => { setEditing(null); setPendingPhoto(null); }}
-                    className="flex-1 py-3 min-h-[48px] bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">Cancelar</button>
+                    className="min-h-[44px] flex-1 rounded-xl bg-zinc-100 py-2.5 text-sm font-bold transition-all hover:bg-zinc-200 2xl:min-h-[48px] 2xl:py-3">Cancelar</button>
                   <button type="submit" disabled={uploadingPhoto}
-                    className="flex-1 py-3 min-h-[48px] bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-all">
+                    className="min-h-[44px] flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:opacity-50 2xl:min-h-[48px] 2xl:py-3">
                     {uploadingPhoto ? 'Salvando...' : 'Salvar'}
                   </button>
                 </div>
@@ -1227,17 +1229,17 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
         {showCategoryModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
             <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="bg-white rounded-t-3xl sm:rounded-3xl p-4 sm:p-7 max-w-md w-full shadow-2xl flex flex-col max-h-[min(88dvh,100svh)] sm:max-h-[80vh] min-h-0">
-              <div className="flex items-center justify-between mb-4 sm:mb-5 shrink-0">
+              className="flex max-h-[min(92dvh,100svh)] min-h-0 w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white p-4 shadow-2xl sm:max-h-[min(85vh,640px)] sm:rounded-3xl sm:p-6">
+              <div className="flex shrink-0 items-center justify-between pb-3 sm:pb-4">
                 <h3 className="text-lg sm:text-xl font-black text-zinc-900">Categorias</h3>
                 <button type="button" onClick={() => setShowCategoryModal(false)} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
               </div>
-              <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-2 mb-4 shrink-0">
+              <form onSubmit={handleAddCategory} className="mb-3 flex shrink-0 flex-col gap-2 sm:flex-row">
                 <input type="text" placeholder="Nova categoria..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)}
-                  className="flex-1 min-w-0 px-3.5 py-2.5 min-h-[44px] border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
-                <button type="submit" className="px-4 py-2.5 min-h-[44px] bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all shrink-0">Adicionar</button>
+                  className="min-h-[44px] flex-1 min-w-0 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm focus:border-zinc-400 focus:outline-none lg:min-h-0 lg:py-2"/>
+                <button type="submit" className="min-h-[44px] shrink-0 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 lg:min-h-0 lg:py-2">Adicionar</button>
               </form>
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border border-zinc-100 rounded-xl divide-y divide-zinc-50">
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-xl border border-zinc-100 divide-y divide-zinc-50">
                 {categories.length === 0 && <p className="text-center text-zinc-400 py-6 text-sm">Nenhuma categoria</p>}
                 {categories.map(cat => (
                   <div key={cat.id} className="flex justify-between items-center px-4 py-3 hover:bg-zinc-50">
@@ -1246,7 +1248,9 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                   </div>
                 ))}
               </div>
-              <button onClick={() => setShowCategoryModal(false)} className="mt-5 w-full py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">Fechar</button>
+              <div className="shrink-0 border-t border-zinc-100 pt-3 sm:pt-4">
+                <button type="button" onClick={() => setShowCategoryModal(false)} className="w-full rounded-xl bg-zinc-100 py-2.5 text-sm font-bold transition-all hover:bg-zinc-200">Fechar</button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -1420,7 +1424,7 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
         className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col min-h-0 max-h-[min(92dvh,100svh)] sm:max-h-[92vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-zinc-100 shrink-0">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 py-3 sm:px-5 sm:py-3.5 2xl:px-6 2xl:py-5">
           <div className="min-w-0 pr-2">
             <h3 className="text-base sm:text-lg font-black text-zinc-900">Opções do Produto</h3>
             <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 truncate">{produtoNome}</p>
@@ -1429,7 +1433,7 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
         </div>
 
         {/* Dica */}
-        <div className="mx-4 sm:mx-6 mt-3 sm:mt-4 shrink-0 bg-blue-50 border border-blue-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[11px] sm:text-xs text-blue-800 space-y-1.5 overflow-x-auto">
+        <div className="mx-3 mt-2 shrink-0 space-y-1.5 overflow-x-auto rounded-xl border border-blue-200 bg-blue-50 px-2.5 py-2 text-[11px] text-blue-800 sm:mx-5 sm:mt-3 sm:px-3 sm:py-2.5 2xl:mx-6 2xl:mt-4 2xl:px-4 2xl:py-3 2xl:text-xs">
           <p><strong>💡 Duas formas de configurar o preço:</strong></p>
           <p><strong>A) Preço base R$0,00</strong> — coloque o preço cheio em cada item da proteína (Bisteca = R$15,99, Frango = R$16,99...)</p>
           <p><strong>B) Preço base = mais barato</strong> — coloque o preço do item mais barato no produto (R$15,99) e nos outros apenas a diferença (Bife a Parmegiana = +R$4,00)</p>
@@ -1437,7 +1441,7 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
         </div>
 
         {/* Lista de grupos */}
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 2xl:space-y-4 2xl:px-6 2xl:py-4">
           {loading ? (
             <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>
           ) : grupos.length === 0 ? (
@@ -1598,7 +1602,7 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
         </div>
 
         {/* Adicionar novo grupo */}
-        <div className="px-4 sm:px-6 py-4 border-t border-zinc-100 bg-zinc-50/50 space-y-3 shrink-0">
+        <div className="shrink-0 space-y-2 border-t border-zinc-100 bg-zinc-50/50 px-3 py-3 sm:px-5 2xl:space-y-3 2xl:px-6 2xl:py-4">
           <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Novo grupo de opções</p>
           <div className="flex flex-col sm:flex-row gap-2 sm:flex-wrap">
             <input value={novoGrupo.nome} onChange={e=>setNovoGrupo(p=>({...p,nome:e.target.value}))}

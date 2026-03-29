@@ -43,6 +43,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Card, Button } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
+import { adminScreenPagePaddingClass } from '../components/ui/screenChrome';
 
 type AdminActionPayloadField = { type: 'number' | 'text' | 'textarea'; label: string; required: boolean };
 
@@ -930,7 +931,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                   <span className="text-sm">Carregando histórico…</span>
                 </div>
               ) : tenantLogsError ? (
-                <div className="p-6 text-center">
+                <div className="p-4 text-center 2xl:p-6">
                   <p className="text-red-600 text-sm font-medium mb-2">{tenantLogsError}</p>
                   <Button onClick={() => selectedTenantId && fetchTenantLogs(selectedTenantId)} variant="secondary" className="text-xs">
                     Tentar novamente
@@ -1160,13 +1161,12 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     icon={Package}
                     title="Nenhum pedido encontrado"
                     description="Não há pedidos recentes para este estabelecimento."
-                    className="!py-12 !sm:py-14"
                   />
                 )}
               </div>
             </Card>
           ) : tenantModule === 'caixa' ? (
-            <Card className="p-6">
+            <Card className="p-4 2xl:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <h3 className="font-bold text-white">Caixa</h3>
                 <div className="flex flex-wrap gap-2">
@@ -1263,7 +1263,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
               </div>
             </Card>
           ) : tenantModule === 'estoque' ? (
-            <Card className="p-6">
+            <Card className="p-4 2xl:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <h3 className="font-bold text-white">Resumo do estoque</h3>
                 {tenantModuleData && (
@@ -1382,7 +1382,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
               )}
             </Card>
           ) : tenantModule === 'delivery' ? (
-            <Card className="p-6">
+            <Card className="p-4 2xl:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <h3 className="font-bold text-white">Delivery</h3>
                 {tenantModuleData && (
@@ -1761,8 +1761,8 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
           </motion.div>
         )}
       </AnimatePresence>
-      <header className="!bg-zinc-900 text-white p-4 sm:p-6 flex items-center justify-between border-b border-zinc-800 sticky top-0 z-50 gap-3">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+      <header className="!bg-zinc-900 text-white flex items-center justify-between border-b border-zinc-800 sticky top-0 z-50 gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3 md:px-5 2xl:py-4 2xl:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
           <button
             type="button"
             className="lg:hidden p-2.5 rounded-xl border border-zinc-700 text-zinc-200 min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 active:bg-zinc-800"
@@ -1791,7 +1791,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {adminNavOpen && (
           <button
             type="button"
@@ -1802,9 +1802,9 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
         )}
         <aside
           className={`
-            fixed md:static inset-y-0 left-0 z-[70] w-64 max-w-[85vw] bg-zinc-950 border-r border-zinc-800 p-4 sm:p-6 space-y-2
-            overflow-y-auto min-h-0 transition-transform duration-200 ease-out
-            pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]
+            fixed md:static inset-y-0 left-0 z-[70] w-[14.5rem] max-w-[min(85vw,16rem)] sm:w-56 lg:w-64 bg-zinc-950 border-r border-zinc-800 p-2.5 sm:p-3 lg:p-4 space-y-1.5 sm:space-y-2 2xl:p-5
+            overflow-y-auto min-h-0 min-w-0 transition-transform duration-200 ease-out
+            pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]
             ${adminNavOpen ? 'translate-x-0' : '-translate-x-full'}
             md:translate-x-0
           `}
@@ -1849,38 +1849,38 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
           </button>
         </aside>
 
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-5 md:p-6 bg-zinc-950 min-h-0 min-w-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <main className={`min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-zinc-950 ${adminScreenPagePaddingClass}`}>
           <div className={activeTab !== 'dashboard' ? 'hidden' : ''}>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                <Card className="p-6">
+            <div className="min-w-0 space-y-3 sm:space-y-4 2xl:space-y-6">
+              <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-5 md:gap-4 2xl:gap-5">
+                <Card className="min-w-0 p-3 sm:p-4 md:p-5 2xl:p-6">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Total Clientes</p>
                   <h3 className="text-3xl font-black text-white">{stats?.total || 0}</h3>
                 </Card>
-                <Card className="p-6 border-l-4 border-emerald-500">
+                <Card className="min-w-0 border-l-4 border-emerald-500 p-3 sm:p-4 md:p-5 2xl:p-6">
                   <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Ativos</p>
                   <h3 className="text-3xl font-black text-emerald-400">{stats?.ativos || 0}</h3>
                 </Card>
-                <Card className="p-6 border-l-4 border-amber-500">
+                <Card className="min-w-0 border-l-4 border-amber-500 p-3 sm:p-4 md:p-5 2xl:p-6">
                   <p className="text-xs font-bold text-amber-500 uppercase tracking-widest mb-1">Pendentes</p>
                   <h3 className="text-3xl font-black text-amber-400">{stats?.pendentes || 0}</h3>
                 </Card>
-                <Card className="p-6 border-l-4 border-red-500">
+                <Card className="min-w-0 border-l-4 border-red-500 p-3 sm:p-4 md:p-5 2xl:p-6">
                   <p className="text-xs font-bold text-red-500 uppercase tracking-widest mb-1">Bloqueados</p>
                   <h3 className="text-3xl font-black text-red-400">{stats?.bloqueados || 0}</h3>
                 </Card>
-                <Card className="p-6 border-l-4 border-zinc-400">
+                <Card className="min-w-0 border-l-4 border-zinc-400 p-3 sm:p-4 md:p-5 2xl:p-6">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Expirados</p>
                   <h3 className="text-3xl font-black text-white">{stats?.expirados || 0}</h3>
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-bold text-white mb-6 flex items-center gap-2"><Activity size={18} /> Solicitações Recentes</h3>
-                  <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 min-w-0 lg:grid-cols-2 lg:gap-4 2xl:gap-6">
+                <Card className="min-w-0 p-3 sm:p-4 md:p-5 2xl:p-6">
+                  <h3 className="mb-3 flex items-center gap-2 font-bold text-white sm:mb-4 2xl:mb-6"><Activity size={18} /> Solicitações Recentes</h3>
+                  <div className="space-y-2 2xl:space-y-4">
                     {solicitacoes.slice(0, 5).map(s => (
-                      <div key={s.id} className="flex items-center justify-between p-4 bg-zinc-800 rounded-2xl border border-zinc-800">
+                      <div key={s.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800 p-3 2xl:rounded-2xl 2xl:p-4">
                         <div>
                           <p className="font-bold text-white">{s.nome_estabelecimento}</p>
                           <p className="text-xs text-zinc-400">{s.cidade} • {new Date(s.created_at).toLocaleDateString()}</p>
@@ -1892,11 +1892,11 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     ))}
                   </div>
                 </Card>
-                <Card className="p-6">
-                  <h3 className="font-bold text-white mb-6 flex items-center gap-2"><Users size={18} /> Últimos Clientes</h3>
-                  <div className="space-y-4">
+                <Card className="min-w-0 p-3 sm:p-4 md:p-5 2xl:p-6">
+                  <h3 className="mb-3 flex items-center gap-2 font-bold text-white sm:mb-4 2xl:mb-6"><Users size={18} /> Últimos Clientes</h3>
+                  <div className="space-y-2 2xl:space-y-4">
                     {clientes.slice(0, 5).map(c => (
-                      <div key={c.id} className="flex items-center justify-between p-4 bg-zinc-800 rounded-2xl border border-zinc-800">
+                      <div key={c.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-800 p-3 2xl:rounded-2xl 2xl:p-4">
                         <div>
                           <p className="font-bold text-white">{c.nome_estabelecimento}</p>
                           <p className="text-xs text-zinc-400">
@@ -1919,32 +1919,32 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
           </div>
 
           <div className={activeTab !== 'financeiro' ? 'hidden' : ''}>
-          <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <Card className="p-6 bg-zinc-900 text-white">
+          <div className="min-w-0 space-y-4 sm:space-y-5 2xl:space-y-8">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-4 md:gap-5 min-w-0">
+                <Card className="min-w-0 bg-zinc-900 p-4 text-white sm:p-5 md:p-6">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">MRR (Mensal)</p>
                   <h3 className="text-3xl font-black">R$ {(financeiro?.mrr || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                 </Card>
-                <Card className="p-6">
+                <Card className="min-w-0 p-4 sm:p-5 md:p-6">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">ARR (Anual)</p>
                   <h3 className="text-3xl font-black text-white">R$ {(financeiro?.arr || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                 </Card>
-                <Card className="p-6">
+                <Card className="min-w-0 p-4 sm:p-5 md:p-6">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Clientes Pagantes</p>
                   <h3 className="text-3xl font-black text-white">{financeiro?.clientes_pagantes || 0}</h3>
                 </Card>
-                <Card className="p-6">
+                <Card className="min-w-0 p-4 sm:p-5 md:p-6 sm:col-span-2 md:col-span-1">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Ticket Médio</p>
                   <h3 className="text-3xl font-black text-white">R$ {(financeiro?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <Card className="p-6 lg:col-span-2">
-                  <h3 className="font-bold text-white mb-6 flex items-center gap-2"><Activity size={18} /> Faturamento (Últimos 6 meses)</h3>
-                  <div className="h-64 flex items-end gap-4 px-4">
+              <div className="grid grid-cols-1 gap-4 min-w-0 xl:grid-cols-3 xl:gap-6 2xl:gap-8">
+                <Card className="min-w-0 p-4 sm:p-5 md:p-6 xl:col-span-2">
+                  <h3 className="mb-4 flex items-center gap-2 font-bold text-white sm:mb-6"><Activity size={18} /> Faturamento (Últimos 6 meses)</h3>
+                  <div className="flex h-56 sm:h-64 min-w-0 items-end gap-2 overflow-x-auto overflow-y-hidden px-2 sm:gap-4 sm:px-4 md:overflow-visible">
                     {financeiro?.faturamento_mensal?.map((m: any) => (
-                      <div key={m.mes} className="flex-1 flex flex-col items-center gap-2 group">
+                      <div key={m.mes} className="flex min-w-[2.75rem] shrink-0 flex-col items-center gap-2 group sm:min-w-0 sm:flex-1">
                         <div className="w-full bg-zinc-800 rounded-t-xl relative overflow-hidden flex items-end" style={{ height: '100%' }}>
                           <motion.div 
                             initial={{ height: 0 }}
@@ -1961,9 +1961,9 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                   </div>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="font-bold text-white mb-6 flex items-center gap-2"><Calendar size={18} /> Próximos Vencimentos</h3>
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                <Card className="min-w-0 p-4 sm:p-5 md:p-6">
+                  <h3 className="mb-4 flex items-center gap-2 font-bold text-white sm:mb-6"><Calendar size={18} /> Próximos Vencimentos</h3>
+                  <div className="max-h-[min(50vh,24rem)] space-y-3 overflow-y-auto overscroll-contain pr-1 sm:space-y-4 sm:pr-2">
                     {financeiro?.proximos_vencimentos?.map((v: any) => (
                       <div key={v.nome_estabelecimento} className="p-4 bg-zinc-800 rounded-2xl border border-zinc-800">
                         <div className="flex justify-between items-start mb-2">
@@ -2058,7 +2058,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     </Card>
                   )}
                   {tenantsVisiveis.map((tenant: any) => (
-                      <Card key={tenant.tenant_id} className="p-6">
+                      <Card key={tenant.tenant_id} className="p-4 2xl:p-6">
                         <h3 className="font-bold text-white mb-4 flex items-center gap-2">
                           <Users size={18} /> {tenant.nome_estabelecimento}
                           <span className="text-xs font-normal text-zinc-400">(ID: {tenant.tenant_id})</span>
@@ -2459,7 +2459,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
-              className={`bg-zinc-900 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 pb-[max(1rem,env(safe-area-inset-bottom))] ${actionResultLogs ? 'w-full max-w-2xl max-h-[min(92dvh,100svh)] sm:max-h-[90vh] flex flex-col min-h-0' : 'w-full max-w-md max-h-[min(92dvh,100svh)] sm:max-h-[90vh] overflow-y-auto flex flex-col min-h-0'}`}
+              className={`bg-zinc-900 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col min-h-0 overflow-hidden ${actionResultLogs ? 'w-full max-w-2xl max-h-[min(92dvh,100svh)] sm:max-h-[90vh] p-4 sm:p-6 pb-[max(1rem,env(safe-area-inset-bottom))]' : 'w-full max-w-md max-h-[min(92dvh,100svh)] sm:max-h-[90vh]'}`}
             >
               {actionResultLogs ? (
                 <>
@@ -2492,6 +2492,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                 </>
               ) : (
                 <>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-4 sm:px-6 sm:pt-6">
                   <h3 className="text-lg font-bold text-white mb-2">{actionConfirmModal.label}</h3>
                   <div className="p-3 bg-amber-950 border border-amber-800 rounded-xl mb-4">
                     <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-1">Impacto</p>
@@ -2521,7 +2522,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                       )}
                     </div>
                   ))}
-                  <div className="mb-6">
+                  <div className="mb-4">
                     <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Motivo (obrigatório, mínimo 10 caracteres) *</label>
                     <textarea
                       value={actionConfirmReason}
@@ -2531,7 +2532,8 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                       className="w-full px-4 py-3 border border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
                     />
                   </div>
-                  <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 justify-stretch sm:justify-end shrink-0">
+                  </div>
+                  <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-zinc-800 bg-zinc-900 px-4 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <Button variant="secondary" onClick={dismissActionConfirmModal} disabled={actionConfirmLoading} className="min-h-[44px] w-full sm:w-auto">
                       Cancelar
                     </Button>

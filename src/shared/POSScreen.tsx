@@ -21,9 +21,9 @@ import {
   type Selecoes,
 } from './ProductOptionsModal';
 import type { PosClienteSelecionado } from './PosClienteModal';
+import POSProductOptionsDialog from './POSProductOptionsDialog';
 
 const MesaPickerModal = lazy(() => import('../segments/bar/MesaPickerModal'));
-const POSProductOptionsDialog = lazy(() => import('./POSProductOptionsDialog'));
 const PosClienteModal = lazy(() => import('./PosClienteModal'));
 
 // ── Constantes de estilo ──────────────────────────────────────────────────────
@@ -214,6 +214,7 @@ export default function POSScreen({
   const [opcaoModalProduto, setOpcaoModalProduto]         = useState<ProductOptionsProduto | null>(null);
   const [opcaoModalBaseProduct, setOpcaoModalBaseProduct] = useState<Product | null>(null);
   const [carregandoVariacoes, setCarregandoVariacoes]     = useState(false);
+  const opcaoModalLoadSeqRef                              = useRef(0);
   const [showSuccess, setShowSuccess]                     = useState<{ number: string; receipt: string; senha: number; tipo: string; orderId?: number } | null>(null);
   const [isFinalizing, setIsFinalizing]                   = useState(false);
   const [showTipoRetirada, setShowTipoRetirada]           = useState(false);
@@ -336,13 +337,24 @@ export default function POSScreen({
     setSelectedCartIndex(nextSelectedIndex);
   }, []);
 
+  const closeOpcaoModal = useCallback(() => {
+    opcaoModalLoadSeqRef.current += 1;
+    setCarregandoVariacoes(false);
+    setOpcaoModalProduto(null);
+    setOpcaoModalBaseProduct(null);
+  }, []);
+
   const openProductCustomizeFlow = useCallback(async (product: Product) => {
+    const seq = ++opcaoModalLoadSeqRef.current;
+    setOpcaoModalBaseProduct(product);
+    setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
     setCarregandoVariacoes(true);
     try {
       const [resVar, resGrp] = await Promise.all([
         fetch(`/api/products/${product.id}/variacoes-vendaveis`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/products/${product.id}/opcoes`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
+      if (seq !== opcaoModalLoadSeqRef.current) return;
       const vars = resVar.ok ? await resVar.json() : [];
       const gruposRaw = resGrp.ok ? await resGrp.json() : [];
       const ativas = Array.isArray(vars)
@@ -354,13 +366,12 @@ export default function POSScreen({
         preco: Number(v.preco ?? 0),
       }));
       const grupos = normalizeGruposPDV(gruposRaw);
-      setOpcaoModalBaseProduct(product);
       setOpcaoModalProduto(buildProdutoOptionsPayload(product, grupos, variacoes));
     } catch {
-      setOpcaoModalBaseProduct(product);
+      if (seq !== opcaoModalLoadSeqRef.current) return;
       setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
     } finally {
-      setCarregandoVariacoes(false);
+      if (seq === opcaoModalLoadSeqRef.current) setCarregandoVariacoes(false);
     }
   }, [token]);
 
@@ -370,6 +381,8 @@ export default function POSScreen({
 
   const applyModalItemToPedido = useCallback((item: ProductOptionsCartItem) => {
     const base = opcaoModalBaseProduct;
+    opcaoModalLoadSeqRef.current += 1;
+    setCarregandoVariacoes(false);
     setOpcaoModalProduto(null);
     setOpcaoModalBaseProduct(null);
     if (!base) return;
@@ -547,8 +560,7 @@ export default function POSScreen({
       return;
     }
     if (opcaoModalProduto) {
-      setOpcaoModalProduto(null);
-      setOpcaoModalBaseProduct(null);
+      closeOpcaoModal();
       return;
     }
     if (pendingProduct) {
@@ -559,7 +571,7 @@ export default function POSScreen({
     if (mobileCartOpen) {
       setMobileCartOpen(false);
     }
-  }, [confirmLimpar, showSuccess, showClienteModal, showTipoRetirada, showMesaPicker, opcaoModalProduto, pendingProduct, mobileCartOpen]);
+  }, [confirmLimpar, showSuccess, showClienteModal, showTipoRetirada, showMesaPicker, opcaoModalProduto, pendingProduct, mobileCartOpen, closeOpcaoModal]);
 
   const handleQtyIncrease = useCallback(() => {
     if (selectedCartIndex === null) return;
@@ -842,7 +854,7 @@ export default function POSScreen({
             type="button"
             onClick={handleStartFinalize}
             disabled={cart.length === 0 || remaining > 0.01 || isFinalizing}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-base font-black text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 transition-all duration-200 hover:bg-amber-300 hover:ring-amber-400/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 xl:min-h-[52px] xl:gap-2.5 xl:py-4"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-2.5 text-sm font-black text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 transition-all duration-200 hover:bg-amber-300 hover:ring-amber-400/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 md:min-h-[48px] md:py-3 md:text-base xl:min-h-[52px] xl:gap-2.5 xl:py-4"
           >
             {isFinalizing ? (
               <><span className="animate-pulse">⏳</span> Processando...</>
@@ -932,7 +944,7 @@ export default function POSScreen({
         {/* Grade de Produtos */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-24 md:px-3 md:pb-3">
           {displayProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-zinc-500" role="status">
+            <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-zinc-500 md:py-12" role="status">
               <ScanLine size={36} className="mb-3 opacity-40" aria-hidden />
               <p className="text-base font-semibold text-zinc-300">Nenhum produto encontrado</p>
               {searchTerm && <p className="text-sm mt-1.5 text-zinc-500">Termo: {searchTerm}</p>}
@@ -1065,13 +1077,12 @@ export default function POSScreen({
       </AnimatePresence>
 
       {opcaoModalProduto && (
-        <Suspense fallback={null}>
-          <POSProductOptionsDialog
-            produto={opcaoModalProduto}
-            onClose={() => { setOpcaoModalProduto(null); setOpcaoModalBaseProduct(null); }}
-            onAdicionar={applyModalItemToPedido}
-          />
-        </Suspense>
+        <POSProductOptionsDialog
+          produto={opcaoModalProduto}
+          carregandoOpcoes={carregandoVariacoes}
+          onClose={closeOpcaoModal}
+          onAdicionar={applyModalItemToPedido}
+        />
       )}
 
       {showMesaPicker && pendingMesaProduct && (

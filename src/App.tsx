@@ -750,9 +750,12 @@ const handleAuth = async (e: React.FormEvent) => {
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-[min(100%,14rem)] max-w-[85vw] sm:w-[15rem] lg:w-[13rem] xl:w-56 2xl:w-60
+          w-[min(100%,14rem)] max-w-[85vw] sm:w-[15rem]
+          ${activeTab === 'central'
+            ? 'lg:w-[11rem] xl:w-48 2xl:w-60'
+            : 'lg:w-[13rem] xl:w-56 2xl:w-60'}
           bg-white border-r border-zinc-200 flex flex-col h-screen min-h-0 shrink-0
-          transition-transform duration-200 ease-out
+          transition-[transform,width] duration-200 ease-out
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}

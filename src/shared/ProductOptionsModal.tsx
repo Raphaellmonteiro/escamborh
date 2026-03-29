@@ -320,12 +320,15 @@ export function ProductOptionsModal({
   onAdicionar,
   addDestination = 'sacola',
   visualVariant = 'delivery',
+  carregandoOpcoes = false,
 }: {
   produto: ProductOptionsProduto;
   onClose: () => void;
   onAdicionar: (item: ProductOptionsCartItem) => void;
   addDestination?: ProductOptionsDestination;
   visualVariant?: ProductOptionsVisualVariant;
+  /** PDV: opções/variações ainda vindo da API; não permitir confirmar até atualizar. */
+  carregandoOpcoes?: boolean;
 }) {
   const mTh = useDeliveryCardapioTheme();
   const compactLayout = useCompactOptionsModalLayout();
@@ -353,6 +356,7 @@ export function ProductOptionsModal({
   const [descExpanded, setDescExpanded] = useState(false);
   const [descOverflowsTwoLines, setDescOverflowsTwoLines] = useState(false);
   const descCompactRef = useRef<HTMLParagraphElement>(null);
+  const prevCarregandoOpcoes = useRef(false);
   const descricaoProduto = getProdutoDescricao(produto);
   const promoValida = isPromocaoProdutoValida(produto);
   const percentualDesconto = getPercentualDesconto(produto);
@@ -360,6 +364,18 @@ export function ProductOptionsModal({
   useLayoutEffect(() => {
     setDescExpanded(false);
   }, [produto.id]);
+
+  useLayoutEffect(() => {
+    if (prevCarregandoOpcoes.current && !carregandoOpcoes) {
+      const vList = (produto.variacoes_vendaveis || []).filter((v: VariacaoVendavel) => v?.id && Number(v.preco) >= 0);
+      const modoVar = vList.length > 0;
+      const gruposOpcaoProduto = produto.grupos_opcao || [];
+      setVariacaoSel(null);
+      setSelecoes(gerarSelecaoInicial(modoVar ? [] : gruposOpcaoProduto));
+      setErros({});
+    }
+    prevCarregandoOpcoes.current = !!carregandoOpcoes;
+  }, [carregandoOpcoes, produto]);
 
   useLayoutEffect(() => {
     if (!compactLayout || !descricaoProduto) {
@@ -426,6 +442,7 @@ export function ProductOptionsModal({
   };
 
   const validarEAdicionar = () => {
+    if (carregandoOpcoes) return;
     if (modoSomenteVariacoes) {
       if (!variacaoSel) return;
       const cartKey = `${produto.id}_v${variacaoSel.id}`;
@@ -464,20 +481,28 @@ export function ProductOptionsModal({
     });
   };
 
-  const readyTitle = gruposObrigatoriosPendentes > 0
-    ? (modoSomenteVariacoes
-      ? 'Escolha uma opcao abaixo.'
-      : `Faltam ${gruposObrigatoriosPendentes} grupo${gruposObrigatoriosPendentes > 1 ? 's' : ''} obrigatorio${gruposObrigatoriosPendentes > 1 ? 's' : ''}.`)
-    : (destSacola ? 'Pedido pronto para ir para a sacola.' : 'Pronto para adicionar ao pedido atual.');
-  const readyHint = gruposObrigatoriosPendentes > 0
-    ? (modoSomenteVariacoes
-      ? `Toque na variacao desejada antes de adicionar à ${addWord}.`
-      : 'Complete as escolhas obrigatorias para continuar.')
-    : (destSacola ? 'Revise a quantidade e confirme para adicionar.' : 'Revise a quantidade e confirme para enviar ao pedido.');
+  const readyTitle = carregandoOpcoes
+    ? 'Carregando opcoes...'
+    : gruposObrigatoriosPendentes > 0
+      ? (modoSomenteVariacoes
+        ? 'Escolha uma opcao abaixo.'
+        : `Faltam ${gruposObrigatoriosPendentes} grupo${gruposObrigatoriosPendentes > 1 ? 's' : ''} obrigatorio${gruposObrigatoriosPendentes > 1 ? 's' : ''}.`)
+      : (destSacola ? 'Pedido pronto para ir para a sacola.' : 'Pronto para adicionar ao pedido atual.');
+  const readyHint = carregandoOpcoes
+    ? 'Aguarde um instante.'
+    : gruposObrigatoriosPendentes > 0
+      ? (modoSomenteVariacoes
+        ? `Toque na variacao desejada antes de adicionar à ${addWord}.`
+        : 'Complete as escolhas obrigatorias para continuar.')
+      : (destSacola ? 'Revise a quantidade e confirme para adicionar.' : 'Revise a quantidade e confirme para enviar ao pedido.');
 
-  const addBtnLabel = gruposObrigatoriosPendentes > 0
-    ? (modoSomenteVariacoes ? 'Escolher opcao' : 'Revisar adicionais')
-    : (destSacola ? `Adicionar a sacola${qty > 1 ? ` (${qty}x)` : ''}` : `Adicionar ao pedido${qty > 1 ? ` (${qty}x)` : ''}`);
+  const addBtnLabel = carregandoOpcoes
+    ? 'Carregando...'
+    : gruposObrigatoriosPendentes > 0
+      ? (modoSomenteVariacoes ? 'Escolher opcao' : 'Revisar adicionais')
+      : (destSacola ? `Adicionar a sacola${qty > 1 ? ` (${qty}x)` : ''}` : `Adicionar ao pedido${qty > 1 ? ` (${qty}x)` : ''}`);
+
+  const addBtnDisabled = carregandoOpcoes || gruposObrigatoriosPendentes > 0 || precoUnit == null;
 
   return (
     <div className="fixed inset-0 z-[70] flex min-h-0 items-end justify-center overflow-x-hidden overflow-y-auto p-0 sm:items-center sm:p-4">
@@ -673,7 +698,7 @@ export function ProductOptionsModal({
                   <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : 'p-4'}`}>
                     <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : 'gap-3'}`}>
                       <div className="min-w-0">
-                        <p className={compactLayout ? 'text-[13px] font-black leading-tight tracking-tight text-white' : 'text-base font-black tracking-tight text-white'}>{g.nome}</p>
+                        <p className={compactLayout ? 'line-clamp-2 text-[13px] font-black leading-tight tracking-tight text-white' : 'line-clamp-3 text-base font-black tracking-tight text-white'} title={g.nome}>{g.nome}</p>
                         <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
                       </div>
                       <span className={`shrink-0 rounded-full font-bold uppercase tracking-[0.16em] ${
@@ -813,7 +838,7 @@ export function ProductOptionsModal({
           <div className={`rounded-[22px] border ${
             compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : 'mb-3 px-4 py-3'
           } ${
-            gruposObrigatoriosPendentes > 0
+            carregandoOpcoes || gruposObrigatoriosPendentes > 0
               ? 'border-amber-500/25 bg-amber-500/12'
               : ac.footerResumoOkBorder
           }`}>
@@ -822,7 +847,7 @@ export function ProductOptionsModal({
                 <p className={`font-black ${
                   compactLayout ? 'text-[11px] leading-tight' : 'text-sm'
                 } ${
-                  gruposObrigatoriosPendentes > 0
+                  carregandoOpcoes || gruposObrigatoriosPendentes > 0
                     ? 'text-amber-100'
                     : ac.footerResumoOkTitle
                 }`}>
@@ -831,7 +856,7 @@ export function ProductOptionsModal({
                 <p className={`${
                   compactLayout ? 'mt-0.5 line-clamp-2 text-[10px] leading-snug' : 'mt-1 text-xs'
                 } ${
-                  gruposObrigatoriosPendentes > 0
+                  carregandoOpcoes || gruposObrigatoriosPendentes > 0
                     ? 'text-amber-200/90'
                     : ac.footerResumoOkSub
                 }`}>
@@ -854,7 +879,7 @@ export function ProductOptionsModal({
                 <Plus size={13} />
               </button>
             </div>
-            <button type="button" onClick={validarEAdicionar}
+            <button type="button" onClick={validarEAdicionar} disabled={addBtnDisabled}
               className={`${mo.footerBtn} ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2.5 text-[12px] leading-tight' : ''}`}>
               <span>{addBtnLabel}</span>
               <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>

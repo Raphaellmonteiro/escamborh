@@ -5,6 +5,7 @@ import {
   X, Filter, Calendar, AlertCircle, CheckCircle2,
   Banknote, ChevronDown,
 } from 'lucide-react';
+import { adminScreenPagePaddingClass } from '../components/ui/screenChrome';
 
 type DateFilter = 'hoje' | 'semana' | 'mes' | 'tudo';
 
@@ -280,61 +281,61 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="h-full overflow-y-auto bg-zinc-50"
+      className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto bg-zinc-50"
     >
-      <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black text-zinc-900">Financeiro</h1>
-            <p className="text-sm text-zinc-400 mt-0.5">Controle de despesas e caixa</p>
+      <div className={`mx-auto max-w-6xl min-w-0 space-y-3 sm:space-y-4 2xl:space-y-5 ${adminScreenPagePaddingClass}`}>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg font-black text-zinc-900 sm:text-xl 2xl:text-2xl">Financeiro</h1>
+            <p className="mt-0.5 text-[11px] text-zinc-400 sm:text-xs 2xl:text-sm">Controle de despesas e caixa</p>
           </div>
           {tab === 'despesas' && (
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"
+              className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 active:scale-95 min-h-[44px] sm:min-h-0 sm:py-2"
             >
               <Plus size={16} /> Nova Despesa
             </button>
           )}
         </div>
 
-        <div className="flex bg-white border border-zinc-200 rounded-xl p-1 w-fit gap-0.5">
+        <div className="flex w-full min-w-0 gap-0.5 overflow-x-auto overflow-y-hidden rounded-xl border border-zinc-200 bg-white p-1 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] sm:w-fit sm:overflow-visible">
           {TABS.map(item => (
             <button
               key={item.key}
               onClick={() => setTab(item.key as 'despesas' | 'caixa')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === item.key ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-all sm:px-4 sm:text-sm min-h-[40px] sm:min-h-0 ${tab === item.key ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}
             >
               {item.label}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Calendar size={14} className="text-zinc-400" />
+        <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-x-auto overflow-y-hidden pb-0.5 [-webkit-overflow-scrolling:touch] touch-pan-x overscroll-x-contain sm:flex-wrap sm:overflow-visible sm:pb-0">
+          <Calendar size={14} className="shrink-0 text-zinc-400" />
           {DATE_FILTER_OPTIONS.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => handleDateFilter(key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dateFilter === key ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-400'}`}
+              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all sm:px-3 ${dateFilter === key ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-white text-zinc-500 hover:border-zinc-400'}`}
             >
               {label}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+        <div className="grid grid-cols-1 gap-2 min-[960px]:grid-cols-3 sm:gap-2.5 2xl:gap-3">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:p-4">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Receita Operacional</p>
             <p className="text-2xl font-black text-emerald-600 mt-1">{fmt(receitaOperacional)}</p>
             <p className="text-[10px] text-zinc-400 mt-0.5">{financialStats?.totalPedidos || 0} pedidos no período</p>
           </div>
-          <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:p-4">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Reembolsos</p>
             <p className="text-2xl font-black text-amber-600 mt-1">{fmt(totalReembolsado)}</p>
             <p className="text-[10px] text-zinc-400 mt-0.5">Total reembolsado no período</p>
           </div>
-          <div className="bg-white border border-zinc-200 rounded-2xl p-4">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:p-4">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Receita Líquida</p>
             <p className="text-2xl font-black text-zinc-900 mt-1">{fmt(receitaLiquida)}</p>
             <p className="text-[10px] text-zinc-400 mt-0.5">Receita operacional menos reembolsos</p>
@@ -342,10 +343,10 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
         </div>
 
         {tab === 'despesas' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
-              <div className="xl:col-span-1 bg-white border border-zinc-200 rounded-2xl p-5">
-                <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mb-4">
+          <div className="space-y-3 2xl:space-y-4">
+            <div className="grid grid-cols-1 gap-2 min-[1100px]:grid-cols-4 sm:gap-3 2xl:gap-3">
+              <div className="min-w-0 rounded-2xl border border-zinc-200 bg-white p-3 sm:p-4 min-[1100px]:col-span-1 2xl:p-5">
+                <div className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center mb-3 2xl:mb-4 2xl:h-11 2xl:w-11 2xl:rounded-2xl">
                   <DollarSign size={20} />
                 </div>
                 <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Resumo da lista</p>
@@ -353,14 +354,14 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                 <p className="text-sm text-zinc-500 mt-2">
                   {filtered.length} lançamento{filtered.length !== 1 ? 's' : ''} em {DATE_FILTER_LABELS[dateFilter].toLowerCase()}.
                 </p>
-                <div className="mt-4 pt-4 border-t border-zinc-100 space-y-1.5 text-xs text-zinc-500">
+                <div className="mt-3 pt-3 border-t border-zinc-100 space-y-1.5 text-xs text-zinc-500 2xl:mt-4 2xl:pt-4">
                   <p>Categoria ativa: <span className="font-bold text-zinc-700">{activeCategoryLabel}</span></p>
                   <p>Categoria em destaque: <span className="font-bold text-zinc-700">{leadingCategory ? `${leadingCategory.cat} (${fmt(leadingCategory.total)})` : 'Sem dados no filtro atual'}</span></p>
                 </div>
               </div>
 
               {summaryByRange.map(summary => (
-                <div key={summary.key} className="bg-white border border-zinc-200 rounded-2xl p-4">
+                <div key={summary.key} className="rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:p-4">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">{summary.label}</p>
                   <p className="text-2xl font-black text-zinc-900 mt-1">{fmt(summary.total)}</p>
                   <p className="text-[11px] text-zinc-500 mt-2">
@@ -370,8 +371,8 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
               ))}
             </div>
 
-            <div className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:space-y-3 2xl:p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between min-w-0">
                 <div>
                   <p className="text-sm font-black text-zinc-900">Filtros rápidos</p>
                   <p className="text-xs text-zinc-400">
@@ -383,13 +384,13 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <Filter size={14} className="text-zinc-400" />
+              <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-x-auto overflow-y-hidden pb-0.5 [-webkit-overflow-scrolling:touch] touch-pan-x overscroll-x-contain sm:flex-wrap sm:overflow-visible sm:pb-0">
+                <Filter size={14} className="shrink-0 text-zinc-400" />
                 {['Todas', ...CATEGORIAS].map(category => (
                   <button
                     key={category}
                     onClick={() => setCatFilter(category)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${catFilter === category ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-400'}`}
+                    className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all sm:px-3 ${catFilter === category ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-white text-zinc-500 hover:border-zinc-400'}`}
                   >
                     {category}
                   </button>
@@ -402,7 +403,7 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                 <div className="w-7 h-7 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 bg-white border border-dashed border-zinc-200 rounded-2xl">
+              <div className="flex flex-col items-center justify-center py-10 sm:py-12 bg-white border border-dashed border-zinc-200 rounded-2xl">
                 <TrendingDown size={40} className="text-zinc-200 mb-3" />
                 <p className="text-zinc-500 font-medium">
                   Nenhuma despesa encontrada em {DATE_FILTER_LABELS[dateFilter].toLowerCase()} para {activeCategoryLabel.toLowerCase()}.
@@ -415,8 +416,8 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                 </button>
               </div>
             ) : (
-              <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-                <div className="px-4 py-4 border-b border-zinc-200 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div className="flex min-w-0 flex-col gap-2 border-b border-zinc-200 px-3 py-2.5 sm:flex-row sm:items-end sm:justify-between sm:px-4 2xl:py-4">
                   <div>
                     <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Lançamentos</p>
                     <p className="text-lg font-black text-zinc-900 mt-1">Leitura rápida dos gastos</p>
@@ -428,7 +429,7 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                   </div>
                 </div>
 
-                <div className="p-4 space-y-4">
+                <div className="min-w-0 space-y-2 p-2.5 sm:space-y-3 sm:p-3 2xl:space-y-4 2xl:p-4">
                   {groupedExpenses.map(group => (
                     <div key={group.key} className="border border-zinc-200 rounded-2xl overflow-hidden">
                       <div className="px-4 py-3 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between gap-3">
@@ -458,7 +459,7 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                                 </div>
 
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-bold text-zinc-900 text-sm sm:text-base break-words">{expense.description}</p>
+                                  <p className="min-w-0 truncate font-bold text-zinc-900 text-sm sm:text-base" title={expense.description}>{expense.description}</p>
                                   <div className="flex flex-wrap items-center gap-2 mt-2">
                                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${CAT_COLORS[category] || 'bg-zinc-100 text-zinc-600'}`}>
                                       {category}
@@ -501,7 +502,7 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                 <div className="w-7 h-7 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
               </div>
             ) : caixaHistory.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 bg-white border border-dashed border-zinc-200 rounded-2xl">
+              <div className="flex flex-col items-center justify-center py-10 sm:py-12 bg-white border border-dashed border-zinc-200 rounded-2xl">
                 <Banknote size={40} className="text-zinc-200 mb-3" />
                 <p className="text-zinc-400 font-medium">Nenhum histórico de caixa</p>
               </div>
@@ -555,21 +556,21 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
 
       <AnimatePresence>
         {showAdd && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
             <motion.div
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl"
+              className="my-auto flex max-h-[min(92dvh,100svh)] min-h-0 w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-h-[min(90vh,560px)] sm:rounded-2xl"
             >
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-black text-zinc-900">Nova Despesa</h3>
-                <button onClick={() => setShowAdd(false)} className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-400">
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 py-3 sm:px-5 sm:py-3 2xl:px-6 2xl:py-4">
+                <h3 className="text-base font-black text-zinc-900 2xl:text-lg">Nova Despesa</h3>
+                <button type="button" onClick={() => setShowAdd(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100">
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 2xl:space-y-4 2xl:px-6 2xl:py-4">
                 <div>
                   <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Descrição</label>
                   <input
@@ -608,17 +609,19 @@ export default function FinanceScreen({ token, segmento: _segmento }: { token: s
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-5">
+              <div className="flex shrink-0 gap-2 border-t border-zinc-100 bg-white px-3 py-3 sm:gap-3 sm:px-5 2xl:px-6 2xl:py-4">
                 <button
+                  type="button"
                   onClick={() => setShowAdd(false)}
-                  className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all"
+                  className="flex-1 rounded-xl bg-zinc-100 py-2.5 text-sm font-bold transition-all hover:bg-zinc-200"
                 >
                   Cancelar
                 </button>
                 <button
+                  type="button"
                   onClick={handleAdd}
                   disabled={saving || !form.description || !form.amount}
-                  className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                  className="flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:opacity-50"
                 >
                   {saving ? 'Salvando...' : 'Salvar'}
                 </button>

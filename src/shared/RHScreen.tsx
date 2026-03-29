@@ -15,6 +15,7 @@ import {
   ChevronLeft, ChevronRight, Search, Camera, Upload,
   Bell, Palmtree, Gift,
 } from 'lucide-react';
+import { adminScreenPagePaddingClass } from '../components/ui/screenChrome';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Func {
@@ -266,17 +267,17 @@ export default function RHScreen({ token }: { token: string }) {
   const activeTabCopy = TAB_COPY[tab];
 
   return (
-    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full overflow-y-auto bg-zinc-50">
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
-        <div>
-          <h1 className="text-2xl font-black text-zinc-900">Modulo RH</h1>
-          <p className="text-sm text-zinc-400 mt-0.5">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
+    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-zinc-50">
+      <div className={`max-w-7xl mx-auto min-w-0 ${adminScreenPagePaddingClass} space-y-2 sm:space-y-3 2xl:space-y-4`}>
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-black text-zinc-900 2xl:text-2xl">Modulo RH</h1>
+          <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-snug 2xl:text-sm">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2 flex-wrap">
-          <div className="flex bg-white border border-zinc-200 rounded-xl p-1 gap-0.5 overflow-x-auto w-full sm:w-auto">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 flex-wrap min-w-0">
+          <div className="flex bg-white border border-zinc-200 rounded-xl p-0.5 sm:p-1 gap-0.5 overflow-x-auto overflow-y-hidden w-full sm:w-auto min-w-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key as any)}
-                className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`}>
+                className={`flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] text-xs font-bold transition-all shrink-0 rounded-lg sm:gap-2 sm:px-3 sm:text-sm lg:min-h-0 lg:py-1.5 2xl:px-3.5 2xl:py-2 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`}>
                 {t.icon}{t.label}
               </button>
             ))}
@@ -286,27 +287,27 @@ export default function RHScreen({ token }: { token: string }) {
             href={`/kiosk/ponto/${slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-all active:scale-95 no-underline"
+            className="flex items-center justify-center gap-2 px-3 py-2 min-h-[40px] text-xs font-bold sm:px-4 sm:py-2.5 sm:min-h-[44px] sm:text-sm lg:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all active:scale-95 no-underline shrink-0"
           >
             <Fingerprint size={14} />
             Bater Ponto
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-4xl">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">{TABS.find((item) => item.key === tab)?.label}</p>
-              <h2 className="mt-1 text-lg font-black text-zinc-900">{activeTabCopy.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600">{activeTabCopy.subtitle}</p>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:p-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between min-w-0 2xl:gap-3">
+            <div className="max-w-4xl min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 2xl:text-[11px]">{TABS.find((item) => item.key === tab)?.label}</p>
+              <h2 className="mt-0.5 text-sm sm:text-base font-black text-zinc-900 2xl:text-lg 2xl:mt-1">{activeTabCopy.title}</h2>
+              <p className="mt-1 text-[11px] sm:text-xs leading-relaxed text-zinc-600 2xl:mt-1.5 2xl:text-sm">{activeTabCopy.subtitle}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5 shrink-0 2xl:gap-2">
               {activeTabCopy.shortcuts.map((shortcut) => (
                 <button
                   key={shortcut.key}
                   type="button"
                   onClick={() => setTab(shortcut.key)}
-                  className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-bold text-zinc-700 hover:bg-zinc-100"
+                  className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] font-bold text-zinc-700 hover:bg-zinc-100 sm:text-xs 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-sm"
                 >
                   {shortcut.label}
                 </button>
@@ -480,7 +481,7 @@ function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (fu
               <p className="text-xs text-zinc-500 mt-1">Use esta grade para sair da triagem e entrar na mesma gestao detalhada ja existente dentro de Funcionarios.</p>
             </div>
             {funcionariosFiltrados.length === 0 ? (
-              <div className="flex flex-col items-center py-16 text-zinc-400">
+              <div className="flex flex-col items-center py-10 sm:py-12 text-zinc-400">
                 <Users size={44} className="mb-3 opacity-20" />
                 <p className="font-semibold">Nenhum colaborador encontrado</p>
               </div>
@@ -797,7 +798,7 @@ function TabLista({
       </div>
 
       {loading ? <LoadSpinner/> : filtered.length===0 ? (
-        <div className="flex flex-col items-center py-20 text-zinc-400"><Users size={48} className="mb-4 opacity-20"/><p className="font-semibold">Nenhum funcionário ativo</p></div>
+        <div className="flex flex-col items-center py-12 sm:py-16 2xl:py-20 text-zinc-400"><Users size={48} className="mb-3 opacity-20 sm:mb-4"/><p className="font-semibold">Nenhum funcionário ativo</p></div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(f=>(
@@ -1015,7 +1016,7 @@ function TabLista({
         title={`Ficha completa RH - ${selected?.nome}`}
         wide
       >
-        <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+        <div className="space-y-4 pr-0.5 2xl:space-y-6">
           {rhGestaoLoading && <p className="text-xs text-zinc-400">Carregando…</p>}
           {selected && (
             <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 text-sm text-zinc-700">
@@ -1781,33 +1782,33 @@ function TabEspelho({ token }: { token: string }) {
   return (
     <>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0 overflow-x-auto overflow-y-hidden pb-0.5 -mx-0.5 px-0.5 sm:mx-0 sm:px-0 sm:overflow-visible sm:pb-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none shrink-0 max-w-[min(100%,16rem)]">
           {funcs.filter(f=>f.status==='ativo').map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
-        <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl px-2">
+        <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl px-2 shrink-0">
           <button onClick={()=>chgMonth(-1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronLeft size={16}/></button>
           <span className="text-sm font-bold text-zinc-900 w-28 text-center">{MESES[month-1]} {year}</span>
           <button onClick={()=>chgMonth(1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronRight size={16}/></button>
         </div>
-        <button onClick={fetchEspelho} className="p-2 bg-white border border-zinc-200 rounded-xl text-zinc-400 hover:text-zinc-700"><RefreshCw size={15}/></button>
+        <button onClick={fetchEspelho} className="p-2 bg-white border border-zinc-200 rounded-xl text-zinc-400 hover:text-zinc-700 shrink-0"><RefreshCw size={15}/></button>
         {espelho && (
-          <button onClick={exportarPDF} className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all">
+          <button onClick={exportarPDF} className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0">
             <Download size={14}/>Exportar PDF
           </button>
         )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-3 sm:p-4 min-w-0">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between min-w-0">
+          <div className="max-w-3xl min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Espelho</p>
-            <h2 className="mt-1 text-xl font-black text-zinc-900">Operacao do dia e conferencia mensal de presenca</h2>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+            <h2 className="mt-1 text-lg sm:text-xl font-black text-zinc-900">Operacao do dia e conferencia mensal de presenca</h2>
+            <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-zinc-600">
               Aqui fica a area principal para resolver ponto, faltas, atrasos, folgas, atestados, ponto manual, HE e compensacao com banco.
             </p>
           </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 min-w-[260px]">
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm text-zinc-600 min-w-0 w-full lg:max-w-xs xl:min-w-[240px]">
             <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Leitura rapida</p>
             <p className="mt-1 font-semibold text-zinc-800">Clique em um dia para resolver a operacao.</p>
             <p className="mt-1 text-xs leading-relaxed">
@@ -1815,16 +1816,16 @@ function TabEspelho({ token }: { token: string }) {
             </p>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+        <div className="mt-3 grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 sm:px-4 sm:py-3 min-w-0">
             <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Resolver o dia</p>
             <p className="mt-1 text-sm font-semibold text-emerald-950">Ponto, ocorrencias, HE e compensacao sem sair do calendario.</p>
           </div>
-          <div className="rounded-xl border border-orange-200 bg-orange-50/70 px-4 py-3">
+          <div className="rounded-xl border border-orange-200 bg-orange-50/70 px-3 py-2.5 sm:px-4 sm:py-3 min-w-0 sm:col-span-2 lg:col-span-1">
             <p className="text-[10px] font-black uppercase tracking-wider text-orange-700">Resumo do periodo</p>
             <p className="mt-1 text-sm font-semibold text-orange-950">HE apuradas, destino na folha, credito no banco e saldo para compensar.</p>
           </div>
-          <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 px-4 py-3">
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 px-3 py-2.5 sm:px-4 sm:py-3 min-w-0 sm:col-span-2 lg:col-span-1">
             <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Conferencia mensal</p>
             <p className="mt-1 text-sm font-semibold text-cyan-950">Visual do mes para validar presenca e encontrar pendencias rapido.</p>
           </div>
@@ -1834,7 +1835,7 @@ function TabEspelho({ token }: { token: string }) {
       {loading ? <LoadSpinner/> : espelho ? (
         <>
           {/* Resumo presença / descontos */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-7 gap-2 sm:gap-3 min-w-0">
             <SCard label="Dias com ponto" value={espelho.resumo.diasTrabalhados} color="emerald" hint="Presencas validadas no espelho."/>
             <SCard label="Faltas" value={espelho.resumo.totalFaltas} color="red" hint="Dias sem comparecimento."/>
             <SCard label="Folgas" value={espelho.resumo.diasFolga} color="blue" hint="Folgas registradas no periodo."/>
@@ -1852,7 +1853,7 @@ function TabEspelho({ token }: { token: string }) {
             const saldoDisp = espelho.resumo.saldoBancoHorasMin ?? 0;
             const tudoNaFolha = heApur > 0 && heFolha >= heApur && heBancoMes === 0;
             return (
-              <div className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-orange-50/80 to-cyan-50/40 p-4 space-y-3">
+              <div className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-orange-50/80 to-cyan-50/40 p-3 sm:p-4 space-y-2 sm:space-y-3 min-w-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-[11px] font-black uppercase tracking-wider text-zinc-600">
                     Resumo HE e compensação · {MESES[month - 1]} {year}
@@ -1948,12 +1949,14 @@ function TabEspelho({ token }: { token: string }) {
           )}
 
           {/* Calendário */}
-          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-100 bg-zinc-50/80">
+          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
+            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-zinc-100 bg-zinc-50/80">
               <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Operacao do dia</p>
               <p className="mt-1 text-sm font-semibold text-zinc-900">Calendario para resolver ponto, ocorrencias, HE e compensacao.</p>
               <p className="mt-1 text-xs text-zinc-500">Clique em um dia para abrir a gestao do dia e corrigir o que ficou pendente.</p>
             </div>
+            <div className="overflow-x-auto min-w-0 overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
+              <div className="min-w-[520px]">
             <div className="grid grid-cols-7 border-b border-zinc-100">
               {DIAS_LABEL.map(d=><div key={d} className="py-2 text-center text-[10px] font-black text-zinc-400 uppercase tracking-wider">{d}</div>)}
             </div>
@@ -1999,24 +2002,28 @@ function TabEspelho({ token }: { token: string }) {
                 ));
               })()}
             </div>
+              </div>
+            </div>
           </div>
 
           {/* Tabela detalhada */}
-          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-zinc-100 bg-white">
+          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
+            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-zinc-100 bg-white">
               <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Conferencia detalhada</p>
               <p className="mt-1 text-sm font-semibold text-zinc-900">Linha a linha para revisar presenca e agir rapido quando houver divergencia.</p>
             </div>
-            <div className="grid grid-cols-7 px-4 py-2 bg-zinc-50 border-b border-zinc-100 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
+            <div className="overflow-x-auto min-w-0 overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
+              <div className="min-w-[720px]">
+            <div className="grid grid-cols-7 px-3 sm:px-4 py-2 bg-zinc-50 border-b border-zinc-100 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
               <span>Data</span><span>Status</span><span>Entrada</span><span>Saída</span><span>Atraso</span><span>HE</span><span>Ação no dia</span>
             </div>
-            <div className="divide-y divide-zinc-100 max-h-72 overflow-y-auto">
+            <div className="divide-y divide-zinc-100 max-h-[min(18rem,50vh)] sm:max-h-72 overflow-y-auto overscroll-y-contain">
               {espelho.dias
                 .filter(d => d.isExpediente || d.eventos?.some((e:any) => ['folga','atestado'].includes(e.tipo)))
                 .map(dia => {
                   const eventoDestaque = dia.eventos?.find((e:any) => ['folga','atestado'].includes(e.tipo));
                   return (
-                    <div key={dia.data} className="grid grid-cols-7 px-4 py-2.5 text-xs hover:bg-zinc-50 items-center">
+                    <div key={dia.data} className="grid grid-cols-7 px-3 sm:px-4 py-2.5 text-xs hover:bg-zinc-50 items-center">
                       <span className="font-medium text-zinc-600">{fmtDate(dia.data)}</span>
                       <div className="flex flex-col gap-0.5">
                         <span className={`w-fit px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_COLOR[dia.status]}`}>{STATUS_LABEL[dia.status]}</span>
@@ -2042,6 +2049,8 @@ function TabEspelho({ token }: { token: string }) {
                     </div>
                   );
                 })}
+            </div>
+              </div>
             </div>
           </div>
         </>
@@ -2765,17 +2774,17 @@ function TabFolha({ token }: { token: string }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0 overflow-x-auto overflow-y-hidden pb-0.5 -mx-0.5 px-0.5 sm:mx-0 sm:px-0 sm:overflow-visible sm:pb-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none shrink-0 max-w-[min(100%,16rem)]">
           {funcs.filter(f=>f.status==='ativo').map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
-        <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl px-2">
+        <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl px-2 shrink-0">
           <button onClick={()=>chgMonth(-1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronLeft size={16}/></button>
           <span className="text-sm font-bold text-zinc-900 w-28 text-center">{MESES[month-1]} {year}</span>
           <button onClick={()=>chgMonth(1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronRight size={16}/></button>
         </div>
         {folha && !evF && (
-          <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all">
+          <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-zinc-800 transition-all shrink-0">
             <Download size={15} />
             Imprimir / PDF
           </button>
@@ -2783,13 +2792,13 @@ function TabFolha({ token }: { token: string }) {
       </div>
 
       {loading ? <LoadSpinner/> : folha && folha.funcionario && folhaView ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-            <div className="p-6 space-y-5">
-              <div className="flex justify-between items-start pb-5 border-b border-zinc-200">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4 min-w-0">
+            <div className="xl:col-span-2 bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
+            <div className="p-3 sm:p-4 space-y-3 min-w-0 2xl:p-6 2xl:space-y-5">
+              <div className="flex justify-between items-start border-b border-zinc-200 pb-3 2xl:pb-5">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-xl font-black text-zinc-900">
+                    <h1 className="text-base font-black text-zinc-900 sm:text-lg 2xl:text-xl">
                       {evF ? 'Pagamentos por competencia' : 'Folha de pagamento da competencia'}
                     </h1>
                     {paySummary && (
@@ -3144,8 +3153,8 @@ function TabFolha({ token }: { token: string }) {
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+          <div className="space-y-3 sm:space-y-4 min-w-0">
+            <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
                 Situação da competência
               </p>
@@ -3228,7 +3237,7 @@ function TabFolha({ token }: { token: string }) {
               </div>
             </div>
 
-            <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+            <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
                 Pagamentos da competência
               </p>
@@ -3396,10 +3405,22 @@ function Modal({ open, onClose, title, children, wide=false }: { open:boolean; o
   return (
     <AnimatePresence>
       {open&&(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <motion.div initial={{scale:0.93,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.93,opacity:0}} className={`bg-white rounded-2xl p-6 w-full shadow-2xl my-4 ${wide?'max-w-2xl':'max-w-md'}`}>
-            <div className="flex items-center justify-between mb-5"><h3 className="text-lg font-black text-zinc-900">{title}</h3><button onClick={onClose} className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-400"><X size={18}/></button></div>
-            {children}
+        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <motion.div
+            initial={{ scale: 0.93, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.93, opacity: 0 }}
+            className={`my-auto flex max-h-[min(92dvh,100svh)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3 2xl:px-6 2xl:py-4">
+              <h3 className="min-w-0 pr-2 text-base font-black text-zinc-900 2xl:text-lg">{title}</h3>
+              <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 2xl:p-1.5" aria-label="Fechar">
+                <X size={18}/>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 2xl:px-6 2xl:py-4">
+              {children}
+            </div>
           </motion.div>
         </div>
       )}
@@ -3409,4 +3430,4 @@ function Modal({ open, onClose, title, children, wide=false }: { open:boolean; o
 function MBtns({ onCancel, onConfirm, saving, label }: { onCancel:()=>void; onConfirm:()=>void; saving:boolean; label:string }) {
   return <div className="flex gap-3 mt-5"><button onClick={onCancel} className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold">Cancelar</button><button onClick={onConfirm} disabled={saving} className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">{saving?<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:label}</button></div>;
 }
-function LoadSpinner() { return <div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>; }
+function LoadSpinner() { return <div className="flex justify-center py-10 sm:py-12"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>; }

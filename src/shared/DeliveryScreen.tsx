@@ -559,7 +559,7 @@ function TabPainel({ token }: { token: string }) {
 
       {/* Kanban */}
       {loading ? (
-        <div className="flex justify-center py-20" role="status" aria-label="Carregando pedidos">
+        <div className="flex justify-center py-12 sm:py-16 2xl:py-20" role="status" aria-label="Carregando pedidos">
           <Spinner className="h-8 w-8" />
         </div>
       ) : statusFilter === 'ativos' ? (
@@ -1145,7 +1145,7 @@ function TabClientes({ token }: { token: string }) {
       )}
 
       {loading ? (
-        <div className="flex justify-center py-16" role="status" aria-label="Carregando clientes">
+        <div className="flex justify-center py-10 sm:py-12" role="status" aria-label="Carregando clientes">
           <Spinner className="h-7 w-7" />
         </div>
       ) : (
@@ -1289,7 +1289,6 @@ function TabClientes({ token }: { token: string }) {
                 icon={Users}
                 title="Nenhum cliente encontrado"
                 description="Tente outro termo de busca ou limpe o filtro."
-                className="!py-12 !sm:py-14"
               />
             </div>
           )}
@@ -1490,7 +1489,6 @@ function TabMotoboys({ token }: { token: string }) {
                 icon={Truck}
                 title="Nenhum motoboy com entregas no período"
                 description="Altere o mês/ano ou aguarde novas entregas."
-                className="!py-12 !sm:py-14"
               />
             </div>
           )}
@@ -1552,7 +1550,7 @@ function TabRelatorio({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20" role="status" aria-label="Carregando relatório">
+      <div className="flex justify-center py-12 sm:py-16 2xl:py-20" role="status" aria-label="Carregando relatório">
         <Spinner className="h-8 w-8" />
       </div>
     );
@@ -1755,7 +1753,6 @@ function TabRelatorio({ token }: { token: string }) {
                 icon={Tag}
                 title="Nenhum evento registrado ainda"
                 description="Quando clientes aceitarem sugestões no cardápio, os pares aparecerão aqui."
-                className="!py-10 !sm:py-12"
               />
             )}
           </div>
@@ -1868,7 +1865,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16" role="status" aria-label="Carregando configurações">
+      <div className="flex justify-center py-10 sm:py-12" role="status" aria-label="Carregando configurações">
         <Spinner className="h-7 w-7" />
       </div>
     );

@@ -5,7 +5,7 @@
 
 /** Título principal de tela (Pedidos, Operação, Delivery). */
 export const adminScreenTitleClass =
-  'text-lg sm:text-xl md:text-2xl font-black text-zinc-900 dark:text-zinc-100';
+  'text-base sm:text-lg md:text-xl 2xl:text-2xl font-black text-zinc-900 dark:text-zinc-100';
 
 /** Subtítulo sob o título (tom e espaçamento alinhados). */
 export const adminScreenSubtitleClass =
@@ -15,9 +15,9 @@ export const adminScreenSubtitleClass =
 export const adminScreenHeaderRowClass =
   'flex flex-col gap-2 sm:gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0';
 
-/** Padding de página usado em listas admin (ex.: Pedidos). */
+/** Padding de página — denso em notebook/tablet; `2xl` alinha ao desktop largo. */
 export const adminScreenPagePaddingClass =
-  'p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-4 md:p-5 lg:p-6 lg:pb-6';
+  'p-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-3 sm:pb-3 md:p-4 md:pb-4 lg:p-4 lg:pb-4 xl:p-5 xl:pb-5 2xl:p-6 2xl:pb-6';
 
 /** Rótulos de filtro / campo em cards (tamanho mínimo legível). */
 export const adminFormLabelClass =
@@ -74,4 +74,4 @@ export const adminOpsFilterCardClass =
 
 /** Blocos de formulário / resumo em fundo zinc (painéis internos em Produtos). */
 export const adminOpsMutedBlockClass =
-  'min-w-0 max-w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 sm:px-4 sm:py-3 dark:border-zinc-800 dark:bg-zinc-900/40';
+  'min-w-0 max-w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 sm:px-4 sm:py-2.5 2xl:py-3 dark:border-zinc-800 dark:bg-zinc-900/40';

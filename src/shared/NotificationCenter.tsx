@@ -215,11 +215,11 @@ export default function NotificationCenter({
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 py-2 sm:px-3 sm:py-3">
               {carregandoHist ? (
-                <div className="flex items-center justify-center py-24">
+                <div className="flex items-center justify-center py-12 sm:py-16">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-zinc-200" />
                 </div>
               ) : filtrados.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-6 py-20 text-center">
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-5 py-12 text-center sm:px-6 sm:py-14 2xl:py-16">
                   <Bell size={40} className="mb-3 text-zinc-500/60" />
                   <p className="text-sm font-semibold text-zinc-200">
                     {filtro === 'nao_lidos' ? 'Nenhuma notificacao nao lida' : 'Nenhuma notificacao aqui'}

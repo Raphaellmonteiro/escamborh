@@ -135,9 +135,9 @@ export default function SystemLogsScreen({ token }: Props) {
 
       <div className="flex-1 overflow-y-auto px-8 pb-8">
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-zinc-400 text-sm">Carregando logs...</div>
+          <div className="flex items-center justify-center py-10 text-zinc-400 text-sm sm:py-14 2xl:py-20">Carregando logs...</div>
         ) : filtrados.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
+          <div className="flex flex-col items-center justify-center py-10 text-zinc-400 sm:py-14 2xl:py-20">
             <Activity size={40} className="mb-3 opacity-20" />
             <p className="font-semibold">Nenhum log encontrado</p>
           </div>
@@ -146,11 +146,11 @@ export default function SystemLogsScreen({ token }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50">
-                  <th className="text-left px-5 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Data/Hora</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Usuario</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Cargo</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Acao</th>
-                  <th className="text-left px-5 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Detalhes</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-black text-zinc-400 uppercase tracking-wider sm:px-5 sm:py-2.5 2xl:px-5 2xl:py-3">Data/Hora</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-black text-zinc-400 uppercase tracking-wider sm:px-5 sm:py-2.5 2xl:px-5 2xl:py-3">Usuario</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-black text-zinc-400 uppercase tracking-wider sm:px-5 sm:py-2.5 2xl:px-5 2xl:py-3">Cargo</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-black text-zinc-400 uppercase tracking-wider sm:px-5 sm:py-2.5 2xl:px-5 2xl:py-3">Acao</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-black text-zinc-400 uppercase tracking-wider sm:px-5 sm:py-2.5 2xl:px-5 2xl:py-3">Detalhes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
@@ -159,19 +159,19 @@ export default function SystemLogsScreen({ token }: Props) {
                   const cargoCor = CARGO_COR[log.cargo] || CARGO_COR.atendente;
                   return (
                     <tr key={log.id} className="hover:bg-zinc-50 transition-colors">
-                      <td className="px-5 py-3 text-zinc-500 text-xs whitespace-nowrap">{fmt(log.created_at)}</td>
-                      <td className="px-5 py-3 font-bold text-zinc-800">{log.usuario_nome}</td>
-                      <td className="px-5 py-3">
+                      <td className="px-4 py-2 text-zinc-500 text-xs whitespace-nowrap sm:px-5 sm:py-2.5 2xl:py-3">{fmt(log.created_at)}</td>
+                      <td className="px-4 py-2 font-bold text-zinc-800 sm:px-5 sm:py-2.5 2xl:py-3">{log.usuario_nome}</td>
+                      <td className="px-4 py-2 sm:px-5 sm:py-2.5 2xl:py-3">
                         <span className={'px-2 py-0.5 rounded-lg text-[10px] font-black capitalize ' + cargoCor}>
                           {log.cargo}
                         </span>
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-4 py-2 sm:px-5 sm:py-2.5 2xl:py-3">
                         <span className={'px-2.5 py-1 rounded-lg text-[10px] font-black ' + acaoCfg.cor}>
                           {acaoCfg.label}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-zinc-500 text-xs max-w-xs truncate">{log.detalhes || '-'}</td>
+                      <td className="px-4 py-2 text-zinc-500 text-xs max-w-xs truncate sm:px-5 sm:py-2.5 2xl:py-3">{log.detalhes || '-'}</td>
                     </tr>
                   );
                 })}

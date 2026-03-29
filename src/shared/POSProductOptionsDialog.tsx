@@ -12,6 +12,8 @@ type POSProductOptionsDialogProps = {
   produto: ProductOptionsProduto;
   onClose: () => void;
   onAdicionar: (item: ProductOptionsCartItem) => void;
+  /** Enquanto a API de variações/opções do PDV carrega; bloqueia confirmar até os dados chegarem. */
+  carregandoOpcoes?: boolean;
 };
 
 const posProductOptionsTheme = buildDeliveryCardapioTheme('dark_premium');
@@ -20,6 +22,7 @@ export default function POSProductOptionsDialog({
   produto,
   onClose,
   onAdicionar,
+  carregandoOpcoes = false,
 }: POSProductOptionsDialogProps) {
   return (
     <CardapioThemeShell theme={posProductOptionsTheme}>
@@ -29,6 +32,7 @@ export default function POSProductOptionsDialog({
             produto={produto}
             addDestination="pedido"
             visualVariant="pos"
+            carregandoOpcoes={carregandoOpcoes}
             onClose={onClose}
             onAdicionar={onAdicionar}
           />

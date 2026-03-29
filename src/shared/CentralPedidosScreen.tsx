@@ -402,17 +402,22 @@ export default function CentralPedidosScreen({
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900 sm:px-4 sm:py-3 lg:px-6 lg:py-4">
+      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-900 sm:px-3 sm:py-2.5 2xl:px-6 2xl:py-3.5">
         <ScreenHeader
           titleAs="h1"
-          titleClassName="flex items-center gap-2"
+          className="gap-1.5 sm:gap-2 2xl:gap-3"
+          titleClassName="flex items-center gap-1.5 2xl:gap-2 text-base 2xl:text-2xl"
           title={
             <>
-              <LayoutGrid className="shrink-0 text-zinc-700 dark:text-zinc-300" size={20} />
+              <LayoutGrid className="shrink-0 text-zinc-700 dark:text-zinc-300" size={18} strokeWidth={2.25} />
               Operação
             </>
           }
-          subtitle="Visão ao vivo do dia · foco nos ativos · ações rápidas no card"
+          subtitle={
+            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5 2xl:text-sm 2xl:mt-0.5">
+              Ao vivo · hoje · ações no card
+            </p>
+          }
           meta={
             <span className={`${adminScreenMetaHintClass} hidden sm:inline`}>
               Até {CENTRAL_ORDERS_LIMIT} pedidos (hoje)
@@ -422,23 +427,23 @@ export default function CentralPedidosScreen({
             <Button
               type="button"
               variant="secondary"
-              className="!min-h-[40px] !px-3 !py-2 !text-xs"
+              className="!min-h-[34px] !px-2.5 !py-1.5 !text-[11px] 2xl:!min-h-[40px] 2xl:!px-3 2xl:!py-2 2xl:!text-xs"
               onClick={() => void fetchOrders()}
               disabled={loading}
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
               Atualizar
             </Button>
           }
         />
 
-        <div className="mt-3 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
+        <div className="mt-2 flex flex-wrap gap-1 sm:mt-2.5 sm:gap-1.5 2xl:mt-3 2xl:gap-2">
           {FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setChannelFilter(f.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border min-h-[40px] transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3.5 2xl:py-2 2xl:text-xs transition-colors ${
                 channelFilter === f.id
                   ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                   : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -450,39 +455,37 @@ export default function CentralPedidosScreen({
           <button
             type="button"
             onClick={() => setShowClosed((current) => !current)}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold border min-h-[40px] transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
               showClosed
                 ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                 : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
             }`}
             title={showClosed ? 'Ocultar pedidos encerrados' : 'Mostrar pedidos encerrados'}
           >
-            {showClosed ? 'Ocultar encerrados' : `Ver encerrados (${buckets.encerrado.length})`}
+            {showClosed ? 'Ocultar encerrados' : `Encerrados (${buckets.encerrado.length})`}
           </button>
           <button
             type="button"
             onClick={() => setCompactMode((current) => !current)}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold border min-h-[40px] transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
               compactMode
                 ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                 : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
             }`}
             title={compactMode ? 'Voltar ao modo normal' : 'Reduzir altura dos cards'}
           >
-            {compactMode ? 'Modo compacto ativo' : 'Compactar cards'}
+            {compactMode ? 'Compacto' : 'Compactar'}
           </button>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:mt-3 sm:gap-2">
-          <span className={adminSectionEyebrowClass}>
-            Operação
-          </span>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:mt-2 sm:gap-1.5 2xl:mt-3 2xl:gap-2">
+          <span className={`${adminSectionEyebrowClass} text-[10px] 2xl:text-xs`}>Filtros</span>
           {QUICK_FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setQuickFilter(f.id)}
-              className={`min-h-[40px] rounded-full border px-3 py-2 text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5 ${
+              className={`min-h-[34px] rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors sm:min-h-0 sm:py-1 2xl:min-h-0 2xl:px-3 2xl:py-1.5 2xl:text-xs ${
                 quickFilter === f.id
                   ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                   : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
@@ -494,7 +497,7 @@ export default function CentralPedidosScreen({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:p-4 sm:pb-4 lg:p-6 lg:pb-6">
+      <div className="min-h-0 flex-1 space-y-2 p-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:space-y-2.5 sm:p-3 sm:pb-3 2xl:space-y-4 2xl:p-6 2xl:pb-6">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/40 dark:border-red-900 px-4 py-3 text-sm text-red-800 dark:text-red-200">
             {error}
@@ -502,7 +505,7 @@ export default function CentralPedidosScreen({
         )}
 
         {loading && orders.length === 0 ? (
-          <div className="flex justify-center py-24">
+          <div className="flex justify-center py-10 sm:py-12 2xl:py-16">
             <Spinner />
           </div>
         ) : !loading && orders.length === 0 && !error ? (
@@ -513,35 +516,35 @@ export default function CentralPedidosScreen({
         ) : (
           <>
             {!loading && orders.length > 0 && filtered.length === 0 && (
-              <p className="text-sm text-center text-zinc-500 dark:text-zinc-400 mb-2">
+              <p className="text-xs text-center text-zinc-500 dark:text-zinc-400 mb-1 2xl:text-sm 2xl:mb-2">
                 Nenhum pedido corresponde ao filtro selecionado.
               </p>
             )}
-            <div className="-mx-3 overflow-x-auto overflow-y-hidden px-3 pb-2 [scrollbar-gutter:stable] sm:mx-0 sm:px-0">
-              <div className="flex min-w-max gap-2.5 sm:min-w-0 sm:grid sm:grid-cols-2 sm:items-start sm:gap-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-6">
+            <div className="-mx-2 overflow-x-auto overflow-y-hidden px-2 pb-1.5 [scrollbar-gutter:stable] sm:mx-0 sm:px-0 sm:pb-2 2xl:-mx-0 2xl:pb-2">
+              <div className="flex min-w-max gap-2 sm:min-w-0 sm:grid sm:grid-cols-2 sm:items-start md:grid-cols-3 lg:grid-cols-3 lg:gap-2.5 xl:grid-cols-4 xl:gap-2.5 2xl:grid-cols-4 2xl:gap-3 min-[1800px]:grid-cols-6">
                 {COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado').map((col) => {
                   const tone = getColumnTone(col.id);
                   return (
                   <div
                     key={col.id}
-                    className={`flex w-[min(100vw-1.5rem,300px)] flex-shrink-0 flex-col rounded-2xl border shadow-sm shadow-zinc-950/[0.02] min-h-[min(380px,55vh)] max-h-[min(680px,72vh)] sm:w-auto sm:min-h-[min(420px,62vh)] sm:max-h-[min(720px,78vh)] ${tone.shell}`}
+                    className={`flex w-[min(100vw-1.25rem,272px)] flex-shrink-0 flex-col rounded-xl border shadow-sm shadow-zinc-950/[0.02] min-h-[min(260px,46vh)] max-h-[min(600px,66vh)] sm:w-auto sm:min-h-[min(300px,50vh)] sm:max-h-[min(640px,70vh)] 2xl:rounded-2xl 2xl:min-h-[min(420px,62vh)] 2xl:max-h-[min(720px,78vh)] ${tone.shell}`}
                   >
-                    <div className={`shrink-0 px-3 py-2.5 ${tone.header}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    <div className={`shrink-0 px-2 py-1.5 2xl:px-3 2xl:py-2.5 ${tone.header}`}>
+                      <div className="flex items-center justify-between gap-1.5 2xl:gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 2xl:text-[11px]">
                           {col.title}
                         </span>
-                        <span className={`text-[10px] font-black tabular-nums px-2 py-0.5 rounded-lg ${tone.count}`}>
+                        <span className={`text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-md 2xl:text-[10px] 2xl:px-2 2xl:rounded-lg ${tone.count}`}>
                           {buckets[col.id].length}
                         </span>
                       </div>
                       {col.hint && (
-                        <p className="text-[10px] text-zinc-400 mt-0.5 leading-none">{col.hint}</p>
+                        <p className="hidden text-[10px] text-zinc-400 mt-0.5 leading-tight 2xl:block">{col.hint}</p>
                       )}
                     </div>
-                    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain p-1.5 sm:space-y-2 sm:p-2">
+                    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-1 sm:p-1.5 2xl:space-y-2 2xl:p-2">
                       {buckets[col.id].length === 0 ? (
-                        <div className={`mx-1 rounded-2xl border border-dashed py-6 px-3 text-center text-[11px] ${tone.empty}`}>
+                        <div className={`mx-0.5 rounded-lg border border-dashed py-2.5 px-2 text-center text-[10px] leading-snug 2xl:mx-1 2xl:rounded-2xl 2xl:py-5 2xl:px-3 2xl:text-[11px] ${tone.empty}`}>
                           Sem pedidos nesta etapa
                         </div>
                       ) : (
@@ -693,12 +696,12 @@ function OrderCard({
   };
 
   return (
-    <Card className={`!shadow-none !rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+    <Card className={`!shadow-none !rounded-xl 2xl:!rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
       urgent
         ? 'ring-1 ring-red-200/80 border-red-200 dark:ring-red-500/20 dark:border-red-500/30'
         : 'hover:border-zinc-300 dark:hover:border-zinc-600'
     }`}>
-      <div className={compactMode ? 'p-2.5' : 'p-3 sm:p-3.5'}>
+      <div className={compactMode ? 'p-2.5' : 'p-2.5 sm:p-3 2xl:p-3.5'}>
         <button
           type="button"
           onClick={onOpenDetail}

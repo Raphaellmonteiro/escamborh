@@ -1378,7 +1378,7 @@ const handleConfirmOrder = async (id: number) => {
 
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {historyLoading && (
-            <div className="text-center py-16 text-zinc-400">
+            <div className="text-center py-10 sm:py-12 text-zinc-400">
               <Clock size={28} className="mx-auto mb-3 opacity-50" />
               <p>Carregando historico...</p>
             </div>
@@ -1391,7 +1391,7 @@ const handleConfirmOrder = async (id: number) => {
           )}
 
           {!historyLoading && !historyError && historyEvents.length === 0 && (
-            <div className="text-center py-16 text-zinc-400">
+            <div className="text-center py-10 sm:py-12 text-zinc-400">
               <Clock size={28} className="mx-auto mb-3 opacity-50" />
               <p>Nenhum evento encontrado para este pedido.</p>
             </div>
