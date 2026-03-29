@@ -53,6 +53,10 @@ type DeliveryConfig = {
   desconto_primeiro_cliente_min_pedido?: number;
   /** Cardápio online: `dark_premium` (padrão) | `light_red` */
   theme_mode?: string;
+  /** Logo exclusiva do cardápio (sobrepõe logo em Configurações / uploads/logo). */
+  cardapio_online_logo_url?: string;
+  /** Até 4 URLs de banner do topo (`/uploads/delivery/...`), índices 0–3. */
+  cardapio_online_banner_urls?: string[];
 };
 
 type DeliveryAddressRecord = {
@@ -111,6 +115,17 @@ function parseDeliveryConfig(rawConfig?: string | null): DeliveryConfig {
   } catch {
     return {};
   }
+}
+
+function normalizeCardapioBannerSlots(dcfg: DeliveryConfig): string[] {
+  const raw = dcfg.cardapio_online_banner_urls;
+  const out = ['', '', '', ''];
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < 4; i++) {
+    const s = raw[i];
+    out[i] = typeof s === 'string' ? s.trim() : '';
+  }
+  return out;
 }
 
 function getCurrentDateInTimeZone() {
@@ -594,12 +609,14 @@ export function createDeliveryPublicRouter() {
         });
       }
 
-      const logo = (() => {
+      const logoPadrao = (() => {
         const dir = path.join(process.cwd(), 'uploads', 'logo');
         if (!fs.existsSync(dir)) return null;
         const file = fs.readdirSync(dir).find((name: string) => name.startsWith(`logo_${tenant.id}.`));
         return file ? `/uploads/logo/${file}` : null;
       })();
+      const logoCustom = String(dcfg.cardapio_online_logo_url || '').trim();
+      const logo_url = logoCustom || logoPadrao;
 
       const categoriasMap: Record<string, any[]> = {};
       for (const p of produtosComOpcoes) {
@@ -612,7 +629,7 @@ export function createDeliveryPublicRouter() {
       res.json({
         estabelecimento: tenant.nome_estabelecimento,
         nome_estabelecimento: tenant.nome_estabelecimento,
-        logo_url: logo,
+        logo_url,
         ativo: aberto,
         aberto,
         config: {
@@ -634,6 +651,7 @@ export function createDeliveryPublicRouter() {
           desconto_primeiro_cliente_min_pedido: dcfg.desconto_primeiro_cliente_min_pedido ?? 0,
           zonas_entrega: Array.isArray(dcfg.zonas_entrega) ? dcfg.zonas_entrega : [],
           theme_mode: dcfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium',
+          cardapio_banner_slots: normalizeCardapioBannerSlots(dcfg),
         },
         categorias,
         produtos: produtosComOpcoes,
@@ -643,19 +661,14 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  function normalizeDeliveryPhonePublic(value: unknown) {
-    return String(value || '').replace(/\D/g, '');
-  }
-
-  /** Lista pedidos do cliente por telefone (sem login) — delivery/retirada do tenant */
-  router.get('/:slug/orders', publicRateLimit, requireDeliveryTrackingPlan, async (req, res) => {
+  /** Lista pedidos do cliente — apenas com token JWT do delivery (mesma base que /cliente/pedidos) */
+  router.get('/:slug/orders', publicRateLimit, requireDeliveryTrackingPlan, authDeliveryCliente, async (req: any, res) => {
     try {
-      const tel = normalizeDeliveryPhonePublic(req.query.phone);
-      if (tel.length < 10) {
-        return res.status(400).json({ error: 'Informe um telefone valido (minimo 10 digitos)' });
-      }
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
+      if (Number(tenant.id) !== Number(req.tenantId)) {
+        return res.status(403).json({ error: 'Token nao corresponde a esta loja' });
+      }
 
       const rows = await qAll<{
         id: number;
@@ -668,18 +681,10 @@ export function createDeliveryPublicRouter() {
          FROM pedidos p
          WHERE p.tenant_id = ?
            AND p.canal IN ('delivery', 'retirada')
-           AND (
-             regexp_replace(coalesce(p.cliente_tel, ''), '[^0-9]', '', 'g') = ?
-             OR p.delivery_cliente_id IN (
-               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
-             )
-             OR p.cliente_id IN (
-               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
-             )
-           )
+           AND (p.cliente_id = ? OR p.delivery_cliente_id = ?)
          ORDER BY p.created_at DESC
          LIMIT 50`,
-        [tenant.id, tel, tenant.id, tel, tenant.id, tel]
+        [tenant.id, req.clienteId, req.clienteId]
       );
 
       res.json(
@@ -696,19 +701,18 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  /** Detalhe de um pedido — exige o mesmo telefone da listagem */
-  router.get('/:slug/orders/:orderId', publicRateLimit, requireDeliveryTrackingPlan, async (req, res) => {
+  /** Detalhe de um pedido — apenas se pertencer ao cliente autenticado */
+  router.get('/:slug/orders/:orderId', publicRateLimit, requireDeliveryTrackingPlan, authDeliveryCliente, async (req: any, res) => {
     try {
-      const tel = normalizeDeliveryPhonePublic(req.query.phone);
-      if (tel.length < 10) {
-        return res.status(400).json({ error: 'Informe um telefone valido (minimo 10 digitos)' });
-      }
       const orderId = Number(req.params.orderId);
       if (!Number.isInteger(orderId) || orderId <= 0) {
         return res.status(400).json({ error: 'Pedido invalido' });
       }
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
+      if (Number(tenant.id) !== Number(req.tenantId)) {
+        return res.status(403).json({ error: 'Token nao corresponde a esta loja' });
+      }
 
       const pedido = await q1<{
         id: number;
@@ -722,16 +726,8 @@ export function createDeliveryPublicRouter() {
          WHERE p.id = ?
            AND p.tenant_id = ?
            AND p.canal IN ('delivery', 'retirada')
-           AND (
-             regexp_replace(coalesce(p.cliente_tel, ''), '[^0-9]', '', 'g') = ?
-             OR p.delivery_cliente_id IN (
-               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
-             )
-             OR p.cliente_id IN (
-               SELECT id FROM delivery_clientes WHERE tenant_id = ? AND telefone = ?
-             )
-           )`,
-        [orderId, tenant.id, tel, tenant.id, tel, tenant.id, tel]
+           AND (p.cliente_id = ? OR p.delivery_cliente_id = ?)`,
+        [orderId, tenant.id, req.clienteId, req.clienteId]
       );
 
       if (!pedido) {

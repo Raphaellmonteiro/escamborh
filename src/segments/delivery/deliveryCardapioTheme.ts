@@ -220,8 +220,9 @@ const darkPremium: DeliveryCardapioTheme = {
   menuDropdown:
     'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-white/12 bg-zinc-950 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.38)]',
   menuItem:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors text-zinc-100 hover:bg-white/5',
-  menuItemActive: 'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/10 text-cyan-100',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors text-white hover:bg-white/5',
+  menuItemActive:
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/10 text-white',
   menuCategoryActive:
     'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold transition-colors bg-cyan-500/15 text-cyan-50 ring-1 ring-cyan-400/25',
   menuCategoryCountActive: 'text-xs font-black tabular-nums text-cyan-200',

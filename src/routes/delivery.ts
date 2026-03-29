@@ -1,8 +1,15 @@
 // src/routes/delivery.ts — rotas autenticadas do painel delivery
 import { Router, Request } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { buildPublicOrderItemFromPersisted, serializeOrderItemSelecoes } from '../services/ordersService';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
-import { requireAnyPermission } from '../middleware';
+import {
+  requireAnyPermission,
+  uploadDeliveryCardapioLogo,
+  uploadDeliveryCardapioBanner,
+  checkMagicBytes,
+} from '../middleware';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
@@ -45,6 +52,103 @@ function classifyCustomerActivity(totalValidOrders: number, daysWithoutPurchase:
   return 'inativo';
 }
 
+const DELIVERY_UPLOAD_URL_PREFIX = '/uploads/delivery/';
+
+function parseDeliveryCfgJson(raw: string | null | undefined): Record<string, any> {
+  try {
+    if (!raw || !String(raw).trim()) return {};
+    const o = JSON.parse(String(raw));
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+function bannerSlotsFromCfg(cfg: Record<string, any>): string[] {
+  const raw = cfg.cardapio_online_banner_urls;
+  const out = ['', '', '', ''];
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < 4; i++) {
+    const s = raw[i];
+    out[i] = typeof s === 'string' ? s.trim() : '';
+  }
+  return out;
+}
+
+async function mergeDeliveryConfigJson(tenantId: number, patch: (c: Record<string, any>) => void) {
+  const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+  const cfg = parseDeliveryCfgJson(row?.delivery_config ?? null);
+  patch(cfg);
+  await qRun('UPDATE clientes SET delivery_config=? WHERE id=?', [JSON.stringify(cfg), tenantId]);
+  return cfg;
+}
+
+function unlinkDeliveryUploadIfOwned(url: string, tenantId: number) {
+  const u = String(url || '').trim();
+  if (!u.startsWith(DELIVERY_UPLOAD_URL_PREFIX)) return;
+  const base = path.basename(u);
+  const match = /^delivery_(\d+)_/.exec(base);
+  if (!match || Number(match[1]) !== Number(tenantId)) return;
+  const full = path.join(process.cwd(), 'uploads', 'delivery', base);
+  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  if (!full.startsWith(dir)) return;
+  try {
+    if (fs.existsSync(full)) fs.unlinkSync(full);
+  } catch {}
+}
+
+function removeOtherDeliveryLogoVariants(tenantId: number, keepFilename: string) {
+  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  if (!fs.existsSync(dir)) return;
+  const prefix = `delivery_${tenantId}_cardapio_logo`;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith(prefix) && f !== keepFilename) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {}
+    }
+  }
+}
+
+function removeAllDeliveryCardapioLogoFiles(tenantId: number) {
+  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  if (!fs.existsSync(dir)) return;
+  const prefix = `delivery_${tenantId}_cardapio_logo`;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith(prefix)) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {}
+    }
+  }
+}
+
+function removeOtherDeliveryBannerVariants(tenantId: number, index: number, keepFilename: string) {
+  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  if (!fs.existsSync(dir)) return;
+  const prefix = `delivery_${tenantId}_banner_${index}.`;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith(prefix) && f !== keepFilename) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {}
+    }
+  }
+}
+
+function removeAllDeliveryBannerFilesForSlot(tenantId: number, index: number) {
+  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  if (!fs.existsSync(dir)) return;
+  const prefix = `delivery_${tenantId}_banner_${index}.`;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith(prefix)) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {}
+    }
+  }
+}
+
 export function createDeliveryRouter() {
   const router = Router();
 
@@ -70,6 +174,102 @@ export function createDeliveryRouter() {
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(rest), req.tenantId]);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.post(
+    '/cardapio-visual/logo',
+    uploadDeliveryCardapioLogo.single('logo'),
+    checkMagicBytes,
+    async (req: any, res) => {
+      try {
+        if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+        const tenantId = req.tenantId as number;
+        const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+        const prev = parseDeliveryCfgJson(row?.delivery_config ?? null);
+        const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
+        const newName = req.file.filename;
+        if (oldUrl && path.basename(oldUrl) !== newName) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        removeOtherDeliveryLogoVariants(tenantId, newName);
+        const publicUrl = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+        await mergeDeliveryConfigJson(tenantId, (c) => {
+          c.cardapio_online_logo_url = publicUrl;
+        });
+        res.json({ success: true, url: publicUrl });
+      } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message });
+      }
+    }
+  );
+
+  router.delete('/cardapio-visual/logo', async (req: any, res) => {
+    try {
+      const tenantId = req.tenantId as number;
+      const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+      const prev = parseDeliveryCfgJson(row?.delivery_config ?? null);
+      const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
+      if (oldUrl) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+      removeAllDeliveryCardapioLogoFiles(tenantId);
+      await mergeDeliveryConfigJson(tenantId, (c) => {
+        delete c.cardapio_online_logo_url;
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  router.post(
+    '/cardapio-visual/banner/:index',
+    uploadDeliveryCardapioBanner.single('banner'),
+    checkMagicBytes,
+    async (req: any, res) => {
+      try {
+        const idx = parseInt(String(req.params.index), 10);
+        if (!Number.isFinite(idx) || idx < 0 || idx > 3) {
+          return res.status(400).json({ success: false, message: 'Use índice 0 a 3' });
+        }
+        if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+        const tenantId = req.tenantId as number;
+        const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+        const cfg = parseDeliveryCfgJson(row?.delivery_config ?? null);
+        const slots = bannerSlotsFromCfg(cfg);
+        const oldUrl = slots[idx];
+        const newName = req.file.filename;
+        if (oldUrl && path.basename(oldUrl) !== newName) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        removeOtherDeliveryBannerVariants(tenantId, idx, newName);
+        const publicUrl = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+        slots[idx] = publicUrl;
+        await mergeDeliveryConfigJson(tenantId, (c) => {
+          c.cardapio_online_banner_urls = slots;
+        });
+        res.json({ success: true, url: publicUrl, index: idx });
+      } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message });
+      }
+    }
+  );
+
+  router.delete('/cardapio-visual/banner/:index', async (req: any, res) => {
+    try {
+      const idx = parseInt(String(req.params.index), 10);
+      if (!Number.isFinite(idx) || idx < 0 || idx > 3) {
+        return res.status(400).json({ success: false, message: 'Índice inválido' });
+      }
+      const tenantId = req.tenantId as number;
+      const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+      const cfg = parseDeliveryCfgJson(row?.delivery_config ?? null);
+      const slots = bannerSlotsFromCfg(cfg);
+      const oldUrl = slots[idx];
+      if (oldUrl) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+      removeAllDeliveryBannerFilesForSlot(tenantId, idx);
+      slots[idx] = '';
+      await mergeDeliveryConfigJson(tenantId, (c) => {
+        c.cardapio_online_banner_urls = slots;
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
 router.get('/pedidos', async (req: Request, res) => {

@@ -6,7 +6,7 @@ import {
   User, CreditCard, Banknote, Smartphone, Check,
   Truck, AlertCircle, DollarSign, TrendingUp, Users, Search,
   Printer, Navigation, MessageCircle, BarChart2, Tag, Plus, Trash2, ChefHat,
-  Zap, Globe, Bell, BellOff, Map, LayoutGrid, Palette, ListTree,
+  Zap, Globe, Bell, BellOff, Map, LayoutGrid, Palette, ListTree, Image, Upload,
 } from 'lucide-react';
 import { openPrintPreview } from '../utils/print';
 import { getOrderItemDetailText, orderHasAnyItemCustomization, splitOrderItemDetailLines } from '../utils/orderItemDisplay';
@@ -76,6 +76,10 @@ interface DeliveryConfig {
   evolution_url?: string; evolution_token?: string; evolution_instance?: string;
   theme_mode?: 'dark_premium' | 'light_red';
   automation?: Partial<TenantAutomationConfig>;
+  /** Logo só do cardápio online (`/uploads/delivery/...`). Vazio = logo geral (Configurações). */
+  cardapio_online_logo_url?: string;
+  /** Quatro banners do topo; índices 0–3. */
+  cardapio_online_banner_urls?: string[];
 }
 interface Dashboard {
   pedidos_hoje: number; faturamento_hoje: number;
@@ -167,6 +171,17 @@ const PAGS: Record<string, { label: string; icon: React.ReactNode }> = {
 
 const fmt      = (v: number) => `R$ ${(v||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 const fmtHour  = (d?: string) => d ? new Date(d.includes('T')?d:d.replace(' ','T')).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+
+function normalizeCfgBannerSlots(cfg: DeliveryConfig): string[] {
+  const raw = cfg.cardapio_online_banner_urls;
+  const out = ['', '', '', ''];
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < 4; i++) {
+    const s = raw[i];
+    out[i] = typeof s === 'string' ? s.trim() : '';
+  }
+  return out;
+}
 
 function deliveryPedidoTemItensDetalhe(p: Pedido): boolean {
   return Array.isArray(p.itens) && p.itens.length > 0;
@@ -1785,6 +1800,93 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
   const hdrs = { Authorization: `Bearer ${token}` };
 
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const bannerFileRef = useRef<HTMLInputElement>(null);
+  const [bannerPickIdx, setBannerPickIdx] = useState<number | null>(null);
+  const [fallbackLogoUrl, setFallbackLogoUrl] = useState<string | null>(null);
+  const [cvBusy, setCvBusy] = useState<'logo' | number | null>(null);
+
+  useEffect(() => {
+    if (lojaSub !== 'aparencia') return;
+    fetch('/api/settings/logo', { headers: hdrs })
+      .then((r) => r.json())
+      .then((d) => setFallbackLogoUrl(d.logo_url || null))
+      .catch(() => {});
+  }, [lojaSub, token]);
+
+  const onCardapioLogoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setCvBusy('logo');
+    try {
+      const fd = new FormData();
+      fd.append('logo', f);
+      const res = await fetch('/api/delivery/cardapio-visual/logo', { method: 'POST', headers: hdrs, body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.url) setCfg((c) => ({ ...c, cardapio_online_logo_url: d.url }));
+      else alert(d.message || d.error || 'Falha no envio da logo');
+    } catch {}
+    setCvBusy(null);
+  };
+
+  const removeCardapioLogo = async () => {
+    setCvBusy('logo');
+    try {
+      const res = await fetch('/api/delivery/cardapio-visual/logo', { method: 'DELETE', headers: hdrs });
+      if (res.ok) setCfg((c) => ({ ...c, cardapio_online_logo_url: undefined }));
+    } catch {}
+    setCvBusy(null);
+  };
+
+  const pickBanner = (idx: number) => {
+    setBannerPickIdx(idx);
+    setTimeout(() => bannerFileRef.current?.click(), 0);
+  };
+
+  const onBannerFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const idx = bannerPickIdx;
+    e.target.value = '';
+    setBannerPickIdx(null);
+    if (idx === null) return;
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setCvBusy(idx);
+    try {
+      const fd = new FormData();
+      fd.append('banner', f);
+      const res = await fetch(`/api/delivery/cardapio-visual/banner/${idx}`, {
+        method: 'POST',
+        headers: hdrs,
+        body: fd,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.url) {
+        setCfg((c) => {
+          const slots = normalizeCfgBannerSlots(c);
+          slots[idx] = d.url;
+          return { ...c, cardapio_online_banner_urls: slots };
+        });
+      } else alert(d.message || d.error || 'Falha no envio do banner');
+    } catch {}
+    setCvBusy(null);
+  };
+
+  const removeBannerSlot = async (idx: number) => {
+    setCvBusy(idx);
+    try {
+      const res = await fetch(`/api/delivery/cardapio-visual/banner/${idx}`, { method: 'DELETE', headers: hdrs });
+      if (res.ok) {
+        setCfg((c) => {
+          const slots = normalizeCfgBannerSlots(c);
+          slots[idx] = '';
+          return { ...c, cardapio_online_banner_urls: slots };
+        });
+      }
+    } catch {}
+    setCvBusy(null);
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -2113,7 +2215,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
           {lojaSub === 'aparencia' && (
             <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
               <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Palette size={16} className="text-zinc-500"/>Aparência da loja</h4>
-              <p className="text-xs text-zinc-500">Visual do cardápio online público. Salve com o botão no fim da página.</p>
+              <p className="text-xs text-zinc-500">Visual do cardápio online público. Tema e textos abaixo: use Salvar no fim da página. Logo e banners são gravados ao enviar ou remover.</p>
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tema do cardápio</label>
                 <select
@@ -2125,6 +2227,97 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                   <option value="light_red">Claro com vermelho (light red)</option>
                 </select>
               </div>
+
+              <input ref={logoFileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onCardapioLogoFile} />
+              <input ref={bannerFileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onBannerFile} />
+
+              <div>
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Logo do cardápio online</p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-3">Opcional. Sem logo aqui, o cardápio usa a imagem de Configurações (identidade da loja).</p>
+                <div className="flex flex-wrap items-start gap-4">
+                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 flex items-center justify-center">
+                    {cfg.cardapio_online_logo_url || fallbackLogoUrl ? (
+                      <img
+                        src={cfg.cardapio_online_logo_url || fallbackLogoUrl || ''}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Image size={28} className="text-zinc-400" aria-hidden />
+                    )}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    {!cfg.cardapio_online_logo_url && fallbackLogoUrl ? (
+                      <p className="text-[11px] text-zinc-500">Preview: logo padrão da loja (Configurações).</p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={cvBusy === 'logo'}
+                        onClick={() => logoFileRef.current?.click()}
+                        className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-800 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                      >
+                        <Upload size={14} />
+                        {cvBusy === 'logo' ? 'Enviando…' : 'Enviar logo'}
+                      </button>
+                      {cfg.cardapio_online_logo_url ? (
+                        <button
+                          type="button"
+                          disabled={cvBusy === 'logo'}
+                          onClick={removeCardapioLogo}
+                          className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+                        >
+                          <Trash2 size={14} />
+                          Remover logo do cardápio
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Banners do topo (4 imagens)</p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-3">Cada quadrante do topo do cardápio. Vazio = fotos de destaque ou logo, como antes.</p>
+                <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                  {normalizeCfgBannerSlots(cfg).map((url, idx) => (
+                    <div
+                      key={idx}
+                      className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800"
+                    >
+                      <div className="relative aspect-[4/3] w-full bg-zinc-200 dark:bg-zinc-900">
+                        {url ? (
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-zinc-400">
+                            <Image size={22} aria-hidden />
+                            <span className="text-[10px] font-bold uppercase tracking-wide">Slot {idx + 1}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-1 p-2">
+                        <button
+                          type="button"
+                          disabled={cvBusy === idx}
+                          onClick={() => pickBanner(idx)}
+                          className="flex-1 rounded-lg bg-zinc-900 py-1.5 text-[10px] font-black text-white dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50"
+                        >
+                          {cvBusy === idx ? '…' : 'Trocar'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={cvBusy === idx || !url}
+                          onClick={() => removeBannerSlot(idx)}
+                          className="rounded-lg border border-zinc-200 px-2 py-1.5 text-[10px] font-bold text-zinc-600 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {slug && (
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3">
                   <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Link do cardápio</p>

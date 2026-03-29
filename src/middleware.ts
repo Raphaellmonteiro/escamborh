@@ -132,6 +132,54 @@ export const uploadLogo = multer({
   },
 });
 
+const deliveryCardapioDir = path.join(process.cwd(), 'uploads', 'delivery');
+
+const deliveryCardapioLogoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(deliveryCardapioDir)) fs.mkdirSync(deliveryCardapioDir, { recursive: true });
+    cb(null, deliveryCardapioDir);
+  },
+  filename: (req: any, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `delivery_${req.tenantId}_cardapio_logo${ext}`);
+  },
+});
+
+/** Logo exclusiva do cardápio online (delivery); arquivos em uploads/delivery/ */
+export const uploadDeliveryCardapioLogo = multer({
+  storage: deliveryCardapioLogoStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Apenas JPEG, PNG ou WEBP'));
+  },
+});
+
+const deliveryCardapioBannerStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(deliveryCardapioDir)) fs.mkdirSync(deliveryCardapioDir, { recursive: true });
+    cb(null, deliveryCardapioDir);
+  },
+  filename: (req: any, file, cb) => {
+    const raw = parseInt(String(req.params?.index ?? ''), 10);
+    const idx = Number.isFinite(raw) ? Math.min(3, Math.max(0, raw)) : 0;
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `delivery_${req.tenantId}_banner_${idx}${ext}`);
+  },
+});
+
+/** Banner do topo do cardápio; campo `banner`; rota deve incluir `:index` (0–3). */
+export const uploadDeliveryCardapioBanner = multer({
+  storage: deliveryCardapioBannerStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Apenas JPEG, PNG ou WEBP'));
+  },
+});
+
 // ── Multer — foto de funcionário ──────────────────────────────────────────────
 const fotoFuncStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {

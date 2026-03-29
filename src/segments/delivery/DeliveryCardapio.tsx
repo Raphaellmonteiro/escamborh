@@ -58,6 +58,8 @@ interface Config {
   desconto_primeiro_cliente_valor?: number;
   desconto_primeiro_cliente_min_pedido?: number;
   theme_mode?: DeliveryCardapioThemeMode;
+  /** 4 URLs de banner do topo (vazio = fallback na célula). */
+  cardapio_banner_slots?: string[];
 }
 interface CheckoutResumo {
   modelo_entrega: 'bairro_fixo';
@@ -86,15 +88,14 @@ interface CheckoutResumo {
 }
 type CupomAplicadoResumo = CheckoutResumo['cupom_aplicado'];
 
-/** Mock / futura config visual da loja (painel Delivery → Aparência). Vazio = sem efeito. */
-const deliveryVisualConfig = {
-  logoUrl: '',
-  coverImages: [] as string[],
-  backgroundImage: '',
-  backgroundOpacity: 0.1,
-} as const;
-
-type DeliveryVisualConfig = typeof deliveryVisualConfig;
+type DeliveryVisualConfig = {
+  logoUrl: string;
+  coverImages: string[];
+  /** 4 células do hero; se ausente, usa apenas `coverImages` / destaques. */
+  coverSlots?: string[];
+  backgroundImage: string;
+  backgroundOpacity: number;
+};
 
 function resolveDeliveryLogoUrl(cfg: DeliveryVisualConfig, apiLogo: string | null | undefined): string | null {
   const fromCfg = String(cfg.logoUrl || '').trim();
@@ -117,13 +118,47 @@ type HeroGalleryItem = {
   tipo: 'produto' | 'logo' | 'fallback';
 };
 
-/** Hero 2×2: prioriza `coverImages` do mock; senão fotos de destaque; senão logo; senão placeholder. */
+/** Hero 2×2: `coverSlots` (4 células) > `coverImages` > destaques > logo > placeholder. */
 function resolveDeliveryHeroGallery(
   cfg: DeliveryVisualConfig,
   produtosDestaque: Produto[],
   logoResolvido: string | null,
   nome: string
 ): HeroGalleryItem[] {
+  const slots = cfg.coverSlots;
+  if (Array.isArray(slots) && slots.length === 4) {
+    const productPool = produtosDestaque.filter((p) => p.photo_url).map((p) => p.photo_url as string);
+    let prodIdx = 0;
+    const nextProductSrc = () => {
+      if (!productPool.length) return '';
+      const src = productPool[prodIdx % productPool.length];
+      prodIdx++;
+      return src;
+    };
+    return [0, 1, 2, 3].map((index) => {
+      const configured = String(slots[index] || '').trim();
+      let src = configured;
+      let tipo: HeroGalleryItem['tipo'] = 'produto';
+      if (!src) {
+        src = nextProductSrc();
+        tipo = 'produto';
+      }
+      if (!src && logoResolvido) {
+        src = logoResolvido;
+        tipo = 'logo';
+      }
+      if (!src) {
+        tipo = 'fallback';
+      }
+      return {
+        key: `cover-slot-${index}`,
+        src,
+        alt: nome || 'Loja',
+        tipo,
+      };
+    });
+  }
+
   const capasConfig = [...(cfg.coverImages || [])].map(String).filter((s) => s.trim());
   if (capasConfig.length > 0) {
     const imagens: HeroGalleryItem[] = capasConfig.slice(0, 4).map((src, index) => ({
@@ -275,7 +310,7 @@ function isProdutoCombo(produto: Produto) {
   return /\bcombo?s?\b/.test(base);
 }
 
-/** Status amigável para “Meus pedidos” (telefone, sem login) */
+/** Status amigável para “Meus pedidos” (acompanhamento do cliente) */
 function labelStatusPedidoCliente(status: string): string {
   const raw = String(status || '').trim();
   const k = raw.toLowerCase();
@@ -587,6 +622,8 @@ export default function DeliveryCardapio() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [tela, setTela] = useState<Tela>('cardapio');
   const [posIdentificacao, setPosIdentificacao] = useState<Tela>('cardapio');
+  /** Após identificar com telefone, abrir aba Meus pedidos (sem usar `posIdentificacao`, que é tela cheia). */
+  const [identificacaoAbaDestino, setIdentificacaoAbaDestino] = useState<null | 'meus_pedidos'>(null);
   const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento | null>(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 250);
@@ -602,8 +639,6 @@ export default function DeliveryCardapio() {
   const [sacolaOpen, setSacolaOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>(1);
-  const [mpPhone, setMpPhone] = useState('');
-  const [mpTelDigits, setMpTelDigits] = useState('');
   const [mpList, setMpList] = useState<Array<{ id: number; status: string; total: number; created_at: string; order_number?: string }>>([]);
   const [mpLoading, setMpLoading] = useState(false);
   const [mpErr, setMpErr] = useState('');
@@ -613,7 +648,6 @@ export default function DeliveryCardapio() {
   } | null>(null);
   const [produtoModal, setProdutoModal] = useState<Produto|null>(null); // opções e/ou variações (modal único)
   const catRefs = useRef<Record<string, HTMLDivElement|null>>({});
-  const mpPhoneStorageKey = slug ? `dc_mp_phone_${slug}` : '';
 
   useEffect(() => {
     if (!slug) return;
@@ -664,15 +698,32 @@ export default function DeliveryCardapio() {
       .map(({ produto }) => produto)
       .slice(0, 8);
   }, [produtosOrdenados]);
+  const deliveryVisualFromConfig = useMemo((): DeliveryVisualConfig => {
+    const raw = config.cardapio_banner_slots;
+    const coverSlots =
+      Array.isArray(raw) && raw.length === 4
+        ? [0, 1, 2, 3].map((i) => String(raw[i] || '').trim())
+        : undefined;
+    return {
+      logoUrl: '',
+      coverImages: [],
+      coverSlots,
+      backgroundImage: '',
+      backgroundOpacity: 0.1,
+    };
+  }, [config.cardapio_banner_slots]);
   const logoResolvido = useMemo(
-    () => resolveDeliveryLogoUrl(deliveryVisualConfig, logoUrl),
-    [logoUrl]
+    () => resolveDeliveryLogoUrl(deliveryVisualFromConfig, logoUrl),
+    [deliveryVisualFromConfig, logoUrl]
   );
-  const fundoDecorativo = useMemo(() => resolveDeliveryBackgroundDecor(deliveryVisualConfig), []);
+  const fundoDecorativo = useMemo(
+    () => resolveDeliveryBackgroundDecor(deliveryVisualFromConfig),
+    [deliveryVisualFromConfig]
+  );
 
   const galeriaTopo = useMemo(
-    () => resolveDeliveryHeroGallery(deliveryVisualConfig, produtosDestaque, logoResolvido, nome),
-    [produtosDestaque, logoResolvido, nome]
+    () => resolveDeliveryHeroGallery(deliveryVisualFromConfig, produtosDestaque, logoResolvido, nome),
+    [deliveryVisualFromConfig, produtosDestaque, logoResolvido, nome]
   );
   const resumoVitrine = useMemo(() => createFallbackCheckoutResumo({
     config,
@@ -720,37 +771,11 @@ export default function DeliveryCardapio() {
 
   const buscarMeusPedidos = useCallback(async (opts?: { keepDetail?: boolean; silent?: boolean }) => {
     const silent = opts?.silent === true;
-    if (cliToken) {
+    if (!cliToken) {
       if (!silent) {
+        setMpList([]);
         setMpErr('');
-        setMpLoading(true);
       }
-      if (!opts?.keepDetail) setMpDetalhe(null);
-      try {
-        const r = await fetch(`/public/delivery/${slug}/cliente/pedidos`, { headers: { Authorization: `Bearer ${cliToken}` } });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'Nao foi possivel carregar');
-        const list = Array.isArray(d) ? d.map((row: any) => ({
-          id: row.id,
-          status: row.status,
-          total: Number(row.total_amount || 0),
-          created_at: row.created_at,
-          order_number: row.order_number,
-        })) : [];
-        setMpList(list);
-      } catch (e: any) {
-        if (!silent) {
-          setMpErr(e?.message || 'Erro ao buscar');
-          setMpList([]);
-        }
-      } finally {
-        if (!silent) setMpLoading(false);
-      }
-      return;
-    }
-    const tel = (mpPhone.replace(/\D/g, '') || mpTelDigits).replace(/\D/g, '');
-    if (tel.length < 10) {
-      if (!silent) setMpErr('Digite um telefone valido (DDD + numero).');
       return;
     }
     if (!silent) {
@@ -759,14 +784,17 @@ export default function DeliveryCardapio() {
     }
     if (!opts?.keepDetail) setMpDetalhe(null);
     try {
-      const r = await fetch(`/public/delivery/${slug}/orders?phone=${encodeURIComponent(tel)}`);
+      const r = await fetch(`/public/delivery/${slug}/cliente/pedidos`, { headers: { Authorization: `Bearer ${cliToken}` } });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Nao foi possivel carregar');
-      setMpTelDigits(tel);
-      setMpList(Array.isArray(d) ? d : []);
-      try {
-        if (mpPhoneStorageKey) localStorage.setItem(mpPhoneStorageKey, mpPhone);
-      } catch { /* ignore */ }
+      const list = Array.isArray(d) ? d.map((row: any) => ({
+        id: row.id,
+        status: row.status,
+        total: Number(row.total_amount || 0),
+        created_at: row.created_at,
+        order_number: row.order_number,
+      })) : [];
+      setMpList(list);
     } catch (e: any) {
       if (!silent) {
         setMpErr(e?.message || 'Erro ao buscar');
@@ -775,28 +803,7 @@ export default function DeliveryCardapio() {
     } finally {
       if (!silent) setMpLoading(false);
     }
-  }, [slug, mpPhone, mpTelDigits, mpPhoneStorageKey, cliToken]);
-
-  useEffect(() => {
-    if (abaCardapio !== 'meus_pedidos' || !mpPhoneStorageKey || cliToken) return;
-    try {
-      const saved = localStorage.getItem(mpPhoneStorageKey);
-      if (saved) setMpPhone(prev => (prev.trim() ? prev : saved));
-    } catch { /* ignore */ }
-  }, [abaCardapio, mpPhoneStorageKey, cliToken]);
-
-  /** Telefone salvo (consulta sem login): habilita polling e banner mesmo fora da aba Pedidos. */
-  useEffect(() => {
-    if (!mpPhoneStorageKey || cliToken) return;
-    try {
-      const saved = localStorage.getItem(mpPhoneStorageKey);
-      if (!saved?.trim()) return;
-      const digits = saved.replace(/\D/g, '');
-      if (digits.length < 10) return;
-      setMpTelDigits(digits);
-      setMpPhone((prev) => (prev.trim() ? prev : saved));
-    } catch { /* ignore */ }
-  }, [mpPhoneStorageKey, cliToken]);
+  }, [slug, cliToken]);
 
   useEffect(() => {
     if (abaCardapio !== 'meus_pedidos' || !cliToken || !slug) return;
@@ -808,11 +815,6 @@ export default function DeliveryCardapio() {
     void buscarMeusPedidos({ silent: true, keepDetail: true });
   }, [cliToken, slug, buscarMeusPedidos]);
 
-  useEffect(() => {
-    if (cliToken || !slug || mpTelDigits.length < 10) return;
-    void buscarMeusPedidos({ silent: true, keepDetail: true });
-  }, [slug, mpTelDigits, cliToken, buscarMeusPedidos]);
-
   const pedidoEmAndamento = useMemo(() => {
     const sorted = [...mpList].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -822,14 +824,13 @@ export default function DeliveryCardapio() {
 
   const abrirDetalheMeusPedidos = useCallback(async (pedidoId: number, opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true;
-    const tel = cliToken && cliente ? cliente.telefone.replace(/\D/g, '') : mpTelDigits;
-    if (!tel || tel.length < 10) return;
+    if (!cliToken) return;
     if (!silent) {
       setMpLoading(true);
       setMpErr('');
     }
     try {
-      const r = await fetch(`/public/delivery/${slug}/orders/${pedidoId}?phone=${encodeURIComponent(tel)}`);
+      const r = await fetch(`/public/delivery/${slug}/orders/${pedidoId}`, { headers: { Authorization: `Bearer ${cliToken}` } });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Pedido nao encontrado');
       setMpDetalhe(d);
@@ -841,25 +842,23 @@ export default function DeliveryCardapio() {
     } finally {
       if (!silent) setMpLoading(false);
     }
-  }, [slug, mpTelDigits, cliToken, cliente]);
+  }, [slug, cliToken]);
 
   useEffect(() => {
-    const podePollar = Boolean(cliToken) || (mpTelDigits.length >= 10);
-    if (!slug || !podePollar) return;
+    if (!slug || !cliToken) return;
     const interval = setInterval(() => {
       void buscarMeusPedidos({ keepDetail: true, silent: true });
     }, MEUS_PEDIDOS_POLL_MS);
     return () => clearInterval(interval);
-  }, [mpTelDigits, slug, cliToken, buscarMeusPedidos]);
+  }, [slug, cliToken, buscarMeusPedidos]);
 
   useEffect(() => {
-    const telOk = (cliToken && cliente) || (mpTelDigits && mpTelDigits.length >= 10);
-    if (!mpDetalhe || !telOk || !slug) return;
+    if (!mpDetalhe || !cliToken || !slug) return;
     const interval = setInterval(() => {
       void abrirDetalheMeusPedidos(mpDetalhe.id, { silent: true });
     }, MEUS_PEDIDOS_POLL_MS);
     return () => clearInterval(interval);
-  }, [mpDetalhe?.id ?? null, mpTelDigits, slug, cliToken, cliente?.id ?? null, abrirDetalheMeusPedidos]);
+  }, [mpDetalhe?.id ?? null, slug, cliToken, abrirDetalheMeusPedidos]);
   /** Sempre abre o modal do produto; a sacola só muda pelo botão final do `ProductOptionsModal`. */
   const handleAddProduto = (p: Produto) => {
     if (!ativo) return;
@@ -927,16 +926,6 @@ export default function DeliveryCardapio() {
     setSacolaOpen(false);
     setCheckoutStep(1);
     setPedidoSucessoOpen(true);
-    if (cliente?.telefone) {
-      const digits = cliente.telefone.replace(/\D/g, '');
-      if (digits.length >= 10) {
-        setMpTelDigits(digits);
-        try {
-          if (mpPhoneStorageKey) localStorage.setItem(mpPhoneStorageKey, cliente.telefone);
-        } catch { /* ignore */ }
-        setMpPhone((prev) => (prev.trim() ? prev : cliente.telefone));
-      }
-    }
     void buscarMeusPedidos({ silent: true, keepDetail: true });
   };
   const fecharPedidoSucesso = useCallback(() => {
@@ -1002,6 +991,7 @@ export default function DeliveryCardapio() {
     };
   }, [abaCardapio, hasSearch, setAbaCardapio, setSearch]);
   const abrirIdentificacao = useCallback((destino: Tela = 'cardapio') => {
+    setIdentificacaoAbaDestino(null);
     setPosIdentificacao(destino);
     setTela('identificar');
   }, []);
@@ -1020,10 +1010,17 @@ export default function DeliveryCardapio() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
   const abrirPedidosPublicos = useCallback(() => {
+    if (!cliToken || !cliente) {
+      setIdentificacaoAbaDestino('meus_pedidos');
+      setPosIdentificacao('cardapio');
+      setTela('identificar');
+      return;
+    }
+    setIdentificacaoAbaDestino(null);
     setSearch('');
     setAbaCardapio('meus_pedidos');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [cliToken, cliente]);
   const abrirContaOuIdentificacao = useCallback((destinoSemCliente: Tela = 'cardapio') => {
     if (cliente) {
       setTela('conta');
@@ -1324,7 +1321,34 @@ export default function DeliveryCardapio() {
   );
   if (tela==='identificar') return (
     <CardapioThemeShell theme={cardapioTheme}>
-      <TelaIdentificar slug={slug} tipoAtendimento={tipoAtendimento} contexto={posIdentificacao==='checkout'?'checkout':'geral'} onSuccess={(t,c)=>{salvarToken(t,c);if(posIdentificacao==='checkout'){setSacolaOpen(false);setCheckoutOpen(true);setCheckoutStep(1);}else{setTela(posIdentificacao);}}} onBack={()=>setTela(posIdentificacao==='checkout'?'cardapio':posIdentificacao)} />
+      <TelaIdentificar
+        slug={slug}
+        tipoAtendimento={tipoAtendimento}
+        contexto={posIdentificacao === 'checkout' ? 'checkout' : 'geral'}
+        onSuccess={(t, c) => {
+          salvarToken(t, c);
+          const abaDest = identificacaoAbaDestino;
+          setIdentificacaoAbaDestino(null);
+          if (posIdentificacao === 'checkout') {
+            setTela('cardapio');
+            setSacolaOpen(false);
+            setCheckoutOpen(true);
+            setCheckoutStep(1);
+            return;
+          }
+          if (abaDest === 'meus_pedidos') {
+            setTela('cardapio');
+            setAbaCardapio('meus_pedidos');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+          setTela(posIdentificacao);
+        }}
+        onBack={() => {
+          setIdentificacaoAbaDestino(null);
+          setTela(posIdentificacao === 'checkout' ? 'cardapio' : posIdentificacao);
+        }}
+      />
     </CardapioThemeShell>
   );
   if (tela==='conta') return (
@@ -1515,10 +1539,10 @@ export default function DeliveryCardapio() {
                       menuCatalogoAberto
                         ? isLightRed
                           ? 'border-red-200 bg-red-50 text-red-950'
-                          : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100'
+                          : 'border-cyan-500/30 bg-cyan-500/10 text-white'
                         : isLightRed
                           ? 'border-zinc-200 bg-white text-zinc-950 hover:bg-zinc-50 hover:text-zinc-950'
-                          : 'border-white/12 bg-zinc-950 text-zinc-50 hover:bg-white/8'
+                          : 'border-white/12 bg-zinc-950 text-white hover:bg-white/10'
                     }`}
                   >
                     <Menu size={16} />
@@ -1800,36 +1824,25 @@ export default function DeliveryCardapio() {
                 }
               >
                 <p className={`text-[11px] font-bold uppercase tracking-[0.22em] ${isLightRed ? 'text-red-700/90' : 'text-cyan-300/80'}`}>Acompanhe seus pedidos</p>
-                <p className={`mt-2 text-lg font-black ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Consulte pelo telefone usado na compra</p>
-                <p className={`mt-1 text-sm ${isLightRed ? 'text-zinc-600' : 'text-zinc-200'}`}>Digite o mesmo numero com DDD para ver status e detalhes dos seus pedidos recentes.</p>
-                <div className="flex gap-2">
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    placeholder="(11) 99999-9999"
-                    value={mpPhone}
-                    onChange={(e) => setMpPhone(e.target.value)}
-                    className={
-                      isLightRed
-                        ? 'mt-4 flex-1 min-w-0 rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-sm text-zinc-900 placeholder:text-zinc-400 shadow-sm focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500/15'
-                        : 'mt-4 flex-1 min-w-0 rounded-2xl border border-white/12 bg-zinc-950 px-4 py-3.5 text-sm text-white placeholder:text-zinc-300 focus:outline-none focus:border-cyan-400'
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void buscarMeusPedidos()}
-                    disabled={mpLoading}
-                    className={
-                      isLightRed
-                        ? 'mt-4 shrink-0 rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow-md transition-colors hover:bg-red-700 disabled:bg-zinc-200 disabled:text-zinc-400'
-                        : 'mt-4 shrink-0 rounded-2xl bg-white px-5 py-3 text-sm font-black text-zinc-950 shadow-[0_14px_30px_rgba(255,255,255,0.14)] transition-colors hover:bg-cyan-300 hover:shadow-[0_18px_34px_rgba(34,211,238,0.24)] disabled:bg-zinc-800 disabled:text-zinc-500'
-                    }
-                  >
-                    {mpLoading ? '...' : 'Buscar'}
-                  </button>
-                </div>
-                {mpErr && <p className={`mt-3 text-xs font-medium ${isLightRed ? 'text-red-600' : 'text-red-300'}`}>{mpErr}</p>}
+                <p className={`mt-2 text-lg font-black ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Identifique-se com seu telefone</p>
+                <p className={`mt-1 text-sm ${isLightRed ? 'text-zinc-600' : 'text-zinc-200'}`}>
+                  Por seguranca, a lista de pedidos so aparece apos confirmar o mesmo telefone usado na loja. Leva poucos segundos.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentificacaoAbaDestino('meus_pedidos');
+                    setPosIdentificacao('cardapio');
+                    setTela('identificar');
+                  }}
+                  className={
+                    isLightRed
+                      ? 'mt-4 w-full rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-black text-white shadow-md transition-colors hover:bg-red-700'
+                      : 'mt-4 w-full rounded-2xl bg-white px-5 py-3.5 text-sm font-black text-zinc-950 shadow-[0_14px_30px_rgba(255,255,255,0.14)] transition-colors hover:bg-cyan-300 hover:shadow-[0_18px_34px_rgba(34,211,238,0.24)]'
+                  }
+                >
+                  Entrar com telefone
+                </button>
               </div>
             )}
             {cliToken && mpErr && <p className={`px-1 text-xs font-medium ${isLightRed ? 'text-red-600' : 'text-red-300'}`}>{mpErr}</p>}
@@ -1868,7 +1881,7 @@ export default function DeliveryCardapio() {
                 ))}
               </div>
             )}
-            {((cliToken && mpList.length === 0) || (mpTelDigits && mpList.length === 0)) && !mpLoading && !mpErr && (
+            {cliToken && mpList.length === 0 && !mpLoading && !mpErr && (
               <div
                 className={
                   isLightRed
@@ -1877,8 +1890,8 @@ export default function DeliveryCardapio() {
                 }
               >
                 <ClipboardList size={40} className={`mx-auto mb-4 ${isLightRed ? 'text-zinc-400' : 'text-zinc-500'}`} />
-                <p className={`text-sm font-bold ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>{cliToken ? 'Voce ainda nao fez pedidos por aqui' : 'Nenhum pedido encontrado para este telefone'}</p>
-                <p className={`mt-2 text-sm ${isLightRed ? 'text-zinc-600' : 'text-zinc-200'}`}>{cliToken ? 'Quando voce finalizar uma compra, o acompanhamento vai aparecer nesta area.' : 'Confira se o numero informado e o mesmo usado na compra ou volte ao cardapio para fazer um novo pedido.'}</p>
+                <p className={`text-sm font-bold ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Voce ainda nao fez pedidos por aqui</p>
+                <p className={`mt-2 text-sm ${isLightRed ? 'text-zinc-600' : 'text-zinc-200'}`}>Quando voce finalizar uma compra, o acompanhamento vai aparecer nesta area.</p>
               </div>
             )}
           </div>
