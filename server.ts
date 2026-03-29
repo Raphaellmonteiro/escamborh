@@ -36,8 +36,6 @@ app.use(
 );
 
 // ── Startup ───────────────────────────────────────────────────────────────────
-// Backup do banco: não roda aqui — use pg_dump/cron ou o backup do provedor (Supabase/Neon/Railway).
-
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 if (!fs.existsSync('uploads/logo')) fs.mkdirSync('uploads/logo', { recursive: true });
 if (!fs.existsSync('uploads/funcionarios')) fs.mkdirSync('uploads/funcionarios', { recursive: true });
@@ -95,7 +93,7 @@ app.get('/delivery/:slug', (_req, res, next) => {
   next();
 });
 
-// ── Erro Multer (deve vir ANTES do erro global) ───────────────────────────────
+// ── Erro Multer ───────────────────────────────────────────────────────────────
 app.use((err: any, _req: any, res: any, next: any) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -114,32 +112,41 @@ app.use((err: any, _req: any, res: any, next: any) => {
   next(err);
 });
 
-// ── Erro global ───────────────────────────────────────────────────────────────
-
-// ── Start ─────────────────────────────────────────────────────────────────────
+// ── Controle de migrations ────────────────────────────────────────────────────
 function shouldRunMigrationsOnBoot(): boolean {
   const v = String(process.env.RUN_MIGRATIONS_ON_BOOT ?? '').trim().toLowerCase();
   if (v === 'false' || v === '0' || v === 'no') return false;
   return true;
 }
 
+// 🔥 NOVO: retry resiliente
+async function runMigrationsWithRetry(retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`🔄 Rodando migrations (tentativa ${i + 1})...`);
+      await runMigrations();
+      console.log('✅ Migrations executadas com sucesso');
+      return;
+    } catch (err) {
+      console.error(`❌ Tentativa ${i + 1} falhou`);
+
+      if (i === retries - 1) {
+        console.error('❌ Falha definitiva nas migrations — seguindo sem travar o servidor');
+        return; // não mata o app
+      }
+
+      await new Promise((res) => setTimeout(res, 3000));
+    }
+  }
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   if (shouldRunMigrationsOnBoot()) {
-    try {
-      await runMigrations();
-    } catch (err) {
-      console.error('❌ Falha nas migrações:', err);
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('MaxClientsInSessionMode')) {
-        console.error(
-          '   → Use DATABASE_MIGRATION_URL (URI direta db.*:5432) ou RUN_MIGRATIONS_ON_BOOT=false e `npm run migrate`.'
-        );
-      }
-      process.exit(1);
-    }
+    await runMigrationsWithRetry();
   } else {
     console.warn(
-      '⚠️  RUN_MIGRATIONS_ON_BOOT desligado — o servidor sobe sem migrar. Rode `npm run migrate` quando precisar.'
+      '⚠️  RUN_MIGRATIONS_ON_BOOT desligado — o servidor sobe sem migrar.'
     );
   }
 
