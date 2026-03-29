@@ -19,6 +19,7 @@ import {
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
+import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -107,15 +108,8 @@ function normalizeItemObservationForDb(raw: unknown): string | null {
   return s.length > MAX_ITEM_OBSERVATION_LEN ? s.slice(0, MAX_ITEM_OBSERVATION_LEN) : s;
 }
 
-function parseDeliveryConfig(rawConfig?: string | null): DeliveryConfig {
-  if (!rawConfig) return {};
-
-  try {
-    const parsed = JSON.parse(rawConfig);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+function parseDeliveryConfig(rawConfig?: unknown): DeliveryConfig {
+  return coerceDeliveryConfigRow(rawConfig ?? null) as DeliveryConfig;
 }
 
 function getCurrentDateInTimeZone() {
@@ -992,16 +986,7 @@ export function createDeliveryPublicRouter() {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
-      const rawCfgParsed: Record<string, unknown> = (() => {
-        try {
-          if (!tenant.delivery_config || !String(tenant.delivery_config).trim()) return {};
-          const o = JSON.parse(String(tenant.delivery_config));
-          return o && typeof o === 'object' ? (o as Record<string, unknown>) : {};
-        } catch {
-          return {};
-        }
-      })();
-      const automation = parseAutomationFromDeliveryConfigJson(rawCfgParsed);
+      const automation = parseAutomationFromDeliveryConfigJson(dcfg as Record<string, unknown>);
       const { items, pagamento_tipo, observation, cliente_nome, cliente_tel, endereco, clienteToken, cupom_codigo, endereco_id, bairro_temporario } = req.body;
       const canalPedido: OrderChannel = String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
       const tipoRetirada = canalPedido === 'retirada' ? 'levar' : 'local';

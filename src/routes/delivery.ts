@@ -23,6 +23,11 @@ import {
 } from '../services/storeCustomerService';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
+import {
+  applyNormalizedBannerSlots,
+  coerceDeliveryConfigRow,
+  mergeDeliveryConfigClientPut,
+} from '../utils/deliveryConfigPersist';
 
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
@@ -55,24 +60,15 @@ function classifyCustomerActivity(totalValidOrders: number, daysWithoutPurchase:
 
 const DELIVERY_UPLOAD_URL_PREFIX = '/uploads/delivery/';
 
-function parseDeliveryCfgJson(raw: string | null | undefined): Record<string, any> {
-  try {
-    if (!raw || !String(raw).trim()) return {};
-    const o = JSON.parse(String(raw));
-    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
-  } catch {
-    return {};
-  }
-}
-
 function bannerSlotsFromCfg(cfg: Record<string, any>): string[] {
   return [...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)];
 }
 
 async function mergeDeliveryConfigJson(tenantId: number, patch: (c: Record<string, any>) => void) {
   const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
-  const cfg = parseDeliveryCfgJson(row?.delivery_config ?? null);
+  const cfg = coerceDeliveryConfigRow(row?.delivery_config ?? null);
   patch(cfg);
+  applyNormalizedBannerSlots(cfg);
   await qRun('UPDATE clientes SET delivery_config=? WHERE id=?', [JSON.stringify(cfg), tenantId]);
   return cfg;
 }
@@ -157,12 +153,8 @@ export function createDeliveryRouter() {
   router.get('/config', async (req: Request, res) => {
     try {
       const row = await q1('SELECT delivery_ativo, delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-      const parsed = row?.delivery_config ? JSON.parse(row.delivery_config) : {};
-      const base =
-        parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? (parsed as Record<string, unknown>)
-          : {};
-      base.cardapio_online_banner_urls = [...normalizeCardapioOnlineBannerSlots(base.cardapio_online_banner_urls)];
+      const base = coerceDeliveryConfigRow(row?.delivery_config ?? null);
+      applyNormalizedBannerSlots(base);
       res.json({ ativo: !!row?.delivery_ativo, ...base });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -171,9 +163,8 @@ export function createDeliveryRouter() {
     try {
       const { ativo, ...rest } = req.body;
       const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-      const existing = parseDeliveryCfgJson(row?.delivery_config ?? null);
-      const merged = { ...existing, ...rest };
-      merged.cardapio_online_banner_urls = [...normalizeCardapioOnlineBannerSlots(merged.cardapio_online_banner_urls)];
+      const existing = coerceDeliveryConfigRow(row?.delivery_config ?? null);
+      const merged = mergeDeliveryConfigClientPut(existing, rest && typeof rest === 'object' && !Array.isArray(rest) ? rest : {});
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -188,7 +179,7 @@ export function createDeliveryRouter() {
         if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
         const tenantId = req.tenantId as number;
         const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
-        const prev = parseDeliveryCfgJson(row?.delivery_config ?? null);
+        const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
         const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
         const newName = req.file.filename;
         if (oldUrl && path.basename(oldUrl) !== newName) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
@@ -208,7 +199,7 @@ export function createDeliveryRouter() {
     try {
       const tenantId = req.tenantId as number;
       const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
-      const prev = parseDeliveryCfgJson(row?.delivery_config ?? null);
+      const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
       if (oldUrl) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
       removeAllDeliveryCardapioLogoFiles(tenantId);
@@ -234,7 +225,7 @@ export function createDeliveryRouter() {
         if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
         const tenantId = req.tenantId as number;
         const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
-        const cfg = parseDeliveryCfgJson(row?.delivery_config ?? null);
+        const cfg = coerceDeliveryConfigRow(row?.delivery_config ?? null);
         const slots = bannerSlotsFromCfg(cfg);
         const oldUrl = slots[idx];
         const newName = req.file.filename;
@@ -260,7 +251,7 @@ export function createDeliveryRouter() {
       }
       const tenantId = req.tenantId as number;
       const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
-      const cfg = parseDeliveryCfgJson(row?.delivery_config ?? null);
+      const cfg = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const slots = bannerSlotsFromCfg(cfg);
       const oldUrl = slots[idx];
       if (oldUrl) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
@@ -414,10 +405,7 @@ router.get('/pedidos', async (req: Request, res) => {
       let kitchenPrintAutomation: { ok: boolean; message?: string; reason?: string } | undefined;
       if (previousStatus === 'Criado' && nextStatus === 'Pedido Recebido') {
         const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-        const parsed =
-          cfgRow?.delivery_config && String(cfgRow.delivery_config).trim()
-            ? (JSON.parse(cfgRow.delivery_config) as Record<string, unknown>)
-            : {};
+        const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);
         const automation = parseAutomationFromDeliveryConfigJson(parsed);
         if (automation.delivery_auto_print_production) {
           const pr = await runAutomatedKitchenPrintForOrder(Number(req.tenantId), Number(req.params.id), {
@@ -474,7 +462,7 @@ router.get('/pedidos', async (req: Request, res) => {
         dataInicio = String(inicio || '1900-01-01'); dataFim = String(fim || '2100-12-31');
       }
       const cfgRow = await q1('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-      const cfg = cfgRow?.delivery_config ? JSON.parse(cfgRow.delivery_config) : {};
+      const cfg = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);
       const valorPorEntrega = Number(cfg.valor_por_entrega) || 0;
       const rows = await qAll(
         `SELECT m.id, m.nome, COUNT(p.id) as total_entregas,
@@ -814,10 +802,7 @@ router.get('/clientes', async (req: Request, res) => {
       }
 
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-      const parsed =
-        cfgRow?.delivery_config && String(cfgRow.delivery_config).trim()
-          ? (JSON.parse(cfgRow.delivery_config) as Record<string, unknown>)
-          : {};
+      const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);
       const automation = parseAutomationFromDeliveryConfigJson(parsed);
       let kitchenPrintAutomation: { ok: boolean; message?: string; reason?: string } | undefined;
       if (automation.delivery_auto_print_production) {

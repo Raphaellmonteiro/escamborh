@@ -19,6 +19,7 @@ import { buildKitchenReceiptHtml, filterKitchenPreparationItems } from '../servi
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { runAutomatedKitchenPrintForMesa } from '../services/operationalAutomationService';
 import { notifyTenantOrderStreams } from '../sse';
+import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -744,10 +745,7 @@ export function createMesasRouter() {
       );
 
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-      const parsed =
-        cfgRow?.delivery_config && String(cfgRow.delivery_config).trim()
-          ? (JSON.parse(cfgRow.delivery_config) as Record<string, unknown>)
-          : {};
+      const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);
       const automation = parseAutomationFromDeliveryConfigJson(parsed);
       if (automation.mesa_auto_print_production) {
         void runAutomatedKitchenPrintForMesa(Number(req.tenantId), Number(req.params.id), {

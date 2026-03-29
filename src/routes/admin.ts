@@ -7,6 +7,7 @@ import { loginRateLimiter, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '.
 import { logError } from '../utils/logger';
 import { generatePublicId } from '../utils/publicIds';
 import { notifyTenantOrderStreams } from '../sse';
+import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 
 const TZ = 'America/Sao_Paulo';
 const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
@@ -1025,7 +1026,7 @@ export function createAdminRouter() {
       const cliente = await q1('SELECT id, delivery_ativo, delivery_config FROM clientes WHERE id=?', [tenantId]);
       if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-      const cfg = (cliente as any).delivery_config ? JSON.parse((cliente as any).delivery_config) : {};
+      const cfg = coerceDeliveryConfigRow((cliente as any).delivery_config ?? null);
       const todayStr = getTodayDateInTimeZone();
       const notCanceled = "cancelado_at IS NULL AND LOWER(COALESCE(status,'')) <> 'cancelado'";
 
