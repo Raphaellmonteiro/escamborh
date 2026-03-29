@@ -248,7 +248,7 @@ const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
 /** Atalho: não embute lista de balcão — envia para a tela Operação (Central) com filtro Balcão. */
 function DeliveryBalcaoCentralShortcut({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className={`${adminOpsSurfaceCardClass} p-5 sm:p-6`}>
+    <div className={`${adminOpsSurfaceCardClass} p-4 sm:p-5`}>
       <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Balcão na Operação</h2>
       <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
         O balcão e a operação ao vivo de todos os canais ficam na <strong className="text-zinc-700 dark:text-zinc-300">Operação</strong> (menu lateral).
@@ -279,8 +279,8 @@ export default function DeliveryScreen({
   const [tab, setTab] = useState<'balcao' | 'painel' | 'clientes' | 'motoboys' | 'relatorio' | 'config'>('painel');
 
   return (
-    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full overflow-y-auto bg-zinc-100 dark:bg-zinc-950">
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
+    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 overflow-y-auto bg-zinc-100 dark:bg-zinc-950">
+      <div className="mx-auto max-w-7xl min-w-0 space-y-4 p-3 sm:space-y-5 sm:p-4 lg:p-6">
         <ScreenHeader
           titleAs="h1"
           titleClassName="flex items-center gap-2 flex-wrap"
@@ -503,7 +503,7 @@ function TabPainel({ token }: { token: string }) {
   const selectedPedidoSnapshot = parseDeliveryCheckoutSnapshot(selectedPedido?.delivery_checkout_snapshot);
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-4 lg:space-y-5">
       {opsToast && (
         <div
           className={`rounded-xl border px-4 py-3 text-xs font-semibold shadow-sm ${
@@ -518,7 +518,7 @@ function TabPainel({ token }: { token: string }) {
       )}
       {/* Dashboard */}
       {dash && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-3 xl:grid-cols-6">
           <DCard label="Pedidos Hoje"  value={String(dash.pedidos_hoje)}   color="blue"    icon={<Package size={16}/>} />
           <DCard label="Faturamento"   value={fmt(dash.faturamento_hoje)}  color="emerald" icon={<DollarSign size={16}/>} />
           <DCard label="Em Preparo"    value={String(dash.em_preparo)}     color="amber"   icon={<Clock size={16}/>} />
@@ -570,7 +570,7 @@ function TabPainel({ token }: { token: string }) {
             max-md:gap-3 max-md:pb-3 max-md:pt-0.5 max-md:-mx-1 max-md:px-1
             max-md:scroll-pl-3 max-md:scroll-pr-3
             [-webkit-overflow-scrolling:touch]
-            md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:overflow-visible md:scroll-pl-0 md:scroll-pr-0
+            md:grid md:min-w-0 md:grid-cols-2 md:gap-3 md:overflow-visible md:scroll-pl-0 md:scroll-pr-0 lg:grid-cols-2 xl:grid-cols-4 xl:gap-4
           "
         >
           {COLUNAS.map(col => {
@@ -583,12 +583,12 @@ function TabPainel({ token }: { token: string }) {
                 key={col}
                 className={`${adminOpsSurfaceCardClass} overflow-hidden flex flex-col max-md:w-[min(85vw,20rem)] max-md:max-w-[85vw] max-md:flex-shrink-0 max-md:snap-center md:min-w-0 md:w-auto md:max-w-none`}
               >
-                <div className="px-3 sm:px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2 shrink-0" style={{ borderLeftWidth:3, borderLeftColor:cfg.color }}>
+                <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800 sm:px-4 lg:py-3" style={{ borderLeftWidth:3, borderLeftColor:cfg.color }}>
                   <span className="shrink-0" style={{ color:cfg.color }}>{cfg.icon}</span>
                   <span className="font-black text-sm text-zinc-900 dark:text-zinc-100 truncate min-w-0">{cfg.label}</span>
                   <span className={`ml-auto shrink-0 text-xs font-black px-2.5 py-1 rounded-full tabular-nums ${cfg.toneClass}`}>{colPedidos.length}</span>
                 </div>
-                <div className="p-2 space-y-2 min-h-[100px] max-md:max-h-[min(52vh,28rem)] max-h-[60vh] overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y">
+                <div className="min-h-[100px] space-y-1.5 overflow-y-auto overflow-x-hidden overscroll-y-contain p-1.5 touch-pan-y max-md:max-h-[min(52vh,28rem)] max-h-[min(58vh,26rem)] md:max-h-[min(62vh,30rem)] lg:space-y-2 lg:p-2 xl:max-h-[65vh]">
                   {colPedidos.length===0 ? (
                     <div className={`mx-1 ${adminOpsDashedWellClass}`}>
                       <EmptyState
@@ -706,8 +706,9 @@ function TabPainel({ token }: { token: string }) {
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6" onClick={() => setSelectedPedido(null)}>
             <motion.div onClick={e=>e.stopPropagation()}
               initial={{ scale:0.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.9, opacity:0 }}
-              className="max-h-[min(92dvh,100%)] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:rounded-2xl sm:p-6 sm:pb-6">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              className="flex max-h-[min(92dvh,100svh)] w-full max-w-lg min-h-0 flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:rounded-2xl">
+              <div className="shrink-0 border-b border-zinc-100 px-5 pb-4 pt-5 dark:border-zinc-800 sm:px-6 sm:pb-4 sm:pt-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Pedido #{selectedPedido.order_number}</h3>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <button type="button" onClick={() => reimprimir(selectedPedido.id)}
@@ -721,7 +722,9 @@ function TabPainel({ token }: { token: string }) {
                   <button type="button" onClick={() => setSelectedPedido(null)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" aria-label="Fechar">✕</button>
                 </div>
               </div>
+              </div>
 
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-6">
               {(() => {
                 const cfg = STATUS_CFG[selectedPedido.status] || STATUS_CFG['Pedido Recebido'];
                 return (
@@ -950,6 +953,7 @@ function TabPainel({ token }: { token: string }) {
                   );
                 })()}
               </div>
+              </div>
             </motion.div>
           </div>
         )}
@@ -970,7 +974,7 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
   const [selectedMotoboy, setSelectedMotoboy] = useState<number | ''>('');
   const elapsed = Math.max(0, Math.floor((Date.now() - new Date(pedido.created_at).getTime()) / 60000));
   return (
-    <div className={`${adminOpsSurfaceCardClass} p-4 md:p-3 hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all max-md:active:bg-zinc-50/80 dark:max-md:active:bg-zinc-800/40`}>
+    <div className={`${adminOpsSurfaceCardClass} p-3 transition-all hover:border-zinc-300 hover:shadow-md dark:hover:border-zinc-700 md:p-2.5 lg:p-3 max-md:active:bg-zinc-50/80 dark:max-md:active:bg-zinc-800/40`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1 pr-1">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -991,9 +995,9 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <span className={`text-[11px] font-bold tabular-nums px-1 ${elapsed>=20?'text-red-500':'text-zinc-400 dark:text-zinc-500'}`}>{elapsed===0?'agora':`${elapsed}min`}</span>
-          <button type="button" onClick={onReimprimir} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg active:scale-95" title="Cupom (cliente)"><Printer size={16}/></button>
-          <button type="button" onClick={onImprimirProducao} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 rounded-lg active:scale-95" title="Produção (cozinha)"><ChefHat size={16}/></button>
-          <button type="button" onClick={onDetail} className="min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-lg active:scale-95" aria-label="Ver detalhes"><ChevronRight size={18}/></button>
+          <button type="button" onClick={onReimprimir} className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-100 active:scale-95 dark:text-emerald-400 dark:hover:bg-emerald-500/20 md:min-h-[36px] md:min-w-[36px]" title="Cupom (cliente)"><Printer size={16}/></button>
+          <button type="button" onClick={onImprimirProducao} className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-amber-800 hover:bg-amber-100 active:scale-95 dark:text-amber-200 dark:hover:bg-amber-500/20 md:min-h-[36px] md:min-w-[36px]" title="Produção (cozinha)"><ChefHat size={16}/></button>
+          <button type="button" onClick={onDetail} className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 md:min-h-[36px] md:min-w-[36px]" aria-label="Ver detalhes"><ChevronRight size={18}/></button>
         </div>
       </div>
       <p
@@ -1067,8 +1071,8 @@ function DCard({ label, value, color, icon }: { label:string; value:string; colo
   };
   const c = C[color]||C.zinc;
   return (
-    <div className={`${adminOpsSurfaceCardClass} p-3 sm:p-4 hover:shadow-md transition-shadow min-w-0`}>
-      <div className={`w-9 h-9 sm:w-10 sm:h-10 ${c.bg} ${c.text} rounded-xl flex items-center justify-center mb-2 sm:mb-3 shrink-0`}>{icon}</div>
+    <div className={`${adminOpsSurfaceCardClass} min-w-0 p-2.5 transition-shadow hover:shadow-md sm:p-3.5`}>
+      <div className={`mb-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:mb-2 sm:h-10 sm:w-10 ${c.bg} ${c.text}`}>{icon}</div>
       <p className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 leading-none tabular-nums break-words">{value}</p>
       <p className="text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 sm:mt-1.5 font-bold uppercase tracking-wide leading-tight">{label}</p>
     </div>

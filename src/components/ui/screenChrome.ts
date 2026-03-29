@@ -5,19 +5,19 @@
 
 /** Título principal de tela (Pedidos, Operação, Delivery). */
 export const adminScreenTitleClass =
-  'text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100';
+  'text-lg sm:text-xl md:text-2xl font-black text-zinc-900 dark:text-zinc-100';
 
 /** Subtítulo sob o título (tom e espaçamento alinhados). */
 export const adminScreenSubtitleClass =
   'text-sm text-zinc-500 dark:text-zinc-400 mt-0.5';
 
-/** Linha do cabeçalho: empilha no mobile, alinha no desktop. */
+/** Linha do cabeçalho: empilha no mobile, alinha no desktop; gap menor em telas baixas/largas estreitas. */
 export const adminScreenHeaderRowClass =
-  'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between';
+  'flex flex-col gap-2 sm:gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0';
 
 /** Padding de página usado em listas admin (ex.: Pedidos). */
 export const adminScreenPagePaddingClass =
-  'p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 sm:pb-6';
+  'p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-4 md:p-5 lg:p-6 lg:pb-6';
 
 /** Rótulos de filtro / campo em cards (tamanho mínimo legível). */
 export const adminFormLabelClass =
@@ -45,7 +45,7 @@ export const adminScreenMetaHintClass =
 
 /** Card principal com elevação leve (pedido ativo, painel, tabela embutida). */
 export const adminOpsSurfaceCardClass =
-  'rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/[0.04] dark:border-zinc-800 dark:bg-zinc-900';
+  'min-w-0 max-w-full rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/[0.04] dark:border-zinc-800 dark:bg-zinc-900';
 
 /**
  * Linha ou célula de grade sem sombra marcada (lista densa, card de produto em grade).
@@ -70,8 +70,8 @@ export const adminOpsDashedEmptyClass =
  * Faixa de filtros agrupados — evita o `ring` do `Card` e alinha sombra/borda aos demais blocos operacionais.
  */
 export const adminOpsFilterCardClass =
-  'rounded-2xl border border-zinc-200/90 bg-zinc-50/95 shadow-sm shadow-zinc-950/[0.04] dark:border-zinc-800 dark:bg-zinc-900/45';
+  'min-w-0 max-w-full rounded-2xl border border-zinc-200/90 bg-zinc-50/95 shadow-sm shadow-zinc-950/[0.04] dark:border-zinc-800 dark:bg-zinc-900/45';
 
 /** Blocos de formulário / resumo em fundo zinc (painéis internos em Produtos). */
 export const adminOpsMutedBlockClass =
-  'rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40';
+  'min-w-0 max-w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 sm:px-4 sm:py-3 dark:border-zinc-800 dark:bg-zinc-900/40';

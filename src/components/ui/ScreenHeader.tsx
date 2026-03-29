@@ -7,8 +7,8 @@ import {
 
 const HEADER_ROW_FROM = {
   sm: adminScreenHeaderRowClass,
-  md: 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between',
-  lg: 'flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between',
+  md: 'flex min-w-0 flex-col gap-2 sm:gap-3 md:flex-row md:items-center md:justify-between',
+  lg: 'flex min-w-0 flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center lg:justify-between',
 } as const;
 
 export type ScreenHeaderProps = {
@@ -58,7 +58,7 @@ export function ScreenHeader({
         ) : null}
       </div>
       {showTrailing ? (
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {meta}
           {actions}
         </div>

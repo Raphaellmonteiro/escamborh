@@ -142,7 +142,7 @@ const ProductCard = React.memo(function ProductCard({
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
-      className="group relative text-left rounded-xl border border-zinc-700 bg-zinc-800 overflow-hidden shadow-md shadow-black/15 hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-200 ease-out cursor-pointer min-h-[148px] flex flex-col"
+      className="group relative flex min-h-[128px] cursor-pointer flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800 text-left shadow-md shadow-black/15 transition-all duration-200 ease-out hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 md:min-h-[136px] xl:min-h-[148px]"
     >
       <div className="absolute inset-0 pointer-events-none rounded-xl bg-amber-400/25 opacity-0 group-active:opacity-100 transition-opacity duration-75 z-10" aria-hidden />
       <div className="relative w-full overflow-hidden shrink-0" style={{ paddingBottom: '46%' }}>
@@ -638,7 +638,7 @@ export default function POSScreen({
   const renderCartColumn = (variant: 'desktop' | 'drawer') => (
     <>
       {variant === 'desktop' && (
-        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950 flex items-center gap-2.5 shrink-0">
+        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-3 py-2.5 xl:px-4 xl:py-3">
           <ShoppingCart size={18} className="text-amber-400" />
           <h2 className="text-base font-black text-zinc-100">Pedido Atual</h2>
           {cart.length > 0 && (
@@ -653,7 +653,7 @@ export default function POSScreen({
         </div>
       )}
 
-      <div className="px-4 pt-3 pb-2 shrink-0 bg-zinc-950 border-b border-zinc-800/80">
+      <div className="shrink-0 border-b border-zinc-800/80 bg-zinc-950 px-3 pb-2 pt-2.5 xl:px-4 xl:pt-3">
         {!posCliente ? (
           <button
             type="button"
@@ -695,7 +695,7 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0 bg-zinc-950">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-zinc-950 px-3 py-2.5 xl:px-4 xl:py-3">
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-8 px-4">
             <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center mb-3">
@@ -736,7 +736,7 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="border-t border-zinc-800 px-4 pt-4 pb-4 space-y-4 shrink-0 bg-zinc-950">
+      <div className="shrink-0 space-y-3 border-t border-zinc-800 bg-zinc-950 px-3 pb-3 pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4">
         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Pagamentos Adicionados</p>
         {payments.length > 0 && (
           <div className="space-y-1.5">
@@ -842,7 +842,7 @@ export default function POSScreen({
             type="button"
             onClick={handleStartFinalize}
             disabled={cart.length === 0 || remaining > 0.01 || isFinalizing}
-            className="w-full py-4 text-base font-black rounded-xl flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 bg-amber-400 hover:bg-amber-300 active:scale-[0.98] text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 hover:ring-amber-400/60 min-h-[52px]"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-base font-black text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 transition-all duration-200 hover:bg-amber-300 hover:ring-amber-400/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 xl:min-h-[52px] xl:gap-2.5 xl:py-4"
           >
             {isFinalizing ? (
               <><span className="animate-pulse">⏳</span> Processando...</>
@@ -861,7 +861,7 @@ export default function POSScreen({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col md:flex-row overflow-hidden bg-zinc-950 pb-[env(safe-area-inset-bottom)] md:pb-0">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col overflow-hidden bg-zinc-950 pb-[env(safe-area-inset-bottom)] md:flex-row md:pb-0">
 
       {/* ═══════════════════════════════════════════════════════════════
           PAINEL ESQUERDO — Catálogo
@@ -869,7 +869,7 @@ export default function POSScreen({
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Busca */}
-        <div className="px-3 pt-3 pb-2 shrink-0">
+        <div className="shrink-0 px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-3">
           <div className="relative">
             <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
             <input
@@ -930,7 +930,7 @@ export default function POSScreen({
         </div>
 
         {/* Grade de Produtos */}
-        <div className="flex-1 overflow-y-auto px-3 pb-24 md:pb-3">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-24 md:px-3 md:pb-3">
           {displayProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-zinc-500" role="status">
               <ScanLine size={36} className="mb-3 opacity-40" aria-hidden />
@@ -938,7 +938,7 @@ export default function POSScreen({
               {searchTerm && <p className="text-sm mt-1.5 text-zinc-500">Termo: {searchTerm}</p>}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 min-[1728px]:grid-cols-7 gap-2.5 md:gap-3">
+            <div className="grid grid-cols-2 gap-2 md:gap-2.5 lg:grid-cols-3 lg:gap-2.5 xl:grid-cols-4 2xl:grid-cols-5 min-[1728px]:grid-cols-6 min-[1920px]:grid-cols-7 xl:gap-3">
               {displayProducts.map(product => (
                 <ProductCard
                   key={product.id}
@@ -970,7 +970,7 @@ export default function POSScreen({
           PAINEL DIREITO — Pedido + Pagamento (tablet/desktop)
           Usa bg-zinc-950 para evitar override .flowpdv-dark .bg-zinc-900 → #f0f0f0
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="hidden md:flex md:flex-col h-full min-h-0 w-full md:w-[min(340px,36vw)] lg:w-[min(380px,34vw)] xl:w-[400px] bg-zinc-950 border-l border-zinc-800 shrink-0 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
+      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-zinc-800 bg-zinc-950 shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] md:flex md:w-[min(292px,32vw)] md:flex-col lg:w-[min(268px,26vw)] xl:w-[min(320px,22vw)] 2xl:w-[min(400px,400px)]">
         {renderCartColumn('desktop')}
       </div>
 
@@ -1039,7 +1039,7 @@ export default function POSScreen({
         {pendingProduct && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={{ duration: 0.15 }}
-              className="max-h-[min(92dvh,100%)] w-full max-w-sm overflow-y-auto rounded-t-3xl bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8">
+              className="my-auto flex max-h-[min(92dvh,100svh)] w-full max-w-sm min-h-0 flex-col overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
               <div className="text-center mb-6">
                 {pendingProduct.photo_url && <div className="w-full h-40 rounded-2xl overflow-hidden mb-4"><img src={pendingProduct.photo_url} alt={pendingProduct.name} className="w-full h-full object-cover" /></div>}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>

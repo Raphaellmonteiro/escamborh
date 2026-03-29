@@ -154,9 +154,9 @@ export default function NotificationCenter({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 z-[201] flex h-screen w-full max-w-[420px] flex-col border-l border-white/10 bg-[linear-gradient(180deg,rgba(18,18,21,0.98),rgba(10,10,12,1))] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+            className="fixed right-0 top-0 z-[201] flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-[min(420px,100%)] flex-col border-l border-white/10 bg-[linear-gradient(180deg,rgba(18,18,21,0.98),rgba(10,10,12,1))] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
           >
-            <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
+            <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-3 sm:px-5 sm:py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                   <Bell size={17} className="text-zinc-100" />
@@ -192,7 +192,7 @@ export default function NotificationCenter({
               </div>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto border-b border-white/8 px-4 py-3 scrollbar-hide">
+            <div className="flex shrink-0 flex-wrap gap-2 border-b border-white/8 px-3 py-2 scrollbar-hide sm:flex-nowrap sm:overflow-x-auto sm:px-4 sm:py-3">
               {filtros.map((item) => {
                 const isActive = filtro === item.key;
 
@@ -213,7 +213,7 @@ export default function NotificationCenter({
               })}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-3 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 py-2 sm:px-3 sm:py-3">
               {carregandoHist ? (
                 <div className="flex items-center justify-center py-24">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-zinc-200" />

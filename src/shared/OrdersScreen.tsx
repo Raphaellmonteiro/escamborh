@@ -710,7 +710,7 @@ const handleConfirmOrder = async (id: number) => {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={adminScreenPagePaddingClass}>
       <ScreenHeader
-        className="mb-6"
+        className="mb-4 md:mb-5 lg:mb-6"
         title={cfg.tituloPedidos}
         subtitle="Consulta detalhada e histórico — a fila ao vivo está em Operação"
         actions={
@@ -821,7 +821,7 @@ const handleConfirmOrder = async (id: number) => {
                 <div className="h-1.5" style={{ background: isDelivery ? '#f97316' : sc.dot }} />
                 {/* Banner delivery */}
                 {isDelivery && (
-                  <div className="bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2 flex-wrap">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-orange-100 bg-orange-50 px-3 py-1.5 sm:px-4 sm:py-2">
                     <span className="text-sm">🛵</span>
                     <Bike size={14} className="text-orange-700" />
                     <span className="text-xs font-black text-orange-700 uppercase tracking-wider">{channelMeta.label}</span>
@@ -844,8 +844,8 @@ const handleConfirmOrder = async (id: number) => {
                     )}
                   </div>
                 )}
-                <div className="p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
+                <div className="p-3 sm:p-4">
+                  <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
                     {/* Esquerda: senha + tipo */}
                     <div className="flex min-w-0 items-center gap-3">
                       {/* Senha */}

@@ -87,34 +87,36 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-0 sm:items-center sm:p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
           onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <motion.div
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl relative"
+            className="relative flex w-full max-w-lg min-h-0 max-h-[min(92dvh,100svh)] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl"
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)' }}
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-start justify-between p-6 pb-4">
-              <div>
-                <h2 className="text-xl font-black text-white">Solicitar Acesso Gratuito</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.6)' }}>
+            <div className="flex shrink-0 items-start justify-between p-4 pb-3 sm:p-6 sm:pb-4">
+              <div className="min-w-0 pr-2">
+                <h2 className="text-lg font-black text-white sm:text-xl">Solicitar Acesso Gratuito</h2>
+                <p className="mt-0.5 text-[11px] sm:text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>
                   Experimente o FlowPDV por 7 dias sem compromisso
                 </p>
               </div>
-              <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors mt-0.5">
+              <button onClick={handleClose} className="mt-0.5 shrink-0 rounded-lg p-1.5 transition-colors hover:bg-white/10">
                 <X size={18} className="text-zinc-400" />
               </button>
             </div>
 
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {/* Success state */}
             {step === 'success' ? (
-              <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+              <div className="flex flex-col items-center justify-center px-4 py-10 text-center sm:px-6 sm:py-14">
                 <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
                   <CheckCircle2 size={56} className="text-emerald-400 mb-4" />
                 </motion.div>
@@ -129,7 +131,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4 sm:space-y-5 sm:px-6 sm:pb-6">
 
                 {/* Segmentos */}
                 <div>
@@ -143,7 +145,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
                     <span style={{ color: 'rgba(52,211,153,0.8)' }}>Disponíveis</span>
                   </p>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {SEGMENTOS_ATIVOS.map(seg => (
                       <button key={seg.value} type="button"
                         onClick={() => set('segmento', seg.value)}
@@ -168,7 +170,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
                     <span style={{ color: 'rgba(251,191,36,0.7)' }}>Em produção</span>
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {SEGMENTOS_PRODUCAO.map(seg => (
                       <div key={seg.value}
                         className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-center relative opacity-50 cursor-not-allowed"
@@ -219,7 +221,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                 </div>
 
                 {/* Documento */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5"
                       style={{ color: 'rgba(148,163,184,0.5)' }}>Tipo de Documento</label>
@@ -250,7 +252,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                 </div>
 
                 {/* Responsável + Email */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5"
                       style={{ color: 'rgba(148,163,184,0.5)' }}>👤 Nome do Responsável *</label>
@@ -272,7 +274,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                 </div>
 
                 {/* WhatsApp + Cidade */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5"
                       style={{ color: 'rgba(148,163,184,0.5)' }}>📱 WhatsApp *</label>
@@ -315,6 +317,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                 </p>
               </form>
             )}
+            </div>
           </motion.div>
         </motion.div>
       )}

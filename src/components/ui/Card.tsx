@@ -4,7 +4,7 @@ import React from 'react';
 
 export const Card = ({ children, className = "" }: { children: React.ReactNode; className?: string; key?: React.Key }) => (
   <div
-    className={`overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm shadow-zinc-950/[0.04] ring-1 ring-black/[0.03] [.admin-dark_&]:!rounded-xl [.admin-dark_&]:!border-zinc-800 [.admin-dark_&]:!bg-zinc-900 [.admin-dark_&]:!shadow-md [.admin-dark_&]:ring-0 ${className}`}
+    className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-sm shadow-zinc-950/[0.04] ring-1 ring-black/[0.03] [.admin-dark_&]:!rounded-xl [.admin-dark_&]:!border-zinc-800 [.admin-dark_&]:!bg-zinc-900 [.admin-dark_&]:!shadow-md [.admin-dark_&]:ring-0 ${className}`}
   >
     {children}
   </div>

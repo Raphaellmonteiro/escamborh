@@ -29,10 +29,14 @@ export default function OpenCaixaModal({ onClose, onSuccess, token }: { onClose:
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-6">
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
-        <h3 className="text-2xl font-bold text-zinc-900 mb-6">Abrir Caixa</h3>
-        <form onSubmit={handleOpen} className="space-y-4">
+    <div className="fixed inset-0 z-[120] flex items-end justify-center overflow-y-auto bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="my-auto flex w-full max-w-md min-h-0 flex-col overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl max-h-[min(92dvh,100svh)] sm:max-h-[min(90dvh,640px)] sm:rounded-3xl sm:p-8 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
+        <h3 className="mb-4 text-xl font-bold text-zinc-900 sm:mb-6 sm:text-2xl">Abrir Caixa</h3>
+        <form onSubmit={handleOpen} className="min-h-0 space-y-4">
           <Input 
             label="Fundo de Caixa Inicial (R$)" 
             type="number" 

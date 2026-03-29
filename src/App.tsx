@@ -55,7 +55,7 @@ import { useFlowAI }         from './hooks/useFlowAI';
 
 function TabLoadingFallback() {
   return (
-    <div className="flex flex-1 min-h-[50vh] items-center justify-center text-sm text-zinc-400">
+    <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center px-4 py-8 text-sm text-zinc-400">
       Carregando…
     </div>
   );
@@ -737,7 +737,7 @@ const handleAuth = async (e: React.FormEvent) => {
   }
 
   return (
-    <div className="flex h-screen bg-zinc-50 overflow-hidden flex-col lg:flex-row">
+    <div className="flex h-screen min-h-0 bg-zinc-50 overflow-hidden flex-col lg:flex-row">
       {mobileNavOpen && (
         <button
           type="button"
@@ -750,15 +750,15 @@ const handleAuth = async (e: React.FormEvent) => {
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-[min(100%,14rem)] max-w-[85vw] sm:w-[15rem] xl:w-60 2xl:w-64
-          bg-white border-r border-zinc-200 flex flex-col h-screen shrink-0
+          w-[min(100%,14rem)] max-w-[85vw] sm:w-[15rem] lg:w-[13rem] xl:w-56 2xl:w-60
+          bg-white border-r border-zinc-200 flex flex-col h-screen min-h-0 shrink-0
           transition-transform duration-200 ease-out
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
-        <div className="border-b border-zinc-100 bg-zinc-50 p-4 xl:p-5">
-          <div className="rounded-3xl border border-zinc-200 bg-white p-3.5 shadow-sm xl:p-4">
+        <div className="border-b border-zinc-100 bg-zinc-50 p-3 sm:p-4 lg:p-3 xl:p-4">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm lg:p-3 xl:p-3.5">
             <div className="flex items-start gap-3">
             <label className="cursor-pointer group relative" title="Clique para trocar a logo">
               <input
@@ -814,7 +814,7 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
 
         {/* Status do Caixa */}
-        <div className="px-4 py-3 border-b border-zinc-100 xl:px-6 xl:py-4">
+        <div className="border-b border-zinc-100 px-3 py-2.5 lg:px-3 lg:py-3 xl:px-5 xl:py-3.5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${currentCaixa?.status === 'aberto' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
@@ -856,7 +856,7 @@ const handleAuth = async (e: React.FormEvent) => {
           )}
         </div>
 
-     <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto min-h-0 xl:p-4 xl:space-y-2">
+     <nav className="flex-1 min-h-0 space-y-1.5 overflow-y-auto p-2.5 lg:p-2.5 lg:space-y-1 xl:p-3 xl:space-y-1.5">
           {(() => { return (<> 
             {canAccess('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
             {canAccess('orders') && (
@@ -901,7 +901,7 @@ const handleAuth = async (e: React.FormEvent) => {
           {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon={<Settings size={20} />}        label="Configurações" />}
         </nav>
 
-        <div className="border-t border-zinc-100 p-3 flex-shrink-0 space-y-2.5 xl:p-4 xl:space-y-3">
+        <div className="flex-shrink-0 space-y-2 border-t border-zinc-100 p-2.5 lg:p-2.5 xl:space-y-2.5 xl:p-3">
           <div className="flex items-center justify-between px-1">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Utilitários</p>
             <p className="text-[10px] text-zinc-400">Tema, alertas e sessão</p>
@@ -911,7 +911,7 @@ const handleAuth = async (e: React.FormEvent) => {
               <button
                 onClick={() => setNotifCenterOpen(true)}
                 title="Central de Notificações"
-                className="relative flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+                className="relative flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs"
               >
                 <Bell size={16} />
                 <span>Alertas</span>
@@ -925,7 +925,7 @@ const handleAuth = async (e: React.FormEvent) => {
             <button
               onClick={() => setOperationalSoundEnabled((value) => !value)}
               title={operationalSoundEnabled ? 'Desativar som da Operação' : 'Ativar som da Operação'}
-              className={`flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border px-3 text-xs font-semibold transition-all ${
+              className={`flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] font-semibold transition-all lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs ${
                 operationalSoundEnabled
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100'
                   : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900'
@@ -937,7 +937,7 @@ const handleAuth = async (e: React.FormEvent) => {
             <button
               onClick={() => setDarkMode(v => !v)}
               title={darkMode ? 'Modo claro' : 'Modo escuro'}
-              className="flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+              className="flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs"
             >
               {darkMode ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -957,7 +957,7 @@ const handleAuth = async (e: React.FormEvent) => {
             <button
               onClick={handleLogout}
               title="Sair do sistema"
-              className="flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              className="flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs"
             >
               <LogOut size={16} />
               <span>Sair</span>
@@ -966,8 +966,8 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col min-w-0 overflow-hidden lg:min-h-0">
-        <header className="lg:hidden flex items-center gap-3 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] border-b border-zinc-200 bg-white shrink-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
@@ -1033,7 +1033,7 @@ const handleAuth = async (e: React.FormEvent) => {
 
 
       {/* Área de Conteúdo Principal */}
-      <main className="flex-1 min-w-0 overflow-auto relative flex flex-col" style={{ zIndex: 2 }}>
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-auto" style={{ zIndex: 2 }}>
 
         {/* ── Banner senha padrão ───────────────────────────────────── */}
         {senhaPadrao && userCargo === 'dono' && (
@@ -1081,12 +1081,12 @@ const handleAuth = async (e: React.FormEvent) => {
         {/* Modal de Autenticação para Áreas Restritas */}
         <AnimatePresence>
           {showAuthModal && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-6">
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl max-h-[min(90dvh,560px)] overflow-y-auto my-auto"
+                className="my-auto flex w-full max-w-sm flex-col overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl max-h-[min(92dvh,100svh)] min-h-0 sm:max-h-[min(90dvh,560px)] sm:rounded-3xl sm:p-8 pb-[max(1rem,env(safe-area-inset-bottom))]"
               >
                 <div className="w-16 h-16 bg-zinc-100 text-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <Lock size={32} />

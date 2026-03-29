@@ -13,7 +13,7 @@ export default function NavItem({ active = false, attention = false, badgeCount,
   return (
     <button
       onClick={onClick}
-      className={`group relative w-full flex items-center gap-3 px-4 py-3 min-h-[48px] rounded-2xl border text-left transition-all active:opacity-90 ${
+      className={`group relative flex w-full min-w-0 items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition-all active:opacity-90 min-h-[44px] lg:min-h-[48px] lg:gap-3 lg:px-4 lg:py-3 ${
         active
           ? 'border-zinc-900 bg-zinc-900 text-white shadow-lg shadow-zinc-900/15'
           : attention
@@ -27,7 +27,7 @@ export default function NavItem({ active = false, attention = false, badgeCount,
         }`}
       />
       <span
-        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all ${
+        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all lg:h-10 lg:w-10 ${
           active
             ? 'border-white/10 bg-white/12 text-white'
             : attention
@@ -37,7 +37,9 @@ export default function NavItem({ active = false, attention = false, badgeCount,
       >
         {icon}
       </span>
-      <span className="flex-1 font-semibold tracking-tight">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold leading-snug tracking-tight lg:text-sm">
+        {label}
+      </span>
       <span className="flex items-center gap-2 shrink-0">
         {typeof badgeCount === 'number' && badgeCount > 0 ? (
           <span

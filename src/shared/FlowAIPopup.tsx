@@ -65,7 +65,7 @@ export default function FlowAIPopup({ aviso, onDismiss, onAcao }: FlowAIPopupPro
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 380, opacity: 0 }}
       transition={{ type: 'spring', damping: 24, stiffness: 260 }}
-      className="fixed bottom-6 right-6 z-[300] w-[340px] overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.97),rgba(12,12,14,0.99))] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
+      className="fixed bottom-4 right-4 z-[300] w-[min(340px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.97),rgba(12,12,14,0.99))] text-zinc-100 shadow-[0_24px_80px_rgba(0,0,0,0.5)] sm:bottom-6 sm:right-6"
     >
       <div className={`absolute bottom-0 left-0 top-0 w-[3px] rounded-r-full ${severity.rail}`} />
 

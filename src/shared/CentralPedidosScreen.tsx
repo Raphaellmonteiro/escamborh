@@ -401,8 +401,8 @@ export default function CentralPedidosScreen({
   );
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
-      <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-4 sm:px-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-zinc-50 dark:bg-zinc-950">
+      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900 sm:px-4 sm:py-3 lg:px-6 lg:py-4">
         <ScreenHeader
           titleAs="h1"
           titleClassName="flex items-center gap-2"
@@ -432,7 +432,7 @@ export default function CentralPedidosScreen({
           }
         />
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -473,7 +473,7 @@ export default function CentralPedidosScreen({
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:mt-3 sm:gap-2">
           <span className={adminSectionEyebrowClass}>
             Operação
           </span>
@@ -494,7 +494,7 @@ export default function CentralPedidosScreen({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 space-y-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 sm:pb-6">
+      <div className="min-h-0 flex-1 space-y-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:p-4 sm:pb-4 lg:p-6 lg:pb-6">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/40 dark:border-red-900 px-4 py-3 text-sm text-red-800 dark:text-red-200">
             {error}
@@ -517,14 +517,14 @@ export default function CentralPedidosScreen({
                 Nenhum pedido corresponde ao filtro selecionado.
               </p>
             )}
-            <div className="overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 [scrollbar-gutter:stable]">
-              <div className="flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 sm:gap-4 sm:items-start">
+            <div className="-mx-3 overflow-x-auto overflow-y-hidden px-3 pb-2 [scrollbar-gutter:stable] sm:mx-0 sm:px-0">
+              <div className="flex min-w-max gap-2.5 sm:min-w-0 sm:grid sm:grid-cols-2 sm:items-start sm:gap-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1800px]:grid-cols-6">
                 {COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado').map((col) => {
                   const tone = getColumnTone(col.id);
                   return (
                   <div
                     key={col.id}
-                    className={`w-[min(100vw-2rem,320px)] sm:w-auto flex flex-col rounded-2xl border min-h-[min(420px,60vh)] max-h-[min(720px,75vh)] flex-shrink-0 sm:min-h-[min(480px,70vh)] sm:max-h-[min(720px,78vh)] shadow-sm shadow-zinc-950/[0.02] ${tone.shell}`}
+                    className={`flex w-[min(100vw-1.5rem,300px)] flex-shrink-0 flex-col rounded-2xl border shadow-sm shadow-zinc-950/[0.02] min-h-[min(380px,55vh)] max-h-[min(680px,72vh)] sm:w-auto sm:min-h-[min(420px,62vh)] sm:max-h-[min(720px,78vh)] ${tone.shell}`}
                   >
                     <div className={`shrink-0 px-3 py-2.5 ${tone.header}`}>
                       <div className="flex items-center justify-between gap-2">
@@ -539,7 +539,7 @@ export default function CentralPedidosScreen({
                         <p className="text-[10px] text-zinc-400 mt-0.5 leading-none">{col.hint}</p>
                       )}
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain p-1.5 sm:space-y-2 sm:p-2">
                       {buckets[col.id].length === 0 ? (
                         <div className={`mx-1 rounded-2xl border border-dashed py-6 px-3 text-center text-[11px] ${tone.empty}`}>
                           Sem pedidos nesta etapa
@@ -698,7 +698,7 @@ function OrderCard({
         ? 'ring-1 ring-red-200/80 border-red-200 dark:ring-red-500/20 dark:border-red-500/30'
         : 'hover:border-zinc-300 dark:hover:border-zinc-600'
     }`}>
-      <div className={compactMode ? 'p-2.5' : 'p-3.5'}>
+      <div className={compactMode ? 'p-2.5' : 'p-3 sm:p-3.5'}>
         <button
           type="button"
           onClick={onOpenDetail}
@@ -1184,7 +1184,7 @@ function OrderDetailModal({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 24, opacity: 0 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-        className="flex max-h-[min(92dvh,100%)] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:max-w-lg sm:rounded-2xl sm:pb-0"
+        className="flex max-h-[min(92dvh,100svh)] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:max-w-lg sm:rounded-2xl sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 px-4 py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
@@ -1216,7 +1216,7 @@ function OrderDetailModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
           <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Cliente</p>
