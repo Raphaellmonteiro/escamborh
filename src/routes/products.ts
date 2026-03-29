@@ -13,6 +13,22 @@ const REPORT_TZ = 'America/Sao_Paulo';
 export function createProductsRouter() {
   const router = Router();
 
+  async function loadProdutoGruposOpcao(tenantId: number, productId: number) {
+    const grupos = await qAll(
+      'SELECT * FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC',
+      [productId, tenantId]
+    );
+    const result: any[] = [];
+    for (const g of grupos) {
+      const itens = await qAll(
+        'SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC, id ASC',
+        [g.id, tenantId]
+      );
+      result.push({ ...g, itens });
+    }
+    return result;
+  }
+
   router.use((req, res, next) => {
     const canReadOperationalProducts = req.method === 'GET'
       && (
@@ -20,6 +36,7 @@ export function createProductsRouter() {
         || req.path.startsWith('/barcode/')
         || /\/variacoes-vendaveis(?:\/|$)/.test(req.path)
         || /\/opcoes(?:\/|$)/.test(req.path)
+        || /\/pdv-opcoes(?:\/|$)/.test(req.path)
       );
 
     if (canReadOperationalProducts) {
@@ -383,6 +400,34 @@ function normalizeProductPromotionInput(
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  /** Uma ida e volta HTTP: variações ativas + grupos/opções (mesmo contrato que os GETs separados). */
+  router.get('/:id/pdv-opcoes', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+
+      const produto = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
+      if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' });
+
+      const [variacoesRows, gruposOpcao] = await Promise.all([
+        qAll(
+          `SELECT id, produto_id, nome, preco, codigo_barras, ativo, ordem, ingrediente_id
+           FROM produto_variacoes_vendaveis
+           WHERE tenant_id=?
+             AND produto_id=?
+             AND ativo=1
+           ORDER BY ordem ASC, nome ASC`,
+          [req.tenantId, productId]
+        ),
+        loadProdutoGruposOpcao(req.tenantId, productId),
+      ]);
+
+      res.json({ variacoes_vendaveis: variacoesRows, grupos_opcao: gruposOpcao });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   router.post('/:id/variacoes-vendaveis', async (req: Request, res) => {
     try {
       const productId = Number(req.params.id);
@@ -732,12 +777,7 @@ function normalizeProductPromotionInput(
 
   router.get('/:id/opcoes', async (req: Request, res) => {
     try {
-      const grupos = await qAll('SELECT * FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC', [req.params.id, req.tenantId]);
-      const result = [];
-      for (const g of grupos) {
-        const itens = await qAll('SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC, id ASC', [g.id, req.tenantId]);
-        result.push({ ...g, itens });
-      }
+      const result = await loadProdutoGruposOpcao(req.tenantId, Number(req.params.id));
       res.json(result);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

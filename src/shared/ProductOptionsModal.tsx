@@ -1,7 +1,7 @@
 // Modal de opções / variações — compartilhado entre cardápio online (delivery) e PDV / balcão.
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Plus, Minus, AlertCircle } from 'lucide-react';
+import { X, Plus, Minus, AlertCircle, Loader2 } from 'lucide-react';
 import { useDeliveryCardapioTheme } from '../segments/delivery/DeliveryCardapioThemeContext';
 
 export interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
@@ -624,7 +624,27 @@ export function ProductOptionsModal({
         </div>
 
         <div className={`${mo.scroll} min-h-0 ${compactLayout ? 'py-1.5' : ''}`}>
-          {modoSomenteVariacoes ? (
+          {carregandoOpcoes && visualVariant === 'pos' && variacoesLista.length === 0 && grupos.length === 0 ? (
+            <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : 'mx-4 mb-4 space-y-3'}>
+              <div className={`flex items-center gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/10 ${compactLayout ? 'px-2.5 py-2' : 'px-4 py-3'}`}>
+                <Loader2 className={`shrink-0 animate-spin text-amber-300 ${compactLayout ? 'h-4 w-4' : 'h-5 w-5'}`} aria-hidden />
+                <div className="min-w-0">
+                  <p className={`font-black text-amber-50 ${compactLayout ? 'text-xs' : 'text-sm'}`}>Carregando adicionais</p>
+                  <p className={`text-amber-200/85 ${compactLayout ? 'mt-0.5 text-[10px] leading-snug' : 'mt-0.5 text-xs'}`}>
+                    Buscando variacoes e grupos do produto…
+                  </p>
+                </div>
+              </div>
+              <div className={`space-y-2 ${compactLayout ? 'px-0.5' : ''}`}>
+                {[1, 2, 3].map((k) => (
+                  <div
+                    key={k}
+                    className={`animate-pulse rounded-2xl border border-white/10 bg-zinc-900/80 ${compactLayout ? 'h-14' : 'h-[4.25rem]'}`}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : modoSomenteVariacoes ? (
             <section className={compactLayout ? `${mo.section} mx-2.5 mb-2.5` : mo.section}>
               <div className={compactLayout ? `${mo.sectionHeader} !px-2.5 !py-2` : mo.sectionHeader}>
                 <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : 'gap-3'}`}>

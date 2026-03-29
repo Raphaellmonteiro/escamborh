@@ -95,6 +95,21 @@ function buildProdutoOptionsPayload(
   };
 }
 
+/** Mesma normalização dos GETs `/variacoes-vendaveis` + `/opcoes` e do payload unificado `pdv-opcoes`. */
+function parsePdvOpcoesApiResponse(vars: unknown, gruposRaw: unknown): { grupos: GrupoOpcao[]; variacoes: VariacaoVendavel[] } {
+  const ativas = Array.isArray(vars)
+    ? vars.filter((v: { ativo?: number }) => Number(v?.ativo) === 1)
+    : [];
+  const variacoes: VariacaoVendavel[] = ativas.map((v: any) => ({
+    id: Number(v.id),
+    nome: String(v.nome || ''),
+    preco: Number(v.preco ?? 0),
+  }));
+  return { grupos: normalizeGruposPDV(gruposRaw), variacoes };
+}
+
+type PdvOpcoesCacheEntry = { grupos: GrupoOpcao[]; variacoes: VariacaoVendavel[] };
+
 function selecoesLineKey(s: unknown): string {
   if (!s || typeof s !== 'object') return '';
   try {
@@ -215,6 +230,7 @@ export default function POSScreen({
   const [opcaoModalBaseProduct, setOpcaoModalBaseProduct] = useState<Product | null>(null);
   const [carregandoVariacoes, setCarregandoVariacoes]     = useState(false);
   const opcaoModalLoadSeqRef                              = useRef(0);
+  const pdvOpcoesCacheRef                                 = useRef<Map<number, PdvOpcoesCacheEntry>>(new Map());
   const [showSuccess, setShowSuccess]                     = useState<{ number: string; receipt: string; senha: number; tipo: string; orderId?: number } | null>(null);
   const [isFinalizing, setIsFinalizing]                   = useState(false);
   const [showTipoRetirada, setShowTipoRetirada]           = useState(false);
@@ -347,26 +363,26 @@ export default function POSScreen({
   const openProductCustomizeFlow = useCallback(async (product: Product) => {
     const seq = ++opcaoModalLoadSeqRef.current;
     setOpcaoModalBaseProduct(product);
+
+    const cached = pdvOpcoesCacheRef.current.get(product.id);
+    if (cached) {
+      setOpcaoModalProduto(buildProdutoOptionsPayload(product, cached.grupos, cached.variacoes));
+      setCarregandoVariacoes(false);
+      return;
+    }
+
     setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
     setCarregandoVariacoes(true);
     try {
-      const [resVar, resGrp] = await Promise.all([
-        fetch(`/api/products/${product.id}/variacoes-vendaveis`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`/api/products/${product.id}/opcoes`, { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
+      const res = await fetch(`/api/products/${product.id}/pdv-opcoes`, { headers: { Authorization: `Bearer ${token}` } });
       if (seq !== opcaoModalLoadSeqRef.current) return;
-      const vars = resVar.ok ? await resVar.json() : [];
-      const gruposRaw = resGrp.ok ? await resGrp.json() : [];
-      const ativas = Array.isArray(vars)
-        ? vars.filter((v: { ativo?: number }) => Number(v?.ativo) === 1)
-        : [];
-      const variacoes: VariacaoVendavel[] = ativas.map((v: any) => ({
-        id: Number(v.id),
-        nome: String(v.nome || ''),
-        preco: Number(v.preco ?? 0),
-      }));
-      const grupos = normalizeGruposPDV(gruposRaw);
-      setOpcaoModalProduto(buildProdutoOptionsPayload(product, grupos, variacoes));
+      let payload: PdvOpcoesCacheEntry = { grupos: [], variacoes: [] };
+      if (res.ok) {
+        const data = await res.json();
+        payload = parsePdvOpcoesApiResponse(data.variacoes_vendaveis, data.grupos_opcao);
+        pdvOpcoesCacheRef.current.set(product.id, payload);
+      }
+      setOpcaoModalProduto(buildProdutoOptionsPayload(product, payload.grupos, payload.variacoes));
     } catch {
       if (seq !== opcaoModalLoadSeqRef.current) return;
       setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
