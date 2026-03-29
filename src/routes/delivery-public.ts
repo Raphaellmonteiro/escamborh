@@ -18,6 +18,7 @@ import {
 } from '../services/operationalAutomationService';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { notifyTenantOrderStreams } from '../sse';
+import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -115,17 +116,6 @@ function parseDeliveryConfig(rawConfig?: string | null): DeliveryConfig {
   } catch {
     return {};
   }
-}
-
-function normalizeCardapioBannerSlots(dcfg: DeliveryConfig): string[] {
-  const raw = dcfg.cardapio_online_banner_urls;
-  const out = ['', '', '', ''];
-  if (!Array.isArray(raw)) return out;
-  for (let i = 0; i < 4; i++) {
-    const s = raw[i];
-    out[i] = typeof s === 'string' ? s.trim() : '';
-  }
-  return out;
 }
 
 function getCurrentDateInTimeZone() {
@@ -626,6 +616,8 @@ export function createDeliveryPublicRouter() {
       }
       const categorias = Object.entries(categoriasMap).map(([nome, itens]) => ({ nome, itens }));
 
+      const cardapioBannerSlots = [...normalizeCardapioOnlineBannerSlots(dcfg.cardapio_online_banner_urls)];
+
       res.json({
         estabelecimento: tenant.nome_estabelecimento,
         nome_estabelecimento: tenant.nome_estabelecimento,
@@ -651,7 +643,8 @@ export function createDeliveryPublicRouter() {
           desconto_primeiro_cliente_min_pedido: dcfg.desconto_primeiro_cliente_min_pedido ?? 0,
           zonas_entrega: Array.isArray(dcfg.zonas_entrega) ? dcfg.zonas_entrega : [],
           theme_mode: dcfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium',
-          cardapio_banner_slots: normalizeCardapioBannerSlots(dcfg),
+          cardapio_online_banner_urls: cardapioBannerSlots,
+          cardapio_banner_slots: cardapioBannerSlots,
         },
         categorias,
         produtos: produtosComOpcoes,

@@ -18,6 +18,7 @@ import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Spinner } from '../components/ui/Spinner';
 import { StatusChip } from '../components/ui/StatusChip';
 import { adminOpsDashedWellClass, adminOpsInsetPanelClass, adminOpsSurfaceCardClass } from '../components/ui/screenChrome';
+import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 
 // ─── Sound utils (inline — sem dep externa) ───────────────────────────────────
 function playNewOrderSound() {
@@ -171,17 +172,6 @@ const PAGS: Record<string, { label: string; icon: React.ReactNode }> = {
 
 const fmt      = (v: number) => `R$ ${(v||0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 const fmtHour  = (d?: string) => d ? new Date(d.includes('T')?d:d.replace(' ','T')).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
-
-function normalizeCfgBannerSlots(cfg: DeliveryConfig): string[] {
-  const raw = cfg.cardapio_online_banner_urls;
-  const out = ['', '', '', ''];
-  if (!Array.isArray(raw)) return out;
-  for (let i = 0; i < 4; i++) {
-    const s = raw[i];
-    out[i] = typeof s === 'string' ? s.trim() : '';
-  }
-  return out;
-}
 
 function deliveryPedidoTemItensDetalhe(p: Pedido): boolean {
   return Array.isArray(p.itens) && p.itens.length > 0;
@@ -1863,7 +1853,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.url) {
         setCfg((c) => {
-          const slots = normalizeCfgBannerSlots(c);
+          const slots = [...normalizeCardapioOnlineBannerSlots(c.cardapio_online_banner_urls)];
           slots[idx] = d.url;
           return { ...c, cardapio_online_banner_urls: slots };
         });
@@ -1878,7 +1868,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       const res = await fetch(`/api/delivery/cardapio-visual/banner/${idx}`, { method: 'DELETE', headers: hdrs });
       if (res.ok) {
         setCfg((c) => {
-          const slots = normalizeCfgBannerSlots(c);
+          const slots = [...normalizeCardapioOnlineBannerSlots(c.cardapio_online_banner_urls)];
           slots[idx] = '';
           return { ...c, cardapio_online_banner_urls: slots };
         });
@@ -1911,7 +1901,11 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
   const save = async () => {
     setSaving(true);
     try {
-      const body = { ...cfg, zonas_entrega: zonas };
+      const body = {
+        ...cfg,
+        zonas_entrega: zonas,
+        cardapio_online_banner_urls: [...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)],
+      };
       await fetch('/api/delivery/config', {
         method:'PUT', headers:{...hdrs,'Content-Type':'application/json'},
         body: JSON.stringify(body),
@@ -2280,7 +2274,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Banners do topo (4 imagens)</p>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-3">Cada quadrante do topo do cardápio. Vazio = fotos de destaque ou logo, como antes.</p>
                 <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-                  {normalizeCfgBannerSlots(cfg).map((url, idx) => (
+                  {[...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)].map((url, idx) => (
                     <div
                       key={idx}
                       className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800"

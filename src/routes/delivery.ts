@@ -22,6 +22,7 @@ import {
   touchStoreCustomerPurchase,
 } from '../services/storeCustomerService';
 import { notifyTenantOrderStreams } from '../sse';
+import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
@@ -65,14 +66,7 @@ function parseDeliveryCfgJson(raw: string | null | undefined): Record<string, an
 }
 
 function bannerSlotsFromCfg(cfg: Record<string, any>): string[] {
-  const raw = cfg.cardapio_online_banner_urls;
-  const out = ['', '', '', ''];
-  if (!Array.isArray(raw)) return out;
-  for (let i = 0; i < 4; i++) {
-    const s = raw[i];
-    out[i] = typeof s === 'string' ? s.trim() : '';
-  }
-  return out;
+  return [...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)];
 }
 
 async function mergeDeliveryConfigJson(tenantId: number, patch: (c: Record<string, any>) => void) {
@@ -163,15 +157,24 @@ export function createDeliveryRouter() {
   router.get('/config', async (req: Request, res) => {
     try {
       const row = await q1('SELECT delivery_ativo, delivery_config FROM clientes WHERE id=?', [req.tenantId]);
-      const cfg = row?.delivery_config ? JSON.parse(row.delivery_config) : {};
-      res.json({ ativo: !!row?.delivery_ativo, ...cfg });
+      const parsed = row?.delivery_config ? JSON.parse(row.delivery_config) : {};
+      const base =
+        parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      base.cardapio_online_banner_urls = [...normalizeCardapioOnlineBannerSlots(base.cardapio_online_banner_urls)];
+      res.json({ ativo: !!row?.delivery_ativo, ...base });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   router.put('/config', async (req: Request, res) => {
     try {
       const { ativo, ...rest } = req.body;
-      await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(rest), req.tenantId]);
+      const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
+      const existing = parseDeliveryCfgJson(row?.delivery_config ?? null);
+      const merged = { ...existing, ...rest };
+      merged.cardapio_online_banner_urls = [...normalizeCardapioOnlineBannerSlots(merged.cardapio_online_banner_urls)];
+      await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

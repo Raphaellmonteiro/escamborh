@@ -19,6 +19,7 @@ import {
 import { CardapioThemeShell, useDeliveryCardapioTheme } from './DeliveryCardapioThemeContext';
 import { ProductOptionsModal } from '../../shared/ProductOptionsModal';
 import PedidoRastreamento from '../../shared/PedidoRastreamento';
+import { normalizeCardapioOnlineBannerSlots } from '../../utils/deliveryCardapioBannerSlots';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
@@ -58,7 +59,9 @@ interface Config {
   desconto_primeiro_cliente_valor?: number;
   desconto_primeiro_cliente_min_pedido?: number;
   theme_mode?: DeliveryCardapioThemeMode;
-  /** 4 URLs de banner do topo (vazio = fallback na célula). */
+  /** 4 URLs de banner do topo (índice 0 = slot visual 1). Alias histórico: `cardapio_banner_slots`. */
+  cardapio_online_banner_urls?: string[];
+  /** @deprecated Preferir `cardapio_online_banner_urls` (mesmo conteúdo na API pública). */
   cardapio_banner_slots?: string[];
 }
 interface CheckoutResumo {
@@ -115,10 +118,10 @@ type HeroGalleryItem = {
   key: string;
   src: string;
   alt: string;
-  tipo: 'produto' | 'logo' | 'fallback';
+  tipo: 'banner' | 'destaque' | 'logo' | 'fallback';
 };
 
-/** Hero 2×2: `coverSlots` (4 células) > `coverImages` > destaques > logo > placeholder. */
+/** Hero 2×2: `coverSlots[0..3]` = slots visuais 1–4; só células vazias usam destaque/logo/letra. */
 function resolveDeliveryHeroGallery(
   cfg: DeliveryVisualConfig,
   produtosDestaque: Produto[],
@@ -137,12 +140,16 @@ function resolveDeliveryHeroGallery(
     };
     return [0, 1, 2, 3].map((index) => {
       const configured = String(slots[index] || '').trim();
-      let src = configured;
-      let tipo: HeroGalleryItem['tipo'] = 'produto';
-      if (!src) {
-        src = nextProductSrc();
-        tipo = 'produto';
+      if (configured) {
+        return {
+          key: `cover-slot-${index}`,
+          src: configured,
+          alt: nome || 'Loja',
+          tipo: 'banner' as const,
+        };
       }
+      let src = nextProductSrc();
+      let tipo: HeroGalleryItem['tipo'] = 'destaque';
       if (!src && logoResolvido) {
         src = logoResolvido;
         tipo = 'logo';
@@ -165,7 +172,7 @@ function resolveDeliveryHeroGallery(
       key: `cover-config-${index}`,
       src: src.trim(),
       alt: nome || 'Loja',
-      tipo: 'produto',
+      tipo: 'destaque' as const,
     }));
     const base = imagens[0];
     while (imagens.length < 4 && base) {
@@ -173,7 +180,7 @@ function resolveDeliveryHeroGallery(
         key: `${base.key}-rep-${imagens.length}`,
         src: base.src,
         alt: base.alt,
-        tipo: 'produto',
+        tipo: 'destaque',
       });
     }
     return imagens;
@@ -186,7 +193,7 @@ function resolveDeliveryHeroGallery(
       key: `produto-${produto.id}-${index}`,
       src: produto.photo_url as string,
       alt: produto.name,
-      tipo: 'produto',
+      tipo: 'destaque' as const,
     }));
 
   const base = imagens[0];
@@ -195,7 +202,7 @@ function resolveDeliveryHeroGallery(
       key: `${base.key}-rep-${imagens.length}`,
       src: base.src,
       alt: base.alt,
-      tipo: 'produto',
+      tipo: 'destaque',
     });
   }
 
@@ -699,11 +706,9 @@ export default function DeliveryCardapio() {
       .slice(0, 8);
   }, [produtosOrdenados]);
   const deliveryVisualFromConfig = useMemo((): DeliveryVisualConfig => {
-    const raw = config.cardapio_banner_slots;
-    const coverSlots =
-      Array.isArray(raw) && raw.length === 4
-        ? [0, 1, 2, 3].map((i) => String(raw[i] || '').trim())
-        : undefined;
+    const coverSlots = [...normalizeCardapioOnlineBannerSlots(
+      config.cardapio_online_banner_urls ?? config.cardapio_banner_slots
+    )];
     return {
       logoUrl: '',
       coverImages: [],
@@ -711,7 +716,7 @@ export default function DeliveryCardapio() {
       backgroundImage: '',
       backgroundOpacity: 0.1,
     };
-  }, [config.cardapio_banner_slots]);
+  }, [config.cardapio_online_banner_urls, config.cardapio_banner_slots]);
   const logoResolvido = useMemo(
     () => resolveDeliveryLogoUrl(deliveryVisualFromConfig, logoUrl),
     [deliveryVisualFromConfig, logoUrl]
