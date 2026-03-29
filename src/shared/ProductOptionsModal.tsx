@@ -1,5 +1,5 @@
 // Modal de opções / variações — compartilhado entre cardápio online (delivery) e PDV / balcão.
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Minus, AlertCircle } from 'lucide-react';
 import { useDeliveryCardapioTheme } from '../segments/delivery/DeliveryCardapioThemeContext';
@@ -287,9 +287,27 @@ function getModalAccent(isLightRed: boolean, visualVariant: ProductOptionsVisual
   };
 }
 
+/** Viewport baixa (ex.: 1280×720 com chrome): prioriza área rolável dos adicionais. */
+const COMPACT_MAX_VIEWPORT_HEIGHT_PX = 760;
+
+function useCompactOptionsModalLayout() {
+  const [compact, setCompact] = useState(() =>
+    typeof window !== 'undefined'
+      && window.matchMedia(`(max-height: ${COMPACT_MAX_VIEWPORT_HEIGHT_PX}px)`).matches
+  );
+  useLayoutEffect(() => {
+    const mq = window.matchMedia(`(max-height: ${COMPACT_MAX_VIEWPORT_HEIGHT_PX}px)`);
+    const apply = () => setCompact(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+  return compact;
+}
+
 const POS_MODAL_OPCOES_OVERRIDES = {
   sheet:
-    'relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-amber-500/25 sm:rounded-[32px]',
+    'relative flex w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-amber-500/25 sm:rounded-[32px]',
   footerBtn:
     'flex w-full min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-amber-400 py-4 text-sm font-black text-zinc-900 shadow-[0_14px_36px_rgba(245,158,11,0.4)] transition-all hover:bg-amber-300 active:scale-[0.99] disabled:opacity-40 ring-2 ring-amber-400/45 hover:ring-amber-400/60',
   qtyBtnPlus:
@@ -310,6 +328,7 @@ export function ProductOptionsModal({
   visualVariant?: ProductOptionsVisualVariant;
 }) {
   const mTh = useDeliveryCardapioTheme();
+  const compactLayout = useCompactOptionsModalLayout();
   const mo = useMemo(() => {
     const base = mTh.modalOpcoes;
     if (visualVariant !== 'pos') return base;
@@ -439,30 +458,58 @@ export function ProductOptionsModal({
     : (destSacola ? `Adicionar a sacola${qty > 1 ? ` (${qty}x)` : ''}` : `Adicionar ao pedido${qty > 1 ? ` (${qty}x)` : ''}`);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-[70] flex min-h-0 items-end justify-center overflow-x-hidden overflow-y-auto p-0 sm:items-center sm:p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose} />
 
       <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-        className={`${mo.sheet} max-h-[min(95dvh,100%)] w-full pb-[env(safe-area-inset-bottom)] sm:max-h-[92vh] sm:pb-0`}>
+        className={`${mo.sheet} my-auto flex min-h-0 max-h-[min(92dvh,92svh,100%)] w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:max-h-[min(90vh,90dvh)] sm:pb-0`}>
 
         <div className={mo.headerBg}>
           <button type="button" onClick={onClose} className={mo.closeBtn}>
             <X size={18} />
           </button>
           {produto.photo_url ? (
-            <div className="relative h-44 overflow-hidden sm:h-52">
+            <div
+              className={
+                visualVariant === 'pos'
+                  ? compactLayout
+                    ? 'relative h-[min(5.25rem,18svh)] max-h-[5.5rem] shrink-0 overflow-hidden'
+                    : 'relative h-[min(11rem,26svh)] overflow-hidden sm:h-40 md:h-44 lg:h-52'
+                  : compactLayout
+                    ? 'relative h-[min(5.25rem,18svh)] max-h-[5.5rem] shrink-0 overflow-hidden sm:max-h-[6rem]'
+                    : 'relative h-44 overflow-hidden sm:h-52'
+              }
+            >
               <img src={produto.photo_url} alt={produto.name} className="h-full w-full object-cover brightness-[1.03] contrast-[1.02]" />
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/55 to-black/10" />
             </div>
           ) : null}
 
-          <div className={`space-y-4 p-5 ${produto.photo_url ? '' : 'pr-16'}`}>
-            <div className="flex items-start justify-between gap-3">
+          <div className={`${compactLayout ? 'space-y-2 p-3 sm:p-3' : 'space-y-4 p-5'} ${produto.photo_url ? '' : 'pr-16'}`}>
+            <div className={`flex items-start justify-between ${compactLayout ? 'gap-2' : 'gap-3'}`}>
               <div className="min-w-0">
-                <h3 className={mo.title}>{produto.name}</h3>
-                {descricaoProduto && <p className={mo.desc}>{descricaoProduto}</p>}
+                <h3
+                  className={
+                    compactLayout
+                      ? 'text-xl font-black leading-tight tracking-tight text-white drop-shadow-sm'
+                      : mo.title
+                  }
+                >
+                  {produto.name}
+                </h3>
+                {descricaoProduto && (
+                  <p
+                    className={
+                      compactLayout
+                        ? `${mo.desc} mt-1 line-clamp-3 text-xs leading-snug`
+                        : mo.desc
+                    }
+                  >
+                    {descricaoProduto}
+                  </p>
+                )}
               </div>
               {modoSomenteVariacoes ? (
                 <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${ac.badgeVariacoesCount}`}>
@@ -475,24 +522,30 @@ export function ProductOptionsModal({
               ) : null}
             </div>
 
-            <div className={promoValida ? mo.pricePanelPromo : mo.pricePanel}>
-              <div className="flex items-end justify-between gap-3">
+            <div
+              className={
+                compactLayout
+                  ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !px-3 !py-2`
+                  : promoValida ? mo.pricePanelPromo : mo.pricePanel
+              }
+            >
+              <div className={`flex items-end justify-between ${compactLayout ? 'gap-2' : 'gap-3'}`}>
                 <div>
-                  <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${mo.textMuted}`}>Preco base</p>
-                  <p className={`mt-1 text-xl font-black tabular-nums ${promoValida ? 'text-zinc-400 line-through decoration-zinc-500' : mo.textPrimary}`}>{fmt(produto.price)}</p>
+                  <p className={`${compactLayout ? 'text-[10px] tracking-[0.14em]' : 'text-[11px] tracking-[0.18em]'} font-bold uppercase ${mo.textMuted}`}>Preco base</p>
+                  <p className={`${compactLayout ? 'mt-0.5 text-lg' : 'mt-1 text-xl'} font-black tabular-nums ${promoValida ? 'text-zinc-400 line-through decoration-zinc-500' : mo.textPrimary}`}>{fmt(produto.price)}</p>
                 </div>
                 <div className="text-right">
-                  <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${mo.textMuted}`}>Preco atual</p>
+                  <p className={`${compactLayout ? 'text-[10px] tracking-[0.14em]' : 'text-[11px] tracking-[0.18em]'} font-bold uppercase ${mo.textMuted}`}>Preco atual</p>
                   {precoUnit == null ? (
-                    <p className={`mt-1 text-xl font-black ${mo.textMuted}`}>—</p>
+                    <p className={`${compactLayout ? 'mt-0.5 text-lg' : 'mt-1 text-xl'} font-black ${mo.textMuted}`}>—</p>
                   ) : (
-                    <p className={`mt-1 text-xl font-black tabular-nums ${promoValida ? 'text-emerald-400' : ac.precoAtual}`}>{fmt(precoUnit)}</p>
+                    <p className={`${compactLayout ? 'mt-0.5 text-lg' : 'mt-1 text-xl'} font-black tabular-nums ${promoValida ? 'text-emerald-400' : ac.precoAtual}`}>{fmt(precoUnit)}</p>
                   )}
                 </div>
               </div>
-              <p className={`mt-2 text-xs leading-relaxed ${mo.textSecondary}`}>{resumoPrecoUnitario}</p>
+              <p className={`${compactLayout ? 'mt-1 line-clamp-2 text-[11px] leading-snug' : 'mt-2 text-xs leading-relaxed'} ${mo.textSecondary}`}>{resumoPrecoUnitario}</p>
               {promoValida && (
-                <p className="mt-2 text-xs font-bold leading-snug text-emerald-200/95">
+                <p className={`${compactLayout ? 'mt-1 line-clamp-2 text-[10px]' : 'mt-2 text-xs'} font-bold leading-snug text-emerald-200/95`}>
                   ✨ Oferta ativa: {percentualDesconto}% de economia em relacao ao preco original.
                 </p>
               )}
@@ -500,16 +553,18 @@ export function ProductOptionsModal({
           </div>
         </div>
 
-        <div className={mo.scroll}>
+        <div className={`${mo.scroll} min-h-0 ${compactLayout ? 'py-2' : ''}`}>
           {modoSomenteVariacoes ? (
-            <section className={mo.section}>
-              <div className={mo.sectionHeader}>
-                <div className="flex items-start justify-between gap-3">
+            <section className={compactLayout ? `${mo.section} mx-3 mb-3` : mo.section}>
+              <div className={compactLayout ? `${mo.sectionHeader} !p-3` : mo.sectionHeader}>
+                <div className={`flex items-start justify-between ${compactLayout ? 'gap-2' : 'gap-3'}`}>
                   <div className="min-w-0">
-                    <p className="text-base font-black tracking-tight text-white">Escolha a variacao</p>
-                    <p className="mt-1 text-sm leading-snug text-zinc-200">Obrigatorio — selecione 1 opcao para continuar.</p>
+                    <p className={compactLayout ? 'text-sm font-black tracking-tight text-white' : 'text-base font-black tracking-tight text-white'}>Escolha a variacao</p>
+                    <p className={`${compactLayout ? 'mt-0.5 text-xs' : 'mt-1 text-sm'} leading-snug text-zinc-200`}>Obrigatorio — selecione 1 opcao para continuar.</p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                  <span className={`rounded-full font-bold uppercase tracking-[0.16em] ${
+                    compactLayout ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'
+                  } ${
                     variacaoSel
                       ? ac.statusProntoVariacao
                       : 'border border-amber-500/30 bg-amber-500/15 text-amber-100'
@@ -533,15 +588,17 @@ export function ProductOptionsModal({
                           setVariacaoSel(v);
                         }
                       }}
-                      className={`flex cursor-pointer items-center gap-4 px-4 py-4 transition-colors ${
+                      className={`flex cursor-pointer items-center transition-colors ${
+                        compactLayout ? 'gap-3 px-3 py-2.5' : 'gap-4 px-4 py-4'
+                      } ${
                         selecionado
                           ? ac.rowVariacaoSel
                           : 'hover:bg-white/[0.06]'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>{v.nome}</p>
-                        <p className={`mt-1 text-xs font-bold tabular-nums ${ac.precoVariacaoLinha}`}>{fmt(Number(v.preco))}</p>
+                        <p className={`${compactLayout ? 'text-[13px]' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>{v.nome}</p>
+                        <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : 'mt-1 text-xs'} font-bold tabular-nums ${ac.precoVariacaoLinha}`}>{fmt(Number(v.preco))}</p>
                       </div>
                       <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
                         selecionado
@@ -563,16 +620,18 @@ export function ProductOptionsModal({
               const completo = isGrupoCompleto(g, sel);
               const maxSelecoes = getMaxSelecoesGrupo(g);
               return (
-                <section key={g.id} className={`mx-4 mb-4 overflow-hidden rounded-[24px] border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
+                <section key={g.id} className={`${compactLayout ? 'mx-3 mb-3' : 'mx-4 mb-4'} overflow-hidden rounded-[24px] border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
                   temErro ? 'border-red-500/40 bg-red-500/10' : 'border-white/14 bg-zinc-900/85'
                 }`}>
-                  <div className="border-b border-white/12 bg-zinc-900/95 p-4">
-                    <div className="flex items-start justify-between gap-3">
+                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'p-3' : 'p-4'}`}>
+                    <div className={`flex items-start justify-between ${compactLayout ? 'gap-2' : 'gap-3'}`}>
                       <div className="min-w-0">
-                        <p className="text-base font-black tracking-tight text-white">{g.nome}</p>
-                        <p className={`mt-1 text-sm leading-snug ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
+                        <p className={compactLayout ? 'text-sm font-black tracking-tight text-white' : 'text-base font-black tracking-tight text-white'}>{g.nome}</p>
+                        <p className={`${compactLayout ? 'mt-0.5 text-xs' : 'mt-1 text-sm'} leading-snug ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                      <span className={`rounded-full font-bold uppercase tracking-[0.16em] ${
+                        compactLayout ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'
+                      } ${
                         completo
                           ? ac.badgeGrupoCompleto
                           : g.obrigatorio
@@ -582,28 +641,28 @@ export function ProductOptionsModal({
                         {completo ? 'Pronto' : g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
                       </span>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                    <div className={`${compactLayout ? 'mt-2 gap-1.5' : 'mt-3 gap-2'} flex flex-wrap`}>
+                      <span className={`rounded-full border ${compactLayout ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} font-semibold ${
                         g.obrigatorio
                           ? 'border-amber-500/30 bg-amber-500/15 text-amber-100'
                           : 'border-white/14 bg-white/10 text-zinc-100'
                       }`}>
                         {g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
                       </span>
-                      <span className="rounded-full border border-white/14 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-100">
+                      <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}>
                         {getResumoSelecaoGrupo(g, totalSel)}
                       </span>
                       {(g.modo_preco || 'adicional') === 'final' && (
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${ac.badgePrecoFinal}`}>
+                        <span className={`rounded-full border font-semibold ${ac.badgePrecoFinal} ${compactLayout ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}>
                           Preco definido pela escolha
                         </span>
                       )}
                     </div>
                   </div>
                   {temErro && (
-                    <div className="flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 px-4 py-2">
+                    <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-3 py-1.5' : 'px-4 py-2'}`}>
                       <AlertCircle size={11} className="shrink-0 text-red-400" />
-                      <p className="text-xs font-semibold text-red-100">{erros[g.id]}</p>
+                      <p className={`${compactLayout ? 'text-[11px]' : 'text-xs'} font-semibold text-red-100`}>{erros[g.id]}</p>
                     </div>
                   )}
 
@@ -616,7 +675,9 @@ export function ProductOptionsModal({
                       const podeAumentarQuantidade = maxSelecoes === null || totalSel < maxSelecoes;
                       return (
                         <div key={item.id}
-                          className={`flex cursor-pointer items-center gap-4 px-4 py-4 transition-colors ${
+                          className={`flex cursor-pointer items-center transition-colors ${
+                            compactLayout ? 'gap-3 px-3 py-2.5' : 'gap-4 px-4 py-4'
+                          } ${
                             selecionado
                               ? ac.rowItemSel
                               : bloqueado
@@ -629,10 +690,10 @@ export function ProductOptionsModal({
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
+                            <p className={`${compactLayout ? 'text-[13px]' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
                               {item.nome}
                             </p>
-                            <p className={`mt-1 text-xs font-bold ${
+                            <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : 'mt-1 text-xs'} font-bold ${
                               (g.modo_preco || 'adicional') === 'final' || item.preco_adicional > 0
                                 ? ac.precoItemDestaque
                                 : 'text-zinc-300'
@@ -665,13 +726,13 @@ export function ProductOptionsModal({
                               onClick={e => e.stopPropagation()}>
                               <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, -1, g); }}
                                 disabled={qtdItem === 0}
-                                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 sm:h-8 sm:w-8">
+                                className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${compactLayout ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}>
                                 <Minus size={11} />
                               </button>
-                              <span className="w-6 text-center text-sm font-black text-white">{qtdItem}</span>
+                              <span className={`w-6 text-center font-black text-white ${compactLayout ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
                               <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, +1, g); }}
                                 disabled={!podeAumentarQuantidade}
-                                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}>
+                                className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${compactLayout ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}>
                                 <Plus size={11} />
                               </button>
                             </div>
@@ -685,30 +746,42 @@ export function ProductOptionsModal({
             })
           )}
 
-          <div className="mx-4 mt-1 rounded-[28px] border border-white/14 bg-zinc-900/85 px-5 py-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
-            <p className="mb-2 text-sm font-bold text-zinc-50">Alguma observação?</p>
+          <div
+            className={
+              compactLayout
+                ? 'mx-3 mt-0.5 rounded-2xl border border-white/14 bg-zinc-900/85 px-3 py-2.5 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
+                : 'mx-4 mt-1 rounded-[28px] border border-white/14 bg-zinc-900/85 px-5 py-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
+            }
+          >
+            <p className={`font-bold text-zinc-50 ${compactLayout ? 'mb-1 text-xs' : 'mb-2 text-sm'}`}>Alguma observação?</p>
             <textarea value={obs} onChange={e => setObs(e.target.value)} rows={2}
               placeholder="Ex: Sem cebola, ponto bem passado..."
-              className={`w-full resize-none rounded-2xl border px-3 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus}`} />
+              className={`w-full resize-none rounded-2xl border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'px-2.5 py-2 text-xs' : 'px-3 py-3 text-sm'}`} />
           </div>
         </div>
 
-        <div className={mo.footer}>
-          <div className={`mb-3 rounded-[22px] border px-4 py-3 ${
+        <div className={`${mo.footer} ${compactLayout ? '!p-3' : ''}`}>
+          <div className={`rounded-[22px] border ${
+            compactLayout ? 'mb-2 !px-3 !py-2' : 'mb-3 px-4 py-3'
+          } ${
             gruposObrigatoriosPendentes > 0
               ? 'border-amber-500/25 bg-amber-500/12'
               : ac.footerResumoOkBorder
           }`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className={`text-sm font-black ${
+            <div className={`flex items-start justify-between ${compactLayout ? 'gap-2' : 'gap-3'}`}>
+              <div className="min-w-0">
+                <p className={`font-black ${
+                  compactLayout ? 'text-xs leading-snug' : 'text-sm'
+                } ${
                   gruposObrigatoriosPendentes > 0
                     ? 'text-amber-100'
                     : ac.footerResumoOkTitle
                 }`}>
                   {readyTitle}
                 </p>
-                <p className={`mt-1 text-xs ${
+                <p className={`${
+                  compactLayout ? 'mt-0.5 text-[11px] leading-snug' : 'mt-1 text-xs'
+                } ${
                   gruposObrigatoriosPendentes > 0
                     ? 'text-amber-200/90'
                     : ac.footerResumoOkSub
@@ -716,24 +789,24 @@ export function ProductOptionsModal({
                   {readyHint}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-200">Unitario</p>
-                <p className="mt-1 text-sm font-black tabular-nums text-white">{precoUnit != null ? fmt(precoUnit) : '—'}</p>
+              <div className="shrink-0 text-right">
+                <p className={`font-bold uppercase tracking-[0.16em] text-zinc-200 ${compactLayout ? 'text-[10px]' : 'text-[11px]'}`}>Unitario</p>
+                <p className={`font-black tabular-nums text-white ${compactLayout ? 'mt-0.5 text-xs' : 'mt-1 text-sm'}`}>{precoUnit != null ? fmt(precoUnit) : '—'}</p>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className={mo.qtyBar}>
-              <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))} className={mo.qtyBtn}>
+          <div className={`flex items-center ${compactLayout ? 'gap-2' : 'gap-3'}`}>
+            <div className={`${mo.qtyBar} ${compactLayout ? '!p-0.5' : ''}`}>
+              <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))} className={`${mo.qtyBtn} ${compactLayout ? '!h-9 !w-9' : ''}`}>
                 <Minus size={13} />
               </button>
-              <span className={`w-7 text-center text-base font-black ${mo.textPrimary}`}>{qty}</span>
-              <button type="button" onClick={() => setQty(q => q + 1)} className={mo.qtyBtnPlus}>
+              <span className={`w-7 text-center font-black ${mo.textPrimary} ${compactLayout ? 'text-sm' : 'text-base'}`}>{qty}</span>
+              <button type="button" onClick={() => setQty(q => q + 1)} className={`${mo.qtyBtnPlus} ${compactLayout ? '!h-9 !w-9' : ''}`}>
                 <Plus size={13} />
               </button>
             </div>
             <button type="button" onClick={validarEAdicionar}
-              className={mo.footerBtn}>
+              className={`${mo.footerBtn} ${compactLayout ? '!py-3 text-[13px]' : ''}`}>
               <span>{addBtnLabel}</span>
               <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>
             </button>

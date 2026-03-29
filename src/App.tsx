@@ -750,14 +750,15 @@ const handleAuth = async (e: React.FormEvent) => {
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-64 max-w-[85vw] bg-white border-r border-zinc-200 flex flex-col h-screen shrink-0
+          w-[min(100%,14rem)] max-w-[85vw] sm:w-[15rem] xl:w-60 2xl:w-64
+          bg-white border-r border-zinc-200 flex flex-col h-screen shrink-0
           transition-transform duration-200 ease-out
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
-        <div className="border-b border-zinc-100 bg-zinc-50 p-5">
-          <div className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="border-b border-zinc-100 bg-zinc-50 p-4 xl:p-5">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-3.5 shadow-sm xl:p-4">
             <div className="flex items-start gap-3">
             <label className="cursor-pointer group relative" title="Clique para trocar a logo">
               <input
@@ -813,7 +814,7 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
 
         {/* Status do Caixa */}
-        <div className="px-6 py-4 border-b border-zinc-100">
+        <div className="px-4 py-3 border-b border-zinc-100 xl:px-6 xl:py-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${currentCaixa?.status === 'aberto' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
@@ -855,7 +856,7 @@ const handleAuth = async (e: React.FormEvent) => {
           )}
         </div>
 
-     <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
+     <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto min-h-0 xl:p-4 xl:space-y-2">
           {(() => { return (<> 
             {canAccess('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
             {canAccess('orders') && (
@@ -900,7 +901,7 @@ const handleAuth = async (e: React.FormEvent) => {
           {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon={<Settings size={20} />}        label="Configurações" />}
         </nav>
 
-        <div className="border-t border-zinc-100 p-4 flex-shrink-0 space-y-3">
+        <div className="border-t border-zinc-100 p-3 flex-shrink-0 space-y-2.5 xl:p-4 xl:space-y-3">
           <div className="flex items-center justify-between px-1">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Utilitários</p>
             <p className="text-[10px] text-zinc-400">Tema, alertas e sessão</p>
@@ -1032,7 +1033,7 @@ const handleAuth = async (e: React.FormEvent) => {
 
 
       {/* Área de Conteúdo Principal */}
-      <main className="flex-1 overflow-auto relative flex flex-col" style={{ zIndex: 2 }}>
+      <main className="flex-1 min-w-0 overflow-auto relative flex flex-col" style={{ zIndex: 2 }}>
 
         {/* ── Banner senha padrão ───────────────────────────────────── */}
         {senhaPadrao && userCargo === 'dono' && (

@@ -352,8 +352,8 @@ const darkPremium: DeliveryCardapioTheme = {
   },
   modalOpcoes: {
     sheet:
-      'relative flex w-full max-w-xl flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-cyan-500/10 sm:rounded-[32px]',
-    headerBg: 'border-b border-white/14 bg-zinc-950',
+      'relative flex w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-cyan-500/10 sm:rounded-[32px]',
+    headerBg: 'shrink-0 border-b border-white/14 bg-zinc-950',
     closeBtn:
       'absolute right-3 top-3 z-20 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-2xl border border-white/18 bg-black/60 p-2 text-zinc-100 shadow-lg backdrop-blur transition-colors hover:border-white/25 hover:bg-black/75 hover:text-white sm:right-4 sm:top-4',
     title: 'text-2xl font-black leading-tight tracking-tight text-white drop-shadow-sm',
@@ -362,12 +362,12 @@ const darkPremium: DeliveryCardapioTheme = {
       'rounded-[22px] border px-4 py-3 shadow-[0_14px_36px_rgba(0,0,0,0.25)] border-white/18 bg-[linear-gradient(180deg,rgba(48,48,54,0.98),rgba(22,22,26,1))]',
     pricePanelPromo:
       'rounded-[22px] border px-4 py-3 shadow-[0_14px_36px_rgba(0,0,0,0.25)] border-emerald-400/35 bg-[linear-gradient(145deg,rgba(6,95,70,0.28),rgba(20,24,22,0.99))]',
-    scroll: 'flex-1 overflow-y-auto bg-zinc-950 py-4',
+    scroll: 'min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950 py-4',
     section: 'mx-4 mb-4 overflow-hidden rounded-[24px] border border-white/16 bg-zinc-900/92 shadow-[0_12px_36px_rgba(0,0,0,0.22)]',
     sectionHeader: 'border-b border-white/14 bg-zinc-900/98 p-4',
     row: 'flex cursor-pointer items-center gap-4 px-4 py-4 transition-colors hover:bg-white/[0.06]',
     rowSelected: 'flex cursor-pointer items-center gap-4 px-4 py-4 transition-colors bg-cyan-500/[0.14] ring-1 ring-inset ring-cyan-400/30',
-    footer: 'border-t border-white/12 bg-zinc-950 p-4',
+    footer: 'shrink-0 border-t border-white/12 bg-zinc-950 p-4',
     footerBtn:
       'flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#4ade80,#22d3ee)] py-4 text-sm font-black text-zinc-950 shadow-[0_14px_36px_rgba(34,211,238,0.35)] transition-all hover:brightness-110 disabled:opacity-40',
     textPrimary: 'text-white',

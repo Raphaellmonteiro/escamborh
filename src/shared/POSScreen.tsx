@@ -938,7 +938,7 @@ export default function POSScreen({
               {searchTerm && <p className="text-sm mt-1.5 text-zinc-500">Termo: {searchTerm}</p>}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 min-[1728px]:grid-cols-7 gap-2.5 md:gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6 min-[1728px]:grid-cols-7 gap-2.5 md:gap-3">
               {displayProducts.map(product => (
                 <ProductCard
                   key={product.id}
@@ -970,7 +970,7 @@ export default function POSScreen({
           PAINEL DIREITO — Pedido + Pagamento (tablet/desktop)
           Usa bg-zinc-950 para evitar override .flowpdv-dark .bg-zinc-900 → #f0f0f0
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="hidden md:flex md:flex-col h-full min-h-0 w-full md:w-[min(360px,38vw)] lg:w-[380px] xl:w-[400px] bg-zinc-950 border-l border-zinc-800 shrink-0 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
+      <div className="hidden md:flex md:flex-col h-full min-h-0 w-full md:w-[min(340px,36vw)] lg:w-[min(380px,34vw)] xl:w-[400px] bg-zinc-950 border-l border-zinc-800 shrink-0 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact]">
         {renderCartColumn('desktop')}
       </div>
 
