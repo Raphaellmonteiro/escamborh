@@ -11,82 +11,15 @@ import {
   X,
 } from 'lucide-react';
 import type { Aviso } from '../hooks/useFlowAI';
+import { AVISO_TIPO_META, getSeverity, SEVERITY_CFG } from './avisosVisualConfig';
 
-type SeverityVariant = 'critical' | 'warning' | 'success';
 type FiltroTipo = 'todos' | 'nao_lidos' | 'alerta' | 'atencao' | 'oportunidade' | 'parabens';
 
-type TipoConfig = {
-  icon: React.ReactNode;
-  label: string;
-  severity: SeverityVariant;
-};
-
-const TIPO_CFG: Record<Aviso['tipo'], TipoConfig> = {
-  oportunidade: {
-    icon: <TrendingUp size={14} />,
-    label: 'Oportunidade',
-    severity: 'success',
-  },
-  alerta: {
-    icon: <AlertTriangle size={14} />,
-    label: 'Alerta',
-    severity: 'warning',
-  },
-  parabens: {
-    icon: <Trophy size={14} />,
-    label: 'Conquista',
-    severity: 'success',
-  },
-  atencao: {
-    icon: <AlertCircle size={14} />,
-    label: 'Critico',
-    severity: 'critical',
-  },
-};
-
-const SEVERITY_CFG: Record<
-  SeverityVariant,
-  {
-    label: string;
-    dot: string;
-    rail: string;
-    iconWrap: string;
-    badge: string;
-    cta: string;
-    subtleLink: string;
-    activeFilter: string;
-  }
-> = {
-  critical: {
-    label: 'Critico',
-    dot: 'bg-red-400',
-    rail: 'bg-red-400/85',
-    iconWrap: 'border-red-500/25 bg-red-500/12 text-red-200',
-    badge: 'border-red-500/20 bg-red-500/10 text-red-200',
-    cta: 'border-red-500/25 bg-red-500/10 text-red-100 hover:border-red-400/35 hover:bg-red-500/14',
-    subtleLink: 'text-red-200/75 hover:text-red-100',
-    activeFilter: 'border-red-500/25 bg-red-500/12 text-red-100',
-  },
-  warning: {
-    label: 'Alerta',
-    dot: 'bg-amber-400',
-    rail: 'bg-amber-400/85',
-    iconWrap: 'border-amber-500/25 bg-amber-500/12 text-amber-200',
-    badge: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
-    cta: 'border-amber-500/25 bg-amber-500/10 text-amber-100 hover:border-amber-400/35 hover:bg-amber-500/14',
-    subtleLink: 'text-amber-200/75 hover:text-amber-100',
-    activeFilter: 'border-amber-500/25 bg-amber-500/12 text-amber-100',
-  },
-  success: {
-    label: 'Positivo',
-    dot: 'bg-emerald-400',
-    rail: 'bg-emerald-400/85',
-    iconWrap: 'border-emerald-500/25 bg-emerald-500/12 text-emerald-200',
-    badge: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200',
-    cta: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-100 hover:border-emerald-400/35 hover:bg-emerald-500/14',
-    subtleLink: 'text-emerald-200/75 hover:text-emerald-100',
-    activeFilter: 'border-emerald-500/25 bg-emerald-500/12 text-emerald-100',
-  },
+const TIPO_ICONS: Record<Aviso['tipo'], React.ReactNode> = {
+  oportunidade: <TrendingUp size={14} />,
+  alerta: <AlertTriangle size={14} />,
+  parabens: <Trophy size={14} />,
+  atencao: <AlertCircle size={14} />,
 };
 
 const PRIORIDADE_LABEL: Record<number, string> = {
@@ -151,10 +84,6 @@ function compactTitle(text: string): string {
 
 function compactMessage(text: string): string {
   return shortenText(summarizeQuotedList(normalizeText(text)), 168);
-}
-
-function getSeverity(tipo: Aviso['tipo']): SeverityVariant {
-  return TIPO_CFG[tipo]?.severity ?? 'critical';
 }
 
 function getFiltroActiveClass(filtro: FiltroTipo): string {
@@ -304,7 +233,8 @@ export default function NotificationCenter({
               ) : (
                 <div className="flex flex-col gap-2.5">
                   {filtrados.map((aviso) => {
-                    const tipoCfg = TIPO_CFG[aviso.tipo] ?? TIPO_CFG.atencao;
+                    const tipoMeta = AVISO_TIPO_META[aviso.tipo] ?? AVISO_TIPO_META.atencao;
+                    const tipoIcon = TIPO_ICONS[aviso.tipo] ?? TIPO_ICONS.atencao;
                     const severity = SEVERITY_CFG[getSeverity(aviso.tipo)];
                     const isUnread = !aviso.lido;
                     const title = compactTitle(aviso.titulo);
@@ -328,7 +258,7 @@ export default function NotificationCenter({
                                 severity.iconWrap,
                               ].join(' ')}
                             >
-                              {tipoCfg.icon}
+                              {tipoIcon}
                             </div>
                             <div className="mt-2 h-2 w-2">
                               {isUnread ? <div className={`h-2 w-2 rounded-full ${severity.dot}`} /> : null}
@@ -347,7 +277,7 @@ export default function NotificationCenter({
                                   {severity.label}
                                 </span>
                                 <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
-                                  {tipoCfg.label}
+                                  {tipoMeta.label}
                                 </span>
                                 <span
                                   className={[

@@ -33,6 +33,7 @@ import { requireProductInventoryTargets } from './stockIdentification';
 import { parseAutomationFromDeliveryConfigJson, shouldAutoPrintForBalcaoOrder } from './automationConfig';
 import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService';
 import { touchStoreCustomerPurchase } from './storeCustomerService';
+import { notifyTenantOrderStreams } from '../sse';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -50,20 +51,21 @@ const ALLOWED_ORDER_STATUSES = new Set([
   'Saiu para Entrega',
 ]);
 
+/** Chaves canônicas: trim + lowerCase + NFD + sem diacríticos (ex.: Débito/debito/DEBITO → debito). */
+function normalizePaymentMethodKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
+
 const ALLOWED_PAYMENT_METHODS = new Set([
-  'Dinheiro',
-  'PIX',
-  'Débito',
-  'Debito',
-  'Crédito',
-  'Credito',
   'dinheiro',
   'pix',
   'debito',
   'credito',
-  'crédito',
   'cartao',
-  'cartão',
 ]);
 
 type TenantId = number | string;
@@ -339,7 +341,7 @@ function normalizePayment(payment: PaymentInput, index: number): NormalizedPayme
     throw new AppError(`Pagamento ${index + 1} sem método`, 400);
   }
 
-  if (!ALLOWED_PAYMENT_METHODS.has(method)) {
+  if (!ALLOWED_PAYMENT_METHODS.has(normalizePaymentMethodKey(method))) {
     throw new AppError(`Método de pagamento inválido: ${method}`, 400);
   }
 
@@ -1152,6 +1154,8 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
       logError('ordersService.createOrder.autoKitchenPrintConfig', e, { tenantId });
     }
 
+    notifyTenantOrderStreams(Number(tenantId), 'new', { orderId: result.orderId });
+
     return {
       orderId: result.orderId,
       orderNumber: result.orderNumber,
@@ -1186,7 +1190,7 @@ export async function cancelOrder(input: CancelOrderInput) {
       invalidMessage: 'Subsenha invÃ¡lida',
     });
 
-    return await withTx(async (client) => {
+    const updatedOrder = await withTx(async (client) => {
       const order = await txQ1<OrderRow>(
         client,
         `SELECT *
@@ -1242,14 +1246,14 @@ export async function cancelOrder(input: CancelOrderInput) {
         usuarioId: input.userId,
       });
 
-      const updatedOrder = await txQ1<OrderRow>(
+      return await txQ1<OrderRow>(
         client,
         'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
         [orderId, input.tenantId]
       );
-
-      return updatedOrder;
     });
+    notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    return updatedOrder;
   } catch (error) {
     logError('ordersService.cancelOrder', error, {
       orderId,
@@ -1277,7 +1281,7 @@ export async function deleteOrder(input: DeleteOrderInput) {
       invalidMessage: 'Subsenha inválida',
     });
 
-    return await withTx(async (client) => {
+    await withTx(async (client) => {
       const order = await txQ1<{ id: number }>(
         client,
         'SELECT id FROM pedidos WHERE id=? AND tenant_id=?',
@@ -1296,6 +1300,8 @@ export async function deleteOrder(input: DeleteOrderInput) {
 
       return { success: true };
     });
+    notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    return { success: true };
   } catch (error) {
     logError('ordersService.deleteOrder', error, {
       orderId,
@@ -1332,7 +1338,7 @@ export async function refundOrder(input: RefundOrderInput) {
       invalidMessage: 'Subsenha invalida',
     });
 
-    return await withTx(async (client) => {
+    const updatedOrder = await withTx(async (client) => {
       const order = await txQ1<OrderRow>(
         client,
         `SELECT *
@@ -1424,14 +1430,14 @@ export async function refundOrder(input: RefundOrderInput) {
         usuarioId: input.userId,
       });
 
-      const updatedOrder = await txQ1<OrderRow>(
+      return await txQ1<OrderRow>(
         client,
         'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
         [orderId, input.tenantId]
       );
-
-      return updatedOrder;
     });
+    notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    return updatedOrder;
   } catch (error) {
     logError('ordersService.refundOrder', error, {
       orderId,
@@ -1462,7 +1468,7 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
   }
 
   try {
-    return await withTx(async (client) => {
+    const updatedOrder = await withTx(async (client) => {
       const order = await txQ1<OrderRow>(
         client,
         `SELECT *
@@ -1519,14 +1525,14 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
         usuarioId: input.userId,
       });
 
-      const updatedOrder = await txQ1<OrderRow>(
+      return await txQ1<OrderRow>(
         client,
         'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
         [orderId, input.tenantId]
       );
-
-      return updatedOrder;
     });
+    notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    return updatedOrder;
   } catch (error) {
     logError('ordersService.updateOrderStatus', error, {
       orderId,
@@ -1728,7 +1734,7 @@ export async function confirmQrOrder(input: { orderId: number | string; tenantId
   const orderId = parseOrderId(input.orderId);
 
   try {
-    return await withTx(async (client) => {
+    const novoStatus = await withTx(async (client) => {
       // 1. Busca o pedido travando a linha (FOR UPDATE)
       const order = await txQ1<OrderRow>(
         client,
@@ -1746,13 +1752,13 @@ export async function confirmQrOrder(input: { orderId: number | string; tenantId
 
       // 2. Verifica se algum item precisa de preparo na cozinha
       const requiresPrep = await orderHasPreparationItems(client, orderId, input.tenantId);
-      const novoStatus = requiresPrep ? 'Em Preparo' : 'Pronto';
+      const nextStatus = requiresPrep ? 'Em Preparo' : 'Pronto';
 
       // 3. Atualiza o status
       await txRun(
         client,
         'UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?',
-        [novoStatus, orderId, input.tenantId]
+        [nextStatus, orderId, input.tenantId]
       );
 
       // 4. Registra no histórico do pedido
@@ -1761,13 +1767,15 @@ export async function confirmQrOrder(input: { orderId: number | string; tenantId
         tenantId: input.tenantId,
         tipo: 'STATUS',
         statusAnterior: order.status,
-        statusNovo: novoStatus,
+        statusNovo: nextStatus,
         payload: { origem: 'ordersService.confirmQrOrder' },
         usuarioId: input.userId,
       });
 
-      return novoStatus;
+      return nextStatus;
     });
+    notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    return novoStatus;
   } catch (error) {
     logError('ordersService.confirmQrOrder', error, { orderId, tenantId: input.tenantId });
     throw error;

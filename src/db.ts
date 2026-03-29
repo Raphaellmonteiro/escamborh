@@ -13,10 +13,7 @@ export function resolveMigrationConnectionString(): string {
   throw new Error('Defina DATABASE_URL ou DATABASE_MIGRATION_URL para executar migrações.');
 }
 
-// Backup (PostgreSQL — use pg_dump via cron ou backup da plataforma)
-export async function backupDatabase() {
-  console.log('Backup gerenciado pela plataforma (Supabase/Neon/Railway). Configure pg_dump se necessario.');
-}
+// Backup: não há rotina automática neste servidor — use pg_dump + cron ou o backup nativo do provedor.
 
 export async function runMigrations() {
   const client = new Client({
@@ -612,6 +609,31 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_pedidos_tenant_cliente_loja ON pedidos(tenant_id, cliente_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_prod_var_vend_produto ON produto_variacoes_vendaveis(tenant_id, produto_id, ativo, ordem);
       CREATE INDEX IF NOT EXISTS idx_prod_var_vend_barcode ON produto_variacoes_vendaveis(tenant_id, codigo_barras);
+      CREATE INDEX IF NOT EXISTS idx_ai_avisos_tenant_lido ON ai_avisos(tenant_id, lido);
+      CREATE INDEX IF NOT EXISTS idx_ai_cache_tenant_tipo_dt ON ai_cache(tenant_id, tipo, created_at DESC);
+    `);
+
+    await client.query(`
+      WITH ranked AS (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY tenant_id, chave
+                 ORDER BY created_at DESC NULLS LAST, id DESC
+               ) AS rn
+        FROM ai_avisos
+        WHERE chave IS NOT NULL
+          AND expira_em IS NULL
+      )
+      UPDATE ai_avisos a
+      SET expira_em = NOW()
+      FROM ranked r
+      WHERE a.id = r.id AND r.rn > 1
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_avisos_tenant_chave_unexpired
+      ON ai_avisos (tenant_id, chave)
+      WHERE chave IS NOT NULL AND expira_em IS NULL
     `);
 
     await client.query(`

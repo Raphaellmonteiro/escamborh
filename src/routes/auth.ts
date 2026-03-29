@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { ACTIVE_SEGMENT_OPTIONS } from '../config/segmentos';
 import { q1, qInsert } from '../db';
-import { JWT_SECRET, loginRateLimiter, authenticateToken } from '../middleware';
+import { JWT_SECRET, loginRateLimiter, authenticateToken, publicRateLimit } from '../middleware';
 import { isAppError } from '../utils/errors';
 import { validateSecurityPassword } from '../utils/securityPassword';
 
@@ -106,7 +106,7 @@ export function createAuthRouter() {
   });
 
   // POST /api/public/solicitar-acesso
-  router.post('/public/solicitar-acesso', async (req, res) => {
+  router.post('/public/solicitar-acesso', publicRateLimit, async (req, res) => {
     try {
       const { nome_estabelecimento, razao_social, documento_tipo, documento_numero,
               nome_responsavel, email, whatsapp, cidade, segmento } = req.body;
@@ -114,7 +114,7 @@ export function createAuthRouter() {
         return res.status(400).json({ success: false, message: 'Todos os campos obrigatórios devem ser preenchidos.' });
 
       if (segmento && !PUBLIC_SEGMENTS.has(segmento))
-        return res.status(400).json({ success: false, message: 'Segmento indisponÃ­vel no momento.' });
+        return res.status(400).json({ success: false, message: 'Segmento indisponível no momento.' });
 
       const id = await qInsert(
         'INSERT INTO solicitacoes (nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,segmento) VALUES (?,?,?,?,?,?,?,?,?)',

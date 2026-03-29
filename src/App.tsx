@@ -2,7 +2,7 @@
  * App.tsx - Roteador principal do FlowPDV.
  */
 
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, ShoppingCart, Package, LogOut, Archive,
@@ -149,6 +149,10 @@ export default function App() {
     buscarAvisos, marcarLido, marcarTodosLidos,
     gerarAvisos, proximoAviso, buscarHistorico,
   } = useFlowAI(alertsEnabled ? token : null);
+
+  const refreshNotifHistorico = useCallback(() => {
+    buscarHistorico(100, 0);
+  }, [buscarHistorico]);
 
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -509,12 +513,8 @@ React.useEffect(() => {
 
   useEffect(() => {
     if (!token) return;
-    // Sequencial: menos conexões simultâneas no Postgres (Session pooler / plano Free).
-    void (async () => {
-      await fetchProducts();
-      await fetchCaixa();
-      await fetchPerfil();
-    })();
+    // Independentes: perfil / produtos / caixa não se ordenam entre si; paralelo reduz tempo até UI pronta.
+    void Promise.all([fetchProducts(), fetchCaixa(), fetchPerfil()]);
   }, [token]);
 
 const fetchPerfil = async () => {
@@ -1188,7 +1188,7 @@ const handleAuth = async (e: React.FormEvent) => {
               handleTabChange(tab);
               setNotifCenterOpen(false);
             }}
-            onRefresh={() => buscarHistorico(100, 0)}
+            onRefresh={refreshNotifHistorico}
           />
         </Suspense>
       )}

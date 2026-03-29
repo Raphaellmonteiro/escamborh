@@ -17,6 +17,8 @@ import { createPrintRouter } from './print';
 import { createProductsRouter } from './products';
 import { createRhRouter } from './rh';
 import { createSettingsRouter, createCategoriesRouter } from './settings';
+import { deletePointRecord, updatePointRecord } from '../services/pointService';
+import { setupSseStream } from '../sse';
 
 type TenantRequest = Request & {
   tenantId: number | string;
@@ -41,31 +43,15 @@ function createPontosRouter() {
     '/:pontId',
     asyncHandler(async (req, res) => {
       const { hora, tipo } = req.body ?? {};
-
-      if (!hora) {
-        throw new AppError('hora obrigatória', 400);
+      const result = await updatePointRecord({
+        tenantId: req.tenantId,
+        pointId: req.params.pontId,
+        hora: String(hora || ''),
+        tipo: tipo != null ? String(tipo) : null,
+      });
+      if (result.ok === false) {
+        throw new AppError(result.error, result.status);
       }
-
-      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(hora)) {
-        throw new AppError('Formato inválido. Use HH:MM', 400);
-      }
-
-      const ponto = await q1(
-        'SELECT * FROM func_pontos WHERE id=? AND tenant_id=?',
-        [req.params.pontId, req.tenantId]
-      );
-
-      if (!ponto) {
-        throw new AppError('Registro não encontrado', 404);
-      }
-
-      const novaHora = hora.length === 5 ? `${hora}:00` : hora;
-      const novoTipo = tipo && ['entrada', 'saida'].includes(tipo) ? tipo : ponto.tipo;
-
-      await qRun(
-        'UPDATE func_pontos SET hora=?,tipo=? WHERE id=? AND tenant_id=?',
-        [novaHora, novoTipo, req.params.pontId, req.tenantId]
-      );
 
       res.json({ success: true });
     })
@@ -74,19 +60,13 @@ function createPontosRouter() {
   router.delete(
     '/:pontId',
     asyncHandler(async (req, res) => {
-      const exists = await q1(
-        'SELECT id FROM func_pontos WHERE id=? AND tenant_id=?',
-        [req.params.pontId, req.tenantId]
-      );
-
-      if (!exists) {
-        throw new AppError('Registro não encontrado', 404);
+      const result = await deletePointRecord({
+        tenantId: req.tenantId,
+        pointId: req.params.pontId,
+      });
+      if (result.ok === false) {
+        throw new AppError(result.error, result.status);
       }
-
-      await qRun(
-        'DELETE FROM func_pontos WHERE id=? AND tenant_id=?',
-        [req.params.pontId, req.tenantId]
-      );
 
       res.json({ success: true });
     })
@@ -109,14 +89,12 @@ export function createApiRouter() {
       return res.status(session.status).end();
     }
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-    res.write('event: connected\ndata: {}\n\n');
+    const tenantId = Number(session.tenantId);
+    if (!Number.isFinite(tenantId) || tenantId <= 0) {
+      return res.status(401).end();
+    }
 
-    const ping = setInterval(() => res.write('event: ping\ndata: {}\n\n'), 30000);
-    req.on('close', () => clearInterval(ping));
+    setupSseStream(tenantId, req, res);
   });
 
   router.post(
@@ -196,6 +174,9 @@ export function createApiRouter() {
   protectedRouter.use('/clientes', createClientesRouter());
   protectedRouter.use('/expenses', requirePlanFeature('finance'), requireAnyPermission('finance'), createExpensesRouter());
   protectedRouter.use('/dashboard', requirePlanFeature('dashboard'), requireAnyPermission('dashboard'), createDashboardRouter());
+  // Caixa shares the same router factory as /dashboard (see routes/dashboard.ts: hoje, abrir, fechar, historico).
+  // Mounted at /caixa so paths are /api/caixa/hoje, etc. Only requireAnyPermission('finance') — no dashboard plan gate,
+  // so finance users can open/close caixa without the dashboard feature flag.
   protectedRouter.use('/caixa', requireAnyPermission('finance'), createDashboardRouter());
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());

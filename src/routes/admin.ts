@@ -6,6 +6,7 @@ import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
 import { loginRateLimiter, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
 import { logError } from '../utils/logger';
 import { generatePublicId } from '../utils/publicIds';
+import { notifyTenantOrderStreams } from '../sse';
 
 const TZ = 'America/Sao_Paulo';
 const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
@@ -617,6 +618,7 @@ export function createAdminRouter() {
         `UPDATE pedidos SET status='Cancelado', cancelado_at=NOW(), cancelamento_motivo=?, cancelado_por=NULL WHERE id=? AND tenant_id=?`,
         [reason, orderId, tenantId]
       );
+      notifyTenantOrderStreams(tenantId, 'status', { orderId });
 
       await logAdminAction(
         tenantId,
@@ -684,6 +686,7 @@ export function createAdminRouter() {
         "UPDATE pedidos SET pagamento_status='pago' WHERE id=? AND tenant_id=?",
         [orderId, tenantId]
       );
+      notifyTenantOrderStreams(tenantId, 'status', { orderId });
 
       await logAdminAction(
         tenantId,
@@ -858,6 +861,7 @@ export function createAdminRouter() {
       if (pedido.cancelado_at) return res.status(400).json({ success: false, error: 'Pedido já cancelado' });
 
       await qRun('UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?', [status, orderId, tenantId]);
+      notifyTenantOrderStreams(tenantId, 'status', { orderId });
       await qRun('INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
         [tenantId, 'Admin', 'admin', 'ADMIN_FIX_PEDIDO_STATUS', `Pedido #${pedido.order_number || orderId} alterado de "${pedido.status}" para "${status}"`]);
       res.json({ success: true, order_id: orderId, new_status: status });

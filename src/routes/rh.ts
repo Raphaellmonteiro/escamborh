@@ -22,6 +22,7 @@ import {
   extraMinutesForPayrollRow,
   roundMoney,
 } from '../services/payrollService';
+import { deletePointRecord, updatePointRecord } from '../services/pointService';
 import {
   buildRhAlerts,
   listFerias,
@@ -37,6 +38,48 @@ import {
 } from '../services/hrManagerialService';
 
 const TZ = 'America/Sao_Paulo';
+
+type HoraExtraDestino = 'folha' | 'banco' | 'dividido';
+
+function inferHoraExtraDestino(total: number, minutosPagoFolha: number): HoraExtraDestino {
+  if (minutosPagoFolha <= 0) return 'banco';
+  if (minutosPagoFolha >= total) return 'folha';
+  return 'dividido';
+}
+
+function validateHoraExtraDestino(params: {
+  total: number;
+  minutosPagoFolha: number;
+  destinoRaw: unknown;
+  bancoAplicavel: boolean;
+}): { ok: true; destino: HoraExtraDestino } | { ok: false; error: string } {
+  const destinoInformado =
+    params.destinoRaw == null || String(params.destinoRaw).trim() === ''
+      ? null
+      : String(params.destinoRaw).trim();
+  const destino =
+    destinoInformado === 'folha' || destinoInformado === 'banco' || destinoInformado === 'dividido'
+      ? destinoInformado
+      : destinoInformado == null
+        ? inferHoraExtraDestino(params.total, params.minutosPagoFolha)
+        : null;
+  if (!destino) {
+    return { ok: false, error: 'destino invalido. Use folha, banco ou dividido.' };
+  }
+  if (!params.bancoAplicavel && destino !== 'folha') {
+    return { ok: false, error: 'Este contrato nao permite enviar HE para banco. Use destino folha.' };
+  }
+  if (destino === 'folha' && params.minutosPagoFolha !== params.total) {
+    return { ok: false, error: 'Destino folha exige minutos_pago_folha igual ao total da HE.' };
+  }
+  if (destino === 'banco' && params.minutosPagoFolha !== 0) {
+    return { ok: false, error: 'Destino banco exige minutos_pago_folha = 0.' };
+  }
+  if (destino === 'dividido' && (params.minutosPagoFolha <= 0 || params.minutosPagoFolha >= params.total)) {
+    return { ok: false, error: 'Destino dividido exige minutos_pago_folha entre 1 e o total - 1.' };
+  }
+  return { ok: true, destino };
+}
 
 async function assertFixoForFeriasOps(
   tenantId: number,
@@ -280,22 +323,24 @@ export function createRhRouter() {
   router.put('/pontos/:pontId', async (req: any, res) => {
     try {
       const { hora, tipo } = req.body;
-      if (!hora) return res.status(400).json({ error:'hora obrigatória' });
-      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(hora)) return res.status(400).json({ error:'Formato inválido. Use HH:MM' });
-      const p = await q1('SELECT * FROM func_pontos WHERE id=? AND tenant_id=?', [req.params.pontId,req.tenantId]);
-      if (!p) return res.status(404).json({ error:'Registro não encontrado' });
-      const novaHora = hora.length===5 ? hora+':00' : hora;
-      const novoTipo = tipo&&['entrada','saida'].includes(tipo) ? tipo : p.tipo;
-      await qRun('UPDATE func_pontos SET hora=?,tipo=? WHERE id=? AND tenant_id=?', [novaHora,novoTipo,req.params.pontId,req.tenantId]);
+      const result = await updatePointRecord({
+        tenantId: req.tenantId,
+        pointId: req.params.pontId,
+        hora: String(hora || ''),
+        tipo: tipo != null ? String(tipo) : null,
+      });
+      if (result.ok === false) return res.status(result.status).json({ error: result.error });
       res.json({success:true});
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });
 
   router.delete('/pontos/:pontId', async (req: any, res) => {
     try {
-      if (!await q1('SELECT id FROM func_pontos WHERE id=? AND tenant_id=?', [req.params.pontId,req.tenantId]))
-        return res.status(404).json({ error:'Registro não encontrado' });
-      await qRun('DELETE FROM func_pontos WHERE id=? AND tenant_id=?', [req.params.pontId,req.tenantId]);
+      const result = await deletePointRecord({
+        tenantId: req.tenantId,
+        pointId: req.params.pontId,
+      });
+      if (result.ok === false) return res.status(result.status).json({ error: result.error });
       res.json({success:true});
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });
@@ -307,23 +352,37 @@ export function createRhRouter() {
       let q = 'SELECT * FROM func_horas_extras WHERE funcionario_id=? AND tenant_id=?';
       const p: any[] = [req.params.id, req.tenantId];
       if (month&&year) { q+=` AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`; p.push(String(month).padStart(2,'0'),String(year)); }
-      res.json(await qAll(q+' ORDER BY data ASC', p));
+      res.json(await qAll(q+' ORDER BY data ASC, created_at ASC, id ASC', p));
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });
 
   router.post('/:id/horas-extras', async (req: any, res) => {
     try {
-      const { data, minutos, observacao, minutos_pago_folha } = req.body;
+      const { data, minutos, observacao, minutos_pago_folha, destino } = req.body;
       if (!data||!minutos) return res.status(400).json({ error:'data e minutos obrigatórios' });
       const total = Math.floor(Number(minutos));
       if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error:'minutos inválidos' });
-      let pagoFolha: number | null = null;
-      if (minutos_pago_folha !== undefined && minutos_pago_folha !== null && String(minutos_pago_folha).trim() !== '') {
-        pagoFolha = Math.floor(Number(minutos_pago_folha));
-        if (!Number.isFinite(pagoFolha) || pagoFolha < 0 || pagoFolha > total) {
-          return res.status(400).json({ error:'minutos_pago_folha deve estar entre 0 e o total de minutos' });
-        }
+      if (minutos_pago_folha === undefined || minutos_pago_folha === null || String(minutos_pago_folha).trim() === '') {
+        return res.status(400).json({
+          error: 'Informe explicitamente quantos minutos da HE vão para a folha. Use 0 para banco e o total para pagamento integral.',
+        });
       }
+      const pagoFolha = Math.floor(Number(minutos_pago_folha));
+      if (!Number.isFinite(pagoFolha) || pagoFolha < 0 || pagoFolha > total) {
+        return res.status(400).json({ error:'minutos_pago_folha deve estar entre 0 e o total de minutos' });
+      }
+      const funcRow = await q1<{ tipo_contrato: string | null }>(
+        'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [req.params.id, req.tenantId]
+      );
+      if (!funcRow) return res.status(404).json({ error: 'Funcionario nao encontrado' });
+      const destinoCheck = validateHoraExtraDestino({
+        total,
+        minutosPagoFolha: pagoFolha,
+        destinoRaw: destino,
+        bancoAplicavel: hourBankApplicable(normalizeTipoContrato(funcRow.tipo_contrato)),
+      });
+      if (destinoCheck.ok === false) return res.status(400).json({ error: destinoCheck.error });
       const createdBy = req.user?.username != null ? String(req.user.username) : null;
       const id = await qInsert(
         'INSERT INTO func_horas_extras (tenant_id,funcionario_id,data,minutos,observacao,minutos_pago_folha) VALUES (?,?,?,?,?,?)',
@@ -340,7 +399,7 @@ export function createRhRouter() {
           createdBy,
         });
       }
-      res.json({success:true,id});
+      res.json({success:true,id,destino: destinoCheck.destino});
     } catch(e: any) { res.status(500).json({ error:e.message }); }
   });
 
@@ -387,7 +446,7 @@ export function createRhRouter() {
 
   router.post('/:id/banco-horas/movimentacoes', async (req: any, res) => {
     try {
-      const { data_referencia, tipo, minutos, origem, observacao } = req.body || {};
+      const { data_referencia, tipo, minutos, origem, observacao, competencia_referencia } = req.body || {};
       const createdBy = req.user?.username != null ? String(req.user.username) : null;
       const result = await addHourBankMovement({
         tenantId: req.tenantId,
@@ -399,6 +458,7 @@ export function createRhRouter() {
         observacao: observacao != null ? String(observacao) : null,
         createdBy,
         metadataJson: null,
+        payrollReference: competencia_referencia != null ? String(competencia_referencia) : null,
       });
       if (result.ok === false) return res.status(400).json({ error: result.error });
       res.json({ success: true, movimentacao: result.mov });
@@ -590,15 +650,17 @@ export function createRhRouter() {
       );
       // NOVO: Buscar também as horas extras do mês
       const extras = await qAll(
-        `SELECT * FROM func_horas_extras WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`,
+        `SELECT * FROM func_horas_extras WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=? ORDER BY data ASC, created_at ASC, id ASC`,
         [func.id,req.tenantId,mm,yy]
       );
 
-      const pbd: Record<string,any[]>={}, ebd: Record<string,any[]>={}, hbd: Record<string,any>={};
+      const pbd: Record<string,any[]>={}, ebd: Record<string,any[]>={}, hbd: Record<string,any[]>={};
       for (const p of pontos) { if(!pbd[p.data])pbd[p.data]=[]; pbd[p.data].push(p); }
       for (const e of eventos) { if(!ebd[e.data])ebd[e.data]=[]; ebd[e.data].push(e); }
-      // NOVO: Agrupar horas extras por dia
-      for (const h of extras) { hbd[h.data]=h; }
+      for (const h of extras) {
+        if (!hbd[h.data]) hbd[h.data] = [];
+        hbd[h.data].push(h);
+      }
 
       const diasNoMes = new Date(Number(yy),Number(mm),0).getDate();
       const diasSemana = (func.dias_semana||'1,2,3,4,5').split(',').map(Number);
@@ -613,8 +675,8 @@ export function createRhRouter() {
       };
       const expectedOutMin = timeToMin(horSai);
       let totalFaltas=0,totalAtrasos=0,diasTrab=0,diasFolga=0,diasAtestado=0;
-      let totalExtraMin=0;
-      let totalExtraMinPagoFolha=0;
+      const totalExtraMin = extras.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0);
+      const totalExtraMinPagoFolha = extras.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0);
 
       const dias: any[] = [];
       for (let d=1;d<=diasNoMes;d++) {
@@ -623,18 +685,47 @@ export function createRhRouter() {
         const isExp=diasSemana.includes(diaSem);
         const evts=ebd[dataStr]||[];
         const pts=pbd[dataStr]||[];
-        const extraAprov=hbd[dataStr]||null;
+        const extrasDia=(hbd[dataStr]||[]) as Array<{ id: number; minutos: number; minutos_pago_folha?: number | null; observacao?: string | null }>;
+        const extraAprov=extrasDia.length ? {
+          id: extrasDia[extrasDia.length - 1].id,
+          quantidade: extrasDia.length,
+          minutos: extrasDia.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0),
+          minutos_pago_folha:
+            extrasDia.length === 1
+              ? (extrasDia[0].minutos_pago_folha ?? null)
+              : extrasDia.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0),
+          destino:
+            extrasDia.length === 1
+              ? (extrasDia[0].minutos_pago_folha == null
+                  ? 'legado_folha'
+                  : inferHoraExtraDestino(
+                      Math.max(0, Number(extrasDia[0].minutos) || 0),
+                      extraMinutesForPayrollRow(extrasDia[0])
+                    ))
+              : inferHoraExtraDestino(
+                  extrasDia.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0),
+                  extrasDia.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0)
+                ),
+          observacao: extrasDia.length === 1 ? extrasDia[0].observacao ?? null : null,
+          itens: extrasDia.map((curr) => ({
+            id: curr.id,
+            minutos: Number(curr.minutos) || 0,
+            minutos_pago_folha: curr.minutos_pago_folha ?? null,
+            destino: curr.minutos_pago_folha == null
+              ? 'legado_folha'
+              : inferHoraExtraDestino(
+                  Math.max(0, Number(curr.minutos) || 0),
+                  extraMinutesForPayrollRow(curr)
+                ),
+            observacao: curr.observacao ?? null,
+          })),
+        } : null;
         
         const ent=pts.find((p:any)=>p.tipo==='entrada');
         const said=pts.find((p:any)=>p.tipo==='saida');
         let status='sem_expediente'; let atrasoMin=0;
         const isFut=dataStr>hoje;
         const isAnt=admissao&&dataStr<admissao;
-
-        if (extraAprov) {
-          totalExtraMin += Number(extraAprov.minutos)||0;
-          totalExtraMinPagoFolha += extraMinutesForPayrollRow(extraAprov);
-        }
 
         let saidaRealExtraMin = 0;
         if (said && !isFut && !isAnt) {
@@ -735,6 +826,7 @@ export function createRhRouter() {
             employeeId: Number(req.params.id),
             month: mm,
             year: yy,
+            payrollReference: competencia.referencia,
             limit: 100,
           })
         : [];

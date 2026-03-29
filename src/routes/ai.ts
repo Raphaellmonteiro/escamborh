@@ -170,7 +170,7 @@ export function createAiRouter() {
         : `Analise "${tenant?.nome_estabelecimento}" (${tenant?.segmento}). Dados: ${JSON.stringify(contexto)}. De 3 insights acionaveis em JSON: {insights:[{titulo,descricao,acao}], resumo}`;
 
       const msg = await client.messages.create({
-        model: 'claude-sonnet-4-5-20251101',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }],
       });

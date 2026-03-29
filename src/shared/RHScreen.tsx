@@ -25,9 +25,23 @@ interface Func {
   foto_url?: string; status: string;
   tipo_contrato?: 'fixo' | 'diarista' | 'evento';
 }
+interface UsuarioFuncionario {
+  nome: string;
+  username: string;
+  cargo?: 'dono' | 'gerente' | 'atendente' | string;
+  permissoes?: string[] | null;
+}
 interface Evento { id: number; funcionario_id: number; data: string; tipo: string; horas_ausentes: number; observacao?: string; }
 interface Adiantamento { id: number; valor: number; motivo: string; data: string; descontado: number; }
-interface HoraExtraDia { id: number; minutos: number; minutos_pago_folha?: number | null; observacao?: string | null }
+interface HoraExtraDia {
+  id: number;
+  minutos: number;
+  minutos_pago_folha?: number | null;
+  destino?: 'folha' | 'banco' | 'dividido' | 'legado_folha';
+  observacao?: string | null;
+  quantidade?: number;
+  itens?: HoraExtraDia[];
+}
 interface DiaEspelho {
   data: string; dia: number; diaSemana: number; isExpediente: boolean; status: string;
   entrada?: string; saida?: string; atrasoMin: number; eventos: Evento[];
@@ -87,6 +101,13 @@ interface FolhaManagerialApi {
   benefit_deduction_total: number;
   net_adjusted: number;
 }
+interface RhAlertItem {
+  id: string;
+  severity: 'ok' | 'attention' | 'urgent';
+  titulo: string;
+  detalhe: string;
+  funcionario_id?: number;
+}
 
 interface Folha {
   funcionario: Func;
@@ -105,6 +126,8 @@ interface Folha {
   totalExtraMinPago?: number;
   totalExtraMinBancoMes?: number;
   valorExtras: number;
+  totalBancoConvertidoFolhaMin?: number;
+  valorBancoConvertidoFolha?: number;
   totalDescontos: number;
   salarioLiquido: number;
   competencia?: FolhaCompetenciaApi;
@@ -148,28 +171,106 @@ const TIPO_CONTRATO_LABEL: Record<'fixo' | 'diarista' | 'evento', string> = {
   diarista: 'Diarista',
   evento: 'Evento',
 };
+const fmtMinHuman = (minutes: number) => {
+  const total = Math.abs(Math.trunc(Number(minutes) || 0));
+  const h = Math.floor(total / 60);
+  const min = total % 60;
+  const label = h > 0 ? `${h}h${min > 0 ? ` ${min}min` : ''}` : `${min}min`;
+  return minutes < 0 ? `-${label}` : label;
+};
+const resolveHoraExtraDestino = (item: { minutos: number; minutos_pago_folha?: number | null }): HoraExtraDia['destino'] => {
+  const total = Math.max(0, Number(item.minutos) || 0);
+  const pago = item.minutos_pago_folha;
+  if (pago == null) return 'legado_folha';
+  const pagoNorm = Math.min(total, Math.max(0, Number(pago) || 0));
+  if (pagoNorm <= 0) return 'banco';
+  if (pagoNorm >= total) return 'folha';
+  return 'dividido';
+};
+const horaExtraDestinoLabel = (destino: HoraExtraDia['destino']) => {
+  switch (destino) {
+    case 'banco':
+      return 'Destino: banco';
+    case 'dividido':
+      return 'Destino: dividido';
+    case 'folha':
+      return 'Destino: folha';
+    default:
+      return 'Legado: 100% folha';
+  }
+};
+const HOUR_BANK_MOVEMENT_LABEL: Record<string, string> = {
+  credit: 'Credito',
+  debit: 'Compensacao',
+  manual_adjust: 'Ajuste manual',
+  converted_to_payroll: 'Conversao para folha',
+};
+const HOUR_BANK_ORIGIN_LABEL: Record<string, string> = {
+  espelho: 'Espelho',
+  compensacao: 'Compensacao',
+  folha: 'Folha',
+  manual: 'Ajuste manual',
+  hora_extra: 'Hora extra',
+};
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function RHScreen({ token }: { token: string }) {
-  const [tab, setTab] = useState<'lista'|'ponto'|'espelho'|'folha'|'gestao'>('lista');
+  const [tab, setTab] = useState<'lista'|'espelho'|'folha'|'gestao'>('lista');
+  const [gestaoAtalho, setGestaoAtalho] = useState<Func | null>(null);
   const slug = React.useMemo(() => {
     try { const p = token.split('.')[1]; return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/')))?.username || ''; }
     catch { return ''; }
   }, [token]);
 
   const TABS = [
-    { key:'lista',   label:'Funcionários',  icon:<Users size={14}/> },
-    { key:'espelho', label:'Espelho',        icon:<Calendar size={14}/> },
-    { key:'folha',   label:'Folha de Pgto', icon:<FileText size={14}/> },
-    { key:'gestao',  label:'Gestão RH',     icon:<Bell size={14}/> },
-  ];
+    { key:'lista',   label:'Funcionarios',       icon:<Users size={14}/> },
+    { key:'gestao',  label:'Gestao RH',          icon:<Bell size={14}/> },
+    { key:'espelho', label:'Espelho de Ponto',   icon:<Calendar size={14}/> },
+    { key:'folha',   label:'Folha de Pagamento', icon:<FileText size={14}/> },
+  ] as const;
+  const TAB_COPY = {
+    lista: {
+      title: 'Cadastro, contrato e ficha completa do colaborador',
+      subtitle: 'Use esta area para dados cadastrais, contrato, acessos e a gestao detalhada por colaborador quando precisar agir no nivel individual.',
+      shortcuts: [
+        { key: 'gestao', label: 'Ver pendencias gerenciais' },
+        { key: 'espelho', label: 'Conferir jornada' },
+        { key: 'folha', label: 'Fechar pagamento' },
+      ],
+    },
+    gestao: {
+      title: 'Painel gerencial para triagem e prioridades',
+      subtitle: 'Aqui entram alertas, pendencias e filas de decisao. Quando precisar editar um colaborador no detalhe, a ficha completa abre pela aba Funcionarios.',
+      shortcuts: [
+        { key: 'lista', label: 'Abrir ficha completa' },
+        { key: 'folha', label: 'Ir para a folha' },
+      ],
+    },
+    espelho: {
+      title: 'Jornada, ponto, ocorrencias e banco de horas',
+      subtitle: 'O Espelho concentra a operacao do dia e a conferencia mensal de presenca. Tudo que vira reflexo na folha nasce daqui.',
+      shortcuts: [
+        { key: 'folha', label: 'Conferir reflexos na folha' },
+        { key: 'gestao', label: 'Voltar para pendencias RH' },
+      ],
+    },
+    folha: {
+      title: 'Conferencia da competencia, recibos e quitacao',
+      subtitle: 'A Folha de Pagamento fecha o periodo. Jornada e compensacoes continuam no Espelho; beneficios, ferias e 13o continuam em Funcionarios e Gestao RH.',
+      shortcuts: [
+        { key: 'espelho', label: 'Revisar jornada no espelho' },
+        { key: 'lista', label: 'Abrir cadastro do colaborador' },
+      ],
+    },
+  } as const;
+  const activeTabCopy = TAB_COPY[tab];
 
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full overflow-y-auto bg-zinc-50">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
         <div>
-          <h1 className="text-2xl font-black text-zinc-900">RH / Funcionários</h1>
-          <p className="text-sm text-zinc-400 mt-0.5">Controle de ponto, presença e folha de pagamento</p>
+          <h1 className="text-2xl font-black text-zinc-900">Modulo RH</h1>
+          <p className="text-sm text-zinc-400 mt-0.5">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2 flex-wrap">
           <div className="flex bg-white border border-zinc-200 rounded-xl p-1 gap-0.5 overflow-x-auto w-full sm:w-auto">
@@ -192,67 +293,238 @@ export default function RHScreen({ token }: { token: string }) {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>
         </div>
-        {tab==='lista'   && <TabLista   token={token}/>}
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-4xl">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">{TABS.find((item) => item.key === tab)?.label}</p>
+              <h2 className="mt-1 text-lg font-black text-zinc-900">{activeTabCopy.title}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-600">{activeTabCopy.subtitle}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activeTabCopy.shortcuts.map((shortcut) => (
+                <button
+                  key={shortcut.key}
+                  type="button"
+                  onClick={() => setTab(shortcut.key)}
+                  className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-bold text-zinc-700 hover:bg-zinc-100"
+                >
+                  {shortcut.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {tab==='lista'   && (
+          <TabLista
+            token={token}
+            gestaoAtalho={gestaoAtalho}
+            onGestaoAtalhoConsumed={() => setGestaoAtalho(null)}
+          />
+        )}
         {tab==='espelho' && <TabEspelho token={token}/>}
         {tab==='folha'   && <TabFolha   token={token}/>}
-        {tab==='gestao'  && <TabGestaoRH token={token}/>}
+        {tab==='gestao'  && (
+          <TabGestaoRH
+            token={token}
+            onOpenGestao={(func) => {
+              setGestaoAtalho(func);
+              setTab('lista');
+            }}
+          />
+        )}
       </div>
     </motion.div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ABA GESTÃO RH (alertas)
+// ABA GESTÃO RH
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabGestaoRH({ token }: { token: string }) {
-  const [alertas, setAlertas] = useState<
-    { id: string; severity: string; titulo: string; detalhe: string; funcionario_id?: number }[]
-  >([]);
+function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (func: Func) => void }) {
+  const [funcs, setFuncs] = useState<Func[]>([]);
+  const [alertas, setAlertas] = useState<RhAlertItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const hdrs = { Authorization: `Bearer ${token}` };
+
+  const carregarPainel = async () => {
+    setLoading(true);
+    try {
+      const [rf, ra] = await Promise.all([
+        fetch('/api/funcionarios', { headers: hdrs }),
+        fetch('/api/funcionarios/painel/alertas', { headers: hdrs }),
+      ]);
+      const funcsData = await rf.json();
+      const alertasData = await ra.json();
+      setFuncs(Array.isArray(funcsData) ? funcsData : []);
+      setAlertas(Array.isArray(alertasData.alertas) ? alertasData.alertas : []);
+    } catch {
+      setFuncs([]);
+      setAlertas([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const r = await fetch('/api/funcionarios/painel/alertas', { headers: hdrs });
-        const d = await r.json();
-        setAlertas(Array.isArray(d.alertas) ? d.alertas : []);
-      } catch {
-        setAlertas([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void carregarPainel();
   }, [token]);
+
+  const ativos = funcs.filter((f) => f.status === 'ativo');
+  const termo = search.trim().toLowerCase();
+  const alertasUrgentes = alertas.filter((a) => a.severity === 'urgent').length;
+  const alertasPendentes = alertas.filter((a) => a.severity !== 'ok').length;
+  const alertasPorFuncionario = new Set(alertas.map((a) => a.funcionario_id).filter((id): id is number => typeof id === 'number'));
+  const alertasFiltrados = alertas.filter((a) => {
+    if (!termo) return true;
+    const func = a.funcionario_id ? ativos.find((item) => item.id === a.funcionario_id) : null;
+    return [a.titulo, a.detalhe, func?.nome, func?.cargo].some((value) => String(value || '').toLowerCase().includes(termo));
+  });
+  const funcionariosFiltrados = ativos.filter((f) => {
+    if (!termo) return true;
+    return [f.nome, f.cargo, TIPO_CONTRATO_LABEL[normalizeTipoContrato(f.tipo_contrato)]]
+      .some((value) => String(value || '').toLowerCase().includes(termo));
+  });
+
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-zinc-500 max-w-3xl">
-        Painel gerencial: férias, 13º, folha em aberto e banco de horas. Use o botão <span className="font-bold text-zinc-700">Gestão</span> no card do
-        funcionário para férias, benefícios e parcelas do 13º.
-      </p>
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-zinc-500">Painel gerencial</p>
+            <h2 className="text-xl font-black text-zinc-900 mt-1">Alertas, pendencias e prioridades do RH</h2>
+            <p className="text-sm text-zinc-500 mt-2">
+              Esta aba serve para triagem rapida de ferias, 13o, beneficios e folhas em aberto. Quando for preciso editar no detalhe, abrimos a ficha completa do colaborador pela aba Funcionarios.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar alerta ou colaborador..."
+                className="w-full min-w-[250px] rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={carregarPainel}
+              className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-600 hover:bg-zinc-50"
+            >
+              <RefreshCw size={14} />
+              Atualizar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SCard label="Urgentes" value={alertasUrgentes} color="red" />
+        <SCard label="Pendências" value={alertasPendentes} color="amber" />
+        <SCard label="Com alertas" value={alertasPorFuncionario.size} color="purple" />
+        <SCard label="Ativos" value={ativos.length} color="emerald" />
+      </div>
+
       {loading ? (
         <LoadSpinner />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {alertas.map((a) => (
-            <div
-              key={a.id}
-              className={`rounded-2xl border p-4 text-sm ${
-                a.severity === 'urgent'
-                  ? 'bg-red-50 border-red-200 text-red-950'
-                  : a.severity === 'attention'
-                    ? 'bg-amber-50 border-amber-200 text-amber-950'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              }`}
-            >
-              <p className="font-black text-[10px] uppercase tracking-wider mb-1 opacity-80">
-                {a.severity === 'ok' ? 'Ok' : a.severity === 'urgent' ? 'Urgente' : 'Atenção'}
-              </p>
-              <p className="font-bold">{a.titulo}</p>
-              <p className="text-xs mt-1.5 leading-relaxed opacity-90">{a.detalhe}</p>
+        <>
+          <div className="flex flex-col gap-1">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Triagem do modulo</p>
+            <p className="text-sm text-zinc-600">Revise aqui o que pede decisao gerencial e entre na ficha completa apenas quando precisar agir em um colaborador especifico.</p>
+          </div>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+            <div>
+              <h3 className="text-sm font-black text-zinc-900">Pendencias e alertas</h3>
+              <p className="text-xs text-zinc-500 mt-1">Cada card mostra o que precisa de decisao agora e, se necessario, leva para a ficha completa do colaborador.</p>
             </div>
-          ))}
-        </div>
+            <div className="grid gap-3 mt-4 sm:grid-cols-2 xl:grid-cols-3">
+              {alertasFiltrados.map((a) => {
+                const func = a.funcionario_id ? ativos.find((item) => item.id === a.funcionario_id) : null;
+                return (
+                  <div
+                    key={a.id}
+                    className={`rounded-2xl border p-4 text-sm ${
+                      a.severity === 'urgent'
+                        ? 'bg-red-50 border-red-200 text-red-950'
+                        : a.severity === 'attention'
+                          ? 'bg-amber-50 border-amber-200 text-amber-950'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    }`}
+                  >
+                    <p className="font-black text-[10px] uppercase tracking-wider mb-1 opacity-80">
+                      {a.severity === 'ok' ? 'Ok' : a.severity === 'urgent' ? 'Urgente' : 'Atenção'}
+                    </p>
+                    <p className="font-bold">{a.titulo}</p>
+                    <p className="text-xs mt-1.5 leading-relaxed opacity-90">{a.detalhe}</p>
+                    {func && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenGestao(func)}
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl border border-current/20 bg-white/70 px-3 py-2 text-[11px] font-black hover:bg-white"
+                      >
+                        Abrir ficha completa
+                        <ArrowRight size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+            <div>
+              <h3 className="text-sm font-black text-zinc-900">Abrir ficha completa por funcionario</h3>
+              <p className="text-xs text-zinc-500 mt-1">Use esta grade para sair da triagem e entrar na mesma gestao detalhada ja existente dentro de Funcionarios.</p>
+            </div>
+            {funcionariosFiltrados.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-zinc-400">
+                <Users size={44} className="mb-3 opacity-20" />
+                <p className="font-semibold">Nenhum colaborador encontrado</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 mt-4 sm:grid-cols-2 xl:grid-cols-3">
+                {funcionariosFiltrados.map((f) => {
+                  const tipoContrato = normalizeTipoContrato(f.tipo_contrato);
+                  const temPendencia = alertasPorFuncionario.has(f.id);
+                  return (
+                    <div key={f.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
+                      <div className="flex items-start gap-3">
+                        <Avatar func={f} size={42} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-black text-zinc-900">{f.nome}</p>
+                          <p className="truncate text-xs text-zinc-500">{f.cargo || 'Sem cargo definido'}</p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-bold text-white">
+                              {TIPO_CONTRATO_LABEL[tipoContrato]}
+                            </span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${temPendencia ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {temPendencia ? 'Com pendência' : 'Em dia'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-4">
+                        <InfoChip label="Salário base" value={fmt(f.salario_base)} />
+                        <InfoChip label="Jornada" value={`${f.horario_entrada || '--:--'}–${f.horario_saida || '--:--'}`} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onOpenGestao(f)}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-black text-white hover:bg-zinc-800"
+                      >
+                        Abrir ficha completa
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -267,7 +539,15 @@ const BEN_TIPOS = [
   { key: 'ajuda_custo' as const, label: 'Ajuda de custo' },
 ];
 
-function TabLista({ token }: { token: string }) {
+function TabLista({
+  token,
+  gestaoAtalho,
+  onGestaoAtalhoConsumed,
+}: {
+  token: string;
+  gestaoAtalho: Func | null;
+  onGestaoAtalhoConsumed: () => void;
+}) {
   const [funcs, setFuncs] = useState<Func[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -301,7 +581,7 @@ function TabLista({ token }: { token: string }) {
   const eAcesso = { login:'', senha:'', cargo_sistema:'atendente' as 'dono'|'gerente'|'atendente', permissoes: ['pos','orders','mesas'] as string[], criar_acesso: false };
   const [form, setForm] = useState(eF);
   const [formAcesso, setFormAcesso] = useState(eAcesso);
-  const [usuariosExistentes, setUsuariosExistentes] = useState<any[]>([]);
+  const [usuariosExistentes, setUsuariosExistentes] = useState<UsuarioFuncionario[]>([]);
   const [fotoFile, setFotoFile] = useState<File|null>(null);
   const [fotoPreview, setFotoPreview] = useState('');
   const fotoRef = useRef<HTMLInputElement>(null);
@@ -380,6 +660,16 @@ function TabLista({ token }: { token: string }) {
     if (modal !== 'rh_gestao' || !selected) return;
     void loadRhGestao(selected.id, rhDecimoAno);
   }, [modal, selected, rhDecimoAno]);
+  useEffect(() => {
+    if (!gestaoAtalho) return;
+    setSelected(gestaoAtalho);
+    setRhDecimoAno(new Date().getFullYear());
+    setRhSchedIni('');
+    setRhSchedFim('');
+    setRhValFerias('');
+    setModal('rh_gestao');
+    onGestaoAtalhoConsumed();
+  }, [gestaoAtalho, onGestaoAtalhoConsumed]);
 
   const fetchFuncs = async () => {
     setLoading(true);
@@ -458,7 +748,7 @@ function TabLista({ token }: { token: string }) {
   const handleEvento = async () => { setSaving(true); try { const r=await fetch(`/api/funcionarios/${selected!.id}/eventos`,{method:'POST',headers:jHdrs,body:JSON.stringify({...formEvento,horas_ausentes:parseFloat(formEvento.horas_ausentes||'0')})}); if(r.ok){setModal(null);setFormEvento({data:'',tipo:'falta',horas_ausentes:'',observacao:''});} } finally{setSaving(false);} };
   const handleDesativar = async (id:number) => { if(!confirm('Desativar?'))return; await fetch(`/api/funcionarios/${id}/desativar`,{method:'PATCH',headers:hdrs}); setSelected(null); fetchFuncs(); };
 
-  const openEdit = (f:Func) => {
+  const preencherFormulario = (f:Func) => {
     setSelected(f);
     const tc = f.tipo_contrato === 'diarista' || f.tipo_contrato === 'evento' ? f.tipo_contrato : 'fixo';
     setForm({ nome:f.nome, cargo:f.cargo, salario_base:String(f.salario_base), horario_entrada:f.horario_entrada||'08:00', horario_saida:f.horario_saida||'17:00', carga_horaria:String(f.carga_horaria||8), dias_semana:f.dias_semana||'1,2,3,4,5', tolerancia_minutos:String(f.tolerancia_minutos||10), dias_trabalho_mes:String(f.dias_trabalho_mes||26), data_admissao:f.data_admissao||'', telefone:f.telefone||'', cpf:f.cpf||'', pin:f.pin||'', tipo_contrato: tc });
@@ -471,6 +761,10 @@ function TabLista({ token }: { token: string }) {
     } else {
       setFormAcesso({...eAcesso});
     }
+  };
+
+  const openEdit = (f:Func) => {
+    preencherFormulario(f);
     setModal('edit');
   };
 
@@ -481,6 +775,22 @@ function TabLista({ token }: { token: string }) {
 
   return (
     <>
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Funcionarios</p>
+            <h2 className="mt-1 text-xl font-black text-zinc-900">Cadastro, contrato e ficha completa</h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              Esta aba concentra dados cadastrais, contrato, acesso ao sistema e a gestao detalhada por colaborador. Use Gestao RH para triagem e volte aqui quando precisar editar no detalhe.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 min-w-[260px]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Quando usar</p>
+            <p className="mt-1 font-semibold text-zinc-800">Entrar no nivel do funcionario.</p>
+            <p className="mt-1 text-xs leading-relaxed">Cadastro, salario, jornada, acesso, historico e gestao gerencial detalhada ficam concentrados aqui.</p>
+          </div>
+        </div>
+      </div>
       <div className="flex items-center justify-between">
         <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar funcionário..." className="pl-9 pr-4 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none w-56"/></div>
         <button onClick={()=>{setForm(eF);setFotoFile(null);setFotoPreview('');setSelected(null);setModal('novo');}} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"><UserPlus size={16}/>Novo Funcionário</button>
@@ -492,27 +802,35 @@ function TabLista({ token }: { token: string }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(f=>(
             <div key={f.id} className="bg-white border border-zinc-200 rounded-2xl p-5 hover:border-zinc-400 hover:shadow-md transition-all">
+              {(() => {
+                const acesso = usuariosExistentes.find(u => u.nome === f.nome);
+                const tipoContrato = normalizeTipoContrato(f.tipo_contrato);
+                return (
+                  <>
               <div className="flex items-start gap-3 mb-4">
                 <Avatar func={f} size={44}/>
-                <div className="flex-1 min-w-0"><p className="font-black text-zinc-900 truncate">{f.nome}</p><p className="text-xs text-zinc-400 truncate">{f.cargo}</p><p className="text-[11px] text-zinc-500 mt-0.5">Tipo: {TIPO_CONTRATO_LABEL[(f.tipo_contrato === 'diarista' || f.tipo_contrato === 'evento' ? f.tipo_contrato : 'fixo')]}</p></div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">ativo</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-zinc-900 truncate">{f.nome}</p>
+                  <p className="text-xs text-zinc-400 truncate">{f.cargo || 'Sem cargo definido'}</p>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">Contrato: {TIPO_CONTRATO_LABEL[tipoContrato]}</p>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">{f.status}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
-                <InfoChip label="Salário" value={fmt(f.salario_base)}/>
-                <InfoChip label="Horário" value={`${f.horario_entrada||'08:00'}–${f.horario_saida||'17:00'}`}/>
-                <InfoChip label="Carga" value={`${f.carga_horaria||8}h/dia`}/>
-                <InfoChip label="Tolerância" value={`${f.tolerancia_minutos||10}min`}/>
+                <InfoChip label="Salário base" value={fmt(f.salario_base)}/>
+                <InfoChip label="Jornada" value={`${f.horario_entrada||'08:00'}–${f.horario_saida||'17:00'}`}/>
+                <InfoChip label="PIN" value={f.pin ? 'Definido' : 'Pendente'}/>
+                <InfoChip label="Foto" value={f.foto_url ? 'Cadastrada' : 'Sem foto'}/>
+                <InfoChip label="Acesso" value={acesso ? 'Liberado' : 'Sem acesso'}/>
+                <InfoChip label="Status" value={f.status}/>
               </div>
               <div className="flex gap-1.5 flex-wrap">
-                <ABtn label="Editar" icon={<Pencil size={11}/>} onClick={()=>openEdit(f)}/>
-                <ABtn label="Evento" icon={<Calendar size={11}/>} onClick={()=>{setSelected(f);setModal('evento');}}/>
-                {!isEvento(normalizeTipoContrato(f.tipo_contrato)) && (
-                  <ABtn label="Adiantamento" icon={<DollarSign size={11}/>} onClick={()=>{setSelected(f);setModal('adiant');}}/>
-                )}
-                <ABtn label="Salário" icon={<TrendingUp size={11}/>} onClick={()=>{setSelected(f);setModal('ajuste');}}/>
-                <ABtn label="Gestão" icon={<Palmtree size={11}/>} onClick={()=>{setSelected(f);setRhDecimoAno(new Date().getFullYear());setRhSchedIni('');setRhSchedFim('');setRhValFerias('');setModal('rh_gestao');}}/>
+                <ABtn label="Editar cadastro" icon={<Pencil size={11}/>} onClick={()=>openEdit(f)}/>
                 <ABtn label="Desativar" icon={<Trash2 size={11}/>} danger onClick={()=>handleDesativar(f.id)}/>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -521,7 +839,12 @@ function TabLista({ token }: { token: string }) {
       {inativos.length>0&&<details><summary className="cursor-pointer text-sm font-bold text-zinc-400 hover:text-zinc-600 mt-2">Inativos ({inativos.length})</summary><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">{inativos.map(f=><div key={f.id} className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 flex items-center gap-3 opacity-60"><Avatar func={f} size={36}/><div><p className="text-sm font-bold text-zinc-700">{f.nome}</p><p className="text-xs text-zinc-400">{f.cargo}</p></div></div>)}</div></details>}
 
       {/* Modal Funcionário */}
-      <Modal open={modal==='novo'||modal==='edit'} onClose={()=>setModal(null)} title={modal==='novo'?'Novo Funcionário':`Editar — ${selected?.nome}`} wide>
+      <Modal
+        open={modal==='novo'||modal==='edit'}
+        onClose={()=>setModal(null)}
+        title={modal==='novo' ? 'Novo Funcionário' : `Editar cadastro — ${selected?.nome}`}
+        wide
+      >
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="relative w-20 h-20 rounded-2xl bg-zinc-100 overflow-hidden flex items-center justify-center shrink-0 cursor-pointer" onClick={()=>fotoRef.current?.click()}>
@@ -593,7 +916,7 @@ function TabLista({ token }: { token: string }) {
               <div className="space-y-3 p-4 bg-zinc-50 rounded-2xl border border-zinc-200">
                 <div className="grid grid-cols-2 gap-3">
                   <FInput label="Login*" value={formAcesso.login} onChange={v=>setFormAcesso({...formAcesso,login:v})} placeholder="joao.silva"/>
-                  <FInput label={modal==='edit'?'Nova senha (deixe vazio para manter)':'Senha*'} type="password" value={formAcesso.senha} onChange={v=>setFormAcesso({...formAcesso,senha:v})} placeholder="••••••"/>
+                  <FInput label={modal!=='novo'?'Nova senha (deixe vazio para manter)':'Senha*'} type="password" value={formAcesso.senha} onChange={v=>setFormAcesso({...formAcesso,senha:v})} placeholder="••••••"/>
                 </div>
 
                 <div>
@@ -689,11 +1012,19 @@ function TabLista({ token }: { token: string }) {
           setRhDecimoConfirm(null);
           setModal(null);
         }}
-        title={`Gestão RH — ${selected?.nome}`}
+        title={`Ficha completa RH - ${selected?.nome}`}
         wide
       >
         <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
           {rhGestaoLoading && <p className="text-xs text-zinc-400">Carregando…</p>}
+          {selected && (
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 text-sm text-zinc-700">
+              <p className="font-black text-zinc-900">Edicao detalhada do colaborador</p>
+              <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                Esta ficha concentra beneficios, ferias e 13o no nivel individual. A aba Gestao RH continua sendo o painel de triagem; aqui fica a acao detalhada por colaborador.
+              </p>
+            </div>
+          )}
           {selected && !isFixo(normalizeTipoContrato(selected.tipo_contrato)) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
               <p className="font-black text-amber-900">Contrato {TIPO_CONTRATO_LABEL[normalizeTipoContrato(selected.tipo_contrato)]}</p>
@@ -1158,6 +1489,9 @@ function TabEspelho({ token }: { token: string }) {
   const [horaExtraDestino, setHoraExtraDestino] = useState<'folha'|'banco'|'dividir'>('folha');
   const [horaExtraPagoFolha, setHoraExtraPagoFolha] = useState('');
   const [savingExtra, setSavingExtra]           = useState(false);
+  const [compBancoMin, setCompBancoMin] = useState('');
+  const [compBancoObs, setCompBancoObs] = useState('');
+  const [compBancoSaving, setCompBancoSaving] = useState(false);
 
   const hdrs   = { Authorization:`Bearer ${token}` };
   const jHdrs  = { ...hdrs, 'Content-Type':'application/json' };
@@ -1259,6 +1593,7 @@ function TabEspelho({ token }: { token: string }) {
       data: gestaoData,
       minutos: total,
       observacao: horaExtraObs || null,
+      destino: horaExtraDestino === 'dividir' ? 'dividido' : horaExtraDestino,
     };
     if (horaExtraDestino === 'banco') body.minutos_pago_folha = 0;
     else if (horaExtraDestino === 'folha') body.minutos_pago_folha = total;
@@ -1294,6 +1629,47 @@ function TabEspelho({ token }: { token: string }) {
     } catch { alert('Erro ao cancelar'); }
   };
 
+  const handleCompensacaoBancoEspelho = async () => {
+    if (!sel || !gestaoData) return;
+    const raw = parseInt(String(compBancoMin).replace(/\s/g, ''), 10);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      alert('Informe quantos minutos debitar do banco (valor positivo).');
+      return;
+    }
+    const saldoDisponivel = espelho?.resumo.saldoBancoHorasMin ?? 0;
+    if (saldoDisponivel > 0 && raw > saldoDisponivel) {
+      alert(`Saldo disponivel para compensacao: ${saldoDisponivel} min.`);
+      return;
+    }
+    setCompBancoSaving(true);
+    try {
+      const r = await fetch(`/api/funcionarios/${sel}/banco-horas/movimentacoes`, {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({
+          data_referencia: gestaoData,
+          tipo: 'debit',
+          minutos: raw,
+          origem: 'espelho',
+          observacao: compBancoObs.trim() || null,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setCompBancoMin('');
+        setCompBancoObs('');
+        await fetchEspelho();
+        await abrirGestao(gestaoData);
+      } else {
+        alert((data as { error?: string }).error || 'Erro ao registrar compensação');
+      }
+    } catch {
+      alert('Erro de conexão');
+    } finally {
+      setCompBancoSaving(false);
+    }
+  };
+
   // ── PDF do espelho ───────────────────────────────────────────────────────
   const exportarPDF = () => {
     if(!espelho) return;
@@ -1305,6 +1681,11 @@ function TabEspelho({ token }: { token: string }) {
     const fmtH = (m:number) => { const h=Math.floor(m/60),mn=m%60; return h>0?`${h}h${mn>0?` ${mn}min`:''}`:mn+'min'; };
     const statusLabel: Record<string,string> = { trabalhado:'Trabalhou', falta:'Falta', folga:'Folga', atestado:'Atestado', declaracao_parcial:'Aus. Parcial', sem_expediente:'—' };
     const statusColor: Record<string,string> = { trabalhado:'#16a34a', falta:'#dc2626', folga:'#2563eb', atestado:'#7c3aed', declaracao_parcial:'#d97706', sem_expediente:'#a1a1aa' };
+
+    const heApurPdf = espelho.resumo.totalExtraMin ?? 0;
+    const heFolhaPdf = espelho.resumo.totalExtraMinPagoFolha ?? 0;
+    const heBancoMesPdf = espelho.resumo.totalExtraMinBancoMes ?? Math.max(0, heApurPdf - heFolhaPdf);
+    const saldoBancoPdf = espelho.resumo.saldoBancoHorasMin ?? 0;
 
     const linhas = diasExp.map(d=>`
       <tr>
@@ -1354,6 +1735,9 @@ function TabEspelho({ token }: { token: string }) {
         <div class="resumo-card"><div class="resumo-label">Atraso</div><div class="resumo-val" style="color:#d97706">${espelho.resumo.totalAtrasoMin>0?fmtH(espelho.resumo.totalAtrasoMin):'0min'}</div></div>
         <div class="resumo-card"><div class="resumo-label">Desc. Total</div><div class="resumo-val" style="color:#dc2626;font-size:13px">${fmtMoney(espelho.resumo.totalDescontos)}</div></div>
       </div>
+      <p style="font-size:10px;color:#52525b;margin:-10px 0 18px;line-height:1.55">
+        <strong>Resumo HE / banco:</strong> HE apuradas ${heApurPdf} min (${fmtH(heApurPdf)}) · HE -&gt; folha ${heFolhaPdf} min · HE -&gt; banco ${heBancoMesPdf} min · Saldo disponível para compensação ${saldoBancoPdf} min
+      </p>
       <table>
         <thead><tr><th>Data</th><th>Status</th><th>Entrada</th><th>Saída</th><th>Atraso</th></tr></thead>
         <tbody>${linhas}</tbody>
@@ -1376,6 +1760,17 @@ function TabEspelho({ token }: { token: string }) {
   const tipoEsp = normalizeTipoContrato(espFunc?.tipo_contrato ?? 'fixo');
   const espBancoOk = espelho?.banco_horas_aplicavel !== false;
   const heBancoOk = hourBankApplicable(tipoEsp);
+  const saldoBancoDisponivel = espelho?.resumo.saldoBancoHorasMin ?? 0;
+  const atalhosCompensacao = [
+    { min: 30, label: '30m' },
+    { min: 60, label: '1h' },
+    { min: 120, label: '2h' },
+    { min: saldoBancoDisponivel, label: 'Saldo total' },
+  ].filter((item, index, arr) =>
+    item.min > 0 &&
+    item.min <= saldoBancoDisponivel &&
+    arr.findIndex((candidate) => candidate.min === item.min) === index
+  );
 
   useEffect(() => {
     if (!heBancoOk && (horaExtraDestino === 'banco' || horaExtraDestino === 'dividir')) {
@@ -1403,40 +1798,136 @@ function TabEspelho({ token }: { token: string }) {
         )}
       </div>
 
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Espelho</p>
+            <h2 className="mt-1 text-xl font-black text-zinc-900">Operacao do dia e conferencia mensal de presenca</h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              Aqui fica a area principal para resolver ponto, faltas, atrasos, folgas, atestados, ponto manual, HE e compensacao com banco.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 min-w-[260px]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Leitura rapida</p>
+            <p className="mt-1 font-semibold text-zinc-800">Clique em um dia para resolver a operacao.</p>
+            <p className="mt-1 text-xs leading-relaxed">
+              O resumo e a lista abaixo servem para fechar o mes com clareza de presenca, descontos, HE e banco.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Resolver o dia</p>
+            <p className="mt-1 text-sm font-semibold text-emerald-950">Ponto, ocorrencias, HE e compensacao sem sair do calendario.</p>
+          </div>
+          <div className="rounded-xl border border-orange-200 bg-orange-50/70 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-wider text-orange-700">Resumo do periodo</p>
+            <p className="mt-1 text-sm font-semibold text-orange-950">HE apuradas, destino na folha, credito no banco e saldo para compensar.</p>
+          </div>
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Conferencia mensal</p>
+            <p className="mt-1 text-sm font-semibold text-cyan-950">Visual do mes para validar presenca e encontrar pendencias rapido.</p>
+          </div>
+        </div>
+      </div>
+
       {loading ? <LoadSpinner/> : espelho ? (
         <>
-          {/* Resumo */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-3">
-            <SCard label="Trabalhados" value={espelho.resumo.diasTrabalhados} color="emerald"/>
-            <SCard label="Faltas"      value={espelho.resumo.totalFaltas}     color="red"/>
-            <SCard label="Folgas"      value={espelho.resumo.diasFolga}       color="blue"/>
-            <SCard label="Atestados"   value={espelho.resumo.diasAtestado}    color="purple"/>
-            <SCard label="Atraso"      value={`${espelho.resumo.totalAtrasoMin}min`} color="amber"/>
-            <SCard label="HE apuradas" value={`${espelho.resumo.totalExtraMin ?? 0}min`} color="orange"/>
-            <SCard label="HE → folha"  value={`${espelho.resumo.totalExtraMinPagoFolha ?? espelho.resumo.totalExtraMin ?? 0}min`} color="orange"/>
-            {espBancoOk && (
-              <SCard label="Saldo banco" value={`${espelho.resumo.saldoBancoHorasMin ?? 0}min`} color="cyan"/>
-            )}
-            <SCard label="Desc.Faltas" value={fmt(espelho.resumo.descontoFaltas)}   color="red"   small/>
-            <SCard label="Desc.Atrasos" value={fmt(espelho.resumo.descontoAtrasos)} color="amber" small/>
+          {/* Resumo presença / descontos */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+            <SCard label="Dias com ponto" value={espelho.resumo.diasTrabalhados} color="emerald" hint="Presencas validadas no espelho."/>
+            <SCard label="Faltas" value={espelho.resumo.totalFaltas} color="red" hint="Dias sem comparecimento."/>
+            <SCard label="Folgas" value={espelho.resumo.diasFolga} color="blue" hint="Folgas registradas no periodo."/>
+            <SCard label="Atestados" value={espelho.resumo.diasAtestado} color="purple" hint="Ausencias justificadas por atestado."/>
+            <SCard label="Atrasos somados" value={`${espelho.resumo.totalAtrasoMin}min`} color="amber" hint={fmtMinHuman(espelho.resumo.totalAtrasoMin)}/>
+            <SCard label="Desconto por faltas" value={fmt(espelho.resumo.descontoFaltas)} color="red" small hint="Reflexo estimado na folha."/>
+            <SCard label="Desconto por atrasos" value={fmt(espelho.resumo.descontoAtrasos)} color="amber" small hint="Reflexo estimado na folha."/>
           </div>
 
-          {!espBancoOk && (
-            <p className="text-xs text-zinc-500 bg-zinc-100/80 border border-zinc-200 rounded-xl px-3 py-2">
-              Banco de horas não se aplica a colaboradores por evento neste módulo.
-            </p>
-          )}
+          {/* HE e banco — leitura explícita */}
+          {(() => {
+            const heApur = espelho.resumo.totalExtraMin ?? 0;
+            const heFolha = espelho.resumo.totalExtraMinPagoFolha ?? 0;
+            const heBancoMes = espelho.resumo.totalExtraMinBancoMes ?? Math.max(0, heApur - heFolha);
+            const saldoDisp = espelho.resumo.saldoBancoHorasMin ?? 0;
+            const tudoNaFolha = heApur > 0 && heFolha >= heApur && heBancoMes === 0;
+            return (
+              <div className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-orange-50/80 to-cyan-50/40 p-4 space-y-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-zinc-600">
+                    Resumo HE e compensação · {MESES[month - 1]} {year}
+                  </p>
+                  {!espBancoOk && (
+                    <span className="text-[10px] font-bold text-zinc-500">Banco não se aplica a contrato por evento</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-xl bg-white/90 border border-orange-100 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-orange-800/80">HE apuradas</p>
+                    <p className="text-lg font-black text-orange-900 tabular-nums mt-0.5">{heApur} min</p>
+                    <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Total aprovado no Espelho neste período.</p>
+                  </div>
+                  <div className="rounded-xl bg-white/90 border border-orange-100 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-orange-800/80">HE -&gt; folha</p>
+                    <p className="text-lg font-black text-orange-900 tabular-nums mt-0.5">{heFolha} min</p>
+                    <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Minutos enviados para pagamento na folha.</p>
+                  </div>
+                  <div className="rounded-xl bg-white/90 border border-cyan-100 px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-cyan-900/85">HE -&gt; banco</p>
+                    <p className="text-lg font-black text-cyan-950 tabular-nums mt-0.5">{heBancoMes} min</p>
+                    <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Minutos das HE deste período que viraram crédito no banco.</p>
+                  </div>
+                  {espBancoOk ? (
+                    <div className="rounded-xl bg-white/90 border border-cyan-200 px-3 py-2.5">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-cyan-900">Saldo disponível para compensação</p>
+                      <p className="text-lg font-black text-cyan-950 tabular-nums mt-0.5">{saldoDisp} min</p>
+                      <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Saldo acumulado até agora. Use no calendário: dia -&gt; compensação.</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-3 py-2.5 flex items-center">
+                      <p className="text-[10px] text-zinc-500 leading-relaxed">Sem banco de horas neste perfil; HE ficam somente como registro operacional.</p>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-600 bg-white/70 border border-zinc-200/80 rounded-xl px-3 py-2 leading-relaxed">
+                  <span className="font-bold text-zinc-800">Como ler este resumo:</span> HE apuradas = total aprovado no Espelho. HE -&gt; folha = minutos enviados para pagamento.
+                  HE -&gt; banco = creditos gerados neste periodo. Saldo disponivel para compensacao = o que ainda pode ser usado nos dias seguintes.
+                </p>
+                {espBancoOk && saldoDisp === 0 && (
+                  <p className="text-xs text-zinc-600 bg-white/70 border border-zinc-200/80 rounded-xl px-3 py-2 leading-relaxed">
+                    {tudoNaFolha ? (
+                      <>
+                        <span className="font-bold text-zinc-800">Por que o banco está em zero?</span> Neste mês, todas as horas extras foram para a folha;
+                        nada foi creditado no banco pelos lançamentos de HE. O saldo mostrado é o disponível no banco em geral (créditos anteriores já
+                        compensados ou inexistentes).
+                      </>
+                    ) : heBancoMes > 0 ? (
+                      <>
+                        <span className="font-bold text-zinc-800">Saldo zerado com crédito no mês?</span> É possível se houve compensações (débitos) ou se o
+                        saldo anterior já tinha sido usado. Confira a lista de movimentações abaixo.
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold text-zinc-800">Saldo zerado.</span> Não há minutos acumulados no banco para compensar. Créditos entram ao
+                        aprovar HE com destino &quot;banco&quot; ou por lançamento manual na Folha (conferência).
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {espBancoOk && espelho.banco_horas_mes && espelho.banco_horas_mes.length > 0 && (
             <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
               <div className="px-4 py-2 bg-cyan-50 border-b border-cyan-100 text-[10px] font-black text-cyan-800 uppercase tracking-wider">
-                Banco de horas — movimentações no mês
+                Banco de horas - movimentações do mês
               </div>
               <div className="max-h-40 overflow-y-auto divide-y divide-zinc-100 text-xs">
                 {espelho.banco_horas_mes.map((m) => (
                   <div key={m.id} className="px-4 py-2 flex justify-between gap-2 text-zinc-600">
                     <span className="font-mono text-[10px] text-zinc-400 shrink-0">{fmtDate(m.data_referencia)}</span>
-                    <span className="flex-1 truncate">{m.tipo} · {m.origem}{m.observacao ? ` — ${m.observacao}` : ''}</span>
+                    <span className="flex-1 truncate">{HOUR_BANK_MOVEMENT_LABEL[m.tipo] || m.tipo} · {HOUR_BANK_ORIGIN_LABEL[m.origem] || m.origem}{m.observacao ? ` - ${m.observacao}` : ''}</span>
                     <span className={`font-black tabular-nums shrink-0 ${
                       m.tipo === 'manual_adjust'
                         ? m.minutos < 0 ? 'text-red-600' : 'text-emerald-600'
@@ -1458,6 +1949,11 @@ function TabEspelho({ token }: { token: string }) {
 
           {/* Calendário */}
           <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-zinc-100 bg-zinc-50/80">
+              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Operacao do dia</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">Calendario para resolver ponto, ocorrencias, HE e compensacao.</p>
+              <p className="mt-1 text-xs text-zinc-500">Clique em um dia para abrir a gestao do dia e corrigir o que ficou pendente.</p>
+            </div>
             <div className="grid grid-cols-7 border-b border-zinc-100">
               {DIAS_LABEL.map(d=><div key={d} className="py-2 text-center text-[10px] font-black text-zinc-400 uppercase tracking-wider">{d}</div>)}
             </div>
@@ -1480,7 +1976,7 @@ function TabEspelho({ token }: { token: string }) {
                         {/* Badge de hora extra aprovada */}
                         {dia.extraAprov && (
                           <span className="text-[8px] font-black px-1 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">
-                            HE +{dia.extraAprov.minutos}m
+                            HE +{dia.extraAprov.minutos}m{(dia.extraAprov.quantidade ?? 1) > 1 ? ` (${dia.extraAprov.quantidade})` : ''}
                           </span>
                         )}
                         {/* Indicador de saída tardia ainda não aprovada como extra */}
@@ -1507,8 +2003,12 @@ function TabEspelho({ token }: { token: string }) {
 
           {/* Tabela detalhada */}
           <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-zinc-100 bg-white">
+              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Conferencia detalhada</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">Linha a linha para revisar presenca e agir rapido quando houver divergencia.</p>
+            </div>
             <div className="grid grid-cols-7 px-4 py-2 bg-zinc-50 border-b border-zinc-100 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
-              <span>Data</span><span>Status</span><span>Entrada</span><span>Saída</span><span>Atraso</span><span>H.Extra</span><span>Ação</span>
+              <span>Data</span><span>Status</span><span>Entrada</span><span>Saída</span><span>Atraso</span><span>HE</span><span>Ação no dia</span>
             </div>
             <div className="divide-y divide-zinc-100 max-h-72 overflow-y-auto">
               {espelho.dias
@@ -1536,8 +2036,8 @@ function TabEspelho({ token }: { token: string }) {
                         }
                       </span>
                       <div className="flex gap-2">
-                        <button onClick={()=>setAddEvento(dia.data)} className="text-zinc-300 hover:text-zinc-600 text-[10px] font-bold">+ evento</button>
-                        <button onClick={()=>abrirGestao(dia.data)} className="text-blue-400 hover:text-blue-700 text-[10px] font-bold">⏱ ponto</button>
+                        <button onClick={()=>setAddEvento(dia.data)} className="text-zinc-400 hover:text-zinc-700 text-[10px] font-bold">+ ocorrencia</button>
+                        <button onClick={()=>abrirGestao(dia.data)} className="text-blue-500 hover:text-blue-700 text-[10px] font-bold">resolver dia</button>
                       </div>
                     </div>
                   );
@@ -1548,27 +2048,34 @@ function TabEspelho({ token }: { token: string }) {
       ) : null}
 
       {/* ── Modal: Evento ── */}
-      <Modal open={!!addEvento} onClose={()=>setAddEvento(null)} title={`Evento — ${addEvento?fmtDate(addEvento):''}`}>
+      <Modal open={!!addEvento} onClose={()=>setAddEvento(null)} title={`Ocorrência do dia — ${addEvento?fmtDate(addEvento):''}`}>
         <div className="space-y-3">
+          <p className="text-sm text-zinc-600 leading-relaxed">
+            Registre aqui faltas, folgas, atestados ou ausência parcial para deixar o dia coerente no Espelho.
+          </p>
           <div className="grid grid-cols-2 gap-2">
             {TIPOS_EVENTO.map(t=><button key={t.value} onClick={()=>setFormEvento({...formEvento,tipo:t.value})} className={`py-2 rounded-xl text-xs font-bold border transition-all ${formEvento.tipo===t.value?'bg-zinc-900 text-white border-zinc-900':'bg-white text-zinc-500 border-zinc-200'}`}>{t.label}</button>)}
           </div>
           {formEvento.tipo==='declaracao_parcial'&&<FInput label="Horas ausentes" value={formEvento.horas_ausentes} onChange={v=>setFormEvento({...formEvento,horas_ausentes:v})} placeholder="Ex: 2.5"/>}
           <FInput label="Observação (opcional)" value={formEvento.observacao} onChange={v=>setFormEvento({...formEvento,observacao:v})} placeholder="..."/>
         </div>
-        <MBtns onCancel={()=>setAddEvento(null)} onConfirm={handleAddEvento} saving={false} label="Registrar"/>
+        <MBtns onCancel={()=>setAddEvento(null)} onConfirm={handleAddEvento} saving={false} label="Salvar ocorrência"/>
       </Modal>
 
       {/* ── Modal: Gestão de Pontos do Dia ── */}
-      <Modal open={!!gestaoData} onClose={()=>{setGestaoData(null);setEditPonto(null);}} title={`Pontos — ${funcSel?.nome||''} · ${gestaoData?fmtDate(gestaoData):''}`} wide>
+      <Modal open={!!gestaoData} onClose={()=>{setGestaoData(null);setEditPonto(null);setCompBancoMin('');setCompBancoObs('');}} title={`Gestão do dia — ${funcSel?.nome||''} · ${gestaoData?fmtDate(gestaoData):''}`} wide>
         {loadingPontos ? <LoadSpinner/> : (
           <div className="space-y-5">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Resolver este dia</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">Ajuste ponto, registre ausências, aprove HE e use banco de horas sem sair do Espelho.</p>
+            </div>
 
             {/* Registros existentes */}
             <div>
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-2">Registros do dia</p>
+              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-2">Ponto do dia</p>
               {pontosRaw.length === 0 ? (
-                <div className="text-center py-6 text-sm text-zinc-400 bg-zinc-50 rounded-xl">Nenhum ponto registrado neste dia</div>
+                <div className="text-center py-6 text-sm text-zinc-400 bg-zinc-50 rounded-xl">Nenhum ponto registrado neste dia. Use Ponto manual se precisar corrigir a operação.</div>
               ) : (
                 <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-xl overflow-hidden">
                   {pontosRaw.map(p=>(
@@ -1625,9 +2132,12 @@ function TabEspelho({ token }: { token: string }) {
               return (
                 <div className="border border-dashed border-blue-300 rounded-xl p-4 bg-blue-50/30">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-wider">Folga do Dia</p>
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-wider">Folga / descanso</p>
                     {temFolga && <span className="text-[10px] font-black px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200">✓ Folga registrada</span>}
                   </div>
+                  <p className="text-[11px] text-blue-950/80 mb-3 leading-relaxed">
+                    Use quando a resolução do dia for folga compensatória, descanso combinado ou liberação formal.
+                  </p>
                   {temFolga ? (
                     <div className="flex items-center justify-between bg-white border border-blue-200 rounded-xl px-4 py-3">
                       <div>
@@ -1680,9 +2190,83 @@ function TabEspelho({ token }: { token: string }) {
               );
             })()}
 
+            {/* Compensação: debitar banco nesta data (mesmo endpoint da Folha) */}
+            {espBancoOk && (
+              <div className="border border-dashed border-cyan-300 rounded-xl p-4 bg-cyan-50/40">
+                <p className="text-[10px] font-black text-cyan-800 uppercase tracking-wider mb-1">Compensação com banco</p>
+                <p className="text-[11px] text-cyan-950/80 mb-3 leading-relaxed">
+                  Use quando o colaborador vai compensar horas nesta data. Isso baixa o saldo e deixa o ajuste rastreado no Espelho.
+                  Se o dia também precisa aparecer como folga, use <span className="font-bold">Conceder folga</span> acima.
+                </p>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="text-xs font-bold text-cyan-900">
+                    Saldo disponível:{' '}
+                    <span className="tabular-nums font-black">{saldoBancoDisponivel} min</span>
+                    <span className="font-medium text-cyan-800/80"> ({fmtMinHuman(saldoBancoDisponivel)})</span>
+                  </span>
+                </div>
+                {saldoBancoDisponivel <= 0 ? (
+                  <p className="text-[11px] text-zinc-500 bg-white/60 rounded-lg px-3 py-2 border border-cyan-100">
+                    Sem saldo no banco. Credite HE para o banco ao aprovar hora extra, ou use a Folha apenas para ajuste administrativo.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {atalhosCompensacao.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {atalhosCompensacao.map((atalho) => (
+                          <button
+                            key={`${atalho.label}-${atalho.min}`}
+                            type="button"
+                            onClick={() => setCompBancoMin(String(atalho.min))}
+                            className="px-3 py-1.5 rounded-full border border-cyan-200 bg-white text-[11px] font-bold text-cyan-700 hover:bg-cyan-100 transition-all"
+                          >
+                            {atalho.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
+                    <div className="w-full sm:w-32">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Quanto vai compensar</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={compBancoMin}
+                        onChange={(e) => setCompBancoMin(e.target.value)}
+                        placeholder="ex: 60"
+                        className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[160px]">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Observação (opcional)</label>
+                      <input
+                        type="text"
+                        value={compBancoObs}
+                        onChange={(e) => setCompBancoObs(e.target.value)}
+                        placeholder="Ex: Folga compensatória, saída antecipada"
+                        className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCompensacaoBancoEspelho}
+                      disabled={compBancoSaving || !compBancoMin.trim()}
+                      className="px-5 py-2.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-all whitespace-nowrap"
+                    >
+                      {compBancoSaving ? 'Salvando...' : 'Usar saldo nesta data'}
+                    </button>
+                  </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Inserir ponto manual */}
             <div className="border border-dashed border-zinc-300 rounded-xl p-4 bg-zinc-50">
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-3">Inserir ponto manual</p>
+              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-3">Ponto manual</p>
+              <p className="text-[11px] text-zinc-600 mb-3 leading-relaxed">
+                Use quando precisar corrigir um registro que não entrou no dia. O lançamento fica marcado para auditoria.
+              </p>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Tipo</label>
@@ -1710,20 +2294,21 @@ function TabEspelho({ token }: { token: string }) {
                   className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-all flex items-center gap-2"
                 >
                   {saving?<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:<Check size={14}/>}
-                  Inserir
+                  Registrar ponto
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-400 mt-2">⚠️ Registros manuais ficam marcados para auditoria.</p>
+              <p className="text-[10px] text-zinc-400 mt-2">Registros manuais ficam marcados para auditoria.</p>
             </div>
 
             {/* Hora Extra */}
             {(() => {
               const diaEspelho = espelho?.dias.find(d => d.data === gestaoData);
               const extraExistente = diaEspelho?.extraAprov || null;
+              const extraLancamentos = extraExistente?.itens?.length ? extraExistente.itens : extraExistente ? [extraExistente] : [];
               return (
                 <div className="border border-dashed border-orange-300 rounded-xl p-4 bg-orange-50/50">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Hora Extra</p>
+                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Hora extra do dia</p>
                     {extraExistente && (
                       <span className="text-[10px] font-black px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full border border-orange-200">
                         ✓ Aprovada: {extraExistente.minutos}min
@@ -1762,27 +2347,64 @@ function TabEspelho({ token }: { token: string }) {
                               </p>
                             );
                           })()}
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            {horaExtraDestinoLabel(resolveHoraExtraDestino(extraExistente))}
+                          </p>
                           {extraExistente.observacao && <p className="text-xs text-zinc-400 mt-0.5">{extraExistente.observacao}</p>}
                         </div>
-                        <button
+                        {(extraExistente.quantidade ?? 1) <= 1 && <button
                           onClick={() => handleCancelarExtra(extraExistente.id)}
                           className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all"
                         >
                           <Trash2 size={10}/> Cancelar aprovação
                         </button>
+                        }
                       </div>
+                      {extraLancamentos.length > 1 && (
+                        <div className="space-y-2">
+                          {extraLancamentos.map((item) => {
+                            const pagoF =
+                              item.minutos_pago_folha == null
+                                ? item.minutos
+                                : Math.min(item.minutos, Math.max(0, Number(item.minutos_pago_folha)));
+                            return (
+                              <div key={item.id} className="flex items-center justify-between bg-white border border-orange-200 rounded-xl px-4 py-3 gap-3">
+                                <div>
+                                  <p className="text-sm font-black text-orange-700">{item.minutos} minutos aprovados</p>
+                                  <p className="text-[11px] text-orange-600/90 mt-1">
+                                    Na folha: {pagoF} min · Banco: {Math.max(0, item.minutos - pagoF)} min
+                                    {item.minutos_pago_folha == null ? (
+                                      <span className="text-zinc-400"> (legado: destino nao gravado, considerado 100% folha)</span>
+                                    ) : null}
+                                  </p>
+                                  <p className="text-[10px] text-zinc-500 mt-1">
+                                    {horaExtraDestinoLabel(resolveHoraExtraDestino(item))}
+                                  </p>
+                                  {item.observacao && <p className="text-xs text-zinc-400 mt-0.5">{item.observacao}</p>}
+                                </div>
+                                <button
+                                  onClick={() => handleCancelarExtra(item.id)}
+                                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all shrink-0"
+                                >
+                                  <Trash2 size={10}/> Cancelar
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     /* Ainda não aprovada — formulário de aprovação */
                     <div className="space-y-3">
                       <div>
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Destino da hora extra</p>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Para onde vai a HE deste dia</p>
                         <div className="flex flex-wrap gap-2">
                           {([
-                            { k: 'folha' as const, label: 'Pagar na folha' },
+                            { k: 'folha' as const, label: 'HE -> folha' },
                             ...(heBancoOk
                               ? ([
-                                  { k: 'banco' as const, label: 'Banco de horas' },
+                                  { k: 'banco' as const, label: 'HE -> banco' },
                                   { k: 'dividir' as const, label: 'Dividir' },
                                 ] as const)
                               : []),
@@ -1801,10 +2423,13 @@ function TabEspelho({ token }: { token: string }) {
                             </button>
                           ))}
                         </div>
+                        <p className="mt-2 text-[11px] text-zinc-500">
+                          Defina aqui se a hora extra será paga na folha, virará crédito no banco ou será dividida entre os dois.
+                        </p>
                       </div>
                       {horaExtraDestino === 'dividir' && (
                         <div className="w-40">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos na folha</label>
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos que vão para a folha</label>
                           <input
                             type="number"
                             min="1"
@@ -1845,15 +2470,15 @@ function TabEspelho({ token }: { token: string }) {
                           className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-all flex items-center gap-2 whitespace-nowrap"
                         >
                           {savingExtra ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Check size={14}/>}
-                          Aprovar HE
+                          Aprovar HE desta data
                         </button>
                       </div>
                     </div>
                   )}
                   <p className="text-[10px] text-orange-500/70 mt-2">
                     {heBancoOk
-                      ? 'Horas extras na folha usam 50% sobre o valor/hora (CLT). O que for para o banco acumula saldo e pode ser compensado depois (folga, saída antecipada, etc.).'
-                      : 'Contrato por evento: horas extras são registradas apenas como referência de ponto (sem destino banco neste módulo).'}
+                      ? 'O que for para a folha entra como pagamento. O que for para o banco vira saldo disponível para compensar depois.'
+                      : 'Contrato por evento: horas extras ficam apenas como referência de ponto (sem destino banco neste módulo).'}
                   </p>
                 </div>
               );
@@ -2102,6 +2727,10 @@ function TabFolha({ token }: { token: string }) {
           minutos: bancoTipo === 'manual_adjust' ? raw : Math.abs(raw),
           origem,
           observacao: bancoObs.trim() || null,
+          competencia_referencia:
+            bancoTipo === 'converted_to_payroll'
+              ? folha?.competencia?.referencia ?? `${String(month).padStart(2, '0')}/${year}`
+              : null,
         }),
       });
       if (r.ok) {
@@ -2161,21 +2790,21 @@ function TabFolha({ token }: { token: string }) {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-xl font-black text-zinc-900">
-                      {evF ? 'Pagamentos (contrato por evento)' : 'Folha de Pagamento'}
+                      {evF ? 'Pagamentos por competencia' : 'Folha de pagamento da competencia'}
                     </h1>
                     {paySummary && (
                       <span
                         className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${payStatusClass}`}
                       >
-                        {paySummary.unbounded ? 'Pagamentos avulsos' : PAYROLL_STATUS_LABEL[paySummary.status] || paySummary.status}
+                        {paySummary.unbounded ? 'Pagamentos por competência' : PAYROLL_STATUS_LABEL[paySummary.status] || paySummary.status}
                       </span>
                     )}
                   </div>
                   <p className="text-sm mt-1" style={{ color: '#9ca3af' }}>
-                    {MESES[month - 1]} {year}
+                    Competência de {MESES[month - 1]} {year}
                     {folhaView.periodRange ? ` · ${folhaView.periodRange}` : ''}
                   </p>
-                  <p className="text-xs font-bold text-zinc-500 mt-0.5">Competência {folhaView.referencia}</p>
+                  <p className="text-xs font-bold text-zinc-500 mt-0.5">Referência da competência {folhaView.referencia}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-black text-zinc-900 text-lg">{folha.funcionario.nome}</p>
@@ -2192,6 +2821,16 @@ function TabFolha({ token }: { token: string }) {
                   <p className="font-bold text-violet-900">Folha simplificada (diarista)</p>
                   <p className="mt-1 text-violet-900/85">
                     INSS e complemento gerencial automáticos não se aplicam. 13º e férias gerenciais não são geridos pelo sistema para este tipo.
+                  </p>
+                </div>
+              )}
+
+              {!evF && (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/90 px-4 py-3 text-xs text-zinc-700">
+                  <p className="font-bold text-zinc-900">Conferencia e pagamento da competencia</p>
+                  <p className="mt-1 leading-relaxed text-zinc-600">
+                    Esta aba centraliza calculo da competencia, proventos, descontos, adiantamentos, pagamentos, recibos e status.
+                    Operacao diaria, compensacoes e ajustes de jornada continuam no Espelho; aqui o foco e conferencia, recibo e quitacao.
                   </p>
                 </div>
               )}
@@ -2238,7 +2877,7 @@ function TabFolha({ token }: { token: string }) {
               <>
               <div>
                 <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
-                  Proventos
+                  Proventos da competência
                 </p>
                 <div className="rounded-2xl bg-emerald-950 px-4 py-3 space-y-2">
                   {folhaView.earnings.map((row, i) => (
@@ -2250,7 +2889,7 @@ function TabFolha({ token }: { token: string }) {
                 </div>
               </div>
 
-              {(folha.totalExtraMin ?? 0) > 0 && (
+              {((folha.totalExtraMin ?? 0) > 0 || (folha.totalBancoConvertidoFolhaMin ?? 0) > 0) && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-xs text-cyan-950 space-y-1">
                   <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Horas extras no mês</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -2266,12 +2905,16 @@ function TabFolha({ token }: { token: string }) {
                       <span className="text-cyan-700/80">Para o banco (este mês):</span>{' '}
                       <strong>{folha.totalExtraMinBancoMes ?? 0} min</strong>
                     </span>
+                    <span>
+                      <span className="text-cyan-700/80">Convertidas do banco para folha:</span>{' '}
+                      <strong>{folha.totalBancoConvertidoFolhaMin ?? 0} min</strong>
+                    </span>
                   </div>
                 </div>
               )}
 
               <div>
-                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>Descontos</p>
+                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>Descontos da competência</p>
                 <div className="rounded-2xl bg-rose-950 px-4 py-3 space-y-2">
                   {folhaView.deductions.map((row, i) => (
                     <div key={i} className="flex justify-between items-center gap-3 text-sm">
@@ -2334,29 +2977,29 @@ function TabFolha({ token }: { token: string }) {
                 )}
 
               <div className="rounded-2xl bg-zinc-100 border border-zinc-200 px-4 py-4 space-y-3">
-                <p className="text-[11px] font-black uppercase tracking-wider" style={{ color: '#9ca3af' }}>Resumo</p>
+                <p className="text-[11px] font-black uppercase tracking-wider" style={{ color: '#9ca3af' }}>Resumo da competência</p>
                 <div className="flex justify-between text-sm">
-                  <span style={{ color: '#9ca3af' }}>Total bruto</span>
+                  <span style={{ color: '#9ca3af' }}>Bruto apurado</span>
                   <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span style={{ color: '#9ca3af' }}>Total descontos</span>
+                  <span style={{ color: '#9ca3af' }}>Descontos da competência</span>
                   <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.dedTotal)}</span>
                 </div>
                 {paySummary && (
                   <>
                     <div className="flex justify-between text-sm">
-                      <span style={{ color: '#9ca3af' }}>Já pago (folha)</span>
+                      <span style={{ color: '#9ca3af' }}>Pago nesta competência</span>
                       <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span style={{ color: '#9ca3af' }}>Saldo pendente</span>
+                      <span style={{ color: '#9ca3af' }}>Pendente para quitar</span>
                       <span className="font-bold text-amber-800 tabular-nums">{fmt(paySummary.balance_due)}</span>
                     </div>
                   </>
                 )}
                 <div className="flex justify-between items-center pt-2 border-t border-zinc-200">
-                  <span className="font-black text-zinc-900">Salário líquido</span>
+                  <span className="font-black text-zinc-900">Líquido da competência</span>
                   <span className="text-2xl font-black tabular-nums" style={{ color: '#22c55e' }}>
                     {fmt(Math.max(0, folhaView.net))}
                   </span>
@@ -2375,7 +3018,7 @@ function TabFolha({ token }: { token: string }) {
 
               {folha.adiantamentos.length > 0 && (
                 <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-2">Adiantamentos descontados</p>
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-2">Adiantamentos já descontados na competência</p>
                   {folha.adiantamentos.map((a) => (
                     <div key={a.id} className="flex justify-between text-xs text-zinc-600 py-1">
                       <span>
@@ -2389,11 +3032,17 @@ function TabFolha({ token }: { token: string }) {
 
               {showBancoBloco && (
                 <div className="p-4 rounded-xl border border-cyan-200 bg-white space-y-3">
-                  <div className="flex justify-between items-center">
-                    <p className="text-xs font-black text-cyan-900 uppercase tracking-wider">Banco de horas</p>
-                    <span className="text-lg font-black text-cyan-800 tabular-nums">
-                      Saldo {folha.hour_bank.saldo_minutos} min
-                    </span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center gap-2 flex-wrap">
+                      <p className="text-xs font-black text-cyan-900 uppercase tracking-wider">Banco de horas na competência — conferência</p>
+                      <span className="text-lg font-black text-cyan-800 tabular-nums">
+                        Saldo {folha.hour_bank.saldo_minutos} min
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                      Use este bloco para conferir o saldo que impacta a competência e, quando necessário, registrar ajuste administrativo autorizado.
+                      Compensação no dia a dia continua no <span className="font-bold text-zinc-700">Espelho</span>.
+                    </p>
                   </div>
                   {folha.hour_bank.movimentacoes?.length ? (
                     <div className="max-h-36 overflow-y-auto divide-y divide-zinc-100 text-[11px] text-zinc-600">
@@ -2417,7 +3066,7 @@ function TabFolha({ token }: { token: string }) {
                     <p className="text-[11px] text-zinc-400">Nenhuma movimentação neste mês.</p>
                   )}
                   <div className="pt-2 border-t border-zinc-100 space-y-2">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Nova movimentação</p>
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Ajuste administrativo</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Tipo</label>
@@ -2426,10 +3075,10 @@ function TabFolha({ token }: { token: string }) {
                           onChange={(e) => setBancoTipo(e.target.value as typeof bancoTipo)}
                           className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-medium"
                         >
-                          <option value="debit">Débito (compensação — usa saldo)</option>
-                          <option value="credit">Crédito manual</option>
+                          <option value="debit">Débito administrativo (baixa saldo)</option>
+                          <option value="credit">Crédito administrativo</option>
                           <option value="manual_adjust">Ajuste manual (+/− min)</option>
-                          <option value="converted_to_payroll">Convertido em pagamento (baixa banco)</option>
+                          <option value="converted_to_payroll">Baixa para pagamento da competência</option>
                         </select>
                       </div>
                       <div>
@@ -2471,7 +3120,7 @@ function TabFolha({ token }: { token: string }) {
                       disabled={bancoSaving}
                       className="w-full py-2.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-black disabled:opacity-50"
                     >
-                      {bancoSaving ? 'Salvando…' : 'Registrar movimentação'}
+                      {bancoSaving ? 'Salvando…' : 'Salvar ajuste administrativo'}
                     </button>
                   </div>
                 </div>
@@ -2498,17 +3147,24 @@ function TabFolha({ token }: { token: string }) {
           <div className="space-y-4">
             <div className="bg-white border border-zinc-200 rounded-2xl p-5">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
-                Resumo rápido
+                Situação da competência
+              </p>
+              <p className="text-xs text-zinc-500 mb-3">
+                O que foi apurado nesta competência, o que já foi pago e o que ainda falta quitar.
               </p>
               <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span style={{ color: '#9ca3af' }}>Competência</span>
+                  <span className="font-bold text-zinc-800">{folhaView.referencia}</span>
+                </div>
                 {!evF && (
                   <>
                     <div className="flex justify-between">
-                      <span style={{ color: '#9ca3af' }}>Bruto</span>
+                      <span style={{ color: '#9ca3af' }}>Bruto apurado</span>
                       <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span style={{ color: '#9ca3af' }}>Descontos</span>
+                      <span style={{ color: '#9ca3af' }}>Descontos da competência</span>
                       <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.dedTotal)}</span>
                     </div>
                   </>
@@ -2516,19 +3172,19 @@ function TabFolha({ token }: { token: string }) {
                 {paySummary && !paySummary.unbounded && (
                   <>
                     <div className="flex justify-between">
-                      <span style={{ color: '#9ca3af' }}>Valor líquido</span>
+                      <span style={{ color: '#9ca3af' }}>Líquido apurado</span>
                       <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.net_liquid)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span style={{ color: '#9ca3af' }}>Já pago</span>
+                      <span style={{ color: '#9ca3af' }}>Pago nesta competência</span>
                       <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span style={{ color: '#9ca3af' }}>Pendente</span>
+                      <span style={{ color: '#9ca3af' }}>Pendente para quitar</span>
                       <span className="font-bold text-amber-800 tabular-nums">{fmt(paySummary.balance_due)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-1">
-                      <span style={{ color: '#9ca3af' }}>Status folha</span>
+                      <span style={{ color: '#9ca3af' }}>Status da competência</span>
                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${payStatusClass}`}>
                         {PAYROLL_STATUS_LABEL[paySummary.status]}
                       </span>
@@ -2555,13 +3211,13 @@ function TabFolha({ token }: { token: string }) {
                 )}
                 {showBancoBloco && folha.hour_bank && (
                   <div className="flex justify-between">
-                    <span style={{ color: '#9ca3af' }}>Saldo banco</span>
+                    <span style={{ color: '#9ca3af' }}>Saldo banco (conferência)</span>
                     <span className="font-bold text-cyan-800 tabular-nums">{folha.hour_bank.saldo_minutos} min</span>
                   </div>
                 )}
               </div>
               <div className="mt-4 p-3 rounded-xl bg-zinc-100 border border-zinc-200 flex justify-between items-center">
-                <span className="text-sm font-black text-zinc-800">{evF ? 'Salário líquido (CLT)' : 'Líquido'}</span>
+                <span className="text-sm font-black text-zinc-800">{evF ? 'Salário líquido (CLT)' : 'Líquido da competência'}</span>
                 {evF ? (
                   <span className="text-xs font-bold text-zinc-500 text-right max-w-[140px]">Não aplicável (contrato por evento)</span>
                 ) : (
@@ -2574,10 +3230,11 @@ function TabFolha({ token }: { token: string }) {
 
             <div className="bg-white border border-zinc-200 rounded-2xl p-5">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
-                Registrar pagamento
+                Pagamentos da competência
               </p>
               <p className="text-xs text-zinc-500 mb-3">
-                Lança o valor no financeiro (despesas) e atualiza o histórico da competência. Não altera salário base nem adiantamentos já descontados na folha.
+                Use este bloco para registrar adiantamento, pagamento parcial ou quitação da competência. O lançamento entra no financeiro,
+                atualiza o histórico e permite emitir recibo, sem alterar salário base nem ponto do dia a dia.
                 {evF && (
                   <span className="block mt-2 text-sky-800/90">
                     Contrato por evento: não há teto automático de folha — registre os valores acordados por competência.
@@ -2629,7 +3286,7 @@ function TabFolha({ token }: { token: string }) {
                       }
                       className="px-3 py-2 text-xs font-bold rounded-xl bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100"
                     >
-                      Preencher saldo ({fmt(paySummary.balance_due)})
+                      Quitar pendente ({fmt(paySummary.balance_due)})
                     </button>
                   )}
                   <button
@@ -2638,7 +3295,7 @@ function TabFolha({ token }: { token: string }) {
                     onClick={registrarPagamento}
                     className="flex-1 min-w-[140px] py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-40"
                   >
-                    {savingPay ? 'Salvando…' : 'Registrar'}
+                    {savingPay ? 'Salvando…' : 'Registrar pagamento'}
                   </button>
                 </div>
               </div>
@@ -2646,7 +3303,7 @@ function TabFolha({ token }: { token: string }) {
               {(folha.payroll_payments?.length ?? 0) > 0 && (
                 <div className="mt-5 pt-5 border-t border-zinc-100">
                   <p className="text-[10px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
-                    Histórico de pagamentos
+                    Pagamentos já registrados na competência
                   </p>
                   <ul className="space-y-2 max-h-48 overflow-y-auto">
                     {(folha.payroll_payments || []).map((p) => (
@@ -2727,10 +3384,10 @@ function InfoChip({ label, value }: { label:string; value:string }) {
 function ABtn({ label, icon, onClick, danger=false }: { label:string; icon:React.ReactNode; onClick:()=>void; danger?:boolean }) {
   return <button onClick={onClick} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${danger?'border-red-200 text-red-500 bg-red-50 hover:bg-red-100':'border-zinc-200 text-zinc-600 bg-zinc-50 hover:bg-zinc-100'}`}>{icon}{label}</button>;
 }
-function SCard({ label, value, color, small=false }: { label:string; value:string|number; color:string; small?:boolean }) {
+function SCard({ label, value, color, small=false, hint }: { label:string; value:string|number; color:string; small?:boolean; hint?: string }) {
   const bg:Record<string,string>={emerald:'bg-emerald-50 border-emerald-200',red:'bg-red-50 border-red-200',blue:'bg-blue-50 border-blue-200',purple:'bg-purple-50 border-purple-200',amber:'bg-amber-50 border-amber-200',orange:'bg-orange-50 border-orange-200',cyan:'bg-cyan-50 border-cyan-200'};
   const txt:Record<string,string>={emerald:'text-emerald-700',red:'text-red-700',blue:'text-blue-700',purple:'text-purple-700',amber:'text-amber-700',orange:'text-orange-700',cyan:'text-cyan-800'};
-  return <div className={`${bg[color]} border rounded-xl p-3`}><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p><p className={`font-black mt-1 ${txt[color]} ${small?'text-sm':'text-2xl'}`}>{value}</p></div>;
+  return <div className={`${bg[color]} border rounded-xl p-3`}><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p><p className={`font-black mt-1 ${txt[color]} ${small?'text-sm':'text-2xl'}`}>{value}</p>{hint && <p className="mt-1 text-[10px] text-zinc-500 leading-snug">{hint}</p>}</div>;
 }
 function FInput({ label, value, onChange, placeholder='', type='text' }: { label:string; value:string; onChange:(v:string)=>void; placeholder?:string; type?:string }) {
   return <div><label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{label}</label><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"/></div>;

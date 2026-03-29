@@ -69,7 +69,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Erro ao enviar');
+      if (!res.ok) throw new Error(data.message || data.error || 'Erro ao enviar');
       setStep('success');
     } catch (err: any) {
       setError(err.message);

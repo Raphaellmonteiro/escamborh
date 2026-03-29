@@ -44,12 +44,18 @@ export const ADMIN_SECRET = process.env.ADMIN_SECRET || (() => {
 })();
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
+const loginWindowMs = 15 * 60 * 1000;
+const loginMaxAttempts = process.env.NODE_ENV === 'production' ? 5 : 15;
+
 export const loginRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
+  windowMs: loginWindowMs,
+  max: loginMaxAttempts,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Muitas tentativas de login. Aguarde 1 minuto e tente novamente.' },
+  message: {
+    success: false,
+    message: 'Muitas tentativas de login falhas. Aguarde 15 minutos e tente novamente.',
+  },
   skipSuccessfulRequests: true,
 });
 
@@ -145,61 +151,6 @@ export const uploadFotoFunc = multer({
       : cb(new Error('Apenas imagens'));
   },
 });
-
-// ── authenticateToken (async — usa PostgreSQL) ────────────────────────────────
-const legacyAuthenticateToken = async (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token não fornecido' });
-  if (req.path.startsWith('/admin')) return next();
-
-  let user: any;
-  try {
-    user = jwt.verify(token, JWT_SECRET) as any;
-  } catch {
-    return res.status(403).json({ error: 'Token inválido ou expirado' });
-  }
-
-  try {
-    req.user = user;
-
-    const userRecord = await q1('SELECT id, status, vencimento FROM clientes WHERE usuario=?', [user.username]);
-    const usuarioRecord = await q1('SELECT token_version FROM usuarios WHERE username=?', [user.username]);
-
-    if (usuarioRecord && user.token_version !== usuarioRecord.token_version)
-      return res.status(401).json({ error: 'Sessão expirada. Por favor, faça login novamente.' });
-
-    if (userRecord) {
-      req.tenantId = userRecord.id;
-      if (userRecord.status === 'bloqueado') return res.status(403).json({ error: 'bloqueado' });
-      if (userRecord.vencimento && new Date() > new Date(userRecord.vencimento))
-        return res.status(403).json({ error: 'trial_expirado' });
-      await pool.query('UPDATE clientes SET ultimo_acesso=NOW() WHERE id=$1', [userRecord.id]);
-    } else {
-      const subUser = await q1(
-        'SELECT cliente_id, cargo, permissoes, nome FROM usuarios WHERE username=? AND cliente_id IS NOT NULL',
-        [user.username]
-      );
-
-      if (subUser) {
-        req.tenantId = subUser.cliente_id;
-        (req as any).userCargo      = subUser.cargo || 'atendente';
-        (req as any).userPermissoes = subUser.permissoes ? JSON.parse(subUser.permissoes) : null;
-        (req as any).userName       = subUser.nome || user.username;
-        const tc = await q1('SELECT status, vencimento FROM clientes WHERE id=?', [subUser.cliente_id]);
-        if (tc?.status === 'bloqueado') return res.status(403).json({ error: 'bloqueado' });
-        if (tc?.vencimento && new Date() > new Date(tc.vencimento))
-          return res.status(403).json({ error: 'trial_expirado' });
-      } else {
-        return res.status(401).json({ error: 'Sessão inválida. Por favor, faça login novamente.' });
-      }
-    }
-    next();
-  } catch (err: any) {
-    console.error('[authenticateToken] erro:', err.message);
-    res.status(500).json({ error: 'Erro de autenticação' });
-  }
-};
 
 // ── authenticateAdmin ─────────────────────────────────────────────────────────
 function applyAuthenticatedSession(req: Request, session: Extract<AuthenticatedSession, { ok: true }>) {
@@ -312,54 +263,79 @@ export async function resolveAuthenticatedSession(req: Request, tokenOverride?: 
   }
 
   try {
-    const userRecord = await q1('SELECT id, status, vencimento FROM clientes WHERE usuario=?', [user.username]);
-    const usuarioRecord = await q1(
-      'SELECT token_version, ativo, cliente_id, cargo, permissoes, nome FROM usuarios WHERE username=?',
+    const row = await q1<{
+      token_version: number;
+      ativo: number | null;
+      cliente_id: number | null;
+      cargo: string | null;
+      permissoes: string | null;
+      nome: string | null;
+      owner_id: number | null;
+      owner_status: string | null;
+      owner_vencimento: string | Date | null;
+      sub_status: string | null;
+      sub_vencimento: string | Date | null;
+    }>(
+      `SELECT
+         u.token_version,
+         u.ativo,
+         u.cliente_id,
+         u.cargo,
+         u.permissoes,
+         u.nome,
+         c_owner.id AS owner_id,
+         c_owner.status AS owner_status,
+         c_owner.vencimento AS owner_vencimento,
+         c_sub.status AS sub_status,
+         c_sub.vencimento AS sub_vencimento
+       FROM usuarios u
+       LEFT JOIN clientes c_owner ON c_owner.usuario = u.username
+       LEFT JOIN clientes c_sub ON c_sub.id = u.cliente_id
+       WHERE u.username = ?
+       LIMIT 1`,
       [user.username]
     );
 
-    if (!usuarioRecord) {
+    if (!row) {
       return { ok: false, status: 401, body: { error: 'Sessão inválida. Por favor, faça login novamente.' } };
     }
 
-    if (user.token_version !== usuarioRecord.token_version) {
+    if (user.token_version !== row.token_version) {
       return { ok: false, status: 401, body: { error: 'Sessão expirada. Por favor, faça login novamente.' } };
     }
 
-    if (Number(usuarioRecord.ativo) === 0) {
+    if (Number(row.ativo) === 0) {
       return { ok: false, status: 403, body: { error: 'bloqueado' } };
     }
 
-    if (userRecord) {
-      if (userRecord.status === 'bloqueado') return { ok: false, status: 403, body: { error: 'bloqueado' } };
-      if (userRecord.vencimento && new Date() > new Date(userRecord.vencimento)) {
+    if (row.owner_id != null) {
+      if (row.owner_status === 'bloqueado') return { ok: false, status: 403, body: { error: 'bloqueado' } };
+      if (row.owner_vencimento && new Date() > new Date(row.owner_vencimento)) {
         return { ok: false, status: 403, body: { error: 'trial_expirado' } };
       }
 
-      void touchTenantLastAccess(Number(userRecord.id));
+      void touchTenantLastAccess(Number(row.owner_id));
 
       return {
         ok: true,
         user,
-        tenantId: userRecord.id,
+        tenantId: row.owner_id,
       };
     }
 
-    if (usuarioRecord.cliente_id) {
-      const tenantClient = await q1('SELECT status, vencimento FROM clientes WHERE id=?', [usuarioRecord.cliente_id]);
-
-      if (tenantClient?.status === 'bloqueado') return { ok: false, status: 403, body: { error: 'bloqueado' } };
-      if (tenantClient?.vencimento && new Date() > new Date(tenantClient.vencimento)) {
+    if (row.cliente_id) {
+      if (row.sub_status === 'bloqueado') return { ok: false, status: 403, body: { error: 'bloqueado' } };
+      if (row.sub_vencimento && new Date() > new Date(row.sub_vencimento)) {
         return { ok: false, status: 403, body: { error: 'trial_expirado' } };
       }
 
       return {
         ok: true,
         user,
-        tenantId: usuarioRecord.cliente_id,
-        userCargo: usuarioRecord.cargo || 'atendente',
-        userPermissoes: usuarioRecord.permissoes ? JSON.parse(usuarioRecord.permissoes) : null,
-        userName: usuarioRecord.nome || user.username,
+        tenantId: row.cliente_id,
+        userCargo: row.cargo || 'atendente',
+        userPermissoes: row.permissoes ? JSON.parse(row.permissoes) : null,
+        userName: row.nome || user.username,
       };
     }
 
@@ -406,12 +382,74 @@ export const authDeliveryCliente = (req: any, res: any, next: any) => {
   } catch { return res.status(403).json({ error: 'Token de cliente inválido' }); }
 };
 
+// ── Logging: nunca registrar credenciais / segredos em texto puro ─────────────
+const FULL_REDACT_BODY_PATHS = new Set([
+  '/api/login',
+  '/api/auth/verify-admin',
+  '/api/auth/verify-caixa',
+  '/api/admin/login',
+]);
+
+const SENSITIVE_KEY_EXACT = new Set([
+  'password',
+  'pass',
+  'pwd',
+  'senha',
+  'nova_senha',
+  'senha_admin',
+  'senha_caixa',
+  'subsenha',
+  'pin',
+  'token',
+  'authorization',
+  'secret',
+  'api_key',
+  'apikey',
+  'cvv',
+  'cvc',
+  'clientetoken',
+]);
+
+function isSensitiveLogKey(key: string): boolean {
+  const k = key.toLowerCase().replace(/-/g, '_');
+  if (SENSITIVE_KEY_EXACT.has(k)) return true;
+  if (k.includes('password') || k.includes('senha')) return true;
+  if (k.endsWith('_token')) return true;
+  return false;
+}
+
+function redactBodyForLogs(value: unknown, depth = 0): unknown {
+  if (depth > 10) return '[Profundidade máxima]';
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((item) => redactBodyForLogs(item, depth + 1));
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return '[Objeto]';
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = isSensitiveLogKey(k) ? '[REDACTED]' : redactBodyForLogs(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
+function shouldRedactEntireRequestBody(path: string): boolean {
+  if (FULL_REDACT_BODY_PATHS.has(path)) return true;
+  if (path.endsWith('/login-func')) return true;
+  return false;
+}
+
 // ── Logging middleware ────────────────────────────────────────────────────────
 export function requestLogger(req: Request, _res: Response, next: NextFunction) {
   const isProd = process.env.NODE_ENV === 'production';
   if (isProd && req.method === 'GET') return next();
   const agente = req.headers['user-agent']?.substring(0, 35) || 'Desconhecido';
   console.log(`[${new Date().toISOString()}] IP: ${req.ip} | Agente: ${agente}... | ${req.method} ${req.url}`);
-  if (['POST', 'PUT', 'PATCH'].includes(req.method)) console.log('Body:', JSON.stringify(req.body));
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    const safe =
+      shouldRedactEntireRequestBody(req.path) ? '[REDACTED]' : redactBodyForLogs(req.body);
+    console.log('Body:', typeof safe === 'string' ? safe : JSON.stringify(safe));
+  }
   next();
 }

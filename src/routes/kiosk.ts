@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { q1, qAll, qRun, qInsert } from '../db';
 import { publicRateLimit } from '../middleware';
 import { resolveRequiresPreparation } from '../utils/preparation';
+import { notifyTenantOrderStreams, setupSseStream } from '../sse';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -94,6 +95,7 @@ async function syncMesaOrderVisibility(
   itens: Array<{ product_id: number; quantity: number; price_at_time: number }>
 ) {
   const mesaLabel = `Mesa ${mesa.numero}`;
+  let createdNewOrder = false;
   let pedido = await q1(
     `SELECT id
      FROM pedidos
@@ -122,6 +124,7 @@ async function syncMesaOrderVisibility(
     );
 
     pedido = { id: pedidoId };
+    createdNewOrder = true;
   }
 
   let totalDelta = 0;
@@ -160,6 +163,13 @@ async function syncMesaOrderVisibility(
        WHERE id=? AND tenant_id=?`,
       [totalDelta, mesa.id, comandaId, pedido.id, tenantId]
     );
+  }
+
+  const oid = Number(pedido.id);
+  if (createdNewOrder) {
+    notifyTenantOrderStreams(tenantId, 'new', { orderId: oid });
+  } else if (totalDelta > 0) {
+    notifyTenantOrderStreams(tenantId, 'status', { orderId: oid });
   }
 }
 
@@ -657,18 +667,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).end();
 
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders();
+      const tenantId = Number(tenant.id);
+      if (!Number.isFinite(tenantId) || tenantId <= 0) return res.status(404).end();
 
-      const ping = setInterval(() => {
-        if (!res.writableEnded) {
-          res.write('event: ping\ndata: {}\n\n');
-        }
-      }, 30000);
-
-      req.on('close', () => clearInterval(ping));
+      setupSseStream(tenantId, req, res);
     } catch (error) {
       handlePublicRouteError(res, 'GET /public/kds/:slug/events', slug, error);
     }
@@ -688,6 +690,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const next = idx >= 0 && idx < PIPELINE_KDS.length - 1 ? PIPELINE_KDS[idx+1] : null;
       if (!next) return res.json({ success:true, message:'Já no status final' });
       await qRun('UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?', [next, req.params.id, tenant.id]);
+      notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(req.params.id), newStatus: next });
       res.json({ success:true, newStatus:next });
     } catch (error) {
       handlePublicRouteError(res, 'PATCH /public/kds/:slug/orders/:id/advance', slug, error);

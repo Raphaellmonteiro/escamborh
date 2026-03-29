@@ -18,6 +18,7 @@ import { addItemToMesaComanda } from '../services/ordersService';
 import { buildKitchenReceiptHtml, filterKitchenPreparationItems } from '../services/kitchenPrintService';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { runAutomatedKitchenPrintForMesa } from '../services/operationalAutomationService';
+import { notifyTenantOrderStreams } from '../sse';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -297,6 +298,7 @@ async function syncKdsItem(
         "INSERT INTO itens_pedido (order_id,product_id,quantity,type,price_at_time,tenant_id,variation_id,observation,selecoes_json) VALUES (?,?,?,'Mesa',?,?,?,?,?)",
         [newId, productId, Math.abs(diffQtd), priceAtTime, tenantId, line.variation_id, line.observation, line.selecoes_json]
       );
+      notifyTenantOrderStreams(tenantId, 'new', { orderId: Number(newId) });
       return;
     }
     const existing = await q1(
@@ -325,6 +327,7 @@ async function syncKdsItem(
       );
     }
     await qRun('UPDATE pedidos SET total_amount=total_amount+? WHERE id=? AND tenant_id=?', [priceAtTime*diffQtd, kdsOrder.id, tenantId]);
+    notifyTenantOrderStreams(tenantId, 'status', { orderId: Number(kdsOrder.id) });
   } catch (e: unknown) {
     const errMessage = e instanceof Error ? e.message : String(e);
     logError(
@@ -949,6 +952,11 @@ export function createMesasRouter() {
           ]
         );
         await txRun(client, "UPDATE mesas SET status='fechada', opened_at=NULL WHERE id=? AND tenant_id=?", [req.params.id, req.tenantId]);
+        const kdsOpen = await txQ1<{ id: number }>(
+          client,
+          `SELECT id FROM pedidos WHERE tenant_id=? AND observation=? AND ${buildOperationalKdsOrderClause()} ORDER BY id DESC LIMIT 1`,
+          [req.tenantId, `Mesa ${mesa.numero}`]
+        );
         await txRun(
           client,
           `UPDATE pedidos SET status='Entregue' WHERE tenant_id=? AND observation=? AND ${buildOperationalKdsOrderClause()}`,
@@ -957,10 +965,14 @@ export function createMesasRouter() {
 
         return {
           status: 200,
-          body: { success:true, orderNumber, change:troco, receipt:receiptHtml }
+          body: { success:true, orderNumber, change:troco, receipt:receiptHtml },
+          kdsSseOrderId: kdsOpen ? Number(kdsOpen.id) : undefined,
         };
       });
 
+      if (result.status === 200 && 'kdsSseOrderId' in result && result.kdsSseOrderId) {
+        notifyTenantOrderStreams(Number(req.tenantId), 'status', { orderId: result.kdsSseOrderId });
+      }
       return res.status(result.status).json(result.body);
     } catch (e: any) {
       return handleMesasRouteError(res, e, 'mesas.finalizarComanda', {

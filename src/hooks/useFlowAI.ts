@@ -1,5 +1,5 @@
 // src/hooks/useFlowAI.ts
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 export interface Aviso {
   id: number;
@@ -11,6 +11,24 @@ export interface Aviso {
   prioridade: 1 | 2 | 3;
   lido: number;
   created_at: string;
+  /** Chave lógica do alerta determinístico (ex.: sys:estoque:item-zerado) — usada para unicidade */
+  chave?: string | null;
+}
+
+/** API devolve id DESC; primeira ocorrência por chave = registro mais recente. */
+function dedupeAvisosPorChave(lista: Aviso[]): Aviso[] {
+  const seen = new Set<string>();
+  const out: Aviso[] = [];
+  for (const a of lista) {
+    const chave = a.chave;
+    if (chave != null && String(chave).trim() !== '') {
+      const k = String(chave);
+      if (seen.has(k)) continue;
+      seen.add(k);
+    }
+    out.push(a);
+  }
+  return out;
 }
 
 export interface MetricaDestaque {
@@ -35,6 +53,7 @@ export function useFlowAI(token: string | null) {
   const [avisoAtivo, setAvisoAtivo]     = useState<Aviso | null>(null);
   const [carregando, setCarregando]     = useState(false);
   const [carregandoHist, setCarregandoHist] = useState(false);
+  const historicoReqId = useRef(0);
 
   // ── Helpers localStorage para anti-spam ─────────────────────────────────
   const STORAGE_KEY = 'flowai_vistos_hoje';
@@ -66,7 +85,7 @@ export function useFlowAI(token: string | null) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
-      const lista: Aviso[] = await res.json();
+      const lista: Aviso[] = dedupeAvisosPorChave(await res.json());
       setAvisos(lista);
       const vistosHoje = getVistosHoje();
       const hoje = new Date().toDateString();
@@ -89,6 +108,7 @@ export function useFlowAI(token: string | null) {
   // ── Busca histórico completo (lidos + não lidos) ─────────────────────────
   const buscarHistorico = useCallback(async (limit = 100, offset = 0) => {
     if (!token) return;
+    const reqId = ++historicoReqId.current;
     setCarregandoHist(true);
     try {
       const res = await fetch(`/api/ai/avisos/historico?limit=${limit}&offset=${offset}`, {
@@ -96,10 +116,12 @@ export function useFlowAI(token: string | null) {
       });
       if (!res.ok) return;
       const data = await res.json();
-      setHistorico(data.avisos || []);
+      if (reqId !== historicoReqId.current) return;
+      const raw = (data.avisos || []) as Aviso[];
+      setHistorico(dedupeAvisosPorChave(raw));
       setHistoricoTotal(data.total || 0);
     } catch {} finally {
-      setCarregandoHist(false);
+      if (reqId === historicoReqId.current) setCarregandoHist(false);
     }
   }, [token]);
 

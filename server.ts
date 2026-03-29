@@ -2,14 +2,16 @@ import 'dotenv/config';
 
 // server.ts — orquestrador principal
 import express from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 
 // ── Banco e migrações ─────────────────────────────────────────────────────────
-import { backupDatabase, runMigrations } from './src/db';
+import { runMigrations } from './src/db';
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
 import { requestLogger } from './src/middleware';
@@ -27,8 +29,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+  })
+);
+
 // ── Startup ───────────────────────────────────────────────────────────────────
-backupDatabase();
+// Backup do banco: não roda aqui — use pg_dump/cron ou o backup do provedor (Supabase/Neon/Railway).
 
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 if (!fs.existsSync('uploads/logo')) fs.mkdirSync('uploads/logo', { recursive: true });
@@ -48,6 +56,18 @@ app.use(
       callback(new Error(`CORS: origem não permitida — ${origin}`));
     },
     credentials: true,
+  })
+);
+
+app.use(
+  compression({
+    filter: (req, res) => {
+      const contentType = res.getHeader('Content-Type');
+      if (typeof contentType === 'string' && contentType.includes('text/event-stream')) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
   })
 );
 

@@ -14,6 +14,7 @@ import {
   findOrCreateStoreCustomerByPhone,
   touchStoreCustomerPurchase,
 } from '../services/storeCustomerService';
+import { notifyTenantOrderStreams } from '../sse';
 
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
@@ -204,6 +205,7 @@ router.get('/pedidos', async (req: Request, res) => {
       if (status === 'Entregue')          { updates.push('entregue_at=NOW()'); }
       params.push(req.params.id, req.tenantId);
       await qRun(`UPDATE pedidos SET ${updates.join(',')} WHERE id=? AND tenant_id=?`, params);
+      notifyTenantOrderStreams(Number(req.tenantId), 'status', { orderId: Number(req.params.id) });
 
       const nextStatus = String(status || '').trim();
       let kitchenPrintAutomation: { ok: boolean; message?: string; reason?: string } | undefined;
@@ -237,6 +239,7 @@ router.get('/pedidos', async (req: Request, res) => {
       if (isCanceledOrder(order)) return res.status(400).json({ error: 'Pedido cancelado nao pode ter pagamento alterado aqui' });
 
       await qRun('UPDATE pedidos SET pagamento_status=? WHERE id=? AND tenant_id=?', [req.body.pagamento_status, req.params.id, req.tenantId]);
+      notifyTenantOrderStreams(Number(req.tenantId), 'status', { orderId: Number(req.params.id) });
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -624,6 +627,8 @@ router.get('/clientes', async (req: Request, res) => {
           kitchenPrintAutomation = { ok: false, message: pr.message || pr.reason, reason: pr.reason };
         }
       }
+
+      notifyTenantOrderStreams(tenantId, 'new', { orderId });
 
       res.json({
         success: true,

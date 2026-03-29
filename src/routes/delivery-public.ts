@@ -17,6 +17,7 @@ import {
   runAutomatedKitchenPrintForOrder,
 } from '../services/operationalAutomationService';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
+import { notifyTenantOrderStreams } from '../sse';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -1155,6 +1156,8 @@ export function createDeliveryPublicRouter() {
         return { orderId, orderNumber };
       });
 
+      notifyTenantOrderStreams(Number(tenant.id), 'new', { orderId: Number(result.orderId) });
+
       const waNumber = (dcfg.whatsapp || tenant.whatsapp || '').replace(/\D/g, '');
       const listaItens = await Promise.all(itensValidados.map(async (item: any) => {
         const name = item.name || (await q1('SELECT name FROM produtos WHERE id=?', [item.product_id]))?.name || 'Produto';
@@ -1252,6 +1255,7 @@ export function createDeliveryPublicRouter() {
       if (pedido.pagamento_status !== 'pago') {
         await qRun("UPDATE pedidos SET pagamento_status='aguardando_confirmacao' WHERE id=? AND tenant_id=?", [pedido.id, tenant.id]);
       }
+      notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(pedido.id) });
       res.json({ success: true, pagamento_status: 'aguardando_confirmacao' });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
