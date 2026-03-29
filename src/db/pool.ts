@@ -18,8 +18,10 @@ export const pool = new Pool({
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
   ssl: process.env.NODE_ENV === 'production'
-  ? { rejectUnauthorized: false }
-  : false,
+    ? {
+        rejectUnauthorized: false
+      }
+    : false,
 });
 
 pool.on('error', (err) => {
