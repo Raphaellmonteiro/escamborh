@@ -20,6 +20,12 @@ import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
+import {
+  PRIMEIRA_COMPRA_PEDIDO_VALIDO_SQL,
+  buildDeliveryAddressAntiFraudSignature,
+  normalizeBrazilDeliveryPhoneDigits,
+  signatureFromPedidoEnderecoFields,
+} from '../utils/deliveryFirstPurchaseEligibility';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -29,7 +35,12 @@ type FirstCustomerDiscountReason =
   | 'inativo'
   | 'cliente_nao_identificado'
   | 'pedido_abaixo_minimo'
-  | 'nao_primeira_compra'
+  /** Já existe pedido válido (cardápio) para este cadastro `delivery_cliente_id`. */
+  | 'existing_customer_history'
+  /** Pedido válido anterior com o mesmo telefone normalizado (conta diferente ou legado). */
+  | 'same_phone_previous_order'
+  /** Pedido válido anterior com mesma assinatura de endereço (logradouro+número+bairro). */
+  | 'same_address_previous_order'
   | 'sem_valor_configurado'
   | 'sem_taxa_entrega'
   | 'frete_ja_bonificado'
@@ -211,7 +222,19 @@ function buildFirstCustomerDiscountMessage(params: {
   if (params.motivo === 'pedido_abaixo_minimo') {
     return `Disponivel a partir de R$ ${params.minPedido.toFixed(2).replace('.', ',')} no subtotal do pedido.`;
   }
-  if (params.motivo === 'nao_primeira_compra') return 'Beneficio valido somente na primeira compra do cliente.';
+  /** Legado em snapshots de pedidos (`delivery_checkout_snapshot`). */
+  if ((params.motivo as string) === 'nao_primeira_compra') {
+    return 'Beneficio valido somente na primeira compra do cliente.';
+  }
+  if (params.motivo === 'existing_customer_history') {
+    return 'Beneficio valido somente na primeira compra. Ja existe historico de pedidos para esta conta.';
+  }
+  if (params.motivo === 'same_phone_previous_order') {
+    return 'Beneficio valido somente na primeira compra. Ja identificamos pedido anterior com este telefone.';
+  }
+  if (params.motivo === 'same_address_previous_order') {
+    return 'Beneficio valido somente na primeira compra. Ja identificamos pedido anterior para este endereco.';
+  }
   if (params.motivo === 'sem_valor_configurado') return 'Configure um valor valido para o desconto de primeira compra.';
   if (params.motivo === 'sem_taxa_entrega') return 'Este pedido ja esta com entrega gratis.';
   if (params.motivo === 'frete_ja_bonificado') return 'O frete deste pedido ja foi zerado por outro beneficio.';
@@ -321,6 +344,9 @@ async function resolveFirstCustomerDiscount(params: {
   taxaEntrega: number;
   cupomAplicado: any | null;
   totalBeforeFirstCustomerDiscount: number;
+  enderecoSalvo: DeliveryAddressRecord | null;
+  enderecoElegibilidadePreview: { logradouro: string; numero: string; bairro: string } | null;
+  canalPedido: OrderChannel;
 }) {
   const ativo = Boolean(params.config.desconto_primeiro_cliente_ativo);
   const tipo = String(params.config.desconto_primeiro_cliente_tipo || 'percentual').toLowerCase() as FirstCustomerDiscountType;
@@ -378,23 +404,132 @@ async function resolveFirstCustomerDiscount(params: {
     });
   }
 
-  const existingOrder = await q1(
-    `SELECT id
-     FROM pedidos
-     WHERE tenant_id=?
-       AND delivery_cliente_id=?
-       AND cancelado_at IS NULL
-       AND LOWER(COALESCE(status, '')) <> 'cancelado'
+  const existingOrderSameCliente = await q1(
+    `SELECT p.id
+     FROM pedidos p
+     WHERE p.tenant_id=?
+       AND (p.delivery_cliente_id = ? OR p.cliente_id = ?)
+       AND ${PRIMEIRA_COMPRA_PEDIDO_VALIDO_SQL}
      LIMIT 1`,
-    [params.tenantId, params.clienteId]
+    [params.tenantId, params.clienteId, params.clienteId]
   );
 
-  if (existingOrder) {
+  if (existingOrderSameCliente) {
     return finalize({
       desconto: 0,
       elegivel: false,
       aplicado: false,
-      motivo: 'nao_primeira_compra',
+      motivo: 'existing_customer_history',
+    });
+  }
+
+  const clienteRow = await q1(
+    'SELECT telefone FROM delivery_clientes WHERE id=? AND tenant_id=?',
+    [params.clienteId, params.tenantId]
+  );
+  const phoneNorm = normalizeBrazilDeliveryPhoneDigits(clienteRow?.telefone ?? '');
+
+  const currentAddressSig =
+    params.canalPedido === 'delivery'
+      ? params.enderecoSalvo
+        ? buildDeliveryAddressAntiFraudSignature({
+            logradouro: params.enderecoSalvo.logradouro,
+            numero: params.enderecoSalvo.numero,
+            bairro: params.enderecoSalvo.bairro,
+          })
+        : params.enderecoElegibilidadePreview
+          ? buildDeliveryAddressAntiFraudSignature(params.enderecoElegibilidadePreview)
+          : null
+      : null;
+
+  const priorRows = await qAll(
+    `SELECT p.id, p.delivery_cliente_id, p.cliente_id, p.cliente_tel, p.delivery_endereco_id, p.endereco
+     FROM pedidos p
+     WHERE p.tenant_id=?
+       AND ${PRIMEIRA_COMPRA_PEDIDO_VALIDO_SQL}
+     ORDER BY p.id DESC
+     LIMIT 3000`,
+    [params.tenantId]
+  );
+
+  const enderecoIds = [
+    ...new Set(
+      priorRows
+        .map((row: { delivery_endereco_id?: unknown }) =>
+          row.delivery_endereco_id != null ? Number(row.delivery_endereco_id) : null
+        )
+        .filter((id): id is number => id != null && Number.isInteger(id) && id > 0)
+    ),
+  ];
+
+  let enderecoById = new Map<number, { logradouro?: string | null; numero?: string | null; bairro?: string | null }>();
+  if (enderecoIds.length) {
+    const ph = enderecoIds.map(() => '?').join(',');
+    const addrRows = await qAll(
+      `SELECT id, logradouro, numero, bairro FROM delivery_enderecos WHERE tenant_id=? AND id IN (${ph})`,
+      [params.tenantId, ...enderecoIds]
+    );
+    enderecoById = new Map(
+      addrRows.map((e: { id: number; logradouro?: string | null; numero?: string | null; bairro?: string | null }) => [
+        Number(e.id),
+        e,
+      ])
+    );
+  }
+
+  let hitPhone = false;
+  let hitAddress = false;
+
+  for (const row of priorRows as Array<{
+    id: number;
+    delivery_cliente_id?: number | null;
+    cliente_id?: number | null;
+    cliente_tel?: string | null;
+    delivery_endereco_id?: number | null;
+    endereco?: string | null;
+  }>) {
+    if (
+      Number(row.delivery_cliente_id) === Number(params.clienteId) ||
+      Number(row.cliente_id) === Number(params.clienteId)
+    ) {
+      continue;
+    }
+
+    const orderTel = normalizeBrazilDeliveryPhoneDigits(row.cliente_tel);
+    if (phoneNorm.length >= 10 && orderTel.length >= 10 && orderTel === phoneNorm) {
+      hitPhone = true;
+    }
+
+    if (currentAddressSig) {
+      const eid = row.delivery_endereco_id != null ? Number(row.delivery_endereco_id) : null;
+      const linked = eid && enderecoById.has(eid) ? enderecoById.get(eid)! : null;
+      const sig = linked
+        ? signatureFromPedidoEnderecoFields({
+            logradouro: linked.logradouro,
+            numero: linked.numero,
+            bairro: linked.bairro,
+          })
+        : signatureFromPedidoEnderecoFields({ endereco: row.endereco });
+      if (sig && sig === currentAddressSig) {
+        hitAddress = true;
+      }
+    }
+  }
+
+  if (hitPhone) {
+    return finalize({
+      desconto: 0,
+      elegivel: false,
+      aplicado: false,
+      motivo: 'same_phone_previous_order',
+    });
+  }
+  if (hitAddress) {
+    return finalize({
+      desconto: 0,
+      elegivel: false,
+      aplicado: false,
+      motivo: 'same_address_previous_order',
     });
   }
 
@@ -437,8 +572,26 @@ async function buildCheckoutSummary(params: {
   clienteToken?: unknown;
   cupomCodigo?: unknown;
   canalPedido?: OrderChannel;
+  /** Endereço em digitação (cardápio) — mesma regra do pedido final quando ainda não há `endereco_id`. */
+  enderecoElegibilidadePreview?: {
+    logradouro?: unknown;
+    numero?: unknown;
+    bairro?: unknown;
+  } | null;
 }) {
   const clienteId = await resolveDeliveryCustomerId(params.tenantId, params.clienteToken);
+  const canalPedido: OrderChannel = params.canalPedido === 'retirada' ? 'retirada' : 'delivery';
+
+  const rawPv = params.enderecoElegibilidadePreview;
+  let enderecoElegibilidadePreview: { logradouro: string; numero: string; bairro: string } | null = null;
+  if (canalPedido === 'delivery' && rawPv && typeof rawPv === 'object') {
+    const o = rawPv as Record<string, unknown>;
+    const log = String(o.logradouro ?? '').trim();
+    const num = String(o.numero ?? '').trim();
+    const bai = String(o.bairro ?? '').trim();
+    if (log && num && bai) enderecoElegibilidadePreview = { logradouro: log, numero: num, bairro: bai };
+  }
+
   const enderecoSalvo = await resolveSavedDeliveryAddress({
     tenantId: params.tenantId,
     clienteId,
@@ -452,7 +605,7 @@ async function buildCheckoutSummary(params: {
     endereco: enderecoSalvo,
     bairro: params.bairro,
     config: params.config,
-    canalPedido: params.canalPedido,
+    canalPedido,
   });
 
   const descontoPixPercent = pagamentoTipo === 'pix' ? Number(params.config.desconto_pix || 0) : 0;
@@ -490,6 +643,9 @@ async function buildCheckoutSummary(params: {
     taxaEntrega: fee.taxa,
     cupomAplicado,
     totalBeforeFirstCustomerDiscount: totalAntesDoPrimeiroCliente,
+    enderecoSalvo,
+    enderecoElegibilidadePreview,
+    canalPedido,
   });
 
   const total = Math.max(0, totalAntesDoPrimeiroCliente - primeiroCliente.desconto);
@@ -900,6 +1056,7 @@ export function createDeliveryPublicRouter() {
         clienteToken: req.body?.clienteToken,
         cupomCodigo: req.body?.cupom_codigo,
         canalPedido: String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery',
+        enderecoElegibilidadePreview: req.body?.endereco_eligibilidade ?? null,
       });
 
       res.json({ success: true, resumo: summary });
@@ -1086,6 +1243,7 @@ export function createDeliveryPublicRouter() {
         clienteToken,
         cupomCodigo: cupom_codigo,
         canalPedido,
+        enderecoElegibilidadePreview: req.body?.endereco_eligibilidade ?? null,
       });
 
       if (cupom_codigo && !checkoutSummary.cupom_aplicado) {

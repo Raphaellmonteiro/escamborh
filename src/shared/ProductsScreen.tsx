@@ -5,7 +5,7 @@ import {
   Package, Plus, Trash2, Lock, AlertCircle, Image as ImageIcon,
   X, Barcode, Search, LayoutGrid, LayoutList, Copy,
   ChevronUp, ChevronDown, Star, Clock, Eye, EyeOff,
-  Download, Filter, Pencil, Settings2, ChevronRight, Minus,
+  Download, Filter, Pencil, Settings2, ChevronRight, Minus, Award,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category } from '../types';
@@ -15,6 +15,7 @@ import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { adminOpsListRowClass, adminOpsMutedBlockClass, adminScreenPagePaddingClass } from '../components/ui/screenChrome';
 import type { ProductionType } from '../utils/preparation';
 import { resolveProductionType, resolveRequiresPreparation } from '../utils/preparation';
+import { buildCardapioPdfHtml, type CardapioPdfMode, type CardapioPdfProduct } from '../utils/cardapioPdfHtml';
 
 // ─── helpers ─────────────────────────────────────────────────────
 const fmtR$ = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
@@ -116,7 +117,22 @@ function getProductionMeta(product: Partial<ProductExtended>) {
   return PRODUCTION_TYPE_META[resolveProductionType(product)];
 }
 
-export default function ProductsScreen({ products, onUpdate, token }: { products: ProductExtended[], onUpdate: () => void, token: string }) {
+export default function ProductsScreen({
+  products,
+  onUpdate,
+  token,
+  estabelecimentoNome = 'Cardápio',
+  logoUrl = null,
+  deliverySlug = '',
+}: {
+  products: ProductExtended[];
+  onUpdate: () => void;
+  token: string;
+  estabelecimentoNome?: string;
+  logoUrl?: string | null;
+  /** Slug público do delivery (JWT username); usado no QR do PDF moderno */
+  deliverySlug?: string;
+}) {
   const [editing, setEditing]                 = useState<Partial<ProductExtended> | null>(null);
   const [showAuthModal, setShowAuthModal]     = useState(false);
   const [authPassword, setAuthPassword]       = useState('');
@@ -164,6 +180,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
   const [statusFiltro, setStatusFiltro]       = useState<'todos' | 'ativo' | 'inativo'>('todos');
   const [destaqueFiltro, setDestaqueFiltro]   = useState(false);
   const [viewMode, setViewMode]               = useState<ViewMode>('list');
+  const [cardapioPdfIncluirData, setCardapioPdfIncluirData] = useState(true);
 
   const hdrs  = { Authorization: `Bearer ${token}` };
   const jHdrs = { ...hdrs, 'Content-Type': 'application/json' };
@@ -468,35 +485,22 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
     finally { setProductToDelete(null); setDeleteStep('password'); }
   };
 
-  // ── exportar PDF ─────────────────────────────────────────────
-  const handleExportPDF = () => {
-    const cats = [...new Set(products.filter(p => p.active).map(p => p.category))];
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-    <title>Cardápio</title>
-    <style>
-      body{font-family:Arial,sans-serif;padding:32px;color:#111;font-size:12px}
-      h1{font-size:22px;font-weight:900;margin-bottom:4px}
-      h2{font-size:14px;font-weight:700;color:#555;margin:20px 0 8px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #e4e4e7;padding-bottom:4px}
-      .item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f4f4f5}
-      .name{font-weight:600}.price{font-weight:700;color:#16a34a}
-      .desc{font-size:10px;color:#888;margin-top:2px}
-      @media print{body{padding:16px}}
-    </style></head><body>
-    <h1>Cardápio</h1>
-    <p style="color:#888;font-size:11px;margin-bottom:16px">Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
-    ${cats.map(cat => `
-      <h2>${cat}</h2>
-      ${products.filter(p => p.active && p.category === cat).map(p => `
-        <div class="item">
-          <div><div class="name">${p.name}${p.destaque ? ' ⭐' : ''}</div>${p.descricao ? `<div class="desc">${p.descricao}</div>` : ''}</div>
-          <div class="price">${fmtR$(p.price)}</div>
-        </div>`).join('')}
-    `).join('')}
-    <script>window.onload=function(){window.print()}</script>
-    </body></html>`;
-    const w = window.open('', '_blank', 'width=700,height=900');
+  // ── exportar PDF (simples ou moderno) ────────────────────────
+  const abrirCardapioImpressao = (mode: CardapioPdfMode) => {
+    const origin = window.location.origin;
+    const html = buildCardapioPdfHtml({
+      mode,
+      products: products as CardapioPdfProduct[],
+      estabelecimentoNome,
+      logoUrl,
+      origin,
+      deliverySlug: deliverySlug.trim() || null,
+      includeDate: mode === 'modern' ? cardapioPdfIncluirData : true,
+    });
+    const w = window.open('', '_blank', 'width=820,height=960');
     if (!w) return;
-    w.document.write(html); w.document.close();
+    w.document.write(html);
+    w.document.close();
   };
 
   // ── lista filtrada ───────────────────────────────────────────
@@ -568,11 +572,34 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
           }
           actions={
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:shrink-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => abrirCardapioImpressao('simple')}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all"
+                  >
+                    <Download size={13} /> PDF simples
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => abrirCardapioImpressao('modern')}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 rounded-xl text-xs font-bold transition-all"
+                  >
+                    <Download size={13} /> PDF moderno
+                  </button>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-zinc-500 sm:pl-1">
+                  <input
+                    type="checkbox"
+                    checked={cardapioPdfIncluirData}
+                    onChange={(e) => setCardapioPdfIncluirData(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-zinc-300 text-zinc-900"
+                  />
+                  Data no cabeçalho (moderno)
+                </label>
+              </div>
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                <button type="button" onClick={handleExportPDF}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
-                  <Download size={13}/> PDF
-                </button>
                 <button type="button" onClick={() => setShowCategoryModal(true)}
                   className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 rounded-xl text-xs font-bold transition-all">
                   <Filter size={13}/> Categorias
@@ -582,7 +609,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                   <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:p-2 lg:px-2.5 flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
                 </div>
               </div>
-              <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1 })}
+              <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1, mais_vendido: 0 })}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
                 <Plus size={16}/> Novo Produto
               </button>
@@ -649,6 +676,7 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                         <span className="min-w-0 flex-1 truncate font-black text-zinc-900 text-sm" title={p.name}>{p.name}</span>
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                           {p.destaque ? <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0"/> : null}
+                          {!!p.mais_vendido ? <Award size={12} className="text-teal-600 flex-shrink-0" aria-hidden /> : null}
                           {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase flex-shrink-0 bg-rose-100 text-rose-700">
                               Promocao
@@ -719,6 +747,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
                       <div className="absolute top-2 left-11 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black uppercase">
                         Promocao
+                      </div>
+                    ) : null}
+                    {!!p.mais_vendido ? (
+                      <div className="absolute bottom-10 left-2 flex h-7 w-7 items-center justify-center rounded-full bg-teal-600 text-white shadow-sm" title="Mais vendidos">
+                        <Award size={14} aria-hidden />
                       </div>
                     ) : null}
                     <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${p.active ? 'bg-emerald-500 text-white' : 'bg-zinc-500 text-white'}`}>
@@ -1206,6 +1239,11 @@ export default function ProductsScreen({ products, onUpdate, token }: { products
                     <input type="checkbox" checked={!!editing.destaque} onChange={e => setEditing(p => ({...p, destaque: e.target.checked ? 1 : 0}))}
                       className="w-4 h-4 rounded border-zinc-300 text-amber-500 focus:ring-amber-500"/>
                     <span className="text-sm font-medium text-zinc-700">⭐ Em destaque</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+                    <input type="checkbox" checked={!!editing.mais_vendido} onChange={e => setEditing(p => ({...p, mais_vendido: e.target.checked ? 1 : 0}))}
+                      className="w-4 h-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500"/>
+                    <span className="text-sm font-medium text-zinc-700">🏆 Mais vendidos (PDF)</span>
                   </label>
                 </div>
               </div>

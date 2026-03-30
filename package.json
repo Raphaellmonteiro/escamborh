@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "preview-cardapio": "tsx scripts/generate-cardapio-preview.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",

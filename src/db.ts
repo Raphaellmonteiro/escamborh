@@ -489,6 +489,7 @@ export async function runMigrations() {
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS production_type TEXT;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS em_promocao INTEGER DEFAULT 0;
       ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_original REAL;
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS mais_vendido INTEGER DEFAULT 0;
       ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS public_id TEXT;
       ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS variation_id INTEGER;
       ALTER TABLE itens_pedido ADD COLUMN IF NOT EXISTS observation TEXT;

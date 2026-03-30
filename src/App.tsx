@@ -1178,7 +1178,16 @@ const handleAuth = async (e: React.FormEvent) => {
             {activeTab === 'orders' && canAccess('orders') && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
             {activeTab === 'central' && canAccess('orders') && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => handleTabChange('pos')} />}
-            {activeTab === 'products' && canAccess('products') && <ProductsScreen products={products} onUpdate={fetchProducts} token={token} />}
+            {activeTab === 'products' && canAccess('products') && (
+              <ProductsScreen
+                products={products}
+                onUpdate={fetchProducts}
+                token={token}
+                estabelecimentoNome={estabelecimentoNome}
+                logoUrl={logoUrl}
+                deliverySlug={slugAtual}
+              />
+            )}
             {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
             {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
               <DeliveryScreen

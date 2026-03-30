@@ -627,6 +627,7 @@ function normalizeProductPromotionInput(
         disponivel_ate,
         requires_preparation,
         production_type,
+        mais_vendido,
       } = req.body;
       const normalizedBarcode = normalizeBarcode(codigo_barras);
       const normalizedProduction = normalizeProductProductionInput(
@@ -637,8 +638,8 @@ function normalizeProductPromotionInput(
       await ensureBarcodeAvailable(req.tenantId, normalizedBarcode);
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, req.tenantId]
       );
       res.json({ id });
     } catch (e: any) {
@@ -675,6 +676,7 @@ function normalizeProductPromotionInput(
         disponivel_ate,
         requires_preparation,
         production_type,
+        mais_vendido,
       } = req.body;
       const current = await q1<{
         codigo_barras?: string | null;
@@ -709,8 +711,8 @@ function normalizeProductPromotionInput(
         current
       );
       await qRun(
-        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,em_promocao=?,preco_original=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=? WHERE id=? AND tenant_id=?',
-        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, req.params.id, req.tenantId]
+        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,em_promocao=?,preco_original=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=?,mais_vendido=? WHERE id=? AND tenant_id=?',
+        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, req.params.id, req.tenantId]
       );
       res.json({ success: true });
     } catch (e: any) {
@@ -725,8 +727,8 @@ function normalizeProductPromotionInput(
       if (!p) return res.status(404).json({ error: 'Produto n\u00E3o encontrado' });
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
       const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), `${p.name} (c\u00F3pia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, 0, p.em_promocao ? 1 : 0, p.em_promocao ? p.preco_original ?? null : null, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, p.requires_preparation ?? null, p.production_type ?? null, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), `${p.name} (c\u00F3pia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, 0, p.em_promocao ? 1 : 0, p.em_promocao ? p.preco_original ?? null : null, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, p.requires_preparation ?? null, p.production_type ?? null, 0, req.tenantId]
       );
       res.json({ id, success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }

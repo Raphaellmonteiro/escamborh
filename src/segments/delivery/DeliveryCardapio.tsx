@@ -452,6 +452,8 @@ type PedidoConfirmado = {
   checkout_modal_concluido?: boolean;
 };
 
+const SUGGESTIONS_EXPOSURE_TIMEOUT_MS = 800;
+
 const fmt = (v: number) => `R$ ${(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')}`;
 
 function getProdutoDescricao(produto: Produto) {
@@ -602,13 +604,11 @@ function getSuggestionSupportText(item: SuggestionItem) {
 }
 
 function getSuggestionCtaText(item: SuggestionItem, featured: boolean) {
-  const hasVariacoes = getSuggestionVariationCount(item) > 0;
-  if (hasVariacoes) return featured ? 'Escolher' : 'Ver opcoes';
   return featured ? 'Adicionar' : 'Levar';
 }
 
 function getSuggestionPricePrefix(item: SuggestionItem) {
-  return getSuggestionVariationCount(item) > 0 ? 'A partir de' : 'Por mais';
+  return getSuggestionVariationCount(item) > 0 ? 'Leve por' : 'So mais';
 }
 
 function scoreSuggestionForUpsell(item: SuggestionItem, index: number, cart: CartItem[]) {
@@ -790,7 +790,11 @@ function ResumoComercialLinhas({
       ? 'Validando'
       : primeiroCliente?.motivo === 'cliente_nao_identificado'
         ? 'Identifique-se'
-        : 'Nao aplicado';
+        : primeiroCliente?.motivo === 'existing_customer_history' ||
+            primeiroCliente?.motivo === 'same_phone_previous_order' ||
+            primeiroCliente?.motivo === 'same_address_previous_order'
+          ? 'Nao elegivel'
+          : 'Nao aplicado';
 
   return (
     <>
@@ -1018,10 +1022,9 @@ export default function DeliveryCardapio() {
 
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
   const suggestionProductSignature = useMemo(() => buildSuggestionProductSignature(cart), [cart]);
-  const shouldShowSuggestions = prefetchedSuggestions.length > 0 && (
-    suggestionsReadySignature === suggestionProductSignature ||
-    loadingSuggestions
-  );
+  const shouldShowSuggestions = cart.length > 0;
+  const suggestionsReadyForCurrentCart = !!suggestionProductSignature && suggestionsReadySignature === suggestionProductSignature;
+  const suggestionsPendingForCurrentCart = shouldShowSuggestions && !!suggestionProductSignature && !suggestionsReadyForCurrentCart;
   const totalItens = cart.reduce((a,i)=>a+i.qty,0);
   const produtosOrdenados = useMemo(
     () => categorias.flatMap((cat, categoryIndex) =>
@@ -1075,6 +1078,8 @@ export default function DeliveryCardapio() {
     }
 
     const controller = new AbortController();
+    setPrefetchedSuggestions([]);
+    setSuggestionsReadySignature('');
     setLoadingSuggestions(true);
 
     fetch(`/public/delivery/${slug}/suggestions`, {
@@ -2976,6 +2981,9 @@ export default function DeliveryCardapio() {
             suggestions={prefetchedSuggestions}
             loadingSuggestions={loadingSuggestions}
             showSuggestions={shouldShowSuggestions}
+            suggestionsReady={suggestionsReadyForCurrentCart}
+            suggestionsPending={suggestionsPendingForCurrentCart}
+            suggestionRequestKey={suggestionProductSignature}
             onAdd={(p) => addCartItem({ ...p, qty: 1 })}
             onAddSuggestion={(item: SuggestionItem) => {
               const produtoCompleto = categorias
@@ -3078,7 +3086,7 @@ export default function DeliveryCardapio() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SACOLA EM MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, onAdd, onAddSuggestion, onRemove, onContinuarComprando }: {
+function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, suggestionsReady, suggestionsPending, onAdd, onAddSuggestion, onRemove, onContinuarComprando }: {
   slug: string;
   cliToken: string | null;
   cart: CartItem[]; config: Config;
@@ -3086,6 +3094,8 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   suggestions: SuggestionItem[];
   loadingSuggestions: boolean;
   showSuggestions: boolean;
+  suggestionsReady: boolean;
+  suggestionsPending: boolean;
   onAdd: (p: CartItem)=>void; onRemove: (key: string)=>void;
   onAddSuggestion: (item: SuggestionItem)=>void;
   onContinuarComprando: ()=>void;
@@ -3177,7 +3187,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   ), [suggestions, cart]);
 
   const featuredSuggestion = suggestionCards[0] || null;
-  const secondarySuggestions = suggestionCards.slice(1);
+  const showSuggestionSkeleton = showSuggestions && suggestionsPending && loadingSuggestions;
   const suggestionSubtitle = featuredSuggestion
     ? featuredSuggestion.sourceItem
       ? `Para acompanhar ${shortenSuggestionSourceName(featuredSuggestion.sourceItem.name, 34)}.`
@@ -3271,135 +3281,134 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                       Sugestoes
                     </span>
                     <p className={`mt-2 text-lg font-black tracking-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>Leve junto</p>
-                    <p className={`mt-1 max-w-[24rem] text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{suggestionSubtitle}</p>
+                    <p className={`mt-1 max-w-[24rem] text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>
+                      {showSuggestionSkeleton ? 'Estamos preparando sugestoes para complementar sua sacola.' : suggestionSubtitle}
+                    </p>
                   </div>
                   <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${isLightRed ? 'border border-stone-300 bg-[#fffefc] text-stone-700' : 'border border-white/10 bg-zinc-950 text-zinc-200'}`}>
-                    {loadingSuggestions ? 'Atualizando' : `${suggestionCards.length} opcoes`}
+                    {showSuggestionSkeleton ? 'Carregando' : suggestionCards.length > 0 ? `${suggestionCards.length} opcoes` : 'Sem sugestoes'}
                   </span>
                 </div>
 
-                {featuredSuggestion && (
-                  <div
-                    className={
-                      isLightRed
-                        ? 'overflow-hidden rounded-[28px] border border-red-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,244,240,1),rgba(253,230,230,0.92))] p-4 shadow-[0_14px_40px_rgba(220,38,38,0.10)]'
-                        : 'overflow-hidden rounded-[28px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(12,14,24,1),rgba(20,24,37,0.98),rgba(12,63,78,0.58))] p-4 shadow-[0_22px_58px_rgba(6,182,212,0.16)]'
-                    }
-                  >
-                    <div className="grid grid-cols-[1fr_auto] items-start gap-4">
-                      <div className="min-w-0 flex min-h-[10.5rem] flex-col">
-                        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-white/10'}`}>
-                          {featuredSuggestion.badge}
-                        </span>
-                        {featuredSuggestion.item.category && (
-                          <p className={`mt-3 line-clamp-1 text-[10px] font-black uppercase tracking-[0.16em] ${isLightRed ? 'text-stone-500' : 'text-cyan-200/80'}`}>
-                            {featuredSuggestion.item.category}
-                          </p>
-                        )}
-                        <p className={`mt-1 line-clamp-2 text-xl font-black leading-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>{featuredSuggestion.item.name}</p>
-                        <p className={`mt-1 line-clamp-2 text-[13px] leading-relaxed ${isLightRed ? 'text-stone-700' : 'text-zinc-200'}`}>{featuredSuggestion.headline}</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-zinc-100 ring-1 ring-white/10'}`}>
-                            {featuredSuggestion.pricePrefix}
-                          </span>
-                          {featuredSuggestion.variationCount > 0 && (
-                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${isLightRed ? 'bg-white text-stone-700 ring-1 ring-stone-200' : 'bg-black/25 text-zinc-100 ring-1 ring-white/10'}`}>
-                              {featuredSuggestion.variationCount} opcoes
-                            </span>
-                          )}
+                {showSuggestionSkeleton && (
+                  <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {[0, 1, 2].map((index) => (
+                      <div
+                        key={`suggestion-skeleton-${index}`}
+                        className={`grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border p-3.5 ${isLightRed ? 'border-stone-300/70 bg-[#fffefc] shadow-sm' : 'border-white/10 bg-zinc-950'}`}
+                      >
+                        <div className="space-y-3">
+                          <div className={`aspect-[16/10] w-full rounded-[20px] animate-pulse ${isLightRed ? 'bg-stone-200' : 'bg-white/10'}`} />
+                          <div className={`h-6 w-28 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
                         </div>
-                        <div className="mt-auto flex items-end justify-between gap-3 pt-4">
-                          <div>
-                            <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isLightRed ? 'text-stone-500' : 'text-zinc-400'}`}>{featuredSuggestion.pricePrefix}</p>
-                            <p className={`mt-1 text-[32px] font-black leading-none ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.22)]'}`}>
-                              {fmt(featuredSuggestion.displayPrice)}
-                            </p>
+                        <div className="min-w-0 pt-3">
+                          <div className={`h-3 w-20 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
+                          <div className={`mt-2 h-6 w-4/5 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
+                          <div className={`mt-2 h-6 w-3/4 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
+                          <div className={`mt-3 h-4 w-full rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
+                          <div className={`mt-2 h-4 w-5/6 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
+                        </div>
+                        <div className={`mt-4 flex items-end justify-between gap-3 border-t pt-3 ${isLightRed ? 'border-stone-200/80' : 'border-white/10'}`}>
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <div className={`h-3 w-16 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
+                            <div className={`h-8 w-24 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleSuggestionAdd(featuredSuggestion.item)}
-                            className={
-                              isLightRed
-                                ? 'inline-flex min-h-[48px] min-w-[144px] items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white shadow-[0_10px_26px_rgba(220,38,38,0.22)] transition-all hover:bg-red-700'
-                                : 'inline-flex min-h-[48px] min-w-[144px] items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-zinc-950 shadow-[0_14px_36px_rgba(255,255,255,0.12)] transition-all hover:bg-cyan-300'
-                            }
-                          >
-                            <Plus size={15} />
-                            {featuredSuggestion.cta}
-                          </button>
+                          <div className={`h-11 w-[112px] shrink-0 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
                         </div>
                       </div>
-                      {featuredSuggestion.item.photo_url ? (
-                        <img
-                          src={featuredSuggestion.item.photo_url}
-                          alt={featuredSuggestion.item.name}
-                          className={`h-28 w-28 shrink-0 rounded-[22px] object-cover ${isLightRed ? 'border border-white/80 shadow-sm' : 'border border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.28)]'}`}
-                        />
-                      ) : (
-                        <div className={`flex h-28 w-28 shrink-0 items-center justify-center rounded-[22px] text-xs font-black ${isLightRed ? 'border border-red-100 bg-white text-red-700' : 'border border-white/10 bg-black/20 text-cyan-200'}`}>
-                          LEVE
-                        </div>
-                      )}
-                    </div>
-                    <p className={`mt-3 line-clamp-2 text-xs leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{featuredSuggestion.support}</p>
+                    ))}
                   </div>
                 )}
 
-                {secondarySuggestions.length > 0 && (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {secondarySuggestions.map((card) => (
+                {!showSuggestionSkeleton && suggestionCards.length > 0 && (
+                  <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {suggestionCards.map((card) => (
                       <div
                         key={card.item.id}
                         className={
-                          isLightRed
-                            ? 'flex min-h-[184px] flex-col rounded-[24px] border border-stone-300/70 bg-[#fffefc] p-3 shadow-sm'
-                            : 'flex min-h-[184px] flex-col rounded-[24px] border border-white/10 bg-zinc-950 p-3'
+                          card.featured
+                            ? isLightRed
+                              ? 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-red-300 bg-[linear-gradient(180deg,#fffdf9_0%,#fff3ee_100%)] p-3.5 shadow-[0_16px_36px_rgba(220,38,38,0.12)] ring-1 ring-red-200/80'
+                              : 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-cyan-300/35 bg-[linear-gradient(180deg,rgba(16,18,28,1)_0%,rgba(15,34,44,0.96)_100%)] p-3.5 shadow-[0_18px_40px_rgba(34,211,238,0.12)] ring-1 ring-cyan-300/20'
+                            : isLightRed
+                              ? 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-stone-300/70 bg-[#fffefc] p-3.5 shadow-sm'
+                              : 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-white/10 bg-zinc-950 p-3.5'
                         }
                       >
-                        <div className="flex items-start gap-3">
+                        <div className="space-y-3">
                           {card.item.photo_url ? (
                             <img
                               src={card.item.photo_url}
                               alt={card.item.name}
-                              className={`h-14 w-14 shrink-0 rounded-2xl object-cover ${isLightRed ? 'border border-stone-200' : 'border border-white/10'}`}
+                              className={`aspect-[16/10] w-full rounded-[20px] object-cover ${card.featured ? (isLightRed ? 'border border-red-200 shadow-[0_10px_22px_rgba(220,38,38,0.10)]' : 'border border-cyan-300/20 shadow-[0_18px_38px_rgba(0,0,0,0.28)]') : (isLightRed ? 'border border-stone-200 shadow-sm' : 'border border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.22)]')}`}
                             />
                           ) : (
-                            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-[10px] font-black ${isLightRed ? 'bg-stone-100 text-stone-600' : 'bg-zinc-900 text-zinc-500'}`}>
+                            <div className={`flex aspect-[16/10] w-full items-center justify-center rounded-[20px] text-xs font-black tracking-[0.18em] ${card.featured ? (isLightRed ? 'border border-red-200 bg-red-50/70 text-red-700' : 'border border-cyan-300/20 bg-cyan-400/10 text-cyan-200') : (isLightRed ? 'border border-stone-200 bg-stone-100 text-stone-600' : 'border border-white/10 bg-black/20 text-cyan-200')}`}>
                               ITEM
                             </div>
                           )}
-                          <div className="min-w-0 flex min-h-[152px] flex-1 flex-col">
-                            <span className={`inline-flex w-fit items-center rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10'}`}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`inline-flex w-fit max-w-full items-center truncate rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${card.featured ? (isLightRed ? 'bg-red-600 text-white ring-1 ring-red-600/70' : 'bg-cyan-300 text-zinc-950 ring-1 ring-cyan-200/80') : (isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10')}`}>
                               {card.badge}
                             </span>
-                            {card.item.category && (
-                              <p className={`mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'text-stone-500' : 'text-zinc-400'}`}>
-                                {card.item.category}
-                              </p>
+                            {card.featured && (
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-cyan-300/20'}`}>
+                                Mais relevante
+                              </span>
                             )}
-                            <p className={`mt-1 line-clamp-2 min-h-[2.4rem] text-[15px] font-black leading-tight ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`}>{card.item.name}</p>
-                            <p className={`mt-1 line-clamp-2 min-h-[2rem] text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{card.headline}</p>
-                            <div className="mt-auto flex items-end justify-between gap-3 pt-4">
-                              <div className="min-w-0">
-                                <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${isLightRed ? 'text-stone-500' : 'text-zinc-500'}`}>{card.pricePrefix}</p>
-                                <p className={`mt-0.5 text-lg font-black ${isLightRed ? 'text-red-700' : 'text-cyan-300'}`}>{fmt(card.displayPrice)}</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleSuggestionAdd(card.item)}
-                                className={
-                                  isLightRed
-                                    ? 'inline-flex min-h-[42px] min-w-[108px] items-center justify-center rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-red-700'
-                                    : 'inline-flex min-h-[42px] min-w-[108px] items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-black text-zinc-950 transition-colors hover:bg-cyan-300'
-                                }
-                              >
-                                {card.cta}
-                              </button>
-                            </div>
                           </div>
+                        </div>
+
+                        <div className="min-w-0 pt-3">
+                          {card.item.category ? (
+                            <p className={`line-clamp-1 text-[10px] font-black uppercase tracking-[0.14em] ${card.featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/80') : (isLightRed ? 'text-stone-500' : 'text-zinc-400')}`}>
+                              {card.item.category}
+                            </p>
+                          ) : (
+                            <div className="h-[12px]" aria-hidden />
+                          )}
+                          <p className={`mt-2 line-clamp-2 min-h-[3.25rem] text-[16px] font-black leading-snug sm:text-[17px] ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`}>
+                            {card.item.name}
+                          </p>
+                          <p className={`mt-2 line-clamp-2 min-h-[2.75rem] text-[11px] leading-relaxed sm:text-[12px] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>
+                            {card.headline}
+                          </p>
+                        </div>
+
+                        <div className={`mt-4 flex items-end justify-between gap-3 border-t pt-3 ${card.featured ? (isLightRed ? 'border-red-200/80' : 'border-cyan-300/15') : (isLightRed ? 'border-stone-200/80' : 'border-white/10')}`}>
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate text-[10px] font-semibold uppercase tracking-[0.16em] ${card.featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/75') : (isLightRed ? 'text-stone-500' : 'text-zinc-500')}`}>
+                              {card.pricePrefix}
+                            </p>
+                            <p className={`mt-1 truncate whitespace-nowrap text-lg font-black leading-none sm:text-xl ${card.featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200') : (isLightRed ? 'text-red-700' : 'text-cyan-300')}`}>
+                              {fmt(card.displayPrice)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSuggestionAdd(card.item)}
+                            className={
+                              card.featured
+                                ? isLightRed
+                                  ? 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-red-600 px-3 py-2 text-xs font-black text-white shadow-[0_10px_24px_rgba(220,38,38,0.20)] transition-colors hover:bg-red-700'
+                                  : 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-cyan-300 px-3 py-2 text-xs font-black text-zinc-950 shadow-[0_10px_24px_rgba(34,211,238,0.16)] transition-colors hover:bg-cyan-200'
+                                : isLightRed
+                                  ? 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-red-600 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-red-700'
+                                  : 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-white px-3 py-2 text-xs font-black text-zinc-950 transition-colors hover:bg-cyan-300'
+                            }
+                          >
+                            {card.cta}
+                          </button>
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {!showSuggestionSkeleton && suggestionCards.length === 0 && (
+                  <div className={`rounded-[24px] border border-dashed p-4 text-center ${isLightRed ? 'border-stone-300/80 bg-[#fffefc] text-stone-600' : 'border-white/10 bg-zinc-950 text-zinc-300'}`}>
+                    <p className={`text-sm font-bold ${isLightRed ? 'text-stone-800' : 'text-white'}`}>Ainda nao encontramos uma sugestao ideal para esta sacola.</p>
+                    <p className="mt-1 text-xs leading-relaxed">Voce pode seguir normalmente para o checkout assim mesmo.</p>
                   </div>
                 )}
               </div>
@@ -3423,7 +3432,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   );
 }
 
-function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, onAdd, onAddSuggestion, onRemove }: {
+function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, suggestionsReady, suggestionsPending, suggestionRequestKey, onAdd, onAddSuggestion, onRemove }: {
   open: boolean;
   onClose: () => void;
   onContinuarCheckout: () => void;
@@ -3435,6 +3444,9 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
   suggestions: SuggestionItem[];
   loadingSuggestions: boolean;
   showSuggestions: boolean;
+  suggestionsReady: boolean;
+  suggestionsPending: boolean;
+  suggestionRequestKey: string;
   onAdd: (p: CartItem) => void;
   onAddSuggestion: (item: SuggestionItem) => void;
   onRemove: (key: string) => void;
@@ -3443,6 +3455,37 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
   const pedidoMinimoAplicavel = tipoAtendimento === 'entrega' ? Number(config.pedido_minimo || 0) : 0;
   const th = useDeliveryCardapioTheme();
   const sb = th.sacola;
+  const [suggestionsTimeoutElapsed, setSuggestionsTimeoutElapsed] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setSuggestionsTimeoutElapsed(false);
+      return;
+    }
+    if (!showSuggestions || !suggestionsPending || suggestionsReady) {
+      setSuggestionsTimeoutElapsed(false);
+      return;
+    }
+    setSuggestionsTimeoutElapsed(false);
+    const timeoutId = window.setTimeout(() => {
+      setSuggestionsTimeoutElapsed(true);
+    }, SUGGESTIONS_EXPOSURE_TIMEOUT_MS);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, showSuggestions, suggestionsPending, suggestionsReady, suggestionRequestKey]);
+
+  const checkoutLockedBySuggestions = showSuggestions && suggestionsPending && !suggestionsReady && !suggestionsTimeoutElapsed;
+  const footerHint = checkoutLockedBySuggestions
+    ? 'Segure um instante: carregando sugestoes para voce ver antes de avancar.'
+    : showSuggestions && suggestionsPending && !suggestionsReady && suggestionsTimeoutElapsed
+      ? 'As sugestoes ainda estao sendo buscadas, mas o checkout ja foi liberado para nao travar sua experiencia.'
+      : null;
+  const handleContinuarCheckout = useCallback(() => {
+    if (checkoutLockedBySuggestions) return;
+    onContinuarCheckout();
+  }, [checkoutLockedBySuggestions, onContinuarCheckout]);
+
   if (!open) return null;
   return (
     <motion.div
@@ -3492,6 +3535,8 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
             suggestions={suggestions}
             loadingSuggestions={loadingSuggestions}
             showSuggestions={showSuggestions}
+            suggestionsReady={suggestionsReady}
+            suggestionsPending={suggestionsPending}
             onAdd={onAdd}
             onAddSuggestion={onAddSuggestion}
             onRemove={onRemove}
@@ -3513,13 +3558,24 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
                 Pedido mínimo: {fmt(pedidoMinimoAplicavel)}
               </p>
             )}
+            {footerHint ? (
+              <p
+                className={
+                  th.mode === 'light_red'
+                    ? 'mb-3 rounded-xl border border-stone-300 bg-[#fff8ef] px-3 py-2 text-center text-xs font-semibold text-stone-700'
+                    : 'mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center text-xs font-semibold text-zinc-200'
+                }
+              >
+                {footerHint}
+              </p>
+            ) : null}
             <button
               type="button"
-              onClick={onContinuarCheckout}
-              disabled={sub < pedidoMinimoAplicavel}
+              onClick={handleContinuarCheckout}
+              disabled={sub < pedidoMinimoAplicavel || checkoutLockedBySuggestions}
               className={sb.primaryBtn}
             >
-              Continuar para finalizar
+              {checkoutLockedBySuggestions ? 'Aguarde as sugestoes' : 'Continuar para finalizar'}
             </button>
             <button
               type="button"
@@ -4078,6 +4134,14 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
           canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
           endereco_id: resolvedEndId,
           bairro_temporario: resolvedBairroTemp,
+          endereco_eligibilidade:
+            tipoAtendimento === 'entrega' && endSel === 'novo'
+              ? {
+                  logradouro: novoEndereco.campos.logradouro.trim(),
+                  numero: novoEndereco.campos.numero.trim(),
+                  bairro: novoEndereco.campos.bairro.trim(),
+                }
+              : undefined,
           cupom_codigo: cupomCodigo === undefined ? (cupomValido?.cupom?.codigo || undefined) : (cupomCodigo || undefined),
         }),
       });
@@ -4116,7 +4180,18 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
         setCarregandoResumo(false);
       }
     }
-  }, [cliToken, slug, cart, pag, endSel, novoEndereco.campos.bairro, cupomValido?.cupom?.codigo, tipoAtendimento]);
+  }, [
+    cliToken,
+    slug,
+    cart,
+    pag,
+    endSel,
+    novoEndereco.campos.bairro,
+    novoEndereco.campos.logradouro,
+    novoEndereco.campos.numero,
+    cupomValido?.cupom?.codigo,
+    tipoAtendimento,
+  ]);
 
   useEffect(() => {
     atualizarResumo();

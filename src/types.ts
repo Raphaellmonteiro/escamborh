@@ -21,6 +21,8 @@ export interface Product {
   destaque?: number;
   em_promocao?: number;
   preco_original?: number | null;
+  /** Cardápio / PDV — ex.: selo “mais vendidos” no PDF impresso */
+  mais_vendido?: number;
   ordem?: number;
   disponivel_de?: string | null;
   disponivel_ate?: string | null;
