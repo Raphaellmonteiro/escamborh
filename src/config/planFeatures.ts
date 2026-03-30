@@ -5,6 +5,7 @@ export const ALL_PLAN_FEATURES = [
   'configuracoes',
   'caixa',
   'print',
+  'mesas',
   'delivery',
   'delivery_public',
   'delivery_tracking',
@@ -20,6 +21,13 @@ export type PlanFeature = (typeof ALL_PLAN_FEATURES)[number];
 export type PaidTenantPlan = 'basico' | 'basico_delivery' | 'completo';
 export type TenantPlan = PaidTenantPlan | 'trial';
 
+export const PLAN_LABELS: Record<TenantPlan, string> = {
+  basico: 'Básico',
+  basico_delivery: 'Básico + Delivery',
+  completo: 'Completo',
+  trial: 'Trial',
+};
+
 const CORE_FEATURES: PlanFeature[] = [
   'pos',
   'orders',
@@ -27,6 +35,7 @@ const CORE_FEATURES: PlanFeature[] = [
   'configuracoes',
   'caixa',
   'print',
+  'mesas',
   'dashboard',
 ];
 
@@ -75,4 +84,21 @@ export function getPlanFeatures(plan: PaidTenantPlan): PlanFeature[] {
 
 export function getCompletePlanFeatures(): PlanFeature[] {
   return [...PLAN_FEATURES.completo];
+}
+
+export function getSafeFallbackPlanFeatures(): PlanFeature[] {
+  return [...CORE_FEATURES];
+}
+
+export function sanitizePlanFeatures(
+  rawValue: unknown,
+  fallback: PlanFeature[] = getSafeFallbackPlanFeatures()
+): PlanFeature[] {
+  if (!Array.isArray(rawValue)) return [...fallback];
+
+  const features = rawValue.filter(
+    (feature): feature is PlanFeature => typeof feature === 'string' && isKnownPlanFeature(feature)
+  );
+
+  return features.length > 0 ? features : [...fallback];
 }

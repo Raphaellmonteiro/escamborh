@@ -577,10 +577,29 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
     `SELECT * FROM func_horas_extras WHERE funcionario_id=? AND tenant_id=? AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`,
     [func.id, tenantId, mm, yy]
   );
-  const adiantamentos = await qAll(
-    `SELECT * FROM func_adiantamentos WHERE funcionario_id=? AND tenant_id=? AND descontado=0 AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`,
+  const adiantamentosTabela = await qAll(
+    `SELECT * FROM func_adiantamentos WHERE funcionario_id=? AND tenant_id=? AND descontado=0 AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=? ORDER BY data DESC, id DESC`,
     [func.id, tenantId, mm, yy]
   );
+  const referenciaComp = competencia.referencia;
+  const adiantamentosPagamento = await qAll(
+    `SELECT * FROM func_pagamentos_folha WHERE tenant_id=? AND funcionario_id=? AND referencia=? AND tipo=? ORDER BY created_at ASC, id ASC`,
+    [tenantId, func.id, referenciaComp, 'advance']
+  );
+  const adiantamentosFromPagamentos = (adiantamentosPagamento as FuncPagamentoFolhaRow[]).map((p) => {
+    const created = p.created_at ? String(p.created_at).slice(0, 10) : '';
+    return {
+      id: p.id,
+      valor: Number(p.valor) || 0,
+      motivo:
+        (p.observacao && String(p.observacao).trim()) ||
+        'Adiantamento (pagamentos da competência)',
+      data: /^\d{4}-\d{2}-\d{2}$/.test(created) ? created : competencia.end_date,
+      descontado: 1,
+      origem: 'pagamento_folha' as const,
+    };
+  });
+  const adiantamentos = [...adiantamentosTabela, ...adiantamentosFromPagamentos];
 
   const pbd: Record<string, unknown[]> = {};
   const ebd: Record<string, unknown[]> = {};
@@ -774,9 +793,20 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
 
 const MONEY_EPS = 0.02;
 
+/** Parcial + final quitam o líquido; adiantamento já está embutido no líquido como desconto. */
+function payrollSettlementPaidTotal(payments: { valor: number; tipo?: string }[]): number {
+  return roundMoney(
+    payments.reduce((s, p) => {
+      const t = String(p.tipo || '');
+      if (t === 'partial_payment' || t === 'final_payment') return s + (Number(p.valor) || 0);
+      return s;
+    }, 0)
+  );
+}
+
 export function computePayrollPaymentSummary(
   netFromPayroll: number,
-  payments: { valor: number }[],
+  payments: { valor: number; tipo?: string }[],
   options?: { unbounded?: boolean }
 ): PayrollPaymentSummary {
   if (options?.unbounded) {
@@ -785,11 +815,12 @@ export function computePayrollPaymentSummary(
   }
   const net_liquid = roundMoney(Math.max(0, netFromPayroll));
   const total_paid = roundMoney(payments.reduce((s, p) => s + (Number(p.valor) || 0), 0));
-  const balance_due = roundMoney(Math.max(0, net_liquid - total_paid));
+  const paid_settlement = payrollSettlementPaidTotal(payments);
+  const balance_due = roundMoney(Math.max(0, net_liquid - paid_settlement));
   let status: PayrollSheetStatus;
-  if (total_paid <= MONEY_EPS) status = 'pending';
-  else if (balance_due <= MONEY_EPS) status = 'paid';
-  else status = 'partial';
+  if (balance_due <= MONEY_EPS) status = 'paid';
+  else if (paid_settlement > MONEY_EPS) status = 'partial';
+  else status = 'pending';
   return { net_liquid, total_paid, balance_due, status };
 }
 
@@ -870,23 +901,27 @@ export async function registerPayrollPayment(params: {
   } else {
     const netRaw = computed.totals.net;
     const summaryBefore = computePayrollPaymentSummary(netRaw, history);
-    if (summaryBefore.net_liquid <= MONEY_EPS && val > 0) {
+    const paidSettlementBefore = payrollSettlementPaidTotal(history);
+    const balanceSettlement = roundMoney(Math.max(0, netRaw - paidSettlementBefore));
+    if (tipoPag !== 'advance' && summaryBefore.net_liquid <= MONEY_EPS && val > 0) {
       return { ok: false, error: 'Não há valor líquido a pagar nesta competência.' };
     }
-    const newTotal = roundMoney(summaryBefore.total_paid + val);
     if (tipoPag === 'final_payment') {
-      if (Math.abs(newTotal - summaryBefore.net_liquid) > MONEY_EPS) {
+      if (Math.abs(val - balanceSettlement) > MONEY_EPS) {
         return {
           ok: false,
-          error: `Pagamento final deve quitar o saldo (R$ ${summaryBefore.balance_due.toFixed(2)}).`,
+          error: `Pagamento final deve quitar o saldo (R$ ${balanceSettlement.toFixed(2)}).`,
         };
       }
-    } else if (newTotal > summaryBefore.net_liquid + MONEY_EPS) {
-      return {
-        ok: false,
-        error: `Valor excede o saldo pendente (máx. R$ ${summaryBefore.balance_due.toFixed(2)}).`,
-      };
+    } else if (tipoPag === 'partial_payment') {
+      if (val > balanceSettlement + MONEY_EPS) {
+        return {
+          ok: false,
+          error: `Valor excede o saldo pendente (máx. R$ ${balanceSettlement.toFixed(2)}).`,
+        };
+      }
     }
+    /* advance: já compõe o líquido como desconto; não consome saldo de parcial/final */
   }
 
   const func = computed.legacy.funcionario as { nome?: string };

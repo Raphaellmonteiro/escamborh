@@ -5,7 +5,6 @@ import fs from 'fs';
 import path from 'path';
 import { pool, q1, qAll, qRun } from '../db';
 import { uploadLogo, checkMagicBytes } from '../middleware';
-import { getCompletePlanFeatures } from '../config/planFeatures';
 import { getTenantPlanContext } from '../services/tenantPlan';
 
 function resolveTenantLogoUrl(tenantId: number | string | undefined): string | null {
@@ -47,24 +46,9 @@ export function createSettingsRouter() {
         vencimento: cliente?.vencimento || null,
         cargo, permissoes, nome_usuario: nomeUsuario,
       });
-    } catch {
-      const logo_url = resolveTenantLogoUrl(req.tenantId);
-      res.json({
-        nome_estabelecimento: 'FlowPDV',
-        logo_url,
-        senha_padrao: true,
-        segmento: 'Restaurante/Food',
-        taxa_debito: 0,
-        taxa_credito: 0,
-        taxa_pix: 0,
-        plano: 'completo',
-        plan_features: getCompletePlanFeatures(),
-        trial_ativo: false,
-        trial_fim: null,
-        vencimento: null,
-        cargo: 'dono',
-        permissoes: null,
-      });
+    } catch (err: any) {
+      console.error('[settings.profile] erro ao carregar perfil:', err?.message || err);
+      res.status(500).json({ error: 'Erro ao carregar perfil do tenant' });
     }
   };
 

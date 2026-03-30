@@ -166,18 +166,18 @@ export function createApiRouter() {
   );
 
   protectedRouter.use(authenticateToken);
-  protectedRouter.use('/products', createProductsRouter());
-  protectedRouter.use('/settings', requireAnyPermission('configuracoes'), createSettingsRouter());
-  protectedRouter.use('/categories', requireAnyPermission('products'), createCategoriesRouter());
-  protectedRouter.use('/print', createPrintRouter());
-  protectedRouter.use('/orders', createOrdersRouter());
+  protectedRouter.use('/products', requirePlanFeature('products'), createProductsRouter());
+  protectedRouter.use('/settings', requirePlanFeature('configuracoes'), requireAnyPermission('configuracoes'), createSettingsRouter());
+  protectedRouter.use('/categories', requirePlanFeature('products'), requireAnyPermission('products'), createCategoriesRouter());
+  protectedRouter.use('/print', requirePlanFeature('print'), createPrintRouter());
+  protectedRouter.use('/orders', requirePlanFeature('orders'), createOrdersRouter());
   protectedRouter.use('/clientes', createClientesRouter());
   protectedRouter.use('/expenses', requirePlanFeature('finance'), requireAnyPermission('finance'), createExpensesRouter());
   protectedRouter.use('/dashboard', requirePlanFeature('dashboard'), requireAnyPermission('dashboard'), createDashboardRouter());
   // Caixa shares the same router factory as /dashboard (see routes/dashboard.ts: hoje, abrir, fechar, historico).
   // Mounted at /caixa so paths are /api/caixa/hoje, etc. Only requireAnyPermission('finance') — no dashboard plan gate,
   // so finance users can open/close caixa without the dashboard feature flag.
-  protectedRouter.use('/caixa', requireAnyPermission('finance'), createDashboardRouter());
+  protectedRouter.use('/caixa', requirePlanFeature('caixa'), requireAnyPermission('finance'), createDashboardRouter());
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
   protectedRouter.use('/ai', createAiRouter());
@@ -185,8 +185,8 @@ export function createApiRouter() {
   protectedRouter.use('/usuarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createUsuariosRouter());
   protectedRouter.use('/funcionarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createRhRouter());
   protectedRouter.use('/funcionarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createAcessoFuncRouter());
-  protectedRouter.use('/mesas', requireAnyPermission('mesas'), createMesasRouter());
-  protectedRouter.use('/pontos', requireAnyPermission('funcionarios'), createPontosRouter());
+  protectedRouter.use('/mesas', requirePlanFeature('mesas'), requireAnyPermission('mesas'), createMesasRouter());
+  protectedRouter.use('/pontos', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createPontosRouter());
 
   router.use(protectedRouter);
 

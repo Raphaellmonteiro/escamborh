@@ -287,8 +287,8 @@ function getModalAccent(isLightRed: boolean, visualVariant: ProductOptionsVisual
   };
 }
 
-/** Viewport baixa (ex.: 1280×720 com chrome): prioriza área rolável dos adicionais. */
-const COMPACT_MAX_VIEWPORT_HEIGHT_PX = 760;
+/** Viewport muito baixa: layout compacto. Limiar baixo evita modal “espremido” em notebooks comuns. */
+const COMPACT_MAX_VIEWPORT_HEIGHT_PX = 620;
 
 function useCompactOptionsModalLayout() {
   const [compact, setCompact] = useState(() =>
@@ -307,7 +307,7 @@ function useCompactOptionsModalLayout() {
 
 const POS_MODAL_OPCOES_OVERRIDES = {
   sheet:
-    'relative flex w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-amber-500/25 sm:rounded-[32px]',
+    'relative flex w-full max-w-2xl min-h-0 flex-col overflow-hidden rounded-t-[32px] border border-white/16 bg-zinc-950 text-zinc-100 shadow-[0_32px_90px_rgba(0,0,0,0.58)] ring-1 ring-amber-500/25 sm:mx-auto sm:rounded-[32px]',
   footerBtn:
     'flex w-full min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-amber-400 py-4 text-sm font-black text-zinc-900 shadow-[0_14px_36px_rgba(245,158,11,0.4)] transition-all hover:bg-amber-300 active:scale-[0.99] disabled:opacity-40 ring-2 ring-amber-400/45 hover:ring-amber-400/60',
   qtyBtnPlus:
@@ -511,7 +511,7 @@ export function ProductOptionsModal({
 
       <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-        className={`${mo.sheet} my-auto flex min-h-0 max-h-[min(92dvh,92svh,100%)] w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:max-h-[min(90vh,90dvh)] sm:pb-0`}>
+        className={`${mo.sheet} my-auto flex min-h-0 max-h-[min(94dvh,94svh,100%)] w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:max-h-[min(92vh,92dvh)] sm:pb-0`}>
 
         <div className={mo.headerBg}>
           <button type="button" onClick={onClose} className={mo.closeBtn}>
@@ -526,7 +526,7 @@ export function ProductOptionsModal({
                     : 'relative h-[min(11rem,26svh)] overflow-hidden sm:h-40 md:h-44 lg:h-52'
                   : compactLayout
                     ? 'relative h-[min(3.5rem,12svh)] max-h-[4rem] shrink-0 overflow-hidden sm:max-h-[4rem]'
-                    : 'relative h-44 overflow-hidden sm:h-52'
+                    : 'relative h-40 overflow-hidden sm:h-48 md:h-52'
               }
             >
               <img src={produto.photo_url} alt={produto.name} className="h-full w-full object-cover brightness-[1.03] contrast-[1.02]" />

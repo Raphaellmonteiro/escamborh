@@ -217,7 +217,7 @@ function isFullAccessSession(req: Request) {
   const cargo = normalizeCargo(req.userCargo);
   if (!cargo && (req.userPermissoes === undefined || req.userPermissoes === null)) return true;
   if (cargo === 'dono') return true;
-  return req.userPermissoes === null;
+  return false;
 }
 
 export function hasModulePermission(req: Request, permission: string) {

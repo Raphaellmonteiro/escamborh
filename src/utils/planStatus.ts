@@ -1,3 +1,5 @@
+import { PLAN_LABELS, type TenantPlan } from '../config/planFeatures';
+
 export type PlanProfileInfo = {
   plano?: string | null;
   trial_ativo?: boolean;
@@ -14,9 +16,7 @@ export type PlanStatusInfo = {
 
 function getPlanLabel(plano?: string | null) {
   const normalized = String(plano || '').trim().toLowerCase();
-  if (normalized === 'basico') return 'Básico';
-  if (normalized === 'basico_delivery') return 'Delivery';
-  if (normalized === 'completo') return 'Completo';
+  if (normalized in PLAN_LABELS) return PLAN_LABELS[normalized as TenantPlan];
   return 'Plano';
 }
 

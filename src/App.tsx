@@ -15,7 +15,12 @@ import type { Product, CaixaStatusApi, Order } from './types';
 import NavItem from './components/ui/NavItem';
 import PlanBadge from './components/ui/PlanBadge';
 import { getSegCfg, getOperationalSegment } from './config/segmentos';
-import { isKnownPlanFeature, type PlanFeature } from './config/planFeatures';
+import {
+  getSafeFallbackPlanFeatures,
+  isKnownPlanFeature,
+  sanitizePlanFeatures,
+  type PlanFeature,
+} from './config/planFeatures';
 import { FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, mapOrderToCentralColumn } from './utils/orderCentralBoard';
 import type { PlanProfileInfo } from './utils/planStatus';
 import { playNewOrderSound } from './utils/sound';
@@ -69,6 +74,15 @@ function PublicRouteFallback() {
   );
 }
 
+const PLAN_FEATURES_STORAGE_KEY = 'plan_features';
+
+function readStoredPlanFeatures(): PlanFeature[] {
+  try {
+    return sanitizePlanFeatures(JSON.parse(localStorage.getItem(PLAN_FEATURES_STORAGE_KEY) || 'null'));
+  } catch {
+    return getSafeFallbackPlanFeatures();
+  }
+}
 
 export default function App() {
   const OPERATIONAL_ALERT_SOUND_KEY = 'flowpdv_operational_alert_sound';
@@ -106,7 +120,7 @@ export default function App() {
   });
   const [userName, setUserName] = useState<string>(() => localStorage.getItem('user_nome') || '');
   const [estabelecimentoNome, setEstabelecimentoNome] = useState('FlowPDV');
-  const [planFeatures, setPlanFeatures] = useState<PlanFeature[] | null>(null);
+  const [planFeatures, setPlanFeatures] = useState<PlanFeature[]>(() => readStoredPlanFeatures());
   const [planProfile, setPlanProfile] = useState<PlanProfileInfo | null>(null);
   const [operationalAlertCount, setOperationalAlertCount] = useState(0);
   const [operationalNeedsAttention, setOperationalNeedsAttention] = useState(false);
@@ -117,10 +131,13 @@ export default function App() {
   const operationalAlertLoadedRef = React.useRef(false);
   const operationalSoundPlayedAtRef = React.useRef(0);
 
-  const userAllows = (tab: string): boolean => !userPermissoes || userPermissoes.includes(tab);
+  const userAllows = (tab: string): boolean => {
+    if (userCargo === 'dono') return true;
+    if (!Array.isArray(userPermissoes)) return false;
+    return userPermissoes.includes(tab);
+  };
   const normalizeAccessFeature = (tab: string): string => (tab === 'central' ? 'orders' : tab);
   const planAllows = (tab: string): boolean => {
-    if (planFeatures === null) return true;
     const feature = normalizeAccessFeature(tab);
     if (!isKnownPlanFeature(feature)) return true;
     return planFeatures.includes(feature);
@@ -528,7 +545,9 @@ const fetchPerfil = async () => {
         if (typeof data.logo_url === 'string' && data.logo_url) setLogoUrl(data.logo_url);
         else if (data.logo_url === null) setLogoUrl(null);
         if (data.segmento) setEstabelecimentoSegmento(getOperationalSegment(data.segmento));
-        setPlanFeatures(Array.isArray(data.plan_features) ? data.plan_features : null);
+        const nextPlanFeatures = sanitizePlanFeatures(data.plan_features);
+        setPlanFeatures(nextPlanFeatures);
+        localStorage.setItem(PLAN_FEATURES_STORAGE_KEY, JSON.stringify(nextPlanFeatures));
         setPlanProfile({
           plano: data.plano || 'completo',
           trial_ativo: !!data.trial_ativo,
@@ -553,8 +572,12 @@ const fetchPerfil = async () => {
         localStorage.setItem('user_cargo', cargo);
         localStorage.setItem('user_permissoes', perms ? JSON.stringify(perms) : '');
         localStorage.setItem('user_nome', nome);
+      } else {
+        setPlanFeatures((current) => (current.length > 0 ? current : getSafeFallbackPlanFeatures()));
       }
-    } catch (err) { }
+    } catch (err) {
+      setPlanFeatures((current) => (current.length > 0 ? current : getSafeFallbackPlanFeatures()));
+    }
   };
 
 const fetchProducts = async () => {
@@ -644,10 +667,11 @@ const handleAuth = async (e: React.FormEvent) => {
     localStorage.removeItem('user_cargo');
     localStorage.removeItem('user_permissoes');
     localStorage.removeItem('user_nome');
+    localStorage.removeItem(PLAN_FEATURES_STORAGE_KEY);
     setUserCargo('dono');
     setUserPermissoes(null);
     setUserName('');
-    setPlanFeatures(null);
+    setPlanFeatures(getSafeFallbackPlanFeatures());
     setPlanProfile(null);
     setToken(null);
   };

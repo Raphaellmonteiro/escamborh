@@ -1249,25 +1249,23 @@ export default function DeliveryCardapio() {
             )}
           </div>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between px-3.5 py-3 sm:px-4 sm:py-3.5">
-          <div className="min-h-0 min-w-0 flex-1 flex flex-col">
-            <div className="flex shrink-0 items-center justify-between gap-3">
-              <div className="min-w-0 flex-1 pr-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between overflow-hidden px-3 py-2.5 sm:px-3.5 sm:py-3">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="flex h-[26px] shrink-0 items-center justify-between gap-2">
+              <div className="flex min-h-[22px] min-w-0 flex-1 items-center">
                 {promoValida ? (
                   <span className="inline-flex max-w-full rounded-full border border-emerald-200/40 bg-emerald-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white shadow-[0_4px_12px_rgba(16,185,129,0.35)] ring-1 ring-white/15">
                     ✨ Oferta
                   </span>
-                ) : (
-                  <span className="inline-block min-h-[22px]" aria-hidden />
-                )}
+                ) : null}
               </div>
               <button type="button" onClick={() => toggleFav(p.id)} className={`shrink-0 ${vt.favBtn}`} aria-label={isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}>
                 <Heart size={13} className={isFav ? 'fill-rose-500 text-rose-500' : vt.favIcon} />
               </button>
             </div>
-            <div className="mt-1 min-w-0 shrink-0">
+            <div className="mt-0.5 min-h-[2.35rem] shrink-0">
               <p
-                className={`line-clamp-2 cursor-pointer break-words text-base font-black leading-snug tracking-tight outline-none selection:bg-red-100 selection:text-zinc-900 focus-visible:rounded-md focus-visible:ring-2 ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900 focus-visible:ring-red-500/35' : 'text-white focus-visible:ring-cyan-400/40'}`}
+                className={`line-clamp-2 cursor-pointer break-words text-[15px] font-black leading-snug tracking-tight outline-none selection:bg-red-100 selection:text-zinc-900 focus-visible:rounded-md focus-visible:ring-2 sm:text-base ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900 focus-visible:ring-red-500/35' : 'text-white focus-visible:ring-cyan-400/40'}`}
                 onClick={() => handleAddProduto(p)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1280,26 +1278,30 @@ export default function DeliveryCardapio() {
               >
                 {p.name}
               </p>
-              {isFav && <p className="mt-0.5 text-[10px] font-bold text-amber-300">Favorito</p>}
             </div>
-            {(descricao || options?.sectionHint) && (
-              <div className="mt-1 min-h-0 flex-1 overflow-hidden">
-                {descricao && <p className={`line-clamp-1 text-[12px] leading-relaxed ${cardapioTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-200/95'}`}>{descricao}</p>}
-                {options?.sectionHint && <p className={`mt-0.5 line-clamp-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${cardapioTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-300'}`}>{options.sectionHint}</p>}
-              </div>
-            )}
+            <div className="mt-0.5 min-h-[2.35rem] shrink-0 overflow-hidden">
+              {descricao ? (
+                <p className={`line-clamp-2 text-[11px] leading-snug sm:text-[12px] ${cardapioTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-200/95'}`}>{descricao}</p>
+              ) : options?.sectionHint ? (
+                <p className={`line-clamp-2 text-[10px] font-semibold uppercase leading-snug tracking-[0.14em] ${cardapioTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-300'}`}>{options.sectionHint}</p>
+              ) : (
+                <span className="block text-[11px] leading-snug opacity-0" aria-hidden>
+                  {'\u00a0'}
+                </span>
+              )}
+            </div>
           </div>
           <div
-            className={`mt-2 flex shrink-0 flex-col gap-2.5 border-t pt-2.5 ${
+            className={`mt-1.5 flex shrink-0 flex-col gap-2 border-t pt-2 ${
               cardapioTheme.mode === 'light_red' ? 'border-zinc-200/80' : 'border-white/10'
             }`}
           >
-            <div className="min-w-0">
+            <div className="min-h-[3.15rem] min-w-0">
               {(temVariacoes || temPrecoVariavel) ? (
                 <>
                   <span className={vt.priceFrom}>A partir de</span>
                   <p
-                    className={`mt-1 text-[22px] font-black tabular-nums leading-tight tracking-tight sm:text-[23px] ${
+                    className={`mt-0.5 text-xl font-black tabular-nums leading-tight tracking-tight sm:text-[22px] ${
                       cardapioTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-100'
                     }`}
                   >
@@ -1308,14 +1310,16 @@ export default function DeliveryCardapio() {
                 </>
               ) : (
                 <>
-                  {promoValida && (
-                    <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
-                      <p className="min-w-0 shrink truncate text-xs font-semibold tabular-nums text-zinc-500 line-through">{fmt(Number(p.preco_original || 0))}</p>
-                      <span className="shrink-0 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-black tabular-nums text-emerald-200">-{percentualDesconto}%</span>
-                    </div>
-                  )}
+                  <div className="flex min-h-[18px] items-center gap-1.5 overflow-hidden">
+                    {promoValida ? (
+                      <>
+                        <p className="min-w-0 shrink truncate text-[11px] font-semibold tabular-nums text-zinc-500 line-through decoration-zinc-500">{fmt(Number(p.preco_original || 0))}</p>
+                        <span className="shrink-0 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-black tabular-nums text-emerald-200">-{percentualDesconto}%</span>
+                      </>
+                    ) : null}
+                  </div>
                   <p
-                    className={`mt-1 text-[22px] font-black tabular-nums leading-tight tracking-tight sm:text-[23px] ${
+                    className={`text-xl font-black tabular-nums leading-tight tracking-tight sm:text-[22px] ${
                       promoValida
                         ? cardapioTheme.mode === 'light_red'
                           ? 'text-emerald-600'
@@ -1334,7 +1338,7 @@ export default function DeliveryCardapio() {
               type="button"
               onClick={() => ativo && handleAddProduto(p)}
               disabled={!ativo}
-              className={`${vt.btnAdd} w-full min-w-0 justify-center whitespace-nowrap`}
+              className={`${vt.btnAdd} w-full min-w-0 justify-center whitespace-nowrap !min-h-[44px] !py-2`}
             >
               <Plus size={14} className="shrink-0" />
               {temOpcoes || temVariacoes ? 'Escolher' : 'Adicionar'}
