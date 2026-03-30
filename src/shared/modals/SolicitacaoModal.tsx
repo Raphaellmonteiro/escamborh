@@ -7,10 +7,10 @@ import { ACTIVE_SEGMENT_OPTIONS } from '../../config/segmentos';
 const SEGMENTOS_ATIVOS = ACTIVE_SEGMENT_OPTIONS;
 
 const SEGMENTOS_PRODUCAO = [
-  { value: 'Salao',    icon: '💇', label: 'Salão de Beleza' },
-  { value: 'Mercadinho', icon: '🛒', label: 'Mercadinho' },
-  { value: 'Padaria',  icon: '🥐', label: 'Padaria' },
-  { value: 'Varejo',   icon: '👗', label: 'Varejo de Roupas' },
+  { value: 'FoodTruck', icon: '🚚', label: 'Food truck' },
+  { value: 'Padaria', icon: '🥐', label: 'Padaria & café' },
+  { value: 'Buffet', icon: '🍱', label: 'Buffet & self-service' },
+  { value: 'Pizzaria', icon: '🍕', label: 'Pizzaria delivery' },
 ];
 
 // ── Máscaras ──────────────────────────────────────────────────────────────────

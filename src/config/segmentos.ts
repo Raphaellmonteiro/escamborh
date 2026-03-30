@@ -14,7 +14,7 @@ export interface SegmentOption {
 
 export const ACTIVE_SEGMENT_OPTIONS: SegmentOption[] = [
   { value: 'Restaurante', label: 'Restaurante', icon: '🍽️' },
-  { value: 'Fast Food', label: 'Fast Food', icon: '🍔' },
+  { value: 'Fast Food', label: 'Hamburgueria / Lanchonete', icon: '🍔' },
   { value: 'Bar', label: 'Bar & Pub', icon: '🍺' },
   { value: 'Adega', label: 'Adega de Bebidas', icon: '🍷' },
 ];
