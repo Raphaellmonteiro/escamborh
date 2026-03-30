@@ -61,6 +61,72 @@ html.flowpdv-admin-dark .admin-dark .stock-tab-group {
   border-color: #3f3f46 !important;
 }
 
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-shell {
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 28%),
+    linear-gradient(180deg, #0d1117 0%, #0a0e13 100%) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-panel {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 16px 32px rgba(0, 0, 0, 0.24) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-panel-simple {
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.14), transparent 30%),
+    linear-gradient(180deg, #0b1511 0%, #0b100d 100%) !important;
+  border-color: rgba(52, 211, 153, 0.34) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-panel-advanced {
+  background:
+    radial-gradient(circle at top left, rgba(249, 115, 22, 0.16), transparent 30%),
+    linear-gradient(180deg, #17110c 0%, #120e0a 100%) !important;
+  border-color: rgba(251, 146, 60, 0.38) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-panel-neutral {
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.09), transparent 26%),
+    linear-gradient(180deg, #0d1015 0%, #0b0d11 100%) !important;
+  border-color: #3f3f46 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-card {
+  background: rgba(15, 18, 24, 0.96) !important;
+  border-color: #3f4652 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-note {
+  background:
+    linear-gradient(180deg, rgba(12, 29, 46, 0.96) 0%, rgba(10, 21, 35, 0.98) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-chip {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-chip-simple {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(52, 211, 153, 0.28) !important;
+  color: #a7f3d0 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-chip-advanced {
+  background: rgba(249, 115, 22, 0.18) !important;
+  border-color: rgba(251, 146, 60, 0.34) !important;
+  color: #fdba74 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tutorial-chip-neutral {
+  background: rgba(39, 39, 42, 0.95) !important;
+  border-color: #52525b !important;
+  color: #f4f4f5 !important;
+}
+
 html.flowpdv-admin-dark .admin-dark .stock-tab-divider {
   background-color: #27272a !important;
 }

@@ -808,7 +808,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="stock-surface mb-3 rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-zinc-50 p-4 shadow-sm sm:mb-4 sm:p-5 2xl:p-6 [.admin-dark_&]:border-sky-500/35"
+              className="stock-surface stock-tutorial-shell mb-3 rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-zinc-50 p-4 shadow-sm sm:mb-4 sm:p-5 2xl:p-6 [.admin-dark_&]:border-sky-500/35"
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
@@ -824,13 +824,13 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 [.admin-dark_&]:border [.admin-dark_&]:border-emerald-500/30 [.admin-dark_&]:bg-emerald-500/15 [.admin-dark_&]:text-emerald-200">
+                    <span className="stock-tutorial-chip stock-tutorial-chip-simple rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 [.admin-dark_&]:border [.admin-dark_&]:border-emerald-500/30 [.admin-dark_&]:bg-emerald-500/15 [.admin-dark_&]:text-emerald-200">
                       Modo simples em verde
                     </span>
-                    <span className="rounded-full bg-orange-100 px-3 py-1 text-[11px] font-bold text-orange-800 [.admin-dark_&]:border [.admin-dark_&]:border-orange-500/35 [.admin-dark_&]:bg-orange-500/15 [.admin-dark_&]:text-orange-200">
+                    <span className="stock-tutorial-chip stock-tutorial-chip-advanced rounded-full bg-orange-100 px-3 py-1 text-[11px] font-bold text-orange-800 [.admin-dark_&]:border [.admin-dark_&]:border-orange-500/35 [.admin-dark_&]:bg-orange-500/15 [.admin-dark_&]:text-orange-200">
                       Modo avançado em laranja
                     </span>
-                    <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold text-zinc-700 [.admin-dark_&]:border [.admin-dark_&]:border-zinc-600 [.admin-dark_&]:bg-zinc-800/90 [.admin-dark_&]:text-zinc-200">
+                    <span className="stock-tutorial-chip stock-tutorial-chip-neutral rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold text-zinc-700 [.admin-dark_&]:border [.admin-dark_&]:border-zinc-600 [.admin-dark_&]:bg-zinc-800/90 [.admin-dark_&]:text-zinc-200">
                       Baixa automática depende de vínculo correto
                     </span>
                   </div>
@@ -847,7 +847,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
               </div>
 
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                <section className="rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-emerald-500/35 [.admin-dark_&]:bg-gradient-to-br [.admin-dark_&]:from-emerald-950/50 [.admin-dark_&]:via-[#0f1411] [.admin-dark_&]:to-emerald-950/25 [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(52,211,153,0.08)]">
+                <section className="stock-tutorial-panel stock-tutorial-panel-simple rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-emerald-500/35 [.admin-dark_&]:bg-gradient-to-br [.admin-dark_&]:from-emerald-950/50 [.admin-dark_&]:via-[#0f1411] [.admin-dark_&]:to-emerald-950/25 [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(52,211,153,0.08)]">
                   <div className="flex items-start gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 [.admin-dark_&]:bg-emerald-500/20 [.admin-dark_&]:text-emerald-200">
                       <Package size={20} aria-hidden />
@@ -863,7 +863,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-white/90 p-4 [.admin-dark_&]:border-emerald-500/25 [.admin-dark_&]:bg-[#0a0f0d]/95">
+                  <div className="stock-tutorial-card mt-4 rounded-2xl border border-emerald-200 bg-white/90 p-4 [.admin-dark_&]:border-emerald-500/25 [.admin-dark_&]:bg-[#0a0f0d]/95">
                     <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Passo a passo com Coca-Cola lata</p>
                     <div className="mt-3 space-y-3">
                       {SIMPLE_MODE_STEPS.map((step, index) => (
@@ -885,7 +885,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                         return (
                           <div
                             key={action.title}
-                            className="rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm [.admin-dark_&]:border-emerald-500/20 [.admin-dark_&]:bg-[#080c0a]/90 [.admin-dark_&]:shadow-none"
+                            className="stock-tutorial-card rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm [.admin-dark_&]:border-emerald-500/20 [.admin-dark_&]:bg-[#080c0a]/90 [.admin-dark_&]:shadow-none"
                           >
                             <div className="flex items-start gap-3">
                               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${action.iconClass}`}>
@@ -903,7 +903,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                   </div>
                 </section>
 
-                <section className="rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-100/60 p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-orange-500/40 [.admin-dark_&]:bg-gradient-to-br [.admin-dark_&]:from-orange-950/45 [.admin-dark_&]:via-[#14100c] [.admin-dark_&]:to-amber-950/30 [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(251,146,60,0.1)]">
+                <section className="stock-tutorial-panel stock-tutorial-panel-advanced rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-100/60 p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-orange-500/40 [.admin-dark_&]:bg-gradient-to-br [.admin-dark_&]:from-orange-950/45 [.admin-dark_&]:via-[#14100c] [.admin-dark_&]:to-amber-950/30 [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(251,146,60,0.1)]">
                   <div className="flex items-start gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 [.admin-dark_&]:bg-orange-500/20 [.admin-dark_&]:text-orange-200">
                       <BookOpen size={20} aria-hidden />
@@ -919,7 +919,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-orange-200 bg-white/90 p-4 [.admin-dark_&]:border-orange-500/30 [.admin-dark_&]:bg-[#120e0a]/95">
+                  <div className="stock-tutorial-card mt-4 rounded-2xl border border-orange-200 bg-white/90 p-4 [.admin-dark_&]:border-orange-500/30 [.admin-dark_&]:bg-[#120e0a]/95">
                     <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Passo a passo com marmita</p>
                     <div className="mt-3 space-y-3">
                       {ADVANCED_MODE_STEPS.map((step, index) => (
@@ -934,19 +934,19 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-orange-100 bg-white/85 p-4 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
+                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
                       <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Quando usar</p>
                       <p className="mt-2 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
                         Quando voce quer saber consumo real, custo por receita e baixa automatica de ingredientes em gramas, quilos, litros ou mililitros.
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-orange-100 bg-white/85 p-4 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
+                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
                       <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Resultado na venda</p>
                       <p className="mt-2 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
                         Se vender 2 marmitas, a baixa e multiplicada por 2 em cada ingrediente da ficha tecnica. O historico registra cada saida no estoque.
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-orange-100 bg-white/85 p-4 sm:col-span-2 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
+                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 sm:col-span-2 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
                       <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Resumo pratico</p>
                       <p className="mt-2 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
                         No modo avancado, o produto vendido nao precisa ser o mesmo item do estoque. O importante e a ficha tecnica estar certa, porque e ela que diz exatamente o que sera baixado.
@@ -956,7 +956,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                 </section>
               </div>
 
-              <div className="mt-4 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-zinc-600/90 [.admin-dark_&]:bg-[#0d0f12] [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="stock-tutorial-panel stock-tutorial-panel-neutral mt-4 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-zinc-600/90 [.admin-dark_&]:bg-[#0d0f12] [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 [.admin-dark_&]:bg-zinc-800 [.admin-dark_&]:text-zinc-200 [.admin-dark_&]:ring-1 [.admin-dark_&]:ring-zinc-600/50">
                     <Link2 size={18} aria-hidden />
@@ -974,7 +974,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     {STOCK_IDENTIFICATION_STEPS.map((step, index) => (
                       <div
                         key={step}
-                        className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 [.admin-dark_&]:border-zinc-600/80 [.admin-dark_&]:bg-zinc-900/55"
+                        className="stock-tutorial-card flex items-start gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 [.admin-dark_&]:border-zinc-600/80 [.admin-dark_&]:bg-zinc-900/55"
                       >
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-black text-white [.admin-dark_&]:bg-zinc-100 [.admin-dark_&]:text-zinc-900">
                           {index + 1}
@@ -984,7 +984,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     ))}
                   </div>
 
-                  <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 [.admin-dark_&]:border-sky-500/35 [.admin-dark_&]:bg-sky-950/40">
+                  <div className="stock-tutorial-card stock-tutorial-note rounded-2xl border border-sky-200 bg-sky-50/70 p-4 [.admin-dark_&]:border-sky-500/35 [.admin-dark_&]:bg-sky-950/40">
                     <div className="flex items-center gap-2">
                       <Zap size={16} className="text-sky-700 [.admin-dark_&]:text-sky-300" aria-hidden />
                       <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Importante para o cliente final</p>

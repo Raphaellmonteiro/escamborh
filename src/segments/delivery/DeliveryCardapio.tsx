@@ -1234,7 +1234,7 @@ export default function DeliveryCardapio() {
               </div>
             )}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col justify-between px-4 py-3.5">
+          <div className="flex min-h-0 flex-1 flex-col justify-between px-3 py-3 sm:px-4 sm:py-3.5">
             <div className="min-h-0 flex-1 flex flex-col">
               <div className="flex shrink-0 items-start gap-3">
                 <div className="min-w-0 flex-1">
@@ -1471,26 +1471,29 @@ export default function DeliveryCardapio() {
         <div className={`${cardapioTheme.shell.root} min-h-[100dvh]`}>
           <div className={cardapioTheme.shell.inner}>
             <header className={cardapioTheme.header.bar}>
-              <div className="mx-auto max-w-[1440px] px-4 py-3 lg:px-6">
-                <div className={`h-10 w-full max-w-2xl animate-pulse rounded-xl ${sk.header}`} />
+              <div className="mx-auto max-w-[1440px] px-3 py-2 sm:px-4 sm:py-3 lg:px-6">
+                <div className={`h-9 w-full max-w-2xl animate-pulse rounded-xl sm:h-10 ${sk.header}`} />
               </div>
             </header>
-            <div className="mx-auto max-w-[1440px] px-3 py-4 pb-28 sm:px-4 lg:px-6">
-              <section className={`w-full overflow-hidden rounded-[34px] border p-0 shadow-none ${sk.heroWrap}`}>
-                <div className="grid grid-cols-2 gap-px bg-black/5 dark:bg-white/5">
+            <div className="mx-auto max-w-[1440px] px-2 pt-2 pb-24 sm:px-3 sm:py-4 sm:pb-28 lg:px-6">
+              <section className={`w-full overflow-hidden rounded-[22px] border p-0 shadow-none sm:rounded-[34px] ${sk.heroWrap}`}>
+                <div className="grid grid-cols-4 grid-rows-1 gap-px bg-black/5 max-sm:h-[4.5rem] dark:bg-white/5 sm:grid-cols-2 sm:h-auto lg:grid-cols-4">
                   {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className={`aspect-[4/3] animate-pulse ${sk.heroCell}`} />
+                    <div
+                      key={i}
+                      className={`h-full animate-pulse max-sm:aspect-auto sm:aspect-[4/3] ${sk.heroCell}`}
+                    />
                   ))}
                 </div>
-                <div className="flex min-h-[96px] items-center gap-4 px-4 py-5 sm:min-h-[104px] sm:px-6">
-                  <div className={`h-28 w-28 shrink-0 animate-pulse rounded-[36px] sm:h-36 sm:w-36 ${sk.logo}`} />
-                  <div className="min-w-0 flex-1 space-y-3">
-                    <div className={`h-9 w-[78%] max-w-md animate-pulse rounded-lg ${sk.line}`} />
-                    <div className={`h-4 w-[52%] animate-pulse rounded ${sk.lineSm}`} />
+                <div className="flex min-h-[72px] items-center gap-3 px-3 py-3 sm:min-h-[96px] sm:gap-4 sm:px-5 sm:py-5 md:min-h-[104px] md:px-6">
+                  <div className={`h-[4.5rem] w-[4.5rem] shrink-0 animate-pulse rounded-[28px] sm:h-28 sm:w-28 sm:rounded-[36px] md:h-36 md:w-36 ${sk.logo}`} />
+                  <div className="min-w-0 flex-1 space-y-2 sm:space-y-3">
+                    <div className={`h-7 w-[78%] max-w-md animate-pulse rounded-lg sm:h-9 ${sk.line}`} />
+                    <div className={`h-3.5 w-[52%] animate-pulse rounded sm:h-4 ${sk.lineSm}`} />
                   </div>
                 </div>
               </section>
-              <div className="mt-6 space-y-4">
+              <div className="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
                 <div className={`h-12 w-full animate-pulse rounded-2xl ${sk.menu}`} />
                 <div className="grid gap-3 min-[480px]:grid-cols-2">
                   {[0, 1, 2, 3].map((i) => (
@@ -1589,8 +1592,8 @@ export default function DeliveryCardapio() {
       ) : null}
       <div className={cardapioTheme.shell.inner}>
       <header className={cardapioTheme.header.bar}>
-        <div className="mx-auto max-w-[1440px] px-4 py-3 lg:px-6">
-          <div className="relative flex items-center justify-center pr-14">
+        <div className="mx-auto max-w-[1440px] px-3 py-2 sm:px-4 sm:py-3 lg:px-6">
+          <div className="relative flex items-center justify-center pr-12 sm:pr-14">
             <nav className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
             <button
               type="button"
@@ -1649,17 +1652,17 @@ export default function DeliveryCardapio() {
         </div>
       )}
 
-      <div className="mx-auto max-w-[1440px] px-3 py-4 pb-32 sm:px-4 lg:px-6 lg:pb-10">
+      <div className="mx-auto max-w-[1440px] px-2 pt-2 pb-28 sm:px-3 sm:py-4 sm:pb-32 lg:px-6 lg:pb-10">
         <section className={cardapioTheme.mode === 'light_red'
-          ? 'w-full overflow-hidden rounded-[34px] border border-zinc-200/90 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]'
-          : 'w-full overflow-hidden rounded-[34px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] shadow-[0_28px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05]'}>
+          ? 'w-full overflow-hidden rounded-[22px] border border-zinc-200/90 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] sm:rounded-[34px]'
+          : 'w-full overflow-hidden rounded-[22px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] shadow-[0_28px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05] sm:rounded-[34px]'}>
             <div className="relative">
             <div className={cardapioTheme.hero.gridBg}>
               {galeriaTopo.slice(0, 4).map((item, heroIdx) => (
                 <div key={item.key} className={cardapioTheme.hero.cellBg}>
                   {item.tipo === 'fallback' ? (
                     <div className={cardapioTheme.hero.fallbackLetter}>
-                      <span className={`text-5xl font-black ${cardapioTheme.mode === 'light_red' ? 'text-zinc-300' : 'text-zinc-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
+                      <span className={`text-base font-black sm:text-5xl ${cardapioTheme.mode === 'light_red' ? 'text-zinc-300' : 'text-zinc-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
                     </div>
                   ) : (
                     <img
@@ -1671,47 +1674,47 @@ export default function DeliveryCardapio() {
                       fetchPriority={heroIdx === 0 ? 'high' : 'low'}
                     />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent max-sm:from-black/25" />
                 </div>
               ))}
             </div>
 
-            <div className="pointer-events-none absolute bottom-0 left-5 translate-y-[50%] sm:left-6">
+            <div className="pointer-events-none absolute bottom-0 left-3 translate-y-[46%] sm:left-5 sm:translate-y-1/2 md:left-6">
               <div className={cardapioTheme.mode === 'light_red'
-                ? 'flex h-32 w-32 items-center justify-center overflow-hidden rounded-[36px] border-4 border-white bg-white shadow-[0_14px_36px_rgba(0,0,0,0.12)] sm:h-36 sm:w-36'
-                : 'flex h-32 w-32 items-center justify-center overflow-hidden rounded-[36px] border-4 border-zinc-900 bg-zinc-950 shadow-[0_18px_40px_rgba(0,0,0,0.38)] sm:h-36 sm:w-36'}>
+                ? 'flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-[28px] border-[3px] border-white bg-white shadow-[0_14px_36px_rgba(0,0,0,0.12)] sm:h-32 sm:w-32 sm:rounded-[36px] sm:border-4 md:h-36 md:w-36'
+                : 'flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-[28px] border-[3px] border-zinc-900 bg-zinc-950 shadow-[0_18px_40px_rgba(0,0,0,0.38)] sm:h-32 sm:w-32 sm:rounded-[36px] sm:border-4 md:h-36 md:w-36'}>
                 {logoResolvido ? (
                   <img src={logoResolvido} alt={nome} className="h-full w-full object-cover" decoding="async" loading="eager" fetchPriority="high" />
                 ) : (
-                  <span className={`text-3xl font-black ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
+                  <span className={`text-xl font-black sm:text-3xl ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
                 )}
               </div>
             </div>
           </div>
 
           <div className={cardapioTheme.lojaBlock}>
-            <div className="flex min-h-[80px] items-center pl-[104px] sm:min-h-[104px] sm:pl-[150px]">
+            <div className="flex min-h-[4.5rem] items-center pl-[5.75rem] sm:min-h-[5.5rem] sm:pl-[9.5rem] md:min-h-[6.75rem] md:pl-[11rem]">
               <div className="min-w-0 pr-1">
-                <h2 className={`text-2xl font-black leading-tight tracking-tight sm:text-4xl md:text-[52px] md:leading-none ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.08)]'}`}>{nome}</h2>
-                <div className={`mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm sm:text-base ${cardapioTheme.mode === 'light_red' ? 'text-zinc-700' : 'text-zinc-100'}`}>
-                  <p className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 ${ativo ? cardapioTheme.statusPillOpen : cardapioTheme.statusPillClosed}`}>
-                    <Clock size={15} className={ativo ? 'text-emerald-300' : 'text-zinc-300'} />
+                <h2 className={`text-xl font-black leading-tight tracking-tight sm:text-3xl md:text-4xl md:leading-tight lg:text-[52px] lg:leading-none ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.08)]'}`}>{nome}</h2>
+                <div className={`mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:mt-3 sm:gap-x-6 sm:gap-y-2 sm:text-sm md:text-base ${cardapioTheme.mode === 'light_red' ? 'text-zinc-700' : 'text-zinc-100'}`}>
+                  <p className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 sm:gap-2 sm:px-3 sm:py-1 ${ativo ? cardapioTheme.statusPillOpen : cardapioTheme.statusPillClosed}`}>
+                    <Clock size={14} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${ativo ? 'text-emerald-300' : 'text-zinc-300'}`} />
                     {horarioLoja}
                   </p>
-                  <p className={`flex items-center gap-2 font-medium ${cardapioTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>
-                    <MapPin size={15} className={`shrink-0 ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-200'}`} />
-                    {resumoLocalizacao}
+                  <p className={`flex min-w-0 items-center gap-1.5 font-medium sm:gap-2 ${cardapioTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>
+                    <MapPin size={14} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-200'}`} />
+                    <span className="min-w-0 truncate sm:overflow-visible sm:whitespace-normal">{resumoLocalizacao}</span>
                   </p>
                   <button
                     type="button"
                     onClick={() => setLojaInfoAberta(true)}
                     className={
                       isLightRed
-                        ? 'inline-flex w-fit items-center gap-2 rounded-full px-0 py-1 text-sm font-semibold text-red-700 transition-colors hover:text-red-800 sm:text-base'
-                        : 'inline-flex w-fit items-center gap-2 rounded-full px-0 py-1 text-sm font-semibold text-cyan-100 transition-colors hover:text-cyan-50 sm:text-base'
+                        ? 'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-0 py-0.5 text-xs font-semibold text-red-700 transition-colors hover:text-red-800 sm:gap-2 sm:py-1 sm:text-sm md:text-base'
+                        : 'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-0 py-0.5 text-xs font-semibold text-cyan-100 transition-colors hover:text-cyan-50 sm:gap-2 sm:py-1 sm:text-sm md:text-base'
                     }
                   >
-                    <Info size={15} className={isLightRed ? 'text-red-600' : 'text-cyan-200'} />
+                    <Info size={14} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${isLightRed ? 'text-red-600' : 'text-cyan-200'}`} />
                     Mais informacoes
                   </button>
                 </div>
@@ -1720,22 +1723,22 @@ export default function DeliveryCardapio() {
           </div>
         </section>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-w-0 space-y-4">
+        <div className="mt-4 grid gap-4 sm:mt-6 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-3 sm:space-y-4">
 
             <section
               className={
                 isLightRed
-                  ? 'rounded-[32px] border border-zinc-200/90 bg-white p-4 shadow-[0_12px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03]'
-                  : 'rounded-[32px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] p-4 shadow-[0_22px_58px_rgba(0,0,0,0.3)] ring-1 ring-white/[0.04]'
+                  ? 'rounded-[24px] border border-zinc-200/90 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] sm:rounded-[32px] sm:p-4'
+                  : 'rounded-[24px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] p-3 shadow-[0_22px_58px_rgba(0,0,0,0.3)] ring-1 ring-white/[0.04] sm:rounded-[32px] sm:p-4'
               }
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setMenuCatalogoAberto((prev) => !prev)}
-                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition-colors ${
+                    className={`inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2.5 text-xs font-bold transition-colors sm:gap-2 sm:px-4 sm:py-3 sm:text-sm ${
                       menuCatalogoAberto
                         ? isLightRed
                           ? 'border-red-200 bg-red-50 text-red-950 [.flowpdv-dark_&]:border-zinc-700 [.flowpdv-dark_&]:bg-zinc-800 [.flowpdv-dark_&]:text-white [.flowpdv-dark_&]:hover:bg-zinc-700 [.flowpdv-dark_&]:hover:text-white'
@@ -1981,14 +1984,14 @@ export default function DeliveryCardapio() {
               <section
                 className={
                   isLightRed
-                    ? 'rounded-[30px] border border-zinc-200/90 bg-white p-4 shadow-[0_12px_36px_rgba(0,0,0,0.06)]'
-                    : 'rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.96),rgba(24,24,27,1))] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)]'
+                    ? 'rounded-[24px] border border-zinc-200/90 bg-white p-3 shadow-[0_12px_36px_rgba(0,0,0,0.06)] sm:rounded-[30px] sm:p-4'
+                    : 'rounded-[24px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.96),rgba(24,24,27,1))] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.22)] sm:rounded-[30px] sm:p-4'
                 }
               >
-                <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4 sm:gap-3">
                   <div>
                     <p className={`text-[11px] font-bold uppercase tracking-[0.22em] ${isLightRed ? 'text-red-700/90' : 'text-cyan-200/80'}`}>Destaques</p>
-                    <h3 className={`mt-1 text-xl font-black ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Produtos em destaque</h3>
+                    <h3 className={`mt-0.5 text-lg font-black sm:mt-1 sm:text-xl ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Produtos em destaque</h3>
                   </div>
                   {totalPromocoesValidas > 0 && (
                     <button
@@ -2004,9 +2007,11 @@ export default function DeliveryCardapio() {
                     </button>
                   )}
                 </div>
-                <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto scroll-pl-1 pb-2 scrollbar-hide sm:gap-3 sm:scroll-pl-0">
                   {produtosDestaque.slice(0, 6).map((produto) => (
-                    <div key={`destaque-simples-${produto.id}`}>{renderVitrineCard(produto, 'compact')}</div>
+                    <div key={`destaque-simples-${produto.id}`} className="snap-start shrink-0">
+                      {renderVitrineCard(produto, 'compact')}
+                    </div>
                   ))}
                 </div>
               </section>
@@ -2056,8 +2061,8 @@ export default function DeliveryCardapio() {
                     onClick={() => void abrirDetalheMeusPedidos(p.id)}
                     className={
                       isLightRed
-                        ? 'w-full rounded-[26px] border border-zinc-200/90 bg-white p-4 text-left shadow-sm transition-colors hover:border-red-200 hover:shadow-md'
-                        : 'w-full rounded-[26px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] p-4 text-left shadow-[0_18px_50px_rgba(0,0,0,0.24)] transition-colors hover:border-cyan-400/40 hover:shadow-[0_20px_44px_rgba(8,145,178,0.12)]'
+                        ? 'w-full rounded-[22px] border border-zinc-200/90 bg-white p-3.5 text-left shadow-sm transition-colors active:scale-[0.99] hover:border-red-200 hover:shadow-md sm:rounded-[26px] sm:p-4'
+                        : 'w-full rounded-[22px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] p-3.5 text-left shadow-[0_18px_50px_rgba(0,0,0,0.24)] transition-colors active:scale-[0.99] hover:border-cyan-400/40 hover:shadow-[0_20px_44px_rgba(8,145,178,0.12)] sm:rounded-[26px] sm:p-4'
                     }
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -2177,11 +2182,11 @@ export default function DeliveryCardapio() {
                   return (
                     <div
                       key={p.id}
-                      className={`group h-[168px] min-h-0 overflow-hidden rounded-[32px] border transition-all duration-300 ease-out backdrop-blur-sm ring-1 [tap-highlight-color:transparent] ${gridCardRing} ${gridCardBody}`}
+                      className={`group h-[174px] min-h-0 overflow-hidden rounded-[26px] border transition-all duration-300 ease-out backdrop-blur-sm ring-1 [tap-highlight-color:transparent] active:scale-[0.995] sm:h-[168px] sm:rounded-[32px] ${gridCardRing} ${gridCardBody}`}
                     >
                       <div className="flex h-full min-h-0 items-stretch">
                         <div
-                          className={`relative h-[168px] w-[132px] flex-shrink-0 cursor-pointer overflow-hidden sm:w-[146px] outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 ${isLightRed ? 'bg-zinc-100' : 'bg-zinc-800'}`}
+                          className={`relative h-[174px] w-[118px] flex-shrink-0 cursor-pointer overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 sm:h-[168px] sm:w-[146px] ${isLightRed ? 'bg-zinc-100' : 'bg-zinc-800'}`}
                           onClick={()=>handleAddProduto(p)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -2216,7 +2221,7 @@ export default function DeliveryCardapio() {
                           </div>
                           {qty>0&&<div className={`absolute bottom-2 left-2 flex h-8 min-w-[30px] items-center justify-center rounded-full px-2 text-xs font-black shadow-lg ${isLightRed ? 'bg-red-600 text-white' : 'bg-cyan-400 text-zinc-950'}`}>{qty}</div>}
                         </div>
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between px-3.5 py-3 sm:px-4 sm:py-3.5">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between px-3 py-2.5 sm:px-4 sm:py-3.5">
                           <div className="flex min-h-0 flex-1 flex-col">
                             <div className="flex shrink-0 items-start gap-3">
                               <div className="min-w-0 flex-1">
@@ -3069,7 +3074,7 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
             <X size={18} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2.5 sm:px-5 sm:py-3">
           <SacolaConteudo
             slug={slug}
             cliToken={cliToken}
@@ -3337,7 +3342,7 @@ function PedidoSucessoModal({
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3 px-3 py-3 sm:space-y-4 sm:px-5 sm:py-4">
           <div
             className={`rounded-[22px] border p-4 shadow-sm ${
               isLight
@@ -3890,7 +3895,7 @@ const finalizar = async () => {
           </nav>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3 px-3 py-3 sm:space-y-4 sm:px-5 sm:py-4">
         <div className={`${cx.card} ${modalStep !== 1 ? 'hidden' : ''}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -4865,7 +4870,7 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
   const [load, setLoad] = useState(false);
   const [erro, setErro] = useState('');
   const [telNorm, setTelNorm] = useState('');
-  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-50 transition-all";
+  const inp="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3.5 text-base focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-50 transition-all sm:px-4 sm:text-sm";
 
   const verificarTel=async()=>{
     setErro('');setLoad(true);
@@ -4894,13 +4899,13 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8] flex flex-col">
-      <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
-        <button onClick={etapa==='dados'?()=>setEtapa('tel'):onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
+    <div className="flex min-h-screen flex-col bg-[#f8f8f8]">
+      <header className="flex items-center gap-3 border-b border-zinc-100 bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
+        <button type="button" onClick={etapa==='dados'?()=>setEtapa('tel'):onBack} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-zinc-100"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <div><p className="text-lg font-black text-zinc-900">{etapa==='tel'?(contexto==='checkout'?'Entre para continuar sua compra':'Entrar / Criar conta'):'Complete seu cadastro'}</p>
         {etapa==='dados'&&<p className="text-xs text-zinc-400">{contexto==='checkout'?'Preencha os dados para seguir ao checkout':'Preencha os dados para finalizar'}</p>}</div>
       </header>
-      <div className="flex-1 flex flex-col justify-center px-5 max-w-sm mx-auto w-full py-8 space-y-5">
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center space-y-5 px-4 py-6 sm:px-5 sm:py-8">
         {etapa==='tel'?(
           <>
             <div className="text-center">
@@ -5003,7 +5008,7 @@ function TelaEditarPerfil({ slug, token, cliente, onSaved, onBack }: { slug:stri
   const [email, setEmail]=useState(cliente?.email||'');
   const [load, setLoad]=useState(false);
   const [erro, setErro]=useState('');
-  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 transition-all";
+  const inp="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3.5 text-base focus:border-cyan-400 focus:outline-none transition-all sm:px-4 sm:text-sm";
   const salvar=async()=>{
     if(!nome.trim()){setErro('Nome obrigatório');return;}
     setLoad(true);
@@ -5089,11 +5094,11 @@ function TelaEnderecos({ slug, token, onBack, onNovo }: { slug:string;token:stri
   const del=async(id:number)=>{if(!confirm('Remover?'))return;await fetch(`/public/delivery/${slug}/cliente/enderecos/${id}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});load_();};
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col">
-      <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3"><button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button><p className="text-lg font-black text-zinc-900">Meus Endereços</p></div>
-        <button onClick={onNovo} className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 text-white rounded-full text-sm font-bold hover:bg-zinc-800 transition-all"><Plus size={14}/>Adicionar</button>
+      <header className="flex items-center justify-between border-b border-zinc-100 bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
+        <div className="flex items-center gap-2 sm:gap-3"><button type="button" onClick={onBack} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-zinc-100"><ArrowLeft size={20} className="text-zinc-700"/></button><p className="text-lg font-black text-zinc-900">Meus Endereços</p></div>
+        <button type="button" onClick={onNovo} className="flex min-h-[40px] items-center gap-1.5 rounded-full bg-zinc-900 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-zinc-800 sm:px-4 sm:text-sm"><Plus size={14}/>Adicionar</button>
       </header>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 max-w-2xl mx-auto w-full">
+      <div className="mx-auto w-full max-w-2xl flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
         {load?<div className="flex justify-center py-16"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>
         :ends.length===0?<div className="text-center py-16 text-zinc-400"><MapPin size={48} className="mx-auto mb-4 opacity-20"/><p className="font-semibold mb-4">Nenhum endereço</p><button onClick={onNovo} className="px-5 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold">Adicionar</button></div>
         :ends.map(e=>(
@@ -5117,7 +5122,7 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
   const [form, setForm]=useState({label:'Casa',logradouro:'',numero:'',complemento:'',bairro:'',referencia:'',principal:false});
   const [saving, setSaving]=useState(false);
   const [erro, setErro]=useState('');
-  const inp="w-full px-4 py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 transition-all";
+  const inp="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3.5 text-base focus:border-cyan-400 focus:outline-none transition-all sm:px-4 sm:text-sm";
   const set=(k:string)=>(e:React.ChangeEvent<HTMLInputElement>)=>setForm(f=>({...f,[k]:e.target.value}));
   const salvar=async()=>{
     if(!form.logradouro.trim()){setErro('Informe o logradouro');return;}
@@ -5127,11 +5132,11 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
   };
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col">
-      <header className="bg-white border-b border-zinc-100 px-4 py-4 flex items-center gap-3 shadow-sm">
-        <button onClick={onBack} className="p-2 hover:bg-zinc-100 rounded-full"><ArrowLeft size={20} className="text-zinc-700"/></button>
+      <header className="flex items-center gap-3 border-b border-zinc-100 bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
+        <button type="button" onClick={onBack} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-zinc-100"><ArrowLeft size={20} className="text-zinc-700"/></button>
         <p className="text-lg font-black text-zinc-900">Novo Endereço</p>
       </header>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full pb-8">
+      <div className="mx-auto w-full max-w-2xl flex-1 space-y-4 overflow-y-auto p-3 pb-8 sm:p-4">
         <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2">Identificação</label>
         <div className="flex gap-2 flex-wrap">{['Casa','Trabalho','Familiar','Outro'].map(l=><button key={l} onClick={()=>setForm(f=>({...f,label:l}))} className={`px-4 py-2 rounded-full text-sm font-bold border-2 transition-all ${form.label===l?'border-cyan-400 bg-cyan-50 text-cyan-700':'border-zinc-200 bg-white text-zinc-500'}`}>{l}</button>)}</div></div>
         <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">

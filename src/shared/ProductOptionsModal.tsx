@@ -515,7 +515,7 @@ export function ProductOptionsModal({
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
         className={`${mo.sheet} my-auto flex min-h-0 w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:pb-0 ${
           isDelivery
-            ? 'max-h-[min(78dvh,78svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
+            ? 'max-h-[min(86dvh,86svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
             : 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(92vh,92dvh)]'
         }`}>
 
@@ -747,11 +747,11 @@ export function ProductOptionsModal({
                           setVariacaoSel(v);
                         }
                       }}
-                      className={`flex min-h-[44px] cursor-pointer items-center transition-colors ${
+                      className={`flex min-h-[48px] cursor-pointer items-center transition-colors ${
                         compactLayout
                           ? 'gap-2.5 px-2.5 py-2'
                           : isDelivery
-                            ? 'gap-2.5 px-3 py-2.5'
+                            ? 'gap-2.5 px-3 py-3'
                             : 'gap-4 px-4 py-4'
                       } ${
                         selecionado
@@ -943,11 +943,11 @@ export function ProductOptionsModal({
             <p className={`font-bold text-zinc-50 ${compactLayout ? 'mb-0.5 text-[11px]' : isDelivery ? 'mb-0.5 text-[11px]' : 'mb-2 text-sm'}`}>Alguma observação?</p>
             <textarea value={obs} onChange={e => setObs(e.target.value)} rows={compactLayout ? 1 : isDelivery ? 1 : 2}
               placeholder="Ex: Sem cebola, ponto bem passado..."
-              className={`w-full resize-none border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'min-h-[2.25rem] rounded-2xl px-2 py-1.5 text-xs' : isDelivery ? 'min-h-[2.25rem] rounded-xl px-2 py-1.5 text-xs' : 'rounded-2xl px-3 py-3 text-sm'}`} />
+              className={`w-full resize-none border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'min-h-[2.25rem] rounded-2xl px-2 py-1.5 text-xs' : isDelivery ? 'min-h-[2.5rem] rounded-xl px-2.5 py-2 text-base sm:text-xs' : 'rounded-2xl px-3 py-3 text-sm'}`} />
           </div>
         </div>
 
-        <div className={`${mo.footer} shrink-0 ${compactLayout ? '!p-2.5' : isDelivery ? '!p-2 sm:!p-2.5' : ''}`}>
+        <div className={`${mo.footer} shrink-0 ${compactLayout ? '!p-2.5' : isDelivery ? '!p-3 !pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:!p-4 sm:!pb-4' : ''}`}>
           <div className={`rounded-[22px] border ${
             compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : isDelivery ? 'mb-1.5 !rounded-lg !px-2.5 !py-1.5' : 'mb-3 px-4 py-3'
           } ${
@@ -993,7 +993,7 @@ export function ProductOptionsModal({
               </button>
             </div>
             <button type="button" onClick={validarEAdicionar} disabled={addBtnDisabled}
-              className={`${mo.footerBtn} ${compactLayout || isDelivery ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''}`}>
+              className={`${mo.footerBtn} ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''} ${isDelivery ? '!min-h-[50px] !rounded-xl !py-3 text-xs leading-tight sm:!py-4 sm:!text-sm' : ''}`}>
               <span>{addBtnLabel}</span>
               <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>
             </button>
