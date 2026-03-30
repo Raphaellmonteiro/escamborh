@@ -1426,6 +1426,7 @@ export function createDeliveryPublicRouter() {
                  p.category,
                  p.photo_url,
                  0 AS prioridade,
+                 0 AS total_eventos,
                  CAST(NULL AS INTEGER) AS source_product_id,
                  (SELECT COALESCE(JSON_AGG(json_build_object('id', pvv.id, 'nome', pvv.nome, 'preco', pvv.preco) ORDER BY pvv.ordem, pvv.nome), '[]') FROM produto_variacoes_vendaveis pvv WHERE pvv.produto_id=p.id AND pvv.tenant_id=p.tenant_id AND pvv.ativo=1) AS variacoes_vendaveis
                FROM produtos p
@@ -1433,7 +1434,7 @@ export function createDeliveryPublicRouter() {
                  AND p.active = 1
                  AND p.id NOT IN (${excludedPlaceholders})
                  AND (${fallbackFilters.join(' OR ')})
-               ORDER BY p.name ASC
+               ORDER BY COALESCE(p.destaque, 0) DESC, COALESCE(p.em_promocao, 0) DESC, p.price ASC, p.name ASC
                LIMIT ?`,
               [tenant.id, ...excludedIds, missing]
             );
