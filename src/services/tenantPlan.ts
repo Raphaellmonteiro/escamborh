@@ -50,15 +50,19 @@ function isTrialActive(row: TenantPlanRow, normalizedPlan: TenantPlan): boolean 
 function buildTenantPlanContext(row: TenantPlanRow): TenantPlanContext {
   const normalizedPlan = normalizeTenantPlan(row.plano);
   const trialActive = isTrialActive(row, normalizedPlan);
+  const legacyTrialPlan = normalizedPlan === 'trial';
+  const trialFim = row.trial_fim || (legacyTrialPlan ? row.vencimento : null) || null;
+  const trialInicio = row.trial_inicio || null;
 
-  if (trialActive || normalizedPlan === 'trial') {
+  // Compatibilidade com tenants legados que ainda persistem apenas plano=trial.
+  if (legacyTrialPlan) {
     return {
       plan: normalizedPlan,
       effectivePlan: 'completo',
       features: getCompletePlanFeatures(),
-      isTrialActive: true,
-      trialInicio: row.trial_inicio || null,
-      trialFim: row.trial_fim || row.vencimento || null,
+      isTrialActive: trialActive,
+      trialInicio,
+      trialFim,
     };
   }
 
@@ -67,9 +71,9 @@ function buildTenantPlanContext(row: TenantPlanRow): TenantPlanContext {
     plan: normalizedPlan,
     effectivePlan,
     features: getPlanFeatures(effectivePlan),
-    isTrialActive: false,
-    trialInicio: row.trial_inicio || null,
-    trialFim: row.trial_fim || null,
+    isTrialActive: trialActive,
+    trialInicio,
+    trialFim,
   };
 }
 

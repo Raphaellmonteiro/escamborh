@@ -77,7 +77,7 @@ function buildApprovalPlanContext(rawPlan: unknown, rawTrialDays: unknown): Appr
   const trialDays = parseTrialDays(rawTrialDays, 7);
   const trialWindow = buildTrialWindow(trialDays);
   const trialActive = trialDays > 0;
-  const effectivePlan: PaidTenantPlan = trialActive ? 'completo' : storedPlan;
+  const effectivePlan: PaidTenantPlan = storedPlan;
 
   return {
     storedPlan,

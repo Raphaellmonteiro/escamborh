@@ -8,6 +8,7 @@ const TZ = 'America/Sao_Paulo';
 
 export function createAiRouter() {
   const router = Router();
+  router.use(requirePlanFeature('ai'));
 
   router.get('/avisos', async (req: Request, res) => {
     try {
@@ -89,7 +90,7 @@ export function createAiRouter() {
     }
   });
 
-  router.post('/analisar', requirePlanFeature('ai'), async (req: Request, res) => {
+  router.post('/analisar', async (req: Request, res) => {
     const { tipo = 'visao_geral', pergunta } = req.body || {};
     const tenantId = req.tenantId!;
 

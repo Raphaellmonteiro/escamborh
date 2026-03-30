@@ -140,13 +140,17 @@ export default function App() {
   const planAllows = (tab: string): boolean => {
     const feature = normalizeAccessFeature(tab);
     if (!isKnownPlanFeature(feature)) return true;
+    if (token && !planProfile) {
+      return getSafeFallbackPlanFeatures().includes(feature);
+    }
     return planFeatures.includes(feature);
   };
   const canAccess = (tab: string): boolean => {
     const feature = normalizeAccessFeature(tab);
     return planAllows(feature) && userAllows(feature);
   };
-  const alertsEnabled = Boolean(token);
+  const flowAIToken = token && planProfile && planAllows('ai') ? token : null;
+  const alertsEnabled = Boolean(flowAIToken);
   const userRoleLabel =
     userCargo === 'dono' ? 'Proprietário' : userCargo === 'gerente' ? 'Gerente' : 'Atendente';
   const userDisplayName = userName || 'Sessão ativa';
@@ -165,7 +169,7 @@ export default function App() {
     historico, historicoTotal, carregandoHist,
     buscarAvisos, marcarLido, marcarTodosLidos,
     gerarAvisos, proximoAviso, buscarHistorico,
-  } = useFlowAI(alertsEnabled ? token : null);
+  } = useFlowAI(flowAIToken);
 
   const refreshNotifHistorico = useCallback(() => {
     buscarHistorico(100, 0);
@@ -176,7 +180,7 @@ export default function App() {
 
   // Gera avisos ao logar e a cada 30 minutos — com fallback silencioso
   useEffect(() => {
-    if (!token) return;
+    if (!flowAIToken) return;
     const rodar = () =>
       gerarAvisos()
         .then(() => buscarAvisos())
@@ -188,7 +192,7 @@ export default function App() {
     const init = setTimeout(rodar, 6000);
     const iv   = setInterval(rodar, 30 * 60 * 1000);
     return () => { clearTimeout(init); clearInterval(iv); };
-  }, [token]);
+  }, [flowAIToken, gerarAvisos, buscarAvisos]);
 
   // Após login como cliente (admin): abre Estoque ou Pedidos para deeplink
   useEffect(() => {
@@ -207,7 +211,7 @@ export default function App() {
     } catch {
       /* ignore */
     }
-  }, [token, userPermissoes, planFeatures]);
+  }, [token, userPermissoes, planFeatures, planProfile]);
 
   // ── Injeta/remove tema escuro no <html> ──────────────────────────────────
   useEffect(() => {
@@ -627,7 +631,7 @@ const fetchProducts = async () => {
     if (fallback) {
       setActiveTab(fallback as typeof activeTab);
     }
-  }, [token, activeTab, userPermissoes, planFeatures]);
+  }, [token, activeTab, userPermissoes, planFeatures, planProfile]);
 
 const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -2607,7 +2607,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     value={approvalDraft.trial_dias}
                     onChange={(e) => setApprovalDraft({ ...approvalDraft, trial_dias: Number(e.target.value || 0) })}
                   />
-                  <p className="text-xs text-zinc-500">Durante o trial o tenant recebe acesso completo temporariamente.</p>
+                  <p className="text-xs text-zinc-500">O trial so altera a validade do acesso, sem ampliar os modulos liberados pelo plano.</p>
                 </div>
               </div>
               <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-6 sm:px-8 sm:pb-8 pt-4 border-t border-zinc-800 bg-zinc-900">
