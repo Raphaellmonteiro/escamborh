@@ -556,15 +556,15 @@ function getSuggestionBadgeText(item: SuggestionItem, sourceItem: CartItem | nul
   const totalEventos = Number(item.total_eventos || 0);
   const intent = getSuggestionIntent(item);
 
-  if (featured && totalEventos > 0) return 'Mais escolhido';
-  if (featured) return 'Sugestao principal';
-  if (sourceItem && intent === 'drink') return 'Combina com seu pedido';
-  if (sourceItem && intent === 'dessert') return 'Fecha bem';
-  if (sourceItem && (intent === 'side' || intent === 'sauce')) return 'Complementa bem';
-  if (intent === 'drink') return 'Boa pedida';
-  if (intent === 'dessert') return 'Toque final';
-  if (intent === 'side' || intent === 'sauce') return 'Vai junto';
-  return 'Vale levar';
+  if (featured && totalEventos > 0) return 'Mais pedido';
+  if (featured) return 'Sugestao';
+  if (sourceItem && intent === 'drink') return 'Combina';
+  if (sourceItem && intent === 'dessert') return 'Leve junto';
+  if (sourceItem && (intent === 'side' || intent === 'sauce')) return 'Acompanha';
+  if (intent === 'drink') return 'Combina';
+  if (intent === 'dessert') return 'Leve junto';
+  if (intent === 'side' || intent === 'sauce') return 'Sugestao';
+  return 'Leve junto';
 }
 
 function getSuggestionHeadline(item: SuggestionItem, sourceItem: CartItem | null) {
@@ -573,16 +573,16 @@ function getSuggestionHeadline(item: SuggestionItem, sourceItem: CartItem | null
 
   if (sourceName) {
     if (intent === 'drink') return `Para acompanhar ${sourceName}`;
-    if (intent === 'dessert') return `Para fechar com ${sourceName}`;
-    if (intent === 'side' || intent === 'sauce') return `Para completar ${sourceName}`;
+    if (intent === 'dessert') return `Leve junto com ${sourceName}`;
+    if (intent === 'side' || intent === 'sauce') return `Para acompanhar ${sourceName}`;
     return `Vai bem com ${sourceName}`;
   }
 
-  if (intent === 'drink') return 'Uma bebida que entra facil no pedido';
-  if (intent === 'dessert') return 'Um extra gostoso para fechar bem';
-  if (intent === 'side' || intent === 'sauce') return 'Um complemento rapido para levar junto';
-  if (intent === 'main') return 'Mais uma boa escolha para a sacola';
-  return 'Um extra que combina com o momento do pedido';
+  if (intent === 'drink') return 'Uma bebida para acompanhar seu pedido';
+  if (intent === 'dessert') return 'Um extra gostoso para levar junto';
+  if (intent === 'side' || intent === 'sauce') return 'Um complemento que combina com a sacola';
+  if (intent === 'main') return 'Mais uma escolha para completar o pedido';
+  return 'Uma sugestao que combina com seu pedido';
 }
 
 function getSuggestionSupportText(item: SuggestionItem) {
@@ -591,20 +591,20 @@ function getSuggestionSupportText(item: SuggestionItem) {
 
   if (variationCount > 0) {
     return variationCount === 1
-      ? 'Escolha a opcao ideal sem sair da sacola.'
+      ? 'Escolha sem sair da sacola.'
       : `${variationCount} opcoes para escolher rapido.`;
   }
 
-  if (intent === 'drink') return 'Leve junto e deixe o pedido mais completo.';
-  if (intent === 'dessert') return 'Um final gostoso sem pesar no pedido.';
+  if (intent === 'drink') return 'Combina e valoriza o pedido.';
+  if (intent === 'dessert') return 'Leve um extra sem pesar no pedido.';
   if (intent === 'side' || intent === 'sauce') return 'Complemento simples com boa percepcao de valor.';
-  return 'Adicione agora e finalize tudo no mesmo fluxo.';
+  return 'Adicione junto e finalize no mesmo fluxo.';
 }
 
 function getSuggestionCtaText(item: SuggestionItem, featured: boolean) {
   const hasVariacoes = getSuggestionVariationCount(item) > 0;
-  if (hasVariacoes) return featured ? 'Escolher item' : 'Escolher';
-  return featured ? 'Adicionar item' : 'Adicionar';
+  if (hasVariacoes) return featured ? 'Escolher' : 'Ver opcoes';
+  return featured ? 'Adicionar' : 'Levar';
 }
 
 function getSuggestionPricePrefix(item: SuggestionItem) {
@@ -3180,9 +3180,9 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   const secondarySuggestions = suggestionCards.slice(1);
   const suggestionSubtitle = featuredSuggestion
     ? featuredSuggestion.sourceItem
-      ? `Combina com ${shortenSuggestionSourceName(featuredSuggestion.sourceItem.name, 34)}.`
-      : 'Escolhas que completam sua sacola.'
-    : 'Mais um item pode valorizar seu pedido.';
+      ? `Para acompanhar ${shortenSuggestionSourceName(featuredSuggestion.sourceItem.name, 34)}.`
+      : 'Sugestoes que combinam com seu pedido.'
+    : 'Leve mais um item sem pesar na sacola.';
 
   const handleSuggestionAdd = useCallback((item: SuggestionItem) => {
     const sourceProductId = Number(item?.source_product_id);
@@ -3268,9 +3268,9 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${isLightRed ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-cyan-400/20 bg-cyan-400/10 text-cyan-200'}`}>
-                      Sugestoes do pedido
+                      Sugestoes
                     </span>
-                    <p className={`mt-2 text-lg font-black tracking-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>Vale levar junto</p>
+                    <p className={`mt-2 text-lg font-black tracking-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>Leve junto</p>
                     <p className={`mt-1 max-w-[24rem] text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{suggestionSubtitle}</p>
                   </div>
                   <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${isLightRed ? 'border border-stone-300 bg-[#fffefc] text-stone-700' : 'border border-white/10 bg-zinc-950 text-zinc-200'}`}>
@@ -3286,18 +3286,18 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                         : 'overflow-hidden rounded-[28px] border border-cyan-400/20 bg-[linear-gradient(135deg,rgba(12,14,24,1),rgba(20,24,37,0.98),rgba(12,63,78,0.58))] p-4 shadow-[0_22px_58px_rgba(6,182,212,0.16)]'
                     }
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-white/10'}`}>
+                    <div className="grid grid-cols-[1fr_auto] items-start gap-4">
+                      <div className="min-w-0 flex min-h-[10.5rem] flex-col">
+                        <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-white/10'}`}>
                           {featuredSuggestion.badge}
                         </span>
                         {featuredSuggestion.item.category && (
-                          <p className={`mt-3 text-[10px] font-black uppercase tracking-[0.18em] ${isLightRed ? 'text-stone-500' : 'text-cyan-200/80'}`}>
+                          <p className={`mt-3 line-clamp-1 text-[10px] font-black uppercase tracking-[0.16em] ${isLightRed ? 'text-stone-500' : 'text-cyan-200/80'}`}>
                             {featuredSuggestion.item.category}
                           </p>
                         )}
-                        <p className={`mt-1 text-xl font-black leading-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>{featuredSuggestion.item.name}</p>
-                        <p className={`mt-1 text-[13px] leading-relaxed ${isLightRed ? 'text-stone-700' : 'text-zinc-200'}`}>{featuredSuggestion.headline}</p>
+                        <p className={`mt-1 line-clamp-2 text-xl font-black leading-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>{featuredSuggestion.item.name}</p>
+                        <p className={`mt-1 line-clamp-2 text-[13px] leading-relaxed ${isLightRed ? 'text-stone-700' : 'text-zinc-200'}`}>{featuredSuggestion.headline}</p>
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-zinc-100 ring-1 ring-white/10'}`}>
                             {featuredSuggestion.pricePrefix}
@@ -3308,7 +3308,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                             </span>
                           )}
                         </div>
-                        <div className="mt-3 flex items-end justify-between gap-3">
+                        <div className="mt-auto flex items-end justify-between gap-3 pt-4">
                           <div>
                             <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${isLightRed ? 'text-stone-500' : 'text-zinc-400'}`}>{featuredSuggestion.pricePrefix}</p>
                             <p className={`mt-1 text-[32px] font-black leading-none ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.22)]'}`}>
@@ -3320,8 +3320,8 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                             onClick={() => handleSuggestionAdd(featuredSuggestion.item)}
                             className={
                               isLightRed
-                                ? 'inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white shadow-[0_10px_26px_rgba(220,38,38,0.22)] transition-all hover:bg-red-700'
-                                : 'inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-zinc-950 shadow-[0_14px_36px_rgba(255,255,255,0.12)] transition-all hover:bg-cyan-300'
+                                ? 'inline-flex min-h-[48px] min-w-[144px] items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white shadow-[0_10px_26px_rgba(220,38,38,0.22)] transition-all hover:bg-red-700'
+                                : 'inline-flex min-h-[48px] min-w-[144px] items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-zinc-950 shadow-[0_14px_36px_rgba(255,255,255,0.12)] transition-all hover:bg-cyan-300'
                             }
                           >
                             <Plus size={15} />
@@ -3333,15 +3333,15 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                         <img
                           src={featuredSuggestion.item.photo_url}
                           alt={featuredSuggestion.item.name}
-                          className={`h-24 w-24 shrink-0 rounded-[22px] object-cover ${isLightRed ? 'border border-white/80 shadow-sm' : 'border border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.28)]'}`}
+                          className={`h-28 w-28 shrink-0 rounded-[22px] object-cover ${isLightRed ? 'border border-white/80 shadow-sm' : 'border border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.28)]'}`}
                         />
                       ) : (
-                        <div className={`flex h-24 w-24 shrink-0 items-center justify-center rounded-[22px] text-xs font-black ${isLightRed ? 'border border-red-100 bg-white text-red-700' : 'border border-white/10 bg-black/20 text-cyan-200'}`}>
+                        <div className={`flex h-28 w-28 shrink-0 items-center justify-center rounded-[22px] text-xs font-black ${isLightRed ? 'border border-red-100 bg-white text-red-700' : 'border border-white/10 bg-black/20 text-cyan-200'}`}>
                           LEVE
                         </div>
                       )}
                     </div>
-                    <p className={`mt-3 text-xs leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{featuredSuggestion.support}</p>
+                    <p className={`mt-3 line-clamp-2 text-xs leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{featuredSuggestion.support}</p>
                   </div>
                 )}
 
@@ -3352,8 +3352,8 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                         key={card.item.id}
                         className={
                           isLightRed
-                            ? 'rounded-[24px] border border-stone-300/70 bg-[#fffefc] p-3 shadow-sm'
-                            : 'rounded-[24px] border border-white/10 bg-zinc-950 p-3'
+                            ? 'flex min-h-[184px] flex-col rounded-[24px] border border-stone-300/70 bg-[#fffefc] p-3 shadow-sm'
+                            : 'flex min-h-[184px] flex-col rounded-[24px] border border-white/10 bg-zinc-950 p-3'
                         }
                       >
                         <div className="flex items-start gap-3">
@@ -3368,18 +3368,18 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                               ITEM
                             </div>
                           )}
-                          <div className="min-w-0 flex-1">
-                            <span className={`inline-flex max-w-full truncate rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10'}`}>
+                          <div className="min-w-0 flex min-h-[152px] flex-1 flex-col">
+                            <span className={`inline-flex w-fit items-center rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10'}`}>
                               {card.badge}
                             </span>
                             {card.item.category && (
-                              <p className={`mt-2 truncate text-[10px] font-black uppercase tracking-[0.16em] ${isLightRed ? 'text-stone-500' : 'text-zinc-400'}`}>
+                              <p className={`mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'text-stone-500' : 'text-zinc-400'}`}>
                                 {card.item.category}
                               </p>
                             )}
-                            <p className={`mt-1 line-clamp-2 text-[15px] font-black leading-tight ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`}>{card.item.name}</p>
-                            <p className={`mt-1 line-clamp-2 text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{card.headline}</p>
-                            <div className="mt-3 flex items-end justify-between gap-2">
+                            <p className={`mt-1 line-clamp-2 min-h-[2.4rem] text-[15px] font-black leading-tight ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`}>{card.item.name}</p>
+                            <p className={`mt-1 line-clamp-2 min-h-[2rem] text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{card.headline}</p>
+                            <div className="mt-auto flex items-end justify-between gap-3 pt-4">
                               <div className="min-w-0">
                                 <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${isLightRed ? 'text-stone-500' : 'text-zinc-500'}`}>{card.pricePrefix}</p>
                                 <p className={`mt-0.5 text-lg font-black ${isLightRed ? 'text-red-700' : 'text-cyan-300'}`}>{fmt(card.displayPrice)}</p>
@@ -3389,8 +3389,8 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                                 onClick={() => handleSuggestionAdd(card.item)}
                                 className={
                                   isLightRed
-                                    ? 'inline-flex min-h-[42px] items-center justify-center rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-red-700'
-                                    : 'inline-flex min-h-[42px] items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-black text-zinc-950 transition-colors hover:bg-cyan-300'
+                                    ? 'inline-flex min-h-[42px] min-w-[108px] items-center justify-center rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-red-700'
+                                    : 'inline-flex min-h-[42px] min-w-[108px] items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-black text-zinc-950 transition-colors hover:bg-cyan-300'
                                 }
                               >
                                 {card.cta}
