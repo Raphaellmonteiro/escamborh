@@ -520,7 +520,7 @@ export function ProductOptionsModal({
           isDelivery
             ? 'max-h-[min(86dvh,86svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
             : isPos
-              ? 'max-h-[min(78dvh,78svh,100%)] sm:max-h-[min(58vh,58dvh,500px)] sm:!max-w-lg'
+              ? 'max-h-[min(84dvh,84svh,100%)] sm:max-h-[min(66vh,66dvh,580px)] sm:!max-w-lg'
               : 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(92vh,92dvh)]'
         }`}>
 
@@ -678,7 +678,13 @@ export function ProductOptionsModal({
 
         <div
           className={`${mo.scroll} min-h-0 flex-1 ${
-            compactLayout ? 'py-1.5' : useTightModalLayout ? '!py-1 sm:!py-1.5' : ''
+            compactLayout
+              ? 'py-1.5'
+              : isPos
+                ? '!py-0.5 sm:!py-1'
+                : useTightModalLayout
+                  ? '!py-1 sm:!py-1.5'
+                  : ''
           }`}
         >
           {carregandoOpcoes && visualVariant === 'pos' && variacoesLista.length === 0 && grupos.length === 0 ? (
