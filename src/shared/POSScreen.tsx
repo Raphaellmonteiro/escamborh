@@ -157,10 +157,12 @@ const ProductCard = React.memo(function ProductCard({
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
-      className="group relative flex min-h-[128px] cursor-pointer flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800 text-left shadow-md shadow-black/15 transition-all duration-200 ease-out hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 md:min-h-[136px] xl:min-h-[148px]"
+      className="group relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 text-left shadow-md shadow-black/15 transition-all duration-200 ease-out hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 md:rounded-xl [@media(max-height:640px)]:rounded-md"
     >
-      <div className="absolute inset-0 pointer-events-none rounded-xl bg-amber-400/25 opacity-0 group-active:opacity-100 transition-opacity duration-75 z-10" aria-hidden />
-      <div className="relative w-full overflow-hidden shrink-0" style={{ paddingBottom: '46%' }}>
+      <div className="absolute inset-0 pointer-events-none rounded-lg md:rounded-xl bg-amber-400/25 opacity-0 group-active:opacity-100 transition-opacity duration-75 z-10" aria-hidden />
+      <div
+        className="relative w-full overflow-hidden shrink-0 pb-[38%] min-[480px]:pb-[40%] md:pb-[42%] xl:pb-[44%] [@media(max-height:640px)]:pb-[34%]"
+      >
         {product.photo_url ? (
           <img
             src={product.photo_url}
@@ -170,33 +172,42 @@ const ProductCard = React.memo(function ProductCard({
           />
         ) : (
           <div className="absolute inset-0 bg-zinc-700/50 flex items-center justify-center">
-            <span className="text-2xl opacity-50">{emoji}</span>
+            <span className="text-lg min-[480px]:text-xl md:text-2xl opacity-50">{emoji}</span>
           </div>
         )}
         {product.photo_url && (
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         )}
-        <div className="absolute bottom-1.5 left-1.5 flex flex-wrap gap-1">
+        <div className="absolute bottom-1 left-1 md:bottom-1.5 md:left-1.5 flex flex-wrap gap-0.5 md:gap-1 max-w-[calc(100%-0.5rem)]">
           {isDestaque && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/95 text-zinc-900 tracking-wide">MAIS VENDIDO</span>
+            <span className="text-[7px] font-bold px-1 py-px rounded sm:text-[8px] sm:px-1.5 sm:py-0.5 md:text-[9px] md:rounded-md bg-amber-500/95 text-zinc-900 tracking-wide leading-tight">
+              <span className="md:hidden">TOP</span>
+              <span className="hidden md:inline">MAIS VENDIDO</span>
+            </span>
           )}
           {isRecomend && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/95 text-white tracking-wide">RECOMENDADO</span>
+            <span className="text-[7px] font-bold px-1 py-px rounded sm:text-[8px] sm:px-1.5 sm:py-0.5 md:text-[9px] md:rounded-md bg-blue-500/95 text-white tracking-wide leading-tight">
+              <span className="md:hidden">REC</span>
+              <span className="hidden md:inline">RECOMENDADO</span>
+            </span>
           )}
           {isPromo && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-500/95 text-white tracking-wide">PROMOÇÃO</span>
+            <span className="text-[7px] font-bold px-1 py-px rounded sm:text-[8px] sm:px-1.5 sm:py-0.5 md:text-[9px] md:rounded-md bg-red-500/95 text-white tracking-wide leading-tight">
+              <span className="lg:hidden">PROMO</span>
+              <span className="hidden lg:inline">PROMOÇÃO</span>
+            </span>
           )}
         </div>
       </div>
-      <div className="p-2 flex-1 flex flex-col min-w-0">
-        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">{product.category}</p>
-        <h3 className="font-bold text-zinc-100 text-xs leading-snug line-clamp-2 mb-1">{product.name}</h3>
+      <div className="p-1.5 min-[480px]:p-2 flex-1 flex flex-col min-w-0 [@media(max-height:640px)]:p-1.5">
+        <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-px min-[480px]:text-[9px] md:text-[10px] md:mb-0.5">{product.category}</p>
+        <h3 className="font-bold text-zinc-100 text-[11px] leading-snug line-clamp-2 mb-0.5 min-[480px]:text-xs xl:text-[13px]">{product.name}</h3>
         {(product as any).codigo_barras && (
-          <span className="text-[10px] text-zinc-500 flex items-center gap-0.5 mb-1">
-            <Barcode size={8} />{(product as any).codigo_barras}
+          <span className="text-[8px] text-zinc-500 flex items-center gap-0.5 mb-0.5 min-[480px]:text-[9px] md:text-[10px]">
+            <Barcode size={8} className="shrink-0" />{(product as any).codigo_barras}
           </span>
         )}
-        <p className="text-sm font-black text-amber-400 mt-auto">R$ {product.price.toFixed(2)}</p>
+        <p className="text-xs font-black text-amber-400 mt-auto tabular-nums min-[480px]:text-[13px] md:text-sm">R$ {product.price.toFixed(2)}</p>
       </div>
     </motion.button>
   );
@@ -666,9 +677,9 @@ export default function POSScreen({
   const renderCartColumn = (variant: 'desktop' | 'drawer') => (
     <>
       {variant === 'desktop' && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-3 py-2.5 xl:px-4 xl:py-3">
-          <ShoppingCart size={18} className="text-amber-400" />
-          <h2 className="text-base font-black text-zinc-100">Pedido Atual</h2>
+        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:py-1.5 [@media(max-height:640px)]:px-2">
+          <ShoppingCart size={18} className="text-amber-400 shrink-0 [@media(max-height:640px)]:scale-90" />
+          <h2 className="text-sm font-black text-zinc-100 md:text-base truncate">Pedido Atual</h2>
           {cart.length > 0 && (
             <button
               onClick={() => setConfirmLimpar(true)}
@@ -681,7 +692,7 @@ export default function POSScreen({
         </div>
       )}
 
-      <div className="shrink-0 border-b border-zinc-800/80 bg-zinc-950 px-3 pb-2 pt-2.5 xl:px-4 xl:pt-3">
+      <div className="shrink-0 border-b border-zinc-800/80 bg-zinc-950 px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-2.5 xl:px-4 xl:pt-3 [@media(max-height:640px)]:py-1.5 [@media(max-height:640px)]:px-2">
         {!posCliente ? (
           <button
             type="button"
@@ -723,7 +734,7 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-zinc-950 px-3 py-2.5 xl:px-4 xl:py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-zinc-950 px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:py-1.5">
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-8 px-4">
             <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center mb-3">
@@ -764,7 +775,7 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="shrink-0 space-y-3 border-t border-zinc-800 bg-zinc-950 px-3 pb-3 pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4">
+      <div className="shrink-0 space-y-2.5 border-t border-zinc-800 bg-zinc-950 px-2.5 pb-2.5 pt-2.5 md:space-y-3 md:px-3 md:pb-3 md:pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4 [@media(max-height:700px)]:space-y-2 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Pagamentos Adicionados</p>
         {payments.length > 0 && (
           <div className="space-y-1.5">
@@ -837,11 +848,11 @@ export default function POSScreen({
             className="w-full min-h-[44px] px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-base md:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 transition-all"
           />
         </div>
-        <div className="pt-3 space-y-3">
-          <div className="bg-zinc-800 rounded-xl border-2 border-zinc-600 ring-2 ring-amber-400/25 p-4 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-zinc-400 font-medium text-xs">Subtotal</span>
-              <span className="text-sm font-black text-zinc-200">R$ {total.toFixed(2)}</span>
+        <div className="pt-2 space-y-2 md:pt-3 md:space-y-3 [@media(max-height:700px)]:pt-1.5 [@media(max-height:700px)]:space-y-2">
+          <div className="bg-zinc-800 rounded-lg md:rounded-xl border-2 border-zinc-600 ring-2 ring-amber-400/25 p-3 space-y-1.5 md:p-4 md:space-y-2 [@media(max-height:700px)]:p-2.5">
+            <div className="flex justify-between items-center gap-2 min-w-0">
+              <span className="text-zinc-400 font-medium text-[10px] md:text-xs truncate">Subtotal</span>
+              <span className="text-xs font-black text-zinc-200 tabular-nums shrink-0 md:text-sm">R$ {total.toFixed(2)}</span>
             </div>
             {payments.map((p, i) => {
               const perc = getTaxa(p.method as PaymentMethod);
@@ -859,9 +870,9 @@ export default function POSScreen({
                 <span className="text-[10px] font-bold text-amber-500">+ R$ {taxaPreviewPOS.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-zinc-600">
-              <span className="text-zinc-200 font-bold text-sm">Total do Pedido</span>
-              <span className="text-2xl font-black text-amber-400 tabular-nums">
+            <div className="flex justify-between items-center pt-2 mt-1.5 border-t-2 border-zinc-600 gap-2 min-w-0 md:pt-3 md:mt-2">
+              <span className="text-zinc-200 font-bold text-xs md:text-sm truncate">Total do Pedido</span>
+              <span className="text-lg font-black text-amber-400 tabular-nums shrink-0 min-[340px]:text-xl xl:text-2xl">
                 R$ {totalComTaxas.toFixed(2)}
               </span>
             </div>
@@ -870,7 +881,7 @@ export default function POSScreen({
             type="button"
             onClick={handleStartFinalize}
             disabled={cart.length === 0 || remaining > 0.01 || isFinalizing}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-2.5 text-sm font-black text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 transition-all duration-200 hover:bg-amber-300 hover:ring-amber-400/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 md:min-h-[48px] md:py-3 md:text-base xl:min-h-[52px] xl:gap-2.5 xl:py-4"
+            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-amber-400 py-2.5 text-xs font-black text-zinc-900 shadow-xl shadow-amber-500/25 ring-2 ring-amber-400/40 transition-all duration-200 hover:bg-amber-300 hover:ring-amber-400/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 md:min-h-[46px] md:gap-2 md:py-2.5 md:text-sm xl:min-h-[50px] xl:text-base xl:py-3 [@media(max-height:700px)]:min-h-[40px] [@media(max-height:700px)]:py-2 [@media(max-height:700px)]:text-xs"
           >
             {isFinalizing ? (
               <><span className="animate-pulse">⏳</span> Processando...</>
@@ -897,18 +908,18 @@ export default function POSScreen({
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Busca */}
-        <div className="shrink-0 px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-3">
+        <div className="shrink-0 px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-1 [@media(max-height:640px)]:pt-1.5">
           <div className="relative">
-            <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none md:left-4 size-[14px] md:size-[15px]" />
             <input
               ref={searchRef} type="text" value={searchTerm}
               onChange={e => { setSearchTerm(e.target.value); setSelectedCategory('Todas'); }}
               placeholder="Buscar por nome, marca... ou bipe o código"
-              className="w-full min-h-[48px] md:min-h-0 pl-11 pr-10 py-3 md:py-2.5 bg-zinc-800/80 border border-zinc-600 rounded-xl text-base md:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 transition-all"
+              className="w-full min-h-[44px] pl-10 pr-9 py-2.5 bg-zinc-800/80 border border-zinc-600 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 transition-all md:min-h-[42px] md:rounded-xl md:pl-11 md:pr-10 md:py-2.5 md:text-sm max-md:text-base [@media(max-height:640px)]:min-h-[40px] [@media(max-height:640px)]:py-2 [@media(max-height:640px)]:text-sm"
             />
             {searchTerm && (
               <button onClick={() => { setSearchTerm(''); searchRef.current?.focus(); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200">
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 md:right-4">
                 <X size={14} />
               </button>
             )}
@@ -916,18 +927,18 @@ export default function POSScreen({
         </div>
 
         {topShortcutProducts.length > 0 && (
-          <div className="hidden md:block px-3 pb-2 shrink-0">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Atalhos</p>
-                <p className="text-[10px] text-zinc-500">Ctrl+F busca • Ctrl+Enter finaliza</p>
+          <div className="hidden md:block px-2.5 pb-1.5 shrink-0 md:px-3 md:pb-2 [@media(max-height:640px)]:pb-1">
+            <div className="rounded-lg md:rounded-xl border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 md:px-3 md:py-2 [@media(max-height:640px)]:py-1.5">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider md:text-[10px] shrink-0">Atalhos</p>
+                <p className="text-[9px] text-zinc-500 truncate min-w-0 md:text-[10px]">Ctrl+F • Ctrl+Enter</p>
               </div>
-              <p className="mt-1 text-[10px] text-zinc-500">Alt+↑/↓ ajusta o item selecionado • Ctrl+Backspace limpa</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <p className="mt-1 text-[9px] text-zinc-500 [@media(max-height:640px)]:hidden md:text-[10px]">Alt+↑/↓ item • Ctrl+Backspace limpa</p>
+              <div className="mt-1.5 flex flex-wrap gap-1 md:mt-2 md:gap-1.5 [@media(max-height:640px)]:mt-1">
                 {topShortcutProducts.map((product, index) => (
                   <span
                     key={product.id}
-                    className="max-w-[180px] truncate rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-[10px] font-medium text-zinc-300"
+                    className="max-w-[140px] min-[1100px]:max-w-[180px] truncate rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300 md:px-2 md:py-1 md:text-[10px]"
                     title={product.name}
                   >
                     F{index + 1} {product.name}
@@ -939,13 +950,13 @@ export default function POSScreen({
         )}
 
         {/* Abas de categoria */}
-        <div className="px-3 pb-2 shrink-0">
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="px-2.5 pb-1.5 shrink-0 md:px-3 md:pb-2 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-1">
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:gap-2 md:pb-1" style={{ scrollbarWidth: 'none' }}>
             {['Todas', ...categories].map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2.5 md:px-3 md:py-1.5 min-h-[44px] md:min-h-0 flex items-center rounded-lg text-sm font-bold whitespace-nowrap border transition-all duration-200 shrink-0 ${
+                className={`px-3 py-2 min-h-[40px] text-xs rounded-md border transition-all duration-200 shrink-0 max-md:min-h-[44px] max-md:px-4 max-md:py-2.5 max-md:text-sm max-md:rounded-lg md:min-h-0 md:px-3 md:py-1.5 md:text-sm md:rounded-lg flex items-center font-bold whitespace-nowrap [@media(max-height:640px)]:min-h-0 [@media(max-height:640px)]:px-2.5 [@media(max-height:640px)]:py-1 [@media(max-height:640px)]:text-xs ${
                   selectedCategory === cat
                     ? 'bg-amber-400 border-amber-400 text-zinc-900 shadow-md shadow-amber-500/20 ring-2 ring-amber-300/50'
                     : 'bg-zinc-800/70 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
@@ -958,15 +969,15 @@ export default function POSScreen({
         </div>
 
         {/* Grade de Produtos */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-24 md:px-3 md:pb-3">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-24 md:px-3 md:pb-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-2">
           {displayProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-zinc-500 md:py-12" role="status">
+            <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-zinc-500 md:py-12 [@media(max-height:640px)]:py-6" role="status">
               <ScanLine size={36} className="mb-3 opacity-40" aria-hidden />
               <p className="text-base font-semibold text-zinc-300">Nenhum produto encontrado</p>
               {searchTerm && <p className="text-sm mt-1.5 text-zinc-500">Termo: {searchTerm}</p>}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 md:gap-2.5 lg:grid-cols-3 lg:gap-2.5 xl:grid-cols-4 2xl:grid-cols-5 min-[1728px]:grid-cols-6 min-[1920px]:grid-cols-7 xl:gap-3">
+            <div className="grid grid-cols-2 gap-1.5 min-[480px]:gap-2 md:grid-cols-3 md:gap-2 min-[960px]:grid-cols-4 min-[960px]:gap-2.5 xl:grid-cols-5 xl:gap-3 min-[1440px]:grid-cols-6 min-[1800px]:grid-cols-7 min-[2400px]:grid-cols-8">
               {displayProducts.map(product => (
                 <ProductCard
                   key={product.id}
@@ -998,7 +1009,7 @@ export default function POSScreen({
           PAINEL DIREITO — Pedido + Pagamento (tablet/desktop)
           Usa bg-zinc-950 para evitar override .flowpdv-dark .bg-zinc-900 → #f0f0f0
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-zinc-800 bg-zinc-950 shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] md:flex md:w-[min(292px,32vw)] md:flex-col lg:w-[min(268px,26vw)] xl:w-[min(320px,22vw)] 2xl:w-[min(400px,400px)]">
+      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-zinc-800 bg-zinc-950 shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] md:flex md:w-[min(236px,27vw)] md:flex-col md:min-w-[220px] lg:w-[min(252px,23vw)] xl:w-[min(288px,20vw)] 2xl:w-[min(336px,16vw)] min-[2200px]:w-[min(380px,14vw)]">
         {renderCartColumn('desktop')}
       </div>
 
