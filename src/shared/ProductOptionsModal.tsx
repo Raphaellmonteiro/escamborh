@@ -515,7 +515,7 @@ export function ProductOptionsModal({
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
         className={`${mo.sheet} my-auto flex min-h-0 w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:pb-0 ${
           isDelivery
-            ? 'max-h-[min(90dvh,90svh,100%)] sm:max-h-[min(86vh,86dvh)]'
+            ? 'max-h-[min(78dvh,78svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
             : 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(92vh,92dvh)]'
         }`}>
 
@@ -533,7 +533,7 @@ export function ProductOptionsModal({
                   : compactLayout
                     ? 'relative h-[min(3.5rem,12svh)] max-h-[4rem] shrink-0 overflow-hidden sm:max-h-[4rem]'
                     : isDelivery
-                      ? 'relative h-[min(6.75rem,18svh)] max-h-[7.5rem] overflow-hidden sm:h-28 sm:max-h-none md:h-32'
+                      ? 'relative h-[min(4.75rem,13svh)] max-h-[5.25rem] overflow-hidden sm:h-[4.75rem] sm:max-h-none md:h-[5.25rem]'
                       : 'relative h-40 overflow-hidden sm:h-48 md:h-52'
               }
             >
@@ -547,7 +547,7 @@ export function ProductOptionsModal({
               compactLayout
                 ? 'space-y-1.5 p-2.5 sm:p-2.5'
                 : isDelivery
-                  ? 'space-y-2.5 p-3.5 sm:p-4'
+                  ? 'space-y-2 p-3 sm:p-3'
                   : 'space-y-4 p-5'
             } ${produto.photo_url ? '' : 'pr-16'}`}
           >
@@ -558,7 +558,7 @@ export function ProductOptionsModal({
                     compactLayout
                       ? 'text-lg font-black leading-tight tracking-tight text-white drop-shadow-sm'
                       : isDelivery
-                        ? 'text-lg font-black leading-tight tracking-tight text-white drop-shadow-sm sm:text-xl'
+                        ? 'text-base font-black leading-tight tracking-tight text-white drop-shadow-sm sm:text-lg'
                         : mo.title
                   }
                 >
@@ -572,7 +572,7 @@ export function ProductOptionsModal({
                         compactLayout
                           ? `mt-0.5 text-xs leading-snug text-zinc-100/95 ${descExpanded ? '' : 'line-clamp-2'}`
                           : isDelivery
-                            ? `mt-1 text-sm leading-snug text-zinc-100/95 ${descExpanded ? '' : 'line-clamp-2'}`
+                            ? `mt-0.5 text-[11px] leading-snug text-zinc-100/90 ${descExpanded ? '' : 'line-clamp-2'}`
                             : mo.desc
                       }
                     >
@@ -591,11 +591,11 @@ export function ProductOptionsModal({
                 )}
               </div>
               {modoSomenteVariacoes ? (
-                <span className={`shrink-0 rounded-full border font-bold uppercase tracking-[0.16em] ${ac.badgeVariacoesCount} ${compactLayout ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'}`}>
+                <span className={`shrink-0 rounded-full border font-bold uppercase tracking-[0.16em] ${ac.badgeVariacoesCount} ${compactLayout || isDelivery ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'}`}>
                   {variacoesLista.length} opc{variacoesLista.length > 1 ? 'oes' : 'ao'}
                 </span>
               ) : grupos.length > 0 ? (
-                <span className={`shrink-0 rounded-full border border-white/16 bg-white/10 font-bold uppercase tracking-[0.16em] text-zinc-100 ${compactLayout ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'}`}>
+                <span className={`shrink-0 rounded-full border border-white/16 bg-white/10 font-bold uppercase tracking-[0.16em] text-zinc-100 ${compactLayout || isDelivery ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'}`}>
                   {grupos.length} grupo{grupos.length > 1 ? 's' : ''}
                 </span>
               ) : null}
@@ -606,27 +606,27 @@ export function ProductOptionsModal({
                 compactLayout
                   ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !rounded-xl !px-2 !py-1.5`
                   : isDelivery
-                    ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !rounded-xl !px-3 !py-2 !shadow-[0_8px_24px_rgba(0,0,0,0.2)]`
+                    ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !rounded-lg !px-2.5 !py-1.5 !shadow-[0_6px_20px_rgba(0,0,0,0.18)]`
                     : promoValida
                       ? mo.pricePanelPromo
                       : mo.pricePanel
               }
             >
-              <div className={`flex items-end justify-between ${compactLayout ? 'gap-2' : isDelivery ? 'gap-2.5' : 'gap-3'}`}>
+              <div className={`flex items-end justify-between ${compactLayout ? 'gap-2' : isDelivery ? 'gap-2' : 'gap-3'}`}>
                 <div>
-                  <p className={`font-bold uppercase ${mo.textMuted} ${compactLayout ? 'text-[9px] tracking-[0.12em]' : isDelivery ? 'text-[10px] tracking-[0.14em]' : 'text-[11px] tracking-[0.18em]'}`}>
+                  <p className={`font-bold uppercase ${mo.textMuted} ${compactLayout ? 'text-[9px] tracking-[0.12em]' : isDelivery ? 'text-[9px] tracking-[0.12em]' : 'text-[11px] tracking-[0.18em]'}`}>
                     {compactLayout || isDelivery ? 'Base' : 'Preco base'}
                   </p>
-                  <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : isDelivery ? 'mt-0 text-lg' : 'mt-1 text-xl'} ${promoValida ? 'text-zinc-400 line-through decoration-zinc-500' : mo.textPrimary}`}>{fmt(produto.price)}</p>
+                  <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : isDelivery ? 'mt-0 text-base' : 'mt-1 text-xl'} ${promoValida ? 'text-zinc-400 line-through decoration-zinc-500' : mo.textPrimary}`}>{fmt(produto.price)}</p>
                 </div>
                 <div className="text-right">
-                  <p className={`font-bold uppercase ${mo.textMuted} ${compactLayout ? 'text-[9px] tracking-[0.12em]' : isDelivery ? 'text-[10px] tracking-[0.14em]' : 'text-[11px] tracking-[0.18em]'}`}>
+                  <p className={`font-bold uppercase ${mo.textMuted} ${compactLayout ? 'text-[9px] tracking-[0.12em]' : isDelivery ? 'text-[9px] tracking-[0.12em]' : 'text-[11px] tracking-[0.18em]'}`}>
                     {compactLayout || isDelivery ? 'Atual' : 'Preco atual'}
                   </p>
                   {precoUnit == null ? (
-                    <p className={`font-black ${mo.textMuted} ${compactLayout ? 'mt-0 text-base' : isDelivery ? 'mt-0 text-lg' : 'mt-1 text-xl'}`}>—</p>
+                    <p className={`font-black ${mo.textMuted} ${compactLayout ? 'mt-0 text-base' : isDelivery ? 'mt-0 text-base' : 'mt-1 text-xl'}`}>—</p>
                   ) : (
-                    <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : isDelivery ? 'mt-0 text-lg' : 'mt-1 text-xl'} ${promoValida ? 'text-emerald-400' : ac.precoAtual}`}>{fmt(precoUnit)}</p>
+                    <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : isDelivery ? 'mt-0 text-base' : 'mt-1 text-xl'} ${promoValida ? 'text-emerald-400' : ac.precoAtual}`}>{fmt(precoUnit)}</p>
                   )}
                 </div>
               </div>
@@ -634,7 +634,7 @@ export function ProductOptionsModal({
                 <p className={`mt-2 text-xs leading-relaxed ${mo.textSecondary}`}>{resumoPrecoUnitario}</p>
               )}
               {!compactLayout && isDelivery && (
-                <p className={`mt-1.5 line-clamp-2 text-[11px] leading-snug ${mo.textSecondary}`} title={resumoPrecoUnitario}>
+                <p className={`mt-1 line-clamp-1 text-[10px] leading-snug ${mo.textSecondary}`} title={resumoPrecoUnitario}>
                   {resumoPrecoUnitario}
                 </p>
               )}
@@ -644,8 +644,8 @@ export function ProductOptionsModal({
                 </p>
               )}
               {promoValida && isDelivery && !compactLayout && (
-                <p className="mt-1 line-clamp-1 text-[11px] font-bold leading-snug text-emerald-200/95">
-                  ✨ Oferta ativa: {percentualDesconto}% de economia.
+                <p className="mt-0.5 truncate text-[10px] font-bold text-emerald-200/95" title={`Oferta ${percentualDesconto}%`}>
+                  ✨ {percentualDesconto}% off
                 </p>
               )}
               {promoValida && compactLayout && (
@@ -658,8 +658,8 @@ export function ProductOptionsModal({
         </div>
 
         <div
-          className={`${mo.scroll} min-h-0 ${
-            compactLayout ? 'py-1.5' : isDelivery ? '!py-2 sm:!py-2.5' : ''
+          className={`${mo.scroll} min-h-0 flex-1 ${
+            compactLayout ? 'py-1.5' : isDelivery ? '!py-1 sm:!py-1.5' : ''
           }`}
         >
           {carregandoOpcoes && visualVariant === 'pos' && variacoesLista.length === 0 && grupos.length === 0 ? (
@@ -688,7 +688,7 @@ export function ProductOptionsModal({
                 compactLayout
                   ? `${mo.section} mx-2.5 mb-2.5`
                   : isDelivery
-                    ? `${mo.section} !mx-3 !mb-3 !rounded-[20px]`
+                    ? `${mo.section} !mx-2.5 !mb-2 !rounded-[18px]`
                     : mo.section
               }
             >
@@ -697,7 +697,7 @@ export function ProductOptionsModal({
                   compactLayout
                     ? `${mo.sectionHeader} !px-2.5 !py-2`
                     : isDelivery
-                      ? `${mo.sectionHeader} !px-3 !py-2.5`
+                      ? `${mo.sectionHeader} !px-2.5 !py-2`
                       : mo.sectionHeader
                 }
               >
@@ -708,7 +708,7 @@ export function ProductOptionsModal({
                         compactLayout
                           ? 'text-sm font-black leading-tight tracking-tight text-white'
                           : isDelivery
-                            ? 'text-[15px] font-black leading-tight tracking-tight text-white'
+                            ? 'text-sm font-black leading-tight tracking-tight text-white'
                             : 'text-base font-black tracking-tight text-white'
                       }
                     >
@@ -722,7 +722,7 @@ export function ProductOptionsModal({
                     )}
                   </div>
                   <span className={`rounded-full font-bold uppercase tracking-[0.16em] ${
-                    compactLayout ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'
+                    compactLayout || isDelivery ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'
                   } ${
                     variacaoSel
                       ? ac.statusProntoVariacao
@@ -747,11 +747,11 @@ export function ProductOptionsModal({
                           setVariacaoSel(v);
                         }
                       }}
-                      className={`flex min-h-[48px] cursor-pointer items-center transition-colors ${
+                      className={`flex min-h-[44px] cursor-pointer items-center transition-colors ${
                         compactLayout
                           ? 'gap-2.5 px-2.5 py-2'
                           : isDelivery
-                            ? 'gap-3 px-3.5 py-3'
+                            ? 'gap-2.5 px-3 py-2.5'
                             : 'gap-4 px-4 py-4'
                       } ${
                         selecionado
@@ -760,8 +760,8 @@ export function ProductOptionsModal({
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className={`${compactLayout ? 'text-[13px]' : isDelivery ? 'text-[15px]' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>{v.nome}</p>
-                        <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : isDelivery ? 'mt-0.5 text-xs' : 'mt-1 text-xs'} font-bold tabular-nums ${ac.precoVariacaoLinha}`}>{fmt(Number(v.preco))}</p>
+                        <p className={`${compactLayout ? 'text-[13px]' : isDelivery ? 'text-sm' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>{v.nome}</p>
+                        <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : isDelivery ? 'mt-0 text-[11px]' : 'mt-1 text-xs'} font-bold tabular-nums ${ac.precoVariacaoLinha}`}>{fmt(Number(v.preco))}</p>
                       </div>
                       <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
                         selecionado
@@ -786,12 +786,12 @@ export function ProductOptionsModal({
                 <section
                   key={g.id}
                   className={`${
-                    compactLayout ? 'mx-2.5 mb-2.5' : isDelivery ? 'mx-3 mb-3' : 'mx-4 mb-4'
-                  } overflow-hidden ${compactLayout ? 'rounded-[18px]' : isDelivery ? 'rounded-[20px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
+                    compactLayout ? 'mx-2.5 mb-2.5' : isDelivery ? 'mx-2.5 mb-2' : 'mx-4 mb-4'
+                  } overflow-hidden ${compactLayout ? 'rounded-[18px]' : isDelivery ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
                     temErro ? 'border-red-500/40 bg-red-500/10' : 'border-white/14 bg-zinc-900/85'
                   }`}
                 >
-                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : isDelivery ? 'px-3 py-2.5' : 'p-4'}`}>
+                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : isDelivery ? 'px-2.5 py-2' : 'p-4'}`}>
                     <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : isDelivery ? 'gap-2' : 'gap-3'}`}>
                       <div className="min-w-0">
                         <p
@@ -799,17 +799,17 @@ export function ProductOptionsModal({
                             compactLayout
                               ? 'line-clamp-2 text-[13px] font-black leading-tight tracking-tight text-white'
                               : isDelivery
-                                ? 'line-clamp-2 text-[15px] font-black leading-tight tracking-tight text-white'
+                                ? 'line-clamp-2 text-sm font-black leading-tight tracking-tight text-white'
                                 : 'line-clamp-3 text-base font-black tracking-tight text-white'
                           }
                           title={g.nome}
                         >
                           {g.nome}
                         </p>
-                        <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : isDelivery ? 'mt-0.5 line-clamp-2 text-xs leading-snug' : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
+                        <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : isDelivery ? 'mt-0 line-clamp-2 text-[11px] leading-snug' : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
                       </div>
                       <span className={`shrink-0 rounded-full font-bold uppercase tracking-[0.16em] ${
-                        compactLayout ? 'px-1.5 py-0.5 text-[8px]' : 'px-3 py-1 text-[10px]'
+                        compactLayout ? 'px-1.5 py-0.5 text-[8px]' : isDelivery ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-[10px]'
                       } ${
                         completo
                           ? ac.badgeGrupoCompleto
@@ -820,7 +820,7 @@ export function ProductOptionsModal({
                         {completo ? 'Pronto' : g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
                       </span>
                     </div>
-                    <div className={`flex flex-wrap ${compactLayout ? 'mt-1.5 gap-1' : isDelivery ? 'mt-2 gap-1.5' : 'mt-3 gap-2'}`}>
+                    <div className={`flex flex-wrap ${compactLayout ? 'mt-1.5 gap-1' : isDelivery ? 'mt-1.5 gap-1' : 'mt-3 gap-2'}`}>
                       {!compactLayout && !isDelivery && (
                         <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                           g.obrigatorio
@@ -830,18 +830,18 @@ export function ProductOptionsModal({
                           {g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
                         </span>
                       )}
-                      <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
+                      <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-1.5 py-px text-[9px]' : isDelivery ? 'px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
                         {getResumoSelecaoGrupo(g, totalSel)}
                       </span>
                       {(g.modo_preco || 'adicional') === 'final' && (
-                        <span className={`rounded-full border font-semibold ${ac.badgePrecoFinal} ${compactLayout ? 'max-w-[min(100%,11rem)] truncate px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
-                          {compactLayout ? 'Preco na escolha' : 'Preco definido pela escolha'}
+                        <span className={`rounded-full border font-semibold ${ac.badgePrecoFinal} ${compactLayout ? 'max-w-[min(100%,11rem)] truncate px-1.5 py-px text-[9px]' : isDelivery ? 'max-w-[min(100%,10rem)] truncate px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
+                          {compactLayout || isDelivery ? 'Preco na escolha' : 'Preco definido pela escolha'}
                         </span>
                       )}
                     </div>
                   </div>
                   {temErro && (
-                    <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-2.5 py-1' : 'px-4 py-2'}`}>
+                    <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-2.5 py-1' : isDelivery ? 'px-2.5 py-1.5' : 'px-4 py-2'}`}>
                       <AlertCircle size={11} className="shrink-0 text-red-400" />
                       <p className={`${compactLayout ? 'text-[11px]' : 'text-xs'} font-semibold text-red-100`}>{erros[g.id]}</p>
                     </div>
@@ -856,11 +856,11 @@ export function ProductOptionsModal({
                       const podeAumentarQuantidade = maxSelecoes === null || totalSel < maxSelecoes;
                       return (
                         <div key={item.id}
-                          className={`flex min-h-[48px] cursor-pointer items-center transition-colors ${
+                          className={`flex min-h-[44px] cursor-pointer items-center transition-colors ${
                             compactLayout
                               ? 'gap-2.5 px-2.5 py-2'
                               : isDelivery
-                                ? 'gap-3 px-3.5 py-3'
+                                ? 'gap-2.5 px-3 py-2.5'
                                 : 'gap-4 px-4 py-4'
                           } ${
                             selecionado
@@ -875,10 +875,10 @@ export function ProductOptionsModal({
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className={`${compactLayout ? 'text-[13px]' : isDelivery ? 'text-[15px]' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
+                            <p className={`${compactLayout ? 'text-[13px]' : isDelivery ? 'text-sm' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
                               {item.nome}
                             </p>
-                            <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : isDelivery ? 'mt-0.5 text-xs' : 'mt-1 text-xs'} font-bold ${
+                            <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : isDelivery ? 'mt-0 text-[11px]' : 'mt-1 text-xs'} font-bold ${
                               (g.modo_preco || 'adicional') === 'final' || item.preco_adicional > 0
                                 ? ac.precoItemDestaque
                                 : 'text-zinc-300'
@@ -911,13 +911,13 @@ export function ProductOptionsModal({
                               onClick={e => e.stopPropagation()}>
                               <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, -1, g); }}
                                 disabled={qtdItem === 0}
-                                className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${compactLayout ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}>
+                                className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${compactLayout || isDelivery ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}>
                                 <Minus size={11} />
                               </button>
-                              <span className={`w-6 text-center font-black text-white ${compactLayout ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
+                              <span className={`w-6 text-center font-black text-white ${compactLayout || isDelivery ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
                               <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, +1, g); }}
                                 disabled={!podeAumentarQuantidade}
-                                className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${compactLayout ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}>
+                                className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${compactLayout || isDelivery ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}>
                                 <Plus size={11} />
                               </button>
                             </div>
@@ -936,29 +936,29 @@ export function ProductOptionsModal({
               compactLayout
                 ? 'mx-2.5 mt-0 rounded-xl border border-white/14 bg-zinc-900/85 px-2.5 py-2 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
                 : isDelivery
-                  ? 'mx-3 mt-1 rounded-2xl border border-white/14 bg-zinc-900/85 px-3 py-2.5 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
+                  ? 'mx-2.5 mt-0.5 rounded-xl border border-white/14 bg-zinc-900/85 px-2.5 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.16)]'
                   : 'mx-4 mt-1 rounded-[28px] border border-white/14 bg-zinc-900/85 px-5 py-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
             }
           >
-            <p className={`font-bold text-zinc-50 ${compactLayout ? 'mb-0.5 text-[11px]' : isDelivery ? 'mb-1 text-xs' : 'mb-2 text-sm'}`}>Alguma observação?</p>
-            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={compactLayout ? 1 : isDelivery ? 2 : 2}
+            <p className={`font-bold text-zinc-50 ${compactLayout ? 'mb-0.5 text-[11px]' : isDelivery ? 'mb-0.5 text-[11px]' : 'mb-2 text-sm'}`}>Alguma observação?</p>
+            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={compactLayout ? 1 : isDelivery ? 1 : 2}
               placeholder="Ex: Sem cebola, ponto bem passado..."
-              className={`w-full resize-none rounded-2xl border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'min-h-[2.25rem] px-2 py-1.5 text-xs' : isDelivery ? 'min-h-[2.5rem] px-2.5 py-2 text-sm' : 'px-3 py-3 text-sm'}`} />
+              className={`w-full resize-none border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'min-h-[2.25rem] rounded-2xl px-2 py-1.5 text-xs' : isDelivery ? 'min-h-[2.25rem] rounded-xl px-2 py-1.5 text-xs' : 'rounded-2xl px-3 py-3 text-sm'}`} />
           </div>
         </div>
 
-        <div className={`${mo.footer} ${compactLayout ? '!p-2.5' : isDelivery ? '!p-2.5 sm:!p-3' : ''}`}>
+        <div className={`${mo.footer} shrink-0 ${compactLayout ? '!p-2.5' : isDelivery ? '!p-2 sm:!p-2.5' : ''}`}>
           <div className={`rounded-[22px] border ${
-            compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : isDelivery ? 'mb-2 !rounded-xl !px-3 !py-2' : 'mb-3 px-4 py-3'
+            compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : isDelivery ? 'mb-1.5 !rounded-lg !px-2.5 !py-1.5' : 'mb-3 px-4 py-3'
           } ${
             carregandoOpcoes || gruposObrigatoriosPendentes > 0
               ? 'border-amber-500/25 bg-amber-500/12'
               : ac.footerResumoOkBorder
           }`}>
-            <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : isDelivery ? 'gap-2' : 'gap-3'}`}>
+            <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : isDelivery ? 'gap-1.5' : 'gap-3'}`}>
               <div className="min-w-0">
                 <p className={`font-black ${
-                  compactLayout ? 'text-[11px] leading-tight' : isDelivery ? 'text-xs leading-tight sm:text-[13px]' : 'text-sm'
+                  compactLayout ? 'text-[11px] leading-tight' : isDelivery ? 'text-[11px] leading-tight sm:text-xs' : 'text-sm'
                 } ${
                   carregandoOpcoes || gruposObrigatoriosPendentes > 0
                     ? 'text-amber-100'
@@ -967,7 +967,7 @@ export function ProductOptionsModal({
                   {readyTitle}
                 </p>
                 <p className={`${
-                  compactLayout ? 'mt-0.5 line-clamp-2 text-[10px] leading-snug' : isDelivery ? 'mt-0.5 line-clamp-2 text-[10px] leading-snug sm:text-[11px]' : 'mt-1 text-xs'
+                  compactLayout ? 'mt-0.5 line-clamp-2 text-[10px] leading-snug' : isDelivery ? 'mt-0.5 line-clamp-2 text-[9px] leading-snug sm:text-[10px]' : 'mt-1 text-xs'
                 } ${
                   carregandoOpcoes || gruposObrigatoriosPendentes > 0
                     ? 'text-amber-200/90'
@@ -978,22 +978,22 @@ export function ProductOptionsModal({
               </div>
               <div className="shrink-0 text-right">
                 <p className={`font-bold uppercase tracking-[0.14em] text-zinc-200 ${compactLayout ? 'text-[8px]' : isDelivery ? 'text-[9px]' : 'text-[11px]'}`}>Unitario</p>
-                <p className={`font-black tabular-nums text-white ${compactLayout ? 'mt-0 text-[11px]' : isDelivery ? 'mt-0 text-xs sm:text-sm' : 'mt-1 text-sm'}`}>{precoUnit != null ? fmt(precoUnit) : '—'}</p>
+                <p className={`font-black tabular-nums text-white ${compactLayout ? 'mt-0 text-[11px]' : isDelivery ? 'mt-0 text-[11px] sm:text-xs' : 'mt-1 text-sm'}`}>{precoUnit != null ? fmt(precoUnit) : '—'}</p>
               </div>
             </div>
           </div>
-          <div className={`flex items-center ${compactLayout ? 'gap-1.5' : isDelivery ? 'gap-2' : 'gap-3'}`}>
-            <div className={`${mo.qtyBar} ${compactLayout ? '!gap-1 !p-0.5' : isDelivery ? '!gap-1 !p-0.5' : ''}`}>
-              <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))} className={`${mo.qtyBtn} ${compactLayout || isDelivery ? '!h-9 !w-9 min-h-[44px] min-w-[44px]' : ''}`}>
-                <Minus size={13} />
+          <div className={`flex items-center ${compactLayout ? 'gap-1.5' : isDelivery ? 'gap-1.5' : 'gap-3'}`}>
+            <div className={`${mo.qtyBar} ${compactLayout ? '!gap-0.5 !p-0.5' : isDelivery ? '!gap-0.5 !p-0.5' : ''}`}>
+              <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))} className={`${mo.qtyBtn} ${compactLayout || isDelivery ? '!h-8 !w-8 min-h-[40px] min-w-[40px]' : ''}`}>
+                <Minus size={12} />
               </button>
-              <span className={`w-6 text-center font-black ${mo.textPrimary} ${compactLayout || isDelivery ? 'text-xs' : 'text-base'}`}>{qty}</span>
-              <button type="button" onClick={() => setQty(q => q + 1)} className={`${mo.qtyBtnPlus} ${compactLayout || isDelivery ? '!h-9 !w-9 min-h-[44px] min-w-[44px]' : ''}`}>
-                <Plus size={13} />
+              <span className={`w-5 text-center font-black ${mo.textPrimary} ${compactLayout || isDelivery ? 'text-xs' : 'text-base'}`}>{qty}</span>
+              <button type="button" onClick={() => setQty(q => q + 1)} className={`${mo.qtyBtnPlus} ${compactLayout || isDelivery ? '!h-8 !w-8 min-h-[40px] min-w-[40px]' : ''}`}>
+                <Plus size={12} />
               </button>
             </div>
             <button type="button" onClick={validarEAdicionar} disabled={addBtnDisabled}
-              className={`${mo.footerBtn} ${compactLayout || isDelivery ? '!min-h-[48px] !rounded-xl !py-2.5 text-[12px] leading-tight sm:!py-3' : ''}`}>
+              className={`${mo.footerBtn} ${compactLayout || isDelivery ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''}`}>
               <span>{addBtnLabel}</span>
               <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>
             </button>
