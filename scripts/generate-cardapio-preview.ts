@@ -26,7 +26,8 @@ const html = buildCardapioPdfHtml({
       price: 32.9,
       category: 'Lanches',
       active: 1,
-      descricao: 'Blend 180g, queijo prato, maionese da casa e pão brioche.',
+      descricao:
+        'Blend 180g, queijo prato, maionese da casa e pão brioche. Acompanha batata ou salada; molhos especiais disponíveis sob consulta.',
       destaque: 1,
       em_promocao: 0,
       preco_original: null,

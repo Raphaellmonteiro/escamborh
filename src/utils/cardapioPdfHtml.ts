@@ -94,8 +94,8 @@ function buildModernItem(p: CardapioPdfProduct): string {
   const orig = Number(p.preco_original);
   const priceBlock = promo
     ? `<div class="price-col">
-         <span class="price-old">${escapeHtml(fmtPrecoCardapio(orig))}</span>
          <span class="price">${escapeHtml(fmtPrecoCardapio(Number(p.price)))}</span>
+         <span class="price-old">${escapeHtml(fmtPrecoCardapio(orig))}</span>
        </div>`
     : `<div class="price-col"><span class="price">${escapeHtml(fmtPrecoCardapio(Number(p.price)))}</span></div>`;
 
@@ -136,7 +136,8 @@ function buildFooterQr(origin: string, slug: string | null | undefined): string 
         <img class="qr-img" src="${escapeHtml(qrSrc)}" alt="QR Code delivery" width="120" height="120" />
       </div>
       <div class="qr-copy">
-        <p class="qr-title">Peça online pelo QR Code</p>
+        <p class="qr-title">Peça online</p>
+        <p class="qr-sub">Aponte a câmera</p>
         <p class="qr-url">${escapeHtml(url)}</p>
       </div>
     </footer>`;
@@ -159,10 +160,16 @@ export function buildCardapioPdfHtml(params: BuildCardapioPdfHtmlParams): string
   const cats = [...new Set(sorted.map((p) => p.category || 'Geral'))];
 
   const logoResolved = resolveAssetUrl(origin, logoUrl);
-  const dateStr = new Date().toLocaleDateString('pt-BR', {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: '2-digit',
     month: 'long',
+    year: 'numeric',
+  });
+  const dateStrCompact = now.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
   });
 
@@ -201,7 +208,9 @@ ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
     ? `<div class="brand-logo"><img src="${escapeHtml(logoResolved)}" alt="" /></div>`
     : `<div class="brand-logo brand-fallback">${escapeHtml((estabelecimentoNome || 'F').slice(0, 1).toUpperCase())}</div>`;
 
-  const dateLine = includeDate ? `<p class="hero-date">${escapeHtml(dateStr)}</p>` : '';
+  const dateLine = includeDate
+    ? `<p class="hero-date"><span class="hero-date-label">Atualizado</span> ${escapeHtml(dateStrCompact)}</p>`
+    : '';
 
   const sections = cats
     .map((cat) => {
@@ -216,53 +225,77 @@ ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
 
   const footer = buildFooterQr(origin, deliverySlug);
 
+  const watermark = logoResolved
+    ? `<div class="wm" aria-hidden="true"><img src="${escapeHtml(logoResolved)}" alt="" /></div>`
+    : '';
+
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/>
 <title>${escapeHtml(estabelecimentoNome)} — Cardápio</title>
 <style>
   *{box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,sans-serif;margin:0;padding:40px 36px 48px;color:#0f172a;font-size:14px;background:#fff;max-width:640px;margin-left:auto;margin-right:auto}
-  .hero{display:flex;align-items:center;gap:20px;margin-bottom:36px;padding-bottom:28px;border-bottom:1px solid #e2e8f0}
-  .brand-logo{flex-shrink:0;width:72px;height:72px;border-radius:16px;overflow:hidden;background:#f1f5f9;display:flex;align-items:center;justify-content:center}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,sans-serif;margin:0;padding:0;color:#0f172a;font-size:14px;background:#f4f6f8;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .doc{position:relative;max-width:640px;margin:0 auto;padding:40px 36px 52px;min-height:100vh}
+  .doc-accent{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#0f766e 0%,#0d9488 45%,#cbd5e1 100%);opacity:.55}
+  .wm{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);width:min(320px,72vw);pointer-events:none;z-index:0}
+  .wm img{display:block;width:100%;height:auto;object-fit:contain;opacity:.055;filter:grayscale(1)}
+  .sheet{position:relative;z-index:1}
+  .hero{display:flex;align-items:center;gap:20px;margin-bottom:40px;padding:22px 20px 26px;background:#fff;border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.05)}
+  .brand-logo{flex-shrink:0;width:76px;height:76px;border-radius:16px;overflow:hidden;background:#f8fafc;display:flex;align-items:center;justify-content:center;border:1px solid #e2e8f0}
   .brand-logo img{width:100%;height:100%;object-fit:contain}
   .brand-fallback{font-size:28px;font-weight:900;color:#64748b}
   .hero-text{min-width:0;flex:1}
-  .hero-title{font-size:26px;font-weight:900;letter-spacing:-0.02em;margin:0;line-height:1.15}
-  .hero-date{margin:8px 0 0;font-size:12px;color:#64748b;font-weight:500}
-  .cat{margin-top:32px}
-  .cat:first-of-type{margin-top:8px}
-  .cat-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.2em;color:#64748b;margin:0 0 14px;padding-bottom:10px;border-bottom:3px solid #0f172a}
-  .dish{padding:16px 0;border-bottom:1px solid #f1f5f9}
-  .dish:last-child{border-bottom:none}
-  .dish-top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
-  .dish-main{min-width:0;flex:1;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px}
-  .marks{display:inline-flex;gap:6px;flex-shrink:0}
+  .hero-title{font-size:27px;font-weight:900;letter-spacing:-0.03em;margin:0;line-height:1.12;color:#0f172a}
+  .hero-tagline{margin:6px 0 0;font-size:12px;font-weight:700;color:#0f766e;text-transform:uppercase;letter-spacing:.04em}
+  .hero-date{margin:10px 0 0;font-size:10px;color:#94a3b8;font-weight:500;line-height:1.4}
+  .hero-date-label{color:#94a3b8;margin-right:4px;font-weight:600}
+  .cat{margin-top:40px}
+  .cat:first-of-type{margin-top:4px}
+  .cat-title{display:inline-block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:#334155;margin:0 0 16px;padding:9px 16px;background:#eef2f6;border:1px solid #e2e8f0;border-radius:10px}
+  .cat-body{display:flex;flex-direction:column;gap:14px}
+  .dish{padding:18px 16px;background:#fff;border:1px solid #e8ecf1;border-radius:12px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  .dish-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px 20px}
+  .dish-main{min-width:0;flex:1;display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 10px}
+  .marks{display:inline-flex;gap:6px;flex-shrink:0;align-items:center;padding-top:2px}
   .mark{font-size:13px;line-height:1}
-  .dish-name{display:inline;font-size:16px;font-weight:800;margin:0;letter-spacing:-0.02em;line-height:1.35;flex:1;min-width:0}
-  .dish-desc{margin:8px 0 0;font-size:11px;color:#64748b;line-height:1.5;font-weight:400;max-width:42em}
-  .price-col{flex-shrink:0;text-align:right;min-width:6.5rem}
-  .price{display:block;font-size:16px;font-weight:800;color:#0d9488;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .price-old{display:block;font-size:11px;color:#94a3b8;text-decoration:line-through;font-weight:600;margin-bottom:2px;font-variant-numeric:tabular-nums}
-  .foot-qr{margin-top:48px;padding-top:28px;border-top:1px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap}
+  .dish-name{font-size:16px;font-weight:900;margin:0;letter-spacing:-0.02em;line-height:1.3;color:#0f172a;flex:1;min-width:0}
+  .dish-desc{margin:10px 0 0;font-size:11px;color:#64748b;line-height:1.45;font-weight:400;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .price-col{flex-shrink:0;text-align:right;align-self:flex-start;min-width:7rem;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-start;gap:3px}
+  .price{font-size:18px;font-weight:900;color:#0d9488;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.15}
+  .price-old{font-size:10px;color:#94a3b8;text-decoration:line-through;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .foot-qr{margin-top:52px;padding:28px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap}
   .qr-wrap{flex-shrink:0}
   .qr-img{display:block;width:120px;height:120px}
   .qr-copy{text-align:left;max-width:280px}
-  .qr-title{margin:0;font-size:14px;font-weight:800;color:#0f172a}
-  .qr-url{margin:6px 0 0;font-size:10px;color:#64748b;word-break:break-all;line-height:1.4}
+  .qr-title{margin:0;font-size:15px;font-weight:800;color:#0f172a}
+  .qr-sub{margin:4px 0 0;font-size:12px;font-weight:600;color:#475569}
+  .qr-url{margin:8px 0 0;font-size:9px;color:#94a3b8;word-break:break-all;line-height:1.35}
   @media print{
-    body{padding:20px 24px 32px}
+    body{background:#fff}
+    .doc{padding:20px 22px 36px}
+    .doc-accent{opacity:.45}
+    .wm img{opacity:.04}
+    .hero,.dish,.foot-qr{box-shadow:none}
     .foot-qr{break-inside:avoid}
     .cat{break-inside:avoid}
+    .dish{break-inside:avoid}
   }
 </style></head><body>
+<div class="doc">
+  <div class="doc-accent" aria-hidden="true"></div>
+  ${watermark}
+  <div class="sheet">
 <header class="hero">
   ${headerLogo}
   <div class="hero-text">
     <h1 class="hero-title">${escapeHtml(estabelecimentoNome)}</h1>
+    <p class="hero-tagline">Cardápio</p>
     ${dateLine}
   </div>
 </header>
 ${sections}
 ${footer}
+  </div>
+</div>
 ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
 </body></html>`;
 }
