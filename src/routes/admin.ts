@@ -8,10 +8,20 @@ import { logError } from '../utils/logger';
 import { generatePublicId } from '../utils/publicIds';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
+import { getPlanFeatures, type PaidTenantPlan, type PlanFeature } from '../config/planFeatures';
+import { normalizeProductProductionInput } from '../utils/preparation';
 
 const TZ = 'America/Sao_Paulo';
 const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
 type AdminManagedPlan = (typeof ADMIN_PLAN_OPTIONS)[number];
+type ApprovalPlanContext = {
+  storedPlan: AdminManagedPlan;
+  effectivePlan: PaidTenantPlan;
+  features: PlanFeature[];
+  trialDays: number;
+  trialActive: boolean;
+  trialWindow: ReturnType<typeof buildTrialWindow>;
+};
 
 function getTodayDateInTimeZone(): string {
   const today = new Date().toLocaleString('en-US', { timeZone: TZ }).split(',')[0];
@@ -60,6 +70,48 @@ function buildTrialWindow(days: number) {
     trialFim: trialFim.toISOString(),
     vencimento: trialFim.toISOString(),
   };
+}
+
+function buildApprovalPlanContext(rawPlan: unknown, rawTrialDays: unknown): ApprovalPlanContext {
+  const storedPlan = normalizeAdminPlan(rawPlan);
+  const trialDays = parseTrialDays(rawTrialDays, 7);
+  const trialWindow = buildTrialWindow(trialDays);
+  const trialActive = trialDays > 0;
+  const effectivePlan: PaidTenantPlan = trialActive ? 'completo' : storedPlan;
+
+  return {
+    storedPlan,
+    effectivePlan,
+    features: getPlanFeatures(effectivePlan),
+    trialDays,
+    trialActive,
+    trialWindow,
+  };
+}
+
+async function buildUniqueTenantUsername(
+  client: Parameters<typeof txQ1>[0],
+  rawEmail: unknown
+): Promise<string> {
+  const email = String(rawEmail || '').trim().toLowerCase();
+  const emailBase = email.includes('@') ? email.split('@')[0] : email;
+  const normalizedBase = emailBase.replace(/[^a-z0-9]/g, '') || 'cliente';
+
+  for (let suffix = 0; suffix < 1000; suffix += 1) {
+    const candidate = suffix === 0 ? normalizedBase : `${normalizedBase}${suffix + 1}`;
+    const existing = await txQ1<{ username?: string | null; usuario?: string | null }>(
+      client,
+      `SELECT username, NULL::text AS usuario FROM usuarios WHERE username=?
+       UNION ALL
+       SELECT NULL::text AS username, usuario FROM clientes WHERE usuario=?
+       LIMIT 1`,
+      [candidate, candidate]
+    );
+
+    if (!existing) return candidate;
+  }
+
+  throw new Error('Nao foi possivel gerar um usuario unico para a solicitacao');
 }
 
 type DiagnosticProblem = {
@@ -216,17 +268,21 @@ export function createAdminRouter() {
       const sol = await q1('SELECT * FROM solicitacoes WHERE id=?', [req.params.id]);
       if (!sol) return res.status(404).json({ success: false });
       const segmentoFinal = req.body?.segmento || sol.segmento || 'Restaurante/Food';
-      const planoFinal = normalizeAdminPlan(req.body?.plano);
-      const trialDays = parseTrialDays(req.body?.trial_dias, 7);
-      const usuario = sol.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      const approvalPlan = buildApprovalPlanContext(req.body?.plano, req.body?.trial_dias);
       const senha   = Math.random().toString(36).slice(-8);
       const hash    = bcrypt.hashSync(senha, 10);
-      const trialWindow = buildTrialWindow(trialDays);
 
-      const clienteId = await withTx(async (client) => {
+      const result = await withTx(async (client) => {
+        const usuario = await buildUniqueTenantUsername(client, sol.email);
+        const initialProductProduction = normalizeProductProductionInput(
+          { production_type: 'kitchen' },
+          { name: 'Produto Exemplo', category: 'Geral' }
+        );
+
         const cid = await txInsert(client,
-          `INSERT INTO clientes (nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,usuario,senha,status,vencimento,segmento,plano,trial_inicio,trial_fim) VALUES (?,?,?,?,?,?,?,?,?,?,'ativo',?,?,?,?,?)`,
+          `INSERT INTO clientes (solicitacao_id,nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,usuario,senha,status,vencimento,segmento,plano,trial_inicio,trial_fim) VALUES (?,?,?,?,?,?,?,?,?,?,?,'ativo',?,?,?,?,?)`,
           [
+            sol.id,
             sol.nome_estabelecimento,
             sol.razao_social,
             sol.documento_tipo,
@@ -237,11 +293,11 @@ export function createAdminRouter() {
             sol.cidade,
             usuario,
             hash,
-            trialWindow.vencimento,
+            approvalPlan.trialWindow.vencimento,
             segmentoFinal,
-            planoFinal,
-            trialWindow.trialInicio,
-            trialWindow.trialFim,
+            approvalPlan.storedPlan,
+            approvalPlan.trialWindow.trialInicio,
+            approvalPlan.trialWindow.trialFim,
           ]
         );
         await txRun(client, "UPDATE solicitacoes SET status='aprovado', segmento=? WHERE id=?", [segmentoFinal, sol.id]);
@@ -250,20 +306,41 @@ export function createAdminRouter() {
            ON CONFLICT(username) DO UPDATE SET password=EXCLUDED.password,cargo='dono',nome=EXCLUDED.nome,cliente_id=EXCLUDED.cliente_id,ativo=1`,
           [usuario, hash, sol.nome_responsavel, cid]
         );
-        await txRun(client, "INSERT INTO produtos (public_id,name,price,category,active,tenant_id) VALUES (?, 'Produto Exemplo',10.00,'Geral',1,?)", [generatePublicId('prd'), cid]);
-        return cid;
+        await txRun(
+          client,
+          "INSERT INTO produtos (public_id,name,price,category,active,requires_preparation,production_type,tenant_id) VALUES (?, 'Produto Exemplo',10.00,'Geral',1,?,?,?)",
+          [
+            generatePublicId('prd'),
+            initialProductProduction.requiresPreparation,
+            initialProductProduction.productionType,
+            cid,
+          ]
+        );
+
+        return { clienteId: cid, usuario };
       });
       res.json({
         success: true,
-        usuario,
+        cliente_id: result.clienteId,
+        usuario: result.usuario,
         senha,
         segmento: segmentoFinal,
-        plano: planoFinal,
-        trial_inicio: trialWindow.trialInicio,
-        trial_fim: trialWindow.trialFim,
-        vencimento: trialWindow.vencimento,
+        plano: approvalPlan.storedPlan,
+        plan_type: approvalPlan.storedPlan,
+        plan_features: approvalPlan.features,
+        trial_ativo: approvalPlan.trialActive,
+        trial_dias: approvalPlan.trialDays,
+        trial_inicio: approvalPlan.trialWindow.trialInicio,
+        trial_fim: approvalPlan.trialWindow.trialFim,
+        vencimento: approvalPlan.trialWindow.vencimento,
       });
-    } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+    } catch (e: any) {
+      console.error('[admin.aprovarSolicitacao] erro ao aprovar solicitacao:', {
+        solicitacaoId: req.params.id,
+        message: e?.message || e,
+      });
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   admin.post('/solicitacoes/:id/recusar', async (req, res) => {
