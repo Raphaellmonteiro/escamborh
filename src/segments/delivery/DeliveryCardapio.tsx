@@ -40,6 +40,17 @@ interface Produto {
   variacoes_vendaveis?: VariacaoVendavel[];
 }
 interface Categoria { nome: string; itens: Produto[]; }
+
+/** Resposta parcial de `/public/delivery/:slug/suggestions` (produto sugerido). */
+interface SuggestionItem {
+  id: number;
+  name: string;
+  price?: number;
+  category?: string;
+  photo_url?: string;
+  variacoes_vendaveis?: VariacaoVendavel[] | string;
+  source_product_id?: number;
+}
 interface Config {
   modelo_entrega?: 'bairro_fixo';
   taxa_entrega: number;
@@ -238,6 +249,16 @@ interface CartItem extends Produto {
   cart_key: string;           // chave única para diferenciar variações do mesmo produto
   variation_id?: number | null;
 }
+function buildSuggestionProductSignature(cart: CartItem[]): string {
+  const uniqueIds = new Set<number>();
+  for (const item of cart) {
+    const productId = Number(item.id);
+    if (Number.isInteger(productId) && productId > 0) {
+      uniqueIds.add(productId);
+    }
+  }
+  return Array.from(uniqueIds).sort((a, b) => a - b).join(',');
+}
 interface Endereco { id: number; label: string; logradouro: string; numero?: string; complemento?: string; bairro?: string; referencia?: string; principal: number; }
 
 /** Campos de endereço alinhados ao modelo `delivery_enderecos` (checkout + Meus endereços). */
@@ -261,6 +282,55 @@ function formatEnderecoResumoTexto(campos: DeliveryEnderecoCampos): string {
     campos.referencia.trim() ? `Ref: ${campos.referencia.trim()}` : '',
   ].filter(Boolean);
   return parts.join(' • ');
+}
+
+/** Alinhado ao backend `formatSavedDeliveryAddress` (texto gravado no pedido). */
+function formatEnderecoPedidoLinha(campos: DeliveryEnderecoCampos): string {
+  return [
+    [campos.logradouro.trim(), campos.numero.trim()].filter(Boolean).join(', '),
+    campos.complemento.trim() ? `Compl: ${campos.complemento.trim()}` : '',
+    campos.bairro.trim() ? `Bairro: ${campos.bairro.trim()}` : '',
+    campos.referencia.trim() ? `Ref: ${campos.referencia.trim()}` : '',
+  ].filter(Boolean).join(' - ');
+}
+
+const DELIVERY_ENDERECO_LABELS = ['Casa', 'Trabalho', 'Familiar', 'Outro'] as const;
+
+type DeliveryNovoEnderecoForm = {
+  label: string;
+  campos: DeliveryEnderecoCampos;
+  principal: boolean;
+};
+
+function emptyDeliveryNovoEnderecoForm(principalDefault: boolean): DeliveryNovoEnderecoForm {
+  return { label: 'Casa', campos: emptyDeliveryEnderecoCampos(), principal: principalDefault };
+}
+
+function DeliveryIdentificacaoEnderecoChips({
+  value,
+  onChange,
+  chipOn,
+  chipOff,
+}: {
+  value: string;
+  onChange: (label: string) => void;
+  chipOn: string;
+  chipOff: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {DELIVERY_ENDERECO_LABELS.map((l) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => onChange(l)}
+          className={`rounded-full border-2 px-4 py-2 text-sm font-bold transition-all ${value === l ? chipOn : chipOff}`}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function DeliveryEnderecoCamposInputs({
@@ -748,6 +818,11 @@ export default function DeliveryCardapio() {
   } | null>(null);
   const [produtoModal, setProdutoModal] = useState<Produto|null>(null); // opções e/ou variações (modal único)
   const catRefs = useRef<Record<string, HTMLDivElement|null>>({});
+  const suggestionsCacheRef = useRef<Map<string, SuggestionItem[]>>(new Map());
+  const suggestionsReqRef = useRef(0);
+  const [prefetchedSuggestions, setPrefetchedSuggestions] = useState<SuggestionItem[]>([]);
+  const [suggestionsReadySignature, setSuggestionsReadySignature] = useState('');
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -790,6 +865,11 @@ export default function DeliveryCardapio() {
   }, [slug]);
 
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
+  const suggestionProductSignature = useMemo(() => buildSuggestionProductSignature(cart), [cart]);
+  const shouldShowSuggestions = prefetchedSuggestions.length > 0 && (
+    suggestionsReadySignature === suggestionProductSignature ||
+    loadingSuggestions
+  );
   const totalItens = cart.reduce((a,i)=>a+i.qty,0);
   const produtosOrdenados = useMemo(
     () => categorias.flatMap((cat, categoryIndex) =>
@@ -804,6 +884,75 @@ export default function DeliveryCardapio() {
     () => categorias.flatMap(cat => cat.itens).filter(isPromocaoProdutoValida).length,
     [categorias]
   );
+  useEffect(() => {
+    const requestId = ++suggestionsReqRef.current;
+
+    if (!slug) {
+      suggestionsCacheRef.current.clear();
+      setPrefetchedSuggestions([]);
+      setSuggestionsReadySignature('');
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    if (!suggestionProductSignature) {
+      setPrefetchedSuggestions([]);
+      setSuggestionsReadySignature('');
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const cacheKey = `${slug}:${suggestionProductSignature}`;
+    if (suggestionsCacheRef.current.has(cacheKey)) {
+      setPrefetchedSuggestions(suggestionsCacheRef.current.get(cacheKey) || []);
+      setSuggestionsReadySignature(suggestionProductSignature);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const productIds = suggestionProductSignature
+      .split(',')
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (!productIds.length) {
+      setPrefetchedSuggestions([]);
+      setSuggestionsReadySignature('');
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoadingSuggestions(true);
+
+    fetch(`/public/delivery/${slug}/suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds }),
+      signal: controller.signal,
+    })
+      .then(r => (r.ok ? r.json() : []))
+      .then((d) => {
+        if (requestId !== suggestionsReqRef.current) return;
+        const nextSuggestions = Array.isArray(d) ? d.slice(0, 3) as SuggestionItem[] : [];
+        suggestionsCacheRef.current.set(cacheKey, nextSuggestions);
+        setPrefetchedSuggestions(nextSuggestions);
+        setSuggestionsReadySignature(suggestionProductSignature);
+      })
+      .catch((error) => {
+        if (requestId !== suggestionsReqRef.current) return;
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      })
+      .finally(() => {
+        if (requestId === suggestionsReqRef.current) {
+          setLoadingSuggestions(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [slug, suggestionProductSignature]);
   const produtosDestaque = useMemo(() => {
     const vistos = new Set<number>();
     return produtosOrdenados
@@ -1573,7 +1722,14 @@ export default function DeliveryCardapio() {
   );
   if (tela==='novo_endereco') return (
     <CardapioThemeShell theme={cardapioTheme}>
-      <TelaNovo Endereco slug={slug} token={cliToken} onBack={()=>setTela('enderecos')} onSaved={()=>setTela('enderecos')} />
+      <TelaNovo
+        Endereco
+        slug={slug}
+        token={cliToken}
+        temZonas={(config.zonas_entrega || []).length > 0}
+        onBack={() => setTela('enderecos')}
+        onSaved={() => setTela('enderecos')}
+      />
     </CardapioThemeShell>
   );
   return (
@@ -2665,8 +2821,11 @@ export default function DeliveryCardapio() {
             cart={cart}
             config={config}
             tipoAtendimento={tipoAtendimento}
+            suggestions={prefetchedSuggestions}
+            loadingSuggestions={loadingSuggestions}
+            showSuggestions={shouldShowSuggestions}
             onAdd={(p) => addCartItem({ ...p, qty: 1 })}
-            onAddSuggestion={(item: any) => {
+            onAddSuggestion={(item: SuggestionItem) => {
               const produtoCompleto = categorias
                 .flatMap((c) => c.itens)
                 .find((p) => Number(p.id) === Number(item?.id));
@@ -2767,13 +2926,16 @@ export default function DeliveryCardapio() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SACOLA EM MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddSuggestion, onRemove, onContinuarComprando }: {
+function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, onAdd, onAddSuggestion, onRemove, onContinuarComprando }: {
   slug: string;
   cliToken: string | null;
   cart: CartItem[]; config: Config;
   tipoAtendimento: TipoAtendimento | null;
+  suggestions: SuggestionItem[];
+  loadingSuggestions: boolean;
+  showSuggestions: boolean;
   onAdd: (p: CartItem)=>void; onRemove: (key: string)=>void;
-  onAddSuggestion: (item: any)=>void;
+  onAddSuggestion: (item: SuggestionItem)=>void;
   onContinuarComprando: ()=>void;
 }) {
   const cardTh = useDeliveryCardapioTheme();
@@ -2784,42 +2946,6 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, onAdd, 
   const [resumoCheckout, setResumoCheckout] = useState<CheckoutResumo | null>(null);
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const resumoReqRef = useRef(0);
-
-// --- INÍCIO DA CAMADA 1: SUGESTÕES ---
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-
-  useEffect(() => {
-    const productIds = Array.from(new Set(cart.map(i => i.id)));
-    if (productIds.length === 0) {
-      setSuggestions([]);
-      setLoadingSuggestions(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingSuggestions(true);
-
-    fetch(`/public/delivery/${slug}/suggestions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productIds }),
-    })
-      .then(r => (r.ok ? r.json() : []))
-      .then((d) => {
-        if (cancelled) return;
-        setSuggestions(Array.isArray(d) ? d.slice(0, 3) : []);
-      })
-      .catch(() => {
-        if (!cancelled) setSuggestions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingSuggestions(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [slug, cart]);
-  // --- FIM DA CAMADA 1: SUGESTÕES ---
 
   const descontoPixPercentual = Number(config.desconto_pix || 0);
   const resumoFallback = useMemo(() => createFallbackCheckoutResumo({
@@ -2927,7 +3053,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, onAdd, 
               </div>
             ))}
 
-            {!loadingSuggestions && suggestions.length > 0 && (
+            {showSuggestions && (
               <div
                 className={
                   isLightRed
@@ -2937,7 +3063,9 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, onAdd, 
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className={`text-sm font-black ${isLightRed ? 'text-stone-900' : 'text-white'}`}>Complete seu pedido</p>
-                  <span className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>Sugestoes</span>
+                  <span className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>
+                    {loadingSuggestions ? 'Atualizando' : 'Sugestoes'}
+                  </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {suggestions.slice(0, 4).map((item) => (
@@ -3018,7 +3146,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, onAdd, 
   );
 }
 
-function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart, config, tipoAtendimento, onAdd, onAddSuggestion, onRemove }: {
+function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, onAdd, onAddSuggestion, onRemove }: {
   open: boolean;
   onClose: () => void;
   onContinuarCheckout: () => void;
@@ -3027,8 +3155,11 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
   cart: CartItem[];
   config: Config;
   tipoAtendimento: TipoAtendimento | null;
+  suggestions: SuggestionItem[];
+  loadingSuggestions: boolean;
+  showSuggestions: boolean;
   onAdd: (p: CartItem) => void;
-  onAddSuggestion: (item: any) => void;
+  onAddSuggestion: (item: SuggestionItem) => void;
   onRemove: (key: string) => void;
 }) {
   const sub = cart.reduce((a, i) => a + i.preco_final * i.qty, 0);
@@ -3081,6 +3212,9 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
             cart={cart}
             config={config}
             tipoAtendimento={tipoAtendimento}
+            suggestions={suggestions}
+            loadingSuggestions={loadingSuggestions}
+            showSuggestions={showSuggestions}
             onAdd={onAdd}
             onAddSuggestion={onAddSuggestion}
             onRemove={onRemove}
@@ -3468,8 +3602,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const { step: modalStep, onStepChange: setModalStep, onClose: fecharModalCheckout } = modalUi;
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [endSel, setEndSel] = useState<number|'novo'|''>('');
-  const [novoEnd, setNovoEnd] = useState('');
-  const [bairroNovo, setBairroNovo] = useState('');
+  const [novoEndereco, setNovoEndereco] = useState<DeliveryNovoEnderecoForm>(() => emptyDeliveryNovoEnderecoForm(true));
   const [modoRecebimento, setModoRecebimento] = useState<ModoRecebimentoPedido | null>(null);
   const [pag, setPag] = useState('pix');
   const [pixCheckoutAck, setPixCheckoutAck] = useState(false);
@@ -3512,7 +3645,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
 
   // Bairro do endereço atualmente selecionado
   const bairroAtual = endSel === 'novo'
-    ? bairroNovo
+    ? novoEndereco.campos.bairro
     : (() => {
         const e = enderecos.find(x => x.id === endSel);
         return e?.bairro || '';
@@ -3619,11 +3752,18 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
           setEnderecos(d);
           const p = d.find((e:Endereco)=>e.principal);
           setEndSel(p ? p.id : d[0].id);
-        } else setEndSel('novo');
+        } else {
+          setEnderecos([]);
+          setEndSel('novo');
+          setNovoEndereco(emptyDeliveryNovoEnderecoForm(true));
+        }
       });
   },[cliToken,slug]);
 
-  const atualizarResumo = useCallback(async (cupomCodigo?: string | null) => {
+  const atualizarResumo = useCallback(async (
+    cupomCodigo?: string | null,
+    feeOverride?: { enderecoId?: number },
+  ) => {
     if (!cliToken || !slug || cart.length === 0 || !tipoAtendimento) {
       setResumoCheckout(null);
       return null;
@@ -3631,6 +3771,24 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
 
     const requestId = ++resumoReqRef.current;
     setCarregandoResumo(true);
+
+    const resolvedEndId =
+      feeOverride && feeOverride.enderecoId !== undefined
+        ? feeOverride.enderecoId
+        : tipoAtendimento === 'retirada'
+          ? undefined
+          : typeof endSel === 'number'
+            ? endSel
+            : undefined;
+
+    const resolvedBairroTemp =
+      tipoAtendimento === 'retirada'
+        ? undefined
+        : resolvedEndId != null && resolvedEndId > 0
+          ? undefined
+          : endSel === 'novo'
+            ? novoEndereco.campos.bairro.trim() || undefined
+            : undefined;
 
     try {
       const r = await fetch(`/public/delivery/${slug}/pedido/resumo`, {
@@ -3641,8 +3799,8 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
           pagamento_tipo: pag,
           clienteToken: cliToken,
           canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
-          endereco_id: tipoAtendimento === 'retirada' ? undefined : (typeof endSel === 'number' ? endSel : undefined),
-          bairro_temporario: tipoAtendimento === 'retirada' ? undefined : (endSel === 'novo' ? bairroNovo.trim() || undefined : undefined),
+          endereco_id: resolvedEndId,
+          bairro_temporario: resolvedBairroTemp,
           cupom_codigo: cupomCodigo === undefined ? (cupomValido?.cupom?.codigo || undefined) : (cupomCodigo || undefined),
         }),
       });
@@ -3681,14 +3839,14 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
         setCarregandoResumo(false);
       }
     }
-  }, [cliToken, slug, cart, pag, endSel, bairroNovo, cupomValido?.cupom?.codigo, tipoAtendimento]);
+  }, [cliToken, slug, cart, pag, endSel, novoEndereco.campos.bairro, cupomValido?.cupom?.codigo, tipoAtendimento]);
 
   useEffect(() => {
     atualizarResumo();
   }, [atualizarResumo]);
 
   const endStr = endSel==='novo'
-    ? [novoEnd.trim(), bairroNovo.trim() ? `Bairro: ${bairroNovo.trim()}` : ''].filter(Boolean).join(' • ')
+    ? formatEnderecoPedidoLinha(novoEndereco.campos)
     : (() => { const e=enderecos.find(x=>x.id===endSel); return e?`${e.logradouro}${e.numero?', '+e.numero:''}${e.complemento?' — '+e.complemento:''}${e.bairro?' • '+e.bairro:''}${e.referencia?' — Ref: '+e.referencia:''}`.trim():''; })();
 
   const validarCupom = async () => {
@@ -3708,8 +3866,13 @@ const finalizar = async () => {
     if (!tipoAtendimento) { setErro('Escolha se o pedido sera para entrega ou retirada.'); return; }
     if (!modoRecebimento) { setErro('Escolha como deseja receber o pedido.'); return; }
     if (tipoAtendimento === 'entrega') {
+    if (endSel === 'novo') {
+      if (!novoEndereco.campos.logradouro.trim()) { setErro('Informe a rua ou avenida'); return; }
+      if (!novoEndereco.campos.numero.trim()) { setErro('Informe o número do endereço'); return; }
+      if (!novoEndereco.campos.bairro.trim()) { setErro('Informe o bairro'); return; }
+    }
     if (!endStr.trim()) { setErro('Selecione ou informe o endereço de entrega'); return; }
-    if (temZonas && endSel === 'novo' && !bairroNovo.trim()) {
+    if (temZonas && endSel === 'novo' && !novoEndereco.campos.bairro.trim()) {
       setErro('Informe o bairro do endereço para calcular a taxa de entrega.');
       return;
     }
@@ -3721,7 +3884,36 @@ const finalizar = async () => {
     if (enviando) return;
     setEnviando(true);
     try {
-      if (!await atualizarResumo()) {
+      let enderecoIdFinal: number | undefined = typeof endSel === 'number' ? endSel : undefined;
+
+      if (tipoAtendimento === 'entrega' && endSel === 'novo') {
+        if (!cliToken) {
+          setErro('É necessário estar identificado para salvar o endereço de entrega.');
+          return;
+        }
+        const principalFlag = enderecos.length === 0 || novoEndereco.principal;
+        const rs = await fetch(`/public/delivery/${slug}/cliente/enderecos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cliToken}` },
+          body: JSON.stringify({
+            label: novoEndereco.label,
+            logradouro: novoEndereco.campos.logradouro.trim(),
+            numero: novoEndereco.campos.numero.trim(),
+            complemento: novoEndereco.campos.complemento.trim() || null,
+            bairro: novoEndereco.campos.bairro.trim(),
+            referencia: novoEndereco.campos.referencia.trim() || null,
+            principal: principalFlag,
+          }),
+        });
+        const sd = await rs.json();
+        if (!sd.success) {
+          setErro(sd.error || 'Não foi possível salvar o endereço');
+          return;
+        }
+        enderecoIdFinal = sd.id;
+      }
+
+      if (!await atualizarResumo(undefined, enderecoIdFinal ? { enderecoId: enderecoIdFinal } : undefined)) {
         setErro('Nao foi possivel validar o resumo final do pedido. Tente novamente.');
         return;
       }
@@ -3740,10 +3932,17 @@ const finalizar = async () => {
         endereco: tipoAtendimento === 'retirada' ? null : endStr,
         clienteToken: cliToken,
         canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
-        bairro_temporario: tipoAtendimento === 'retirada' ? undefined : (endSel === 'novo' ? bairroNovo.trim() || undefined : undefined),
+        bairro_temporario:
+          tipoAtendimento === 'retirada'
+            ? undefined
+            : enderecoIdFinal
+              ? undefined
+              : endSel === 'novo'
+                ? novoEndereco.campos.bairro.trim() || undefined
+                : undefined,
         cupom_codigo: cupomValido ? cupomValido.cupom.codigo : undefined,
       };
-      if (tipoAtendimento === 'entrega' && typeof endSel==='number') body.endereco_id = endSel;
+      if (tipoAtendimento === 'entrega' && enderecoIdFinal != null) body.endereco_id = enderecoIdFinal;
       const r = await fetch(`/public/delivery/${slug}/pedido`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d = await r.json();
       // CORREÇÃO: Pegamos o config_pix que vem do backend e mandamos para a próxima tela
@@ -3779,8 +3978,13 @@ const finalizar = async () => {
       return false;
     }
     if (modoRecebimento === 'entrega') {
+      if (endSel === 'novo') {
+        if (!novoEndereco.campos.logradouro.trim()) { setErro('Informe a rua ou avenida'); return false; }
+        if (!novoEndereco.campos.numero.trim()) { setErro('Informe o número do endereço'); return false; }
+        if (!novoEndereco.campos.bairro.trim()) { setErro('Informe o bairro'); return false; }
+      }
       if (!endStr.trim()) { setErro('Selecione ou informe o endereço de entrega'); return false; }
-      if (temZonas && endSel === 'novo' && !bairroNovo.trim()) {
+      if (temZonas && endSel === 'novo' && !novoEndereco.campos.bairro.trim()) {
         setErro('Informe o bairro do endereço para calcular a taxa de entrega.');
         return false;
       }
@@ -4057,22 +4261,89 @@ const finalizar = async () => {
                   })()}
                 </button>
               ))}
-              <button onClick={()=>setEndSel('novo')}
-                className={endSel==='novo' ? cx.addressBtnOn : `${cx.addressBtnOff} border-dashed`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setEndSel('novo');
+                  setNovoEndereco(emptyDeliveryNovoEnderecoForm(false));
+                }}
+                className={endSel==='novo' ? cx.addressBtnOn : `${cx.addressBtnOff} border-dashed`}
+              >
                 <p className={`text-sm font-bold ${checkoutTheme.mode === 'light_red' ? 'text-red-800' : 'text-cyan-200'}`}>+ Usar outro endereço</p>
               </button>
             </div>
           )}
           {(endSel==='novo'||enderecos.length===0) && (
-            <div className="space-y-2">
-              <textarea value={novoEnd} onChange={e=>setNovoEnd(e.target.value)}
-                placeholder="Rua, número, complemento, referência..." rows={3} className={`${inp} resize-none`}/>
-              <input
-                value={bairroNovo}
-                onChange={e=>setBairroNovo(e.target.value)}
-                placeholder={temZonas ? 'Bairro para calcular a taxa de entrega *' : 'Bairro (opcional)'}
-                className={inp}
-              />
+            <div className="mt-2 space-y-3">
+              <div>
+                <p className={`mb-1.5 text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}>Identificação</p>
+                <DeliveryIdentificacaoEnderecoChips
+                  value={novoEndereco.label}
+                  onChange={(label) => setNovoEndereco((f) => ({ ...f, label }))}
+                  chipOn={
+                    isLightCheckout
+                      ? 'border-cyan-400 bg-cyan-50 text-cyan-700'
+                      : 'border-cyan-400/70 bg-cyan-500/15 text-cyan-200'
+                  }
+                  chipOff={
+                    isLightCheckout
+                      ? 'border-zinc-200 bg-white text-zinc-500'
+                      : 'border-white/15 bg-white/5 text-zinc-400'
+                  }
+                />
+              </div>
+              <div
+                className={
+                  isLightCheckout
+                    ? 'space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm'
+                    : 'space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4'
+                }
+              >
+                <DeliveryEnderecoCamposInputs
+                  value={novoEndereco.campos}
+                  onChange={(campos) => setNovoEndereco((f) => ({ ...f, campos }))}
+                  inpClass={inp}
+                  temZonas={temZonas}
+                  labelClassName={isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}
+                />
+              </div>
+              {enderecos.length === 0 ? (
+                <p className={`text-xs font-medium ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  Este primeiro endereço será salvo no seu cadastro como principal.
+                </p>
+              ) : (
+                <label
+                  className={
+                    isLightCheckout
+                      ? 'flex cursor-pointer items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm'
+                      : 'flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4'
+                  }
+                >
+                  <button
+                    type="button"
+                    aria-pressed={novoEndereco.principal}
+                    onClick={() => setNovoEndereco((f) => ({ ...f, principal: !f.principal }))}
+                    className={`relative h-6 w-12 shrink-0 rounded-full transition-all ${
+                      novoEndereco.principal
+                        ? isLightCheckout
+                          ? 'bg-red-600'
+                          : 'bg-cyan-600'
+                        : isLightCheckout
+                          ? 'bg-zinc-300'
+                          : 'bg-zinc-600'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                        novoEndereco.principal ? 'left-6' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className={`text-sm font-semibold ${isLightCheckout ? 'text-zinc-700' : 'text-zinc-200'}`}>
+                    Definir como principal
+                  </span>
+                </label>
+              )}
             </div>
           )}
 
@@ -5118,17 +5389,52 @@ function TelaEnderecos({ slug, token, onBack, onNovo }: { slug:string;token:stri
   );
 }
 
-function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: any;slug:string;token:string|null;onBack:()=>void;onSaved:()=>void }) {
-  const [form, setForm]=useState({label:'Casa',logradouro:'',numero:'',complemento:'',bairro:'',referencia:'',principal:false});
+function TelaNovo({
+  Endereco: _,
+  slug,
+  token,
+  temZonas,
+  onBack,
+  onSaved,
+}: {
+  Endereco?: any;
+  slug: string;
+  token: string | null;
+  temZonas: boolean;
+  onBack: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<DeliveryNovoEnderecoForm>(() => emptyDeliveryNovoEnderecoForm(false));
   const [saving, setSaving]=useState(false);
   const [erro, setErro]=useState('');
   const inp="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3.5 text-base focus:border-cyan-400 focus:outline-none transition-all sm:px-4 sm:text-sm";
-  const set=(k:string)=>(e:React.ChangeEvent<HTMLInputElement>)=>setForm(f=>({...f,[k]:e.target.value}));
   const salvar=async()=>{
-    if(!form.logradouro.trim()){setErro('Informe o logradouro');return;}
+    if (!form.campos.logradouro.trim()) { setErro('Informe o logradouro'); return; }
+    if (!form.campos.numero.trim()) { setErro('Informe o número'); return; }
+    if (!form.campos.bairro.trim()) { setErro('Informe o bairro'); return; }
     setSaving(true);
-    try{const r=await fetch(`/public/delivery/${slug}/cliente/enderecos`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify(form)});const d=await r.json();if(d.success)onSaved();else setErro(d.error||'Erro');}
-    catch{setErro('Erro de conexão');}finally{setSaving(false);}
+    try {
+      const r = await fetch(`/public/delivery/${slug}/cliente/enderecos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          label: form.label,
+          logradouro: form.campos.logradouro.trim(),
+          numero: form.campos.numero.trim(),
+          complemento: form.campos.complemento.trim() || null,
+          bairro: form.campos.bairro.trim(),
+          referencia: form.campos.referencia.trim() || null,
+          principal: form.principal,
+        }),
+      });
+      const d = await r.json();
+      if (d.success) onSaved();
+      else setErro(d.error || 'Erro');
+    } catch {
+      setErro('Erro de conexão');
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col">
@@ -5137,22 +5443,38 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
         <p className="text-lg font-black text-zinc-900">Novo Endereço</p>
       </header>
       <div className="mx-auto w-full max-w-2xl flex-1 space-y-4 overflow-y-auto p-3 pb-8 sm:p-4">
-        <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-2">Identificação</label>
-        <div className="flex gap-2 flex-wrap">{['Casa','Trabalho','Familiar','Outro'].map(l=><button key={l} onClick={()=>setForm(f=>({...f,label:l}))} className={`px-4 py-2 rounded-full text-sm font-bold border-2 transition-all ${form.label===l?'border-cyan-400 bg-cyan-50 text-cyan-700':'border-zinc-200 bg-white text-zinc-500'}`}>{l}</button>)}</div></div>
-        <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-          {[{k:'logradouro',l:'Rua / Avenida *',p:'Rua das Flores'},{k:'numero',l:'Número',p:'123'},{k:'complemento',l:'Complemento',p:'Apto 12'},{k:'bairro',l:'Bairro',p:'Centro'},{k:'referencia',l:'Referência',p:'Próximo ao mercado...'}].map(f=>(
-            <div key={f.k}><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">{f.l}</label><input value={(form as any)[f.k]} onChange={set(f.k)} placeholder={f.p} className={inp}/></div>
-          ))}
+        <div>
+          <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-zinc-500">Identificação</label>
+          <DeliveryIdentificacaoEnderecoChips
+            value={form.label}
+            onChange={(label) => setForm((f) => ({ ...f, label }))}
+            chipOn="border-cyan-400 bg-cyan-50 text-cyan-700"
+            chipOff="border-zinc-200 bg-white text-zinc-500"
+          />
         </div>
-        <label className="flex items-center gap-3 cursor-pointer bg-white rounded-2xl p-4 shadow-sm">
-          <div onClick={()=>setForm(f=>({...f,principal:!f.principal}))} className={`w-12 h-6 rounded-full relative transition-all ${form.principal?'bg-cyan-600':'bg-zinc-300'}`}>
-            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow transition-all ${form.principal?'left-6':'left-0.5'}`}/>
-          </div>
+        <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
+          <DeliveryEnderecoCamposInputs
+            value={form.campos}
+            onChange={(campos) => setForm((f) => ({ ...f, campos }))}
+            inpClass={inp}
+            temZonas={temZonas}
+            labelClassName="text-zinc-500"
+          />
+        </div>
+        <label className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            aria-pressed={form.principal}
+            onClick={() => setForm((f) => ({ ...f, principal: !f.principal }))}
+            className={`relative h-6 w-12 shrink-0 rounded-full transition-all ${form.principal ? 'bg-cyan-600' : 'bg-zinc-300'}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${form.principal ? 'left-6' : 'left-0.5'}`} />
+          </button>
           <span className="text-sm font-semibold text-zinc-700">Definir como principal</span>
         </label>
         {erro&&<div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600">{erro}</div>}
-        <button onClick={salvar} disabled={saving} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 text-white rounded-2xl font-black flex items-center justify-center transition-all active:scale-[0.98]">
-          {saving?<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:'Salvar Endereço'}
+        <button type="button" onClick={salvar} disabled={saving} className="flex w-full items-center justify-center rounded-2xl bg-zinc-900 py-4 font-black text-white transition-all hover:bg-zinc-800 active:scale-[0.98] disabled:bg-zinc-300">
+          {saving?<div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"/>:'Salvar Endereço'}
         </button>
       </div>
     </div>

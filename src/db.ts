@@ -316,6 +316,7 @@ export async function runMigrations() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_sugestoes_eventos_tenant ON sugestoes_eventos (tenant_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_sugestoes_eventos_sugerido ON sugestoes_eventos (tenant_id, produto_sugerido_id);
 
       CREATE TABLE IF NOT EXISTS funcionarios (
         id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL,
