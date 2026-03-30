@@ -125,6 +125,8 @@ export interface CalculatePayrollResult extends PayrollStructured {
     totalExtraMinPago: number;
     /** Minutos do mês destinados ao banco (via lançamento HE) */
     totalExtraMinBancoMes: number;
+    /** HE aprovadas com destino "definir depois" (não entram na folha nem no banco até definir) */
+    totalExtraMinPendentes?: number;
     /** Minutos convertidos do banco para provento financeiro nesta competência */
     totalBancoConvertidoFolhaMin: number;
     valorExtras: number;
@@ -142,13 +144,31 @@ export function roundMoney(value: number): number {
  * Minutos de HE que entram na folha em dinheiro.
  * NULL em minutos_pago_folha = 100% na folha (legado / registros antigos antes do destino explícito na API).
  * Preferir sempre gravar minutos_pago_folha (0…total) em novos lançamentos.
+ * destino_pendente = 1: destino ainda não definido — não entra na folha nem gera crédito de banco.
  */
-export function extraMinutesForPayrollRow(row: { minutos?: number; minutos_pago_folha?: number | null }): number {
+export function extraMinutesForPayrollRow(row: {
+  minutos?: number;
+  minutos_pago_folha?: number | null;
+  destino_pendente?: number | null;
+}): number {
+  if (Number(row.destino_pendente) === 1) return 0;
   const total = Math.max(0, Number(row.minutos) || 0);
   const pago = row.minutos_pago_folha;
   if (pago == null) return total;
   const n = Math.max(0, Math.floor(Number(pago)));
   return Math.min(total, n);
+}
+
+/** Minutos de HE que vão para o banco neste lançamento (0 se pendente ou 100% folha). */
+export function extraMinutesForBankFromRow(row: {
+  minutos?: number;
+  minutos_pago_folha?: number | null;
+  destino_pendente?: number | null;
+}): number {
+  if (Number(row.destino_pendente) === 1) return 0;
+  const total = Math.max(0, Number(row.minutos) || 0);
+  const pago = extraMinutesForPayrollRow(row);
+  return Math.max(0, total - pago);
 }
 
 export type HourBankMovTipo = 'credit' | 'debit' | 'manual_adjust' | 'converted_to_payroll';
@@ -443,6 +463,7 @@ export async function syncBankCreditFromHoraExtra(params: {
   minutos: number;
   minutosPagoFolha: number | null | undefined;
   createdBy: string | null;
+  destinoPendente?: boolean;
 }): Promise<void> {
   const fc = await q1<{ tipo_contrato: string | null }>(
     'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
@@ -456,6 +477,9 @@ export async function syncBankCreditFromHoraExtra(params: {
     employeeId: params.employeeId,
     horaExtraId: params.horaExtraId,
   });
+  if (params.destinoPendente) {
+    return;
+  }
   const total = Math.max(0, Math.floor(Number(params.minutos) || 0));
   const pago = extraMinutesForPayrollRow({
     minutos: total,
@@ -556,6 +580,7 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
         totalExtraMin: 0,
         totalExtraMinPago: 0,
         totalExtraMinBancoMes: 0,
+        totalExtraMinPendentes: 0,
         valorExtras: 0,
         totalBancoConvertidoFolhaMin: 0,
         valorBancoConvertidoFolha: 0,
@@ -635,7 +660,11 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
   let horasAusentesParcial = 0;
   const totalExtraMin = extras.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0);
   const totalExtraMinPago = extras.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0);
-  const totalExtraMinBancoMes = Math.max(0, totalExtraMin - totalExtraMinPago);
+  const totalExtraMinBancoMes = extras.reduce((acc, curr) => acc + extraMinutesForBankFromRow(curr), 0);
+  const totalExtraMinPendentes = extras.reduce(
+    (acc, curr) => acc + (Number((curr as { destino_pendente?: unknown }).destino_pendente) === 1 ? Number((curr as { minutos?: unknown }).minutos) || 0 : 0),
+    0
+  );
   const { minutos_convertidos_folha: totalBancoConvertidoFolhaMin } = hourBankApplicable(tipo)
     ? await getHourBankPayrollConversionSummary({
         tenantId,
@@ -799,6 +828,7 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
       totalExtraMin,
       totalExtraMinPago,
       totalExtraMinBancoMes,
+      totalExtraMinPendentes,
       valorExtras,
       totalBancoConvertidoFolhaMin,
       valorBancoConvertidoFolha,

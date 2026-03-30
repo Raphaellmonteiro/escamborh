@@ -28,3 +28,158 @@ html.flowpdv-admin-dark ::selection {
   background-color: rgba(52, 211, 153, 0.35);
   color: #fafafa;
 }
+
+/* Estoque admin dark: superfÃ­cies e legibilidade escopadas ao mÃ³dulo */
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell {
+  background:
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 28%),
+    linear-gradient(180deg, #09090b 0%, #0b0d12 100%) !important;
+  color: #f4f4f5;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell,
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell * {
+  color-scheme: dark;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-header-shell {
+  background: rgba(10, 10, 13, 0.88) !important;
+  border-color: #27272a !important;
+  backdrop-filter: blur(14px);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-surface,
+html.flowpdv-admin-dark .admin-dark .stock-kpi-card {
+  background: #111318 !important;
+  border-color: #27272a !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-muted-surface,
+html.flowpdv-admin-dark .admin-dark .stock-tab-group {
+  background: rgba(24, 24, 27, 0.82) !important;
+  border-color: #3f3f46 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tab-divider {
+  background-color: #27272a !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tab-button {
+  color: #a1a1aa !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tab-button:hover {
+  background: rgba(39, 39, 42, 0.95) !important;
+  color: #fafafa !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tab-button.is-active {
+  background: #0f1115 !important;
+  color: #fafafa !important;
+  box-shadow: inset 0 0 0 1px rgba(63, 63, 70, 0.9);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-tab-button.stock-tab-production.is-active {
+  background: rgba(109, 40, 217, 0.18) !important;
+  color: #ede9fe !important;
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.35);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-primary-action {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%) !important;
+  box-shadow: 0 14px 28px rgba(5, 150, 105, 0.28);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-primary-action:hover {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-secondary-action {
+  background: rgba(24, 24, 27, 0.92) !important;
+  border-color: #3f3f46 !important;
+  color: #f4f4f5 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-secondary-action:hover {
+  background: #23262f !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell select,
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell textarea {
+  background: #0d1015 !important;
+  border-color: #323642 !important;
+  color: #fafafa !important;
+  box-shadow: none !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell input::placeholder,
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell textarea::placeholder {
+  color: #71717a !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell input:not([type='checkbox']):not([type='radio']):focus,
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell select:focus,
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell textarea:focus {
+  border-color: rgba(52, 211, 153, 0.85) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14) !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.7);
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='bg-white'] {
+  background-color: #111318 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='bg-zinc-50'] {
+  background-color: #171922 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='bg-zinc-100'] {
+  background-color: #1f2330 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='border-zinc-100'],
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='border-zinc-200'] {
+  border-color: #27272a !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='text-zinc-900'] { color: #fafafa !important; }
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='text-zinc-800'] { color: #f4f4f5 !important; }
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='text-zinc-700'] { color: #e4e4e7 !important; }
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='text-zinc-600'] { color: #d4d4d8 !important; }
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='text-zinc-500'] { color: #a1a1aa !important; }
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class~='text-zinc-400'] { color: #71717a !important; }
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class*='hover:bg-zinc-50']:hover {
+  background-color: #1d212c !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class*='hover:bg-zinc-100']:hover {
+  background-color: #252a38 !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class*='hover:bg-zinc-200']:hover {
+  background-color: #31384a !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class*='hover:text-zinc-700']:hover,
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell [class*='hover:text-zinc-900']:hover {
+  color: #fafafa !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell table thead tr {
+  background: #151821 !important;
+  border-color: #27272a !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell table tbody {
+  border-color: #23262f !important;
+}
+
+html.flowpdv-admin-dark .admin-dark .stock-screen-shell table tbody tr:hover {
+  background: rgba(24, 24, 27, 0.78) !important;
+}

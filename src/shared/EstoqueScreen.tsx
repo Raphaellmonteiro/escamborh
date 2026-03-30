@@ -13,7 +13,6 @@ import type {
   Ingrediente, MovimentacaoEstoque, FichaTecnicaItem,
   RelatorioConsumo, Product, LegacyFallbackAuditReport,
 } from '../types';
-import { Card, Button, Input } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Spinner } from '../components/ui/Spinner';
@@ -54,6 +53,67 @@ type Filtro = 'todos' | 'ok' | 'baixo' | 'esgotado';
 
 const ESTOQUE_INTRO_COLLAPSED_KEY = 'flowpdv_estoque_intro_collapsed';
 
+type TutorialAction = {
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  iconClass: string;
+};
+
+const SIMPLE_MODE_ACTIONS: TutorialAction[] = [
+  {
+    title: 'Entrada',
+    description: 'Soma estoque quando chega compra, reposicao ou devolucao do fornecedor.',
+    icon: ArrowUpCircle,
+    iconClass: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    title: 'Saida',
+    description: 'Desconta manualmente perdas, uso interno ou vendas feitas fora do fluxo automatico.',
+    icon: ArrowDownCircle,
+    iconClass: 'bg-red-100 text-red-700',
+  },
+  {
+    title: 'Zerar',
+    description: 'Transforma todo o saldo atual em uma saida unica para reiniciar a contagem.',
+    icon: RotateCcw,
+    iconClass: 'bg-zinc-200 text-zinc-700',
+  },
+  {
+    title: 'Editar',
+    description: 'Altera nome, unidade, custo e fornecedor. Se mudar o saldo, o sistema registra ajuste.',
+    icon: FileText,
+    iconClass: 'bg-amber-100 text-amber-700',
+  },
+  {
+    title: 'Historico',
+    description: 'Mostra as ultimas movimentacoes do item para conferir entradas, saidas e ajustes.',
+    icon: History,
+    iconClass: 'bg-sky-100 text-sky-700',
+  },
+];
+
+const SIMPLE_MODE_STEPS = [
+  'Cadastre o item no estoque como Coca-Cola lata, unidade "unidade" e estoque atual de 20.',
+  'No produto de venda, deixe o vinculo correto com o estoque: codigo de barras exato igual ao item de estoque ou uma variacao ligada ao item certo.',
+  'Quando vender no balcao, mesa ou delivery com esse vinculo valido, o sistema localiza a Coca-Cola e baixa automaticamente a quantidade vendida.',
+  'Exemplo: vendeu 3 latas. O estoque cai de 20 para 17 e a movimentacao fica registrada no historico.',
+];
+
+const ADVANCED_MODE_STEPS = [
+  'Cadastre os ingredientes reais no estoque, por exemplo arroz, feijao e carne, usando kg, g, litro ou ml.',
+  'Abra Receita / Producao e monte a ficha tecnica da marmita informando quanto cada ingrediente usa por unidade vendida.',
+  'Exemplo: 1 marmita pode consumir 0,18 kg de arroz, 0,12 kg de feijao e 0,15 kg de carne.',
+  'Quando a marmita for vendida, o sistema multiplica a ficha tecnica pela quantidade do pedido e baixa cada ingrediente automaticamente.',
+];
+
+const STOCK_IDENTIFICATION_STEPS = [
+  'Se a variacao vendavel estiver ligada diretamente a um item de estoque, esse item tem prioridade na baixa.',
+  'Se a variacao tiver codigo de barras proprio e ele bater exatamente com um item de estoque, o sistema usa esse item.',
+  'Se o produto tiver ficha tecnica, a baixa acontece pelos ingredientes cadastrados na ficha.',
+  'Se nao houver ficha tecnica, o sistema ainda pode baixar 1 para 1 quando o codigo de barras do produto for igual ao codigo do item de estoque.',
+];
+
 /** Valores sugeridos para saída rápida conforme a unidade do item. */
 function quickSaidaPresets(unidade: string): number[] {
   const u = (unidade || '').toLowerCase();
@@ -65,6 +125,12 @@ function quickSaidaPresets(unidade: string): number[] {
 function fmtQuickQtyBtn(q: number): string {
   const s = Number.isInteger(q) ? String(q) : String(q).replace('.', ',');
   return `−${s}`;
+}
+
+function previewIngredientNames(items: Ingrediente[]): string {
+  if (items.length === 0) return 'Nenhum item nesta categoria.';
+  const visible = items.slice(0, 3).map((item) => item.nome).join(', ');
+  return items.length > 3 ? `${visible} +${items.length - 3}` : visible;
 }
 
 export default function EstoqueScreen({ token, segmento: _segmento }: { token: string; segmento: string }) {
@@ -586,11 +652,44 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
   );
 
   // ── badges de status ─────────────────────────────────────────
-  const totalEsgotados = ingredientes.filter(i => i.status === 'esgotado').length;
-  const totalBaixos    = ingredientes.filter(i => i.status === 'baixo').length;
+  const itensEsgotados = ingredientes.filter((item) => item.status === 'esgotado');
+  const itensBaixos = ingredientes.filter((item) => item.status === 'baixo');
+  const totalEsgotados = itensEsgotados.length;
+  const totalBaixos = itensBaixos.length;
+  const totalSaudaveis = Math.max(ingredientes.length - totalEsgotados - totalBaixos, 0);
+  const ingredientesComMovimentoHoje = ingredientes.filter(
+    (item) => toNumber(item.usado_hoje) > 0 || toNumber(item.recebido_hoje) > 0
+  ).length;
 
-  const getStatusCls = (s?: string) =>
-    s === 'esgotado' ? 'bg-red-50 border-red-300' : s === 'baixo' ? 'bg-amber-50 border-amber-300' : 'bg-white border-zinc-200';
+  const getStatusMeta = (status?: string) => {
+    if (status === 'esgotado') {
+      return {
+        cardClass:
+          'border-red-200 bg-red-50/80 [.admin-dark_&]:border-red-500/30 [.admin-dark_&]:bg-red-500/10',
+        badgeClass:
+          'border border-red-200 bg-red-50 text-red-700 [.admin-dark_&]:border-red-500/30 [.admin-dark_&]:bg-red-500/15 [.admin-dark_&]:text-red-200',
+        progressClass: 'bg-red-500',
+        label: 'Esgotado',
+      };
+    }
+    if (status === 'baixo') {
+      return {
+        cardClass:
+          'border-amber-200 bg-amber-50/80 [.admin-dark_&]:border-amber-500/30 [.admin-dark_&]:bg-amber-500/10',
+        badgeClass:
+          'border border-amber-200 bg-amber-50 text-amber-700 [.admin-dark_&]:border-amber-500/30 [.admin-dark_&]:bg-amber-500/15 [.admin-dark_&]:text-amber-200',
+        progressClass: 'bg-amber-500',
+        label: 'Baixo',
+      };
+    }
+    return {
+      cardClass: 'stock-surface border-zinc-200 bg-white',
+      badgeClass:
+        'border border-emerald-200 bg-emerald-50 text-emerald-700 [.admin-dark_&]:border-emerald-500/30 [.admin-dark_&]:bg-emerald-500/15 [.admin-dark_&]:text-emerald-200',
+      progressClass: 'bg-emerald-500',
+      label: 'Normal',
+    };
+  };
 
   const getFichaItemNome = (item: FichaTecnicaItem) => {
     const nome = item?.nome ?? item?.ingrediente_nome ?? '';
@@ -624,10 +723,10 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
   // RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 min-w-0 flex-col bg-zinc-50">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="stock-screen-shell flex h-full min-h-0 min-w-0 flex-col bg-zinc-50">
 
       {/* ── Header ── */}
-      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-2 sm:px-3 sm:py-2.5 lg:px-4 lg:py-2.5 2xl:px-6 2xl:py-3.5">
+      <div className="stock-header-shell min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-2 sm:px-3 sm:py-2.5 lg:px-4 lg:py-2.5 2xl:px-6 2xl:py-3.5">
         <ScreenHeader
           rowFrom="md"
           className="gap-2 md:gap-2 2xl:gap-4"
@@ -640,9 +739,9 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
             </p>
           }
           actions={
-            <>
+            <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-0 md:flex-row md:items-stretch md:justify-end">
               <div className="flex max-w-full min-w-0 items-stretch gap-1.5 overflow-x-auto overflow-y-hidden touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1 pb-0.5">
-                <div className="flex min-w-0 shrink-0 flex-col gap-0.5 rounded-xl border border-zinc-200/80 bg-zinc-100 p-1">
+                <div className="stock-tab-group flex min-w-0 shrink-0 flex-col gap-0.5 rounded-xl border border-zinc-200/80 bg-zinc-100 p-1">
                   <span className="hidden px-2 pt-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400 sm:block">Estoque simples</span>
                   <div className="flex gap-0.5">
                     {([
@@ -655,7 +754,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                         type="button"
                         title={t.label}
                         onClick={() => setTab(t.key)}
-                        className={`flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all min-h-[40px] sm:max-w-[14rem] sm:px-3 lg:min-h-0 lg:max-w-none lg:py-2 ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                        className={`stock-tab-button flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all min-h-[40px] sm:max-w-[14rem] sm:px-3 lg:min-h-0 lg:max-w-none lg:py-2 ${tab === t.key ? 'is-active bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
                       >
                         <span className="shrink-0">{t.icon}</span>
                         <span className="min-w-0 truncate leading-tight sm:whitespace-normal">{t.label}</span>
@@ -663,8 +762,8 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     ))}
                   </div>
                 </div>
-                <div className="hidden w-px shrink-0 self-stretch bg-zinc-200 sm:block" aria-hidden />
-                <div className="flex min-w-0 shrink-0 flex-col gap-0.5 rounded-xl border border-violet-200/80 bg-violet-50/60 p-1">
+                <div className="stock-tab-divider hidden w-px shrink-0 self-stretch bg-zinc-200 sm:block" aria-hidden />
+                <div className="stock-tab-group flex min-w-0 shrink-0 flex-col gap-0.5 rounded-xl border border-violet-200/80 bg-violet-50/60 p-1">
                   <span className="hidden px-2 pt-0.5 text-[9px] font-black uppercase tracking-wider text-violet-700 sm:block">Produção / receitas</span>
                   <div className="flex gap-0.5">
                     {([
@@ -675,7 +774,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                         key={t.key}
                         type="button"
                         onClick={() => setTab(t.key)}
-                        className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-xs font-bold transition-all min-h-[40px] sm:px-3 lg:min-h-0 lg:py-2 ${tab === t.key ? 'bg-white text-violet-950 shadow-sm ring-1 ring-violet-200/80' : 'text-violet-800/90 hover:text-violet-950'}`}
+                        className={`stock-tab-button stock-tab-production flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-xs font-bold transition-all min-h-[40px] sm:px-3 lg:min-h-0 lg:py-2 ${tab === t.key ? 'is-active bg-white text-violet-950 shadow-sm ring-1 ring-violet-200/80' : 'text-violet-800/90 hover:text-violet-950'}`}
                       >
                         {t.icon}
                         {t.label}
@@ -685,10 +784,10 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                 </div>
               </div>
               <button onClick={() => setEditing({ nome: '', unidade: 'unidade', estoque_atual: 0, estoque_minimo: 0, custo_unitario: 0 })}
-                className="flex shrink-0 items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-zinc-800 active:scale-95">
+                className="stock-primary-action flex shrink-0 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-zinc-800 active:scale-95 md:min-w-[9.5rem]">
                 <Plus size={16}/>{labelNovo}
               </button>
-            </>
+            </div>
           }
         />
       </div>
@@ -697,90 +796,245 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
       <div className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden ${adminScreenPagePaddingClass}`}>
 
         {/* Bloco explicativo: modos simples e avançado */}
-        {!introCollapsed ? (
-          <div className="mb-3 rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 to-white p-3 shadow-sm sm:mb-4 sm:p-4 2xl:rounded-3xl 2xl:p-5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
-                  <Info size={18} aria-hidden />
-                </div>
+        <AnimatePresence initial={false} mode="wait">
+          {!introCollapsed ? (
+            <motion.section
+              key="estoque-intro-expanded"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="stock-surface mb-3 rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-zinc-50 p-4 shadow-sm sm:mb-4 sm:p-5 2xl:p-6"
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-sm font-black text-zinc-900 sm:text-base">Como funciona o estoque</p>
-                  <p className="mt-0.5 text-xs text-zinc-600 sm:text-sm">Dois jeitos de usar — escolha o que combina com o seu negócio.</p>
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-sm">
+                      <Info size={20} aria-hidden />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-lg font-black text-zinc-900 sm:text-xl">Como funciona o estoque</p>
+                      <p className="mt-1 max-w-3xl text-sm leading-relaxed text-zinc-600">
+                        Este tutorial mostra o jeito mais simples e o jeito mais completo de trabalhar com estoque no FlowPDV. A ideia e ler uma vez, entender o fluxo e depois ocultar sem medo.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800">Modo simples em verde</span>
+                    <span className="rounded-full bg-orange-100 px-3 py-1 text-[11px] font-bold text-orange-800">Modo avançado em laranja</span>
+                    <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold text-zinc-700">Baixa automática depende de vínculo correto</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIntroCollapsedPersist(true)}
+                  className="stock-secondary-action inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-800 shadow-sm hover:bg-sky-50"
+                  aria-expanded="true"
+                >
+                  <ChevronUp size={14} aria-hidden />
+                  Ocultar tutorial
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                <section className="rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-4 shadow-sm sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                      <Package size={20} aria-hidden />
+                    </div>
+                    <div>
+                      <span className="inline-flex rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white">
+                        Modo simples
+                      </span>
+                      <p className="mt-2 text-lg font-black text-zinc-900">Ideal para bebida, lata, garrafa e item vendido por unidade</p>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-700">
+                        Use quando o que voce vende e praticamente o mesmo item que sai do estoque. Exemplo classico: Coca-Cola lata, agua, cerveja long neck, sobremesa pronta ou produto embalado.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-white/90 p-4">
+                    <p className="text-sm font-black text-zinc-900">Passo a passo com Coca-Cola lata</p>
+                    <div className="mt-3 space-y-3">
+                      {SIMPLE_MODE_STEPS.map((step, index) => (
+                        <div key={step} className="flex items-start gap-3">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white">
+                            {index + 1}
+                          </div>
+                          <p className="text-sm leading-relaxed text-zinc-700">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-sm font-black text-zinc-900">O que cada acao faz no modo simples</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {SIMPLE_MODE_ACTIONS.map((action) => {
+                        const Icon = action.icon;
+                        return (
+                          <div key={action.title} className="rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm">
+                            <div className="flex items-start gap-3">
+                              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${action.iconClass}`}>
+                                <Icon size={18} aria-hidden />
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-zinc-900">{action.title}</p>
+                                <p className="mt-1 text-xs leading-relaxed text-zinc-600">{action.description}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-100/60 p-4 shadow-sm sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700">
+                      <BookOpen size={20} aria-hidden />
+                    </div>
+                    <div>
+                      <span className="inline-flex rounded-full bg-orange-500 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white">
+                        Modo avancado
+                      </span>
+                      <p className="mt-2 text-lg font-black text-zinc-900">Ideal para ficha tecnica, producao e controle por ingredientes</p>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-700">
+                        Use quando um produto vendido consome varios itens do estoque. E o caso de marmita, lanche, prato feito, pizza, porcao e qualquer preparacao feita na cozinha.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-orange-200 bg-white/90 p-4">
+                    <p className="text-sm font-black text-zinc-900">Passo a passo com marmita</p>
+                    <div className="mt-3 space-y-3">
+                      {ADVANCED_MODE_STEPS.map((step, index) => (
+                        <div key={step} className="flex items-start gap-3">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-black text-white">
+                            {index + 1}
+                          </div>
+                          <p className="text-sm leading-relaxed text-zinc-700">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-orange-100 bg-white/85 p-4">
+                      <p className="text-sm font-black text-zinc-900">Quando usar</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                        Quando voce quer saber consumo real, custo por receita e baixa automatica de ingredientes em gramas, quilos, litros ou mililitros.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-orange-100 bg-white/85 p-4">
+                      <p className="text-sm font-black text-zinc-900">Resultado na venda</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                        Se vender 2 marmitas, a baixa e multiplicada por 2 em cada ingrediente da ficha tecnica. O historico registra cada saida no estoque.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-orange-100 bg-white/85 p-4 sm:col-span-2">
+                      <p className="text-sm font-black text-zinc-900">Resumo pratico</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                        No modo avancado, o produto vendido nao precisa ser o mesmo item do estoque. O importante e a ficha tecnica estar certa, porque e ela que diz exatamente o que sera baixado.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="mt-4 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700">
+                    <Link2 size={18} aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-base font-black text-zinc-900">Como o sistema identifica o item de estoque na venda</p>
+                    <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+                      A baixa automatica so acontece quando existe um vinculo valido entre o produto vendido e o estoque. Hoje a logica do FlowPDV segue esta ordem:
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="space-y-2">
+                    {STOCK_IDENTIFICATION_STEPS.map((step, index) => (
+                      <div key={step} className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-black text-white">
+                          {index + 1}
+                        </div>
+                        <p className="text-sm leading-relaxed text-zinc-700">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4">
+                    <div className="flex items-center gap-2">
+                      <Zap size={16} className="text-sky-700" aria-hidden />
+                      <p className="text-sm font-black text-zinc-900">Importante para o cliente final</p>
+                    </div>
+                    <div className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-700">
+                      <p>Se nao existir ficha tecnica, variacao vinculada ou codigo de barras exato, o sistema nao tem como adivinhar qual item deve baixar.</p>
+                      <p>Nas vendas do PDV e nas mesas, esse vinculo precisa estar certo para a baixa acontecer com seguranca.</p>
+                      <p>No delivery online, se o pedido entrar sem vinculo valido, ele pode ser autorizado sem a baixa automatica do estoque.</p>
+                      <p>Depois da venda, voce confere tudo em Historico, Entradas e Saidas e Relatorio.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </motion.section>
+          ) : (
+            <motion.div
+              key="estoque-intro-collapsed"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mb-3 flex justify-end sm:mb-4"
+            >
               <button
                 type="button"
-                onClick={() => setIntroCollapsedPersist(true)}
-                className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-sky-800 hover:bg-sky-100/80"
+                onClick={() => setIntroCollapsedPersist(false)}
+                className="stock-secondary-action inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-700 shadow-sm hover:bg-zinc-50"
+                aria-expanded="false"
               >
-                Ocultar
+                <ChevronDown size={14} className="text-sky-600" aria-hidden />
+                Mostrar tutorial do estoque
               </button>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-zinc-200/80 bg-white/90 p-3 sm:p-4">
-                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Modo simples</p>
-                <p className="mt-1 text-sm font-bold text-zinc-900">Quantidade manual</p>
-                <p className="mt-1.5 text-xs leading-relaxed text-zinc-600">
-                  Cadastre cada item (ex.: <strong className="font-semibold text-zinc-800">marmita</strong>, <strong className="font-semibold text-zinc-800">refrigerante 2L</strong>) na unidade que você vende ou conta —
-                  use <strong className="font-semibold text-zinc-800">unidade</strong>, <strong className="font-semibold text-zinc-800">pacote</strong>, etc. Registre <strong className="font-semibold text-zinc-800">entrada</strong> quando comprar e{' '}
-                  <strong className="font-semibold text-zinc-800">saída</strong> (ou saída rápida) quando consumir ou vender fora do PDV.
-                </p>
-                <p className="mt-2 text-[11px] text-zinc-500">Abas: <span className="font-semibold text-zinc-700">Ingredientes</span>, <span className="font-semibold text-zinc-700">Entradas e Saídas</span>, <span className="font-semibold text-zinc-700">Relatório</span>.</p>
-              </div>
-              <div className="rounded-xl border border-violet-200/80 bg-violet-50/40 p-3 sm:p-4">
-                <p className="text-[10px] font-black uppercase tracking-wider text-violet-700">Modo avançado</p>
-                <p className="mt-1 text-sm font-bold text-zinc-900">Ingredientes em gramas + receita</p>
-                <p className="mt-1.5 text-xs leading-relaxed text-zinc-600">
-                  Cadastre insumos com <strong className="font-semibold text-zinc-800">kg, g, litro…</strong> Em <strong className="font-semibold text-zinc-800">Receita / Produção</strong>, diga quanto de cada insumo entra em cada produto do cardápio.
-                  Assim o sistema pode calcular custo e consumo com mais precisão quando houver venda no PDV.
-                </p>
-                <p className="mt-2 text-[11px] text-violet-900/80"><span className="font-semibold">Padronização</span> ajuda a alinhar produtos antigos a receitas explícitas — use quando o suporte indicar.</p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="mb-3 flex justify-end sm:mb-4">
-            <button
-              type="button"
-              onClick={() => setIntroCollapsedPersist(false)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-600 shadow-sm hover:bg-zinc-50"
-            >
-              <Info size={14} className="text-sky-600" aria-hidden />
-              Como funciona o estoque
-            </button>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ═══ ABA: INGREDIENTES ═══ */}
         {tab === 'ingredientes' && (
-          <div className="space-y-2 2xl:space-y-4">
-            <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 sm:px-4">
+          <div className="space-y-3 2xl:space-y-4">
+            <div className="stock-surface rounded-xl border border-zinc-200 bg-white px-3 py-3 text-xs text-zinc-600 sm:px-4">
               <span className="font-bold text-zinc-800">Estoque simples · </span>
               Lista de itens com entrada, saída e ajuste. Unidade em <strong className="font-semibold text-zinc-800">gramas</strong> ou outra — você escolhe ao cadastrar.
+              <p className="mt-2 text-[11px] text-zinc-500">
+                {ingredientesComMovimentoHoje} item(ns) com movimento hoje · {totalSaudaveis} com estoque estável
+              </p>
             </div>
             {/* Alertas rápidos */}
             {(totalEsgotados > 0 || totalBaixos > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {totalEsgotados > 0 && (
-                  <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 sm:gap-3 2xl:rounded-2xl 2xl:p-4">
+                  <div className="stock-kpi-card flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 sm:gap-3 2xl:rounded-2xl 2xl:p-4">
                     <div className="w-10 h-10 bg-red-100 text-red-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <AlertCircle size={20}/>
                     </div>
                     <div>
                       <p className="font-bold text-red-900 text-sm">Itens Esgotados</p>
-                      <p className="text-xs text-red-700">{ingredientes.filter(i => i.status === 'esgotado').map(i => i.nome).join(', ')}</p>
+                      <p className="text-xs text-red-700">{previewIngredientNames(itensEsgotados)}</p>
                     </div>
                   </div>
                 )}
                 {totalBaixos > 0 && (
-                  <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:gap-3 2xl:rounded-2xl 2xl:p-4">
+                  <div className="stock-kpi-card flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:gap-3 2xl:rounded-2xl 2xl:p-4">
                     <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center flex-shrink-0">
                       <AlertCircle size={20}/>
                     </div>
                     <div>
                       <p className="font-bold text-amber-900 text-sm">Estoque Baixo</p>
-                      <p className="text-xs text-amber-700">{ingredientes.filter(i => i.status === 'baixo').map(i => i.nome).join(', ')}</p>
+                      <p className="text-xs text-amber-700">{previewIngredientNames(itensBaixos)}</p>
                     </div>
                   </div>
                 )}
@@ -788,9 +1042,9 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
             )}
 
             {/* Busca + Filtros + Ordenação */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="stock-surface flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:p-4">
               {/* Busca */}
-              <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <div className="relative flex-1 min-w-[220px] max-w-full sm:max-w-sm lg:max-w-md">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
                 <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome ou fornecedor..."
                   className="w-full pl-9 pr-4 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
@@ -821,7 +1075,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                   <option value="custo">Ordenar: Custo</option>
                 </select>
                 <button onClick={() => setOrdemAsc(!ordemAsc)}
-                  className="p-2 bg-white border border-zinc-200 rounded-xl text-zinc-500 hover:text-zinc-900 transition-all">
+                  className="stock-secondary-action p-2 bg-white border border-zinc-200 rounded-xl text-zinc-500 hover:text-zinc-900 transition-all">
                   {ordemAsc ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                 </button>
               </div>
@@ -843,31 +1097,34 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
               <>
               <div className="grid grid-cols-1 md:grid-cols-2 min-[1200px]:grid-cols-3 gap-3">
                 {ingredientesVisiveis.map(ing => (
-                  <div key={ing.id} className={`rounded-2xl border p-2 transition-all ${getStatusCls(ing.status)}`}>
+                  <div key={ing.id} className={`stock-surface rounded-2xl border p-3 transition-all hover:-translate-y-[1px] ${getStatusMeta(ing.status).cardClass}`}>
                     {/* Linha 1: Header + ícones */}
-                    <div className="flex justify-between items-start gap-2 mb-1">
+                    <div className="mb-2 flex justify-between items-start gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-lg shrink-0">{ingredienteEmoji(ing.nome)}</span>
                         <div className="min-w-0">
                           <h3 className="font-black text-zinc-900 text-sm leading-tight truncate">{ing.nome}</h3>
                           <p className="text-[9px] font-bold text-zinc-400 uppercase">{ing.unidade}{ing.fornecedor ? ` · ${ing.fornecedor}` : ''}</p>
+                          <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${getStatusMeta(ing.status).badgeClass}`}>
+                            {getStatusMeta(ing.status).label}
+                          </span>
                         </div>
                       </div>
                       <div className="flex gap-0.5 shrink-0">
-                        <button onClick={() => setEditing(ing)} className="p-0.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded" title="Editar"><FileText size={11}/></button>
-                        <button onClick={() => fetchHistoricoItem(ing)} className="p-0.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded" title="Histórico"><History size={11}/></button>
-                        <button onClick={() => handleDeleteClick(ing.id)} className="p-0.5 hover:bg-red-50 text-zinc-400 hover:text-red-500 rounded" title="Excluir"><Trash2 size={11}/></button>
+                        <button onClick={() => setEditing(ing)} className="stock-secondary-action rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" title="Editar"><FileText size={11}/></button>
+                        <button onClick={() => fetchHistoricoItem(ing)} className="stock-secondary-action rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" title="Histórico"><History size={11}/></button>
+                        <button onClick={() => handleDeleteClick(ing.id)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-500" title="Excluir"><Trash2 size={11}/></button>
                       </div>
                     </div>
 
                     {/* Linha 2: Atual/Mín inline + Barra + % */}
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="stock-muted-surface mb-2 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50/80 px-2.5 py-2">
                       <span className="text-[10px] text-zinc-500 shrink-0"><span className="font-black text-zinc-900">{ing.estoque_atual}</span>/<span className="font-black text-zinc-900">{ing.estoque_minimo}</span> {ing.unidade}</span>
                       <div className="flex-1 min-w-[50px] flex items-center gap-1">
                         <div className="flex-1 h-1 bg-zinc-100 rounded-full overflow-hidden">
                           <motion.div initial={{ width: 0 }}
                             animate={{ width: `${Math.min(100, (ing.estoque_atual / (ing.estoque_minimo * 3 || 1)) * 100)}%` }}
-                            className={`h-full rounded-full ${ing.status === 'esgotado' ? 'bg-red-500' : ing.status === 'baixo' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            className={`h-full rounded-full ${getStatusMeta(ing.status).progressClass}`}
                           />
                         </div>
                         <span className="text-[9px] font-bold text-zinc-400 w-6">{Math.round(Math.min(100, (ing.estoque_atual / (ing.estoque_minimo * 3 || 1)) * 100))}%</span>
@@ -881,7 +1138,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                         <span className="text-emerald-600 font-bold"><ArrowUpCircle size={8}/> +{ing.recebido_hoje || 0}</span>
                       </div>
                       {(ing.custo_unitario || 0) > 0 && (
-                        <span className="text-[9px] text-zinc-500 px-1 py-0.5 bg-zinc-50 rounded border border-zinc-100 shrink-0">{fmt(ing.custo_unitario || 0)}/{ing.unidade}</span>
+                        <span className="stock-muted-surface shrink-0 rounded-lg border border-zinc-100 bg-zinc-50 px-1.5 py-0.5 text-[9px] text-zinc-500">{fmt(ing.custo_unitario || 0)}/{ing.unidade}</span>
                       )}
                       <div className="flex-1 grid grid-cols-2 gap-1 min-w-0">
                         <button onClick={() => { setShowMovModal({ id: ing.id, tipo: 'entrada' }); setMovForm({ quantidade: '', motivo: 'Compra', novoValor: '' }); }}
@@ -901,7 +1158,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                           <RotateCcw size={9}/> Zerar
                         </button>
                       </div>
-                      <div className="mt-1.5 flex w-full flex-wrap items-center gap-1 border-t border-zinc-100/80 pt-1.5">
+                      <div className="mt-2 flex w-full flex-wrap items-center gap-1 border-t border-zinc-100/80 pt-2">
                         <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide text-zinc-500">
                           <Zap size={10} className="text-amber-500" aria-hidden />
                           Saída rápida
@@ -912,7 +1169,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                             type="button"
                             onClick={() => handleQuickSaida(ing, q)}
                             title={`Registrar saída de ${fmtN(q, ing.unidade)} com motivo automático`}
-                            className="rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-zinc-700 shadow-sm hover:bg-zinc-50 active:scale-95"
+                            className="stock-secondary-action rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-zinc-700 shadow-sm hover:bg-zinc-50 active:scale-95"
                           >
                             {fmtQuickQtyBtn(q)} <span className="font-bold text-zinc-500">{ing.unidade}</span>
                           </button>

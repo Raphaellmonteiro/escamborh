@@ -45,10 +45,16 @@ interface HoraExtraDia {
   id: number;
   minutos: number;
   minutos_pago_folha?: number | null;
-  destino?: 'folha' | 'banco' | 'dividido' | 'legado_folha';
+  destino?: 'folha' | 'banco' | 'dividido' | 'legado_folha' | 'pendente';
   observacao?: string | null;
   quantidade?: number;
   itens?: HoraExtraDia[];
+}
+interface HoraExtraPendenteApi {
+  id: number;
+  data: string;
+  minutos: number;
+  observacao?: string | null;
 }
 interface DiaEspelho {
   data: string; dia: number; diaSemana: number; isExpediente: boolean; status: string;
@@ -67,10 +73,12 @@ interface Espelho {
   resumo: {
     diasTrabalhados: number; totalFaltas: number; diasFolga: number; diasAtestado: number; totalAtrasoMin: number;
     descontoFaltas: number; descontoAtrasos: number; descontoParcial?: number; totalDescontos: number;
-    totalExtraMin?: number; totalExtraMinPagoFolha?: number; totalExtraMinBancoMes?: number; saldoBancoHorasMin?: number;
+    totalExtraMin?: number; totalExtraMinPagoFolha?: number; totalExtraMinBancoMes?: number; totalExtraMinPendentes?: number;
+    saldoBancoHorasMin?: number;
   };
   banco_horas_mes?: BancoMovRow[];
   banco_horas_aplicavel?: boolean;
+  horas_extras_pendentes?: HoraExtraPendenteApi[];
 }
 interface PayrollLineApi { type: string; label: string; amount: number }
 interface FolhaPayrollApi {
@@ -134,6 +142,7 @@ interface Folha {
   totalExtraMin: number;
   totalExtraMinPago?: number;
   totalExtraMinBancoMes?: number;
+  totalExtraMinPendentes?: number;
   valorExtras: number;
   totalBancoConvertidoFolhaMin?: number;
   valorBancoConvertidoFolha?: number;
@@ -166,7 +175,7 @@ const STATUS_COLOR: Record<string, string> = {
   folga: 'bg-blue-50 text-blue-700 border-blue-200',
   atestado: 'bg-purple-50 text-purple-700 border-purple-200',
   declaracao_parcial: 'bg-amber-50 text-amber-700 border-amber-200',
-  sem_expediente: 'bg-zinc-50 text-zinc-400 border-zinc-100',
+  sem_expediente: 'bg-[var(--bg-main)] text-[var(--text-muted)] border-[var(--border)]',
 };
 const STATUS_LABEL: Record<string, string> = { trabalhado: 'OK', falta: 'Falta', folga: 'Folga', atestado: 'Ates.', declaracao_parcial: 'Parc.', sem_expediente: '—' };
 const PAYROLL_STATUS_LABEL: Record<string, string> = { pending: 'Pendente', partial: 'Parcial', paid: 'Quitada' };
@@ -187,7 +196,12 @@ const fmtMinHuman = (minutes: number) => {
   const label = h > 0 ? `${h}h${min > 0 ? ` ${min}min` : ''}` : `${min}min`;
   return minutes < 0 ? `-${label}` : label;
 };
-const resolveHoraExtraDestino = (item: { minutos: number; minutos_pago_folha?: number | null }): HoraExtraDia['destino'] => {
+const resolveHoraExtraDestino = (item: {
+  minutos: number;
+  minutos_pago_folha?: number | null;
+  destino?: HoraExtraDia['destino'];
+}): HoraExtraDia['destino'] => {
+  if (item.destino === 'pendente') return 'pendente';
   const total = Math.max(0, Number(item.minutos) || 0);
   const pago = item.minutos_pago_folha;
   if (pago == null) return 'legado_folha';
@@ -198,6 +212,8 @@ const resolveHoraExtraDestino = (item: { minutos: number; minutos_pago_folha?: n
 };
 const horaExtraDestinoLabel = (destino: HoraExtraDia['destino']) => {
   switch (destino) {
+    case 'pendente':
+      return 'Destino da hora extra: pendente (ainda não entra na folha nem no banco)';
     case 'banco':
       return 'Destino da hora extra: banco de horas';
     case 'dividido':
@@ -275,17 +291,17 @@ export default function RHScreen({ token }: { token: string }) {
   const activeTabCopy = TAB_COPY[tab];
 
   return (
-    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-zinc-50">
+    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-[var(--bg-main)]">
       <div className={`max-w-7xl mx-auto min-w-0 ${adminScreenPagePaddingClass} space-y-2 sm:space-y-3 2xl:space-y-4`}>
         <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-black text-zinc-900 2xl:text-2xl">Modulo RH</h1>
-          <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-snug 2xl:text-sm">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
+          <h1 className="text-lg sm:text-xl font-black text-[var(--text-main)] 2xl:text-2xl">Modulo RH</h1>
+          <p className="text-[11px] sm:text-xs text-[var(--text-muted)] mt-0.5 leading-snug 2xl:text-sm">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
         </div>
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 flex-wrap min-w-0">
-          <div className="flex bg-white border border-zinc-200 rounded-xl p-0.5 sm:p-1 gap-0.5 overflow-x-auto overflow-y-hidden w-full sm:w-auto min-w-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
+          <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-0.5 sm:p-1 gap-0.5 overflow-x-auto overflow-y-hidden w-full sm:w-auto min-w-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key as any)}
-                className={`flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] text-xs font-bold transition-all shrink-0 rounded-lg sm:gap-2 sm:px-3 sm:text-sm lg:min-h-0 lg:py-1.5 2xl:px-3.5 2xl:py-2 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`}>
+                className={`flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] text-xs font-bold transition-all shrink-0 rounded-lg sm:gap-2 sm:px-3 sm:text-sm lg:min-h-0 lg:py-1.5 2xl:px-3.5 2xl:py-2 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-main)]'}`}>
                 {t.icon}{t.label}
               </button>
             ))}
@@ -302,12 +318,12 @@ export default function RHScreen({ token }: { token: string }) {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-2.5 sm:p-3 min-w-0 2xl:p-4">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-2.5 sm:p-3 min-w-0 2xl:p-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between min-w-0 2xl:gap-3">
             <div className="max-w-4xl min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 2xl:text-[11px]">{TABS.find((item) => item.key === tab)?.label}</p>
-              <h2 className="mt-0.5 text-sm sm:text-base font-black text-zinc-900 2xl:text-lg 2xl:mt-1">{activeTabCopy.title}</h2>
-              <p className="mt-1 text-[11px] sm:text-xs leading-relaxed text-zinc-600 2xl:mt-1.5 2xl:text-sm">{activeTabCopy.subtitle}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)] 2xl:text-[11px]">{TABS.find((item) => item.key === tab)?.label}</p>
+              <h2 className="mt-0.5 text-sm sm:text-base font-black text-[var(--text-main)] 2xl:text-lg 2xl:mt-1">{activeTabCopy.title}</h2>
+              <p className="mt-1 text-[11px] sm:text-xs leading-relaxed text-[var(--text-muted)] 2xl:mt-1.5 2xl:text-sm">{activeTabCopy.subtitle}</p>
             </div>
             <div className="flex flex-wrap gap-1.5 shrink-0 2xl:gap-2">
               {activeTabCopy.shortcuts.map((shortcut) => (
@@ -315,7 +331,7 @@ export default function RHScreen({ token }: { token: string }) {
                   key={shortcut.key}
                   type="button"
                   onClick={() => setTab(shortcut.key)}
-                  className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] font-bold text-zinc-700 hover:bg-zinc-100 sm:text-xs 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-sm"
+                  className="rounded-lg border border-[var(--border)] bg-[var(--bg-main)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-main)] hover:bg-zinc-100 sm:text-xs 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-sm"
                 >
                   {shortcut.label}
                 </button>
@@ -397,29 +413,29 @@ function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (fu
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-zinc-500">Painel gerencial</p>
-            <h2 className="text-xl font-black text-zinc-900 mt-1">Alertas, pendencias e prioridades do RH</h2>
-            <p className="text-sm text-zinc-500 mt-2">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--text-muted)]">Painel gerencial</p>
+            <h2 className="text-xl font-black text-[var(--text-main)] mt-1">Alertas, pendencias e prioridades do RH</h2>
+            <p className="text-sm text-[var(--text-muted)] mt-2">
               Esta aba serve para triagem rapida de ferias, 13o, beneficios e folhas em aberto. Quando for preciso editar no detalhe, abrimos a ficha completa do colaborador pela aba Funcionarios.
             </p>
           </div>
           <div className="flex gap-2">
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar alerta ou colaborador..."
-                className="w-full min-w-[250px] rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-4 text-sm focus:outline-none"
+                className="w-full min-w-[250px] rounded-xl border border-[var(--border)] bg-[var(--bg-card)] py-2 pl-9 pr-4 text-sm focus:outline-none"
               />
             </div>
             <button
               type="button"
               onClick={carregarPainel}
-              className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-600 hover:bg-zinc-50"
+              className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-4 py-2 text-sm font-bold text-[var(--text-muted)] hover:bg-[var(--bg-main)]"
             >
               <RefreshCw size={14} />
               Atualizar
@@ -440,13 +456,13 @@ function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (fu
       ) : (
         <>
           <div className="flex flex-col gap-1">
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Triagem do modulo</p>
-            <p className="text-sm text-zinc-600">Revise aqui o que pede decisao gerencial e entre na ficha completa apenas quando precisar agir em um colaborador especifico.</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Triagem do modulo</p>
+            <p className="text-sm text-[var(--text-muted)]">Revise aqui o que pede decisao gerencial e entre na ficha completa apenas quando precisar agir em um colaborador especifico.</p>
           </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 sm:p-5">
             <div>
-              <h3 className="text-sm font-black text-zinc-900">Pendencias e alertas</h3>
-              <p className="text-xs text-zinc-500 mt-1">Cada card mostra o que precisa de decisao agora e, se necessario, leva para a ficha completa do colaborador.</p>
+              <h3 className="text-sm font-black text-[var(--text-main)]">Pendencias e alertas</h3>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Cada card mostra o que precisa de decisao agora e, se necessario, leva para a ficha completa do colaborador.</p>
             </div>
             <div className="grid gap-3 mt-4 sm:grid-cols-2 xl:grid-cols-3">
               {alertasFiltrados.map((a) => {
@@ -471,7 +487,7 @@ function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (fu
                       <button
                         type="button"
                         onClick={() => onOpenGestao(func)}
-                        className="mt-3 inline-flex items-center gap-2 rounded-xl border border-current/20 bg-white/70 px-3 py-2 text-[11px] font-black hover:bg-white"
+                        className="mt-3 inline-flex items-center gap-2 rounded-xl border border-current/20 bg-[var(--bg-card)]/70 px-3 py-2 text-[11px] font-black hover:bg-[var(--bg-card)]"
                       >
                         Abrir ficha completa
                         <ArrowRight size={12} />
@@ -483,13 +499,13 @@ function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (fu
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 sm:p-5">
             <div>
-              <h3 className="text-sm font-black text-zinc-900">Abrir ficha completa por funcionario</h3>
-              <p className="text-xs text-zinc-500 mt-1">Use esta grade para sair da triagem e entrar na mesma gestao detalhada ja existente dentro de Funcionarios.</p>
+              <h3 className="text-sm font-black text-[var(--text-main)]">Abrir ficha completa por funcionario</h3>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Use esta grade para sair da triagem e entrar na mesma gestao detalhada ja existente dentro de Funcionarios.</p>
             </div>
             {funcionariosFiltrados.length === 0 ? (
-              <div className="flex flex-col items-center py-10 sm:py-12 text-zinc-400">
+              <div className="flex flex-col items-center py-10 sm:py-12 text-[var(--text-muted)]">
                 <Users size={44} className="mb-3 opacity-20" />
                 <p className="font-semibold">Nenhum colaborador encontrado</p>
               </div>
@@ -499,12 +515,12 @@ function TabGestaoRH({ token, onOpenGestao }: { token: string; onOpenGestao: (fu
                   const tipoContrato = normalizeTipoContrato(f.tipo_contrato);
                   const temPendencia = alertasPorFuncionario.has(f.id);
                   return (
-                    <div key={f.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
+                    <div key={f.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)]/70 p-4">
                       <div className="flex items-start gap-3">
                         <Avatar func={f} size={42} />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate font-black text-zinc-900">{f.nome}</p>
-                          <p className="truncate text-xs text-zinc-500">{f.cargo || 'Sem cargo definido'}</p>
+                          <p className="truncate font-black text-[var(--text-main)]">{f.nome}</p>
+                          <p className="truncate text-xs text-[var(--text-muted)]">{f.cargo || 'Sem cargo definido'}</p>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-bold text-white">
                               {TIPO_CONTRATO_LABEL[tipoContrato]}
@@ -796,33 +812,33 @@ function TabLista({
 
   return (
     <>
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-4 sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Funcionarios</p>
-            <h2 className="mt-1 text-xl font-black text-zinc-900">Cadastro, contrato e ficha completa</h2>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Funcionarios</p>
+            <h2 className="mt-1 text-xl font-black text-[var(--text-main)]">Cadastro, contrato e ficha completa</h2>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--text-muted)]">
               Esta aba concentra dados cadastrais, contrato, acesso ao sistema e a gestao detalhada por colaborador. Use Gestao RH para triagem e volte aqui quando precisar editar no detalhe.
             </p>
           </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 min-w-[260px]">
-            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Quando usar</p>
-            <p className="mt-1 font-semibold text-zinc-800">Entrar no nivel do funcionario.</p>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)] px-4 py-3 text-sm text-[var(--text-muted)] min-w-[260px]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Quando usar</p>
+            <p className="mt-1 font-semibold text-[var(--text-main)]">Entrar no nivel do funcionario.</p>
             <p className="mt-1 text-xs leading-relaxed">Cadastro, salario, jornada, acesso, historico e gestao gerencial detalhada ficam concentrados aqui.</p>
           </div>
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar funcionário..." className="pl-9 pr-4 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none w-56"/></div>
+        <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar funcionário..." className="pl-9 pr-4 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm focus:outline-none w-56"/></div>
         <button onClick={()=>{setForm(eF);setFotoFile(null);setFotoPreview('');setSelected(null);setModal('novo');}} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"><UserPlus size={16}/>Novo Funcionário</button>
       </div>
 
       {loading ? <LoadSpinner/> : filtered.length===0 ? (
-        <div className="flex flex-col items-center py-12 sm:py-16 2xl:py-20 text-zinc-400"><Users size={48} className="mb-3 opacity-20 sm:mb-4"/><p className="font-semibold">Nenhum funcionário ativo</p></div>
+        <div className="flex flex-col items-center py-12 sm:py-16 2xl:py-20 text-[var(--text-muted)]"><Users size={48} className="mb-3 opacity-20 sm:mb-4"/><p className="font-semibold">Nenhum funcionário ativo</p></div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(f=>(
-            <div key={f.id} className="bg-white border border-zinc-200 rounded-2xl p-5 hover:border-zinc-400 hover:shadow-md transition-all">
+            <div key={f.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 hover:border-zinc-400 hover:shadow-md transition-all">
               {(() => {
                 const acesso = usuariosExistentes.find(u => u.nome === f.nome);
                 const tipoContrato = normalizeTipoContrato(f.tipo_contrato);
@@ -831,9 +847,9 @@ function TabLista({
               <div className="flex items-start gap-3 mb-4">
                 <Avatar func={f} size={44}/>
                 <div className="flex-1 min-w-0">
-                  <p className="font-black text-zinc-900 truncate">{f.nome}</p>
-                  <p className="text-xs text-zinc-400 truncate">{f.cargo || 'Sem cargo definido'}</p>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">Contrato: {TIPO_CONTRATO_LABEL[tipoContrato]}</p>
+                  <p className="font-black text-[var(--text-main)] truncate">{f.nome}</p>
+                  <p className="text-xs text-[var(--text-muted)] truncate">{f.cargo || 'Sem cargo definido'}</p>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Contrato: {TIPO_CONTRATO_LABEL[tipoContrato]}</p>
                 </div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">{f.status}</span>
               </div>
@@ -857,7 +873,7 @@ function TabLista({
         </div>
       )}
 
-      {inativos.length>0&&<details><summary className="cursor-pointer text-sm font-bold text-zinc-400 hover:text-zinc-600 mt-2">Inativos ({inativos.length})</summary><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">{inativos.map(f=><div key={f.id} className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 flex items-center gap-3 opacity-60"><Avatar func={f} size={36}/><div><p className="text-sm font-bold text-zinc-700">{f.nome}</p><p className="text-xs text-zinc-400">{f.cargo}</p></div></div>)}</div></details>}
+      {inativos.length>0&&<details><summary className="cursor-pointer text-sm font-bold text-[var(--text-muted)] hover:text-[var(--text-muted)] mt-2">Inativos ({inativos.length})</summary><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">{inativos.map(f=><div key={f.id} className="bg-[var(--bg-main)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-3 opacity-60"><Avatar func={f} size={36}/><div><p className="text-sm font-bold text-[var(--text-main)]">{f.nome}</p><p className="text-xs text-[var(--text-muted)]">{f.cargo}</p></div></div>)}</div></details>}
 
       {/* Modal Funcionário */}
       <Modal
@@ -869,7 +885,7 @@ function TabLista({
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <div className="relative w-20 h-20 rounded-2xl bg-zinc-100 overflow-hidden flex items-center justify-center shrink-0 cursor-pointer" onClick={()=>fotoRef.current?.click()}>
-              {fotoPreview?<img src={fotoPreview} alt="" className="w-full h-full object-cover"/>:<Camera size={24} className="text-zinc-400"/>}
+              {fotoPreview?<img src={fotoPreview} alt="" className="w-full h-full object-cover"/>:<Camera size={24} className="text-[var(--text-muted)]"/>}
               <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-all"><Upload size={18} className="text-white"/></div>
             </div>
             <input ref={fotoRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(!f)return;setFotoFile(f);setFotoPreview(URL.createObjectURL(f));}}/>
@@ -880,9 +896,9 @@ function TabLista({
             <FInput label="Salário base (R$)*" value={form.salario_base} onChange={v=>setForm({...form,salario_base:v})} placeholder="1500,00"/>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Tipo de contrato</label>
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Tipo de contrato</label>
             <select
-              className="mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+              className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
               value={form.tipo_contrato || 'fixo'}
               onChange={(e) => setForm({ ...form, tipo_contrato: e.target.value as 'fixo' | 'diarista' | 'evento' })}
             >
@@ -901,10 +917,10 @@ function TabLista({
             <FInput label="Dias trab./mês (base)" value={form.dias_trabalho_mes} onChange={v=>setForm({...form,dias_trabalho_mes:v})} placeholder="26"/>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Dias de trabalho</label>
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Dias de trabalho</label>
             <div className="flex gap-1.5 mt-1.5">
               {[{v:0,l:'Dom'},{v:1,l:'Seg'},{v:2,l:'Ter'},{v:3,l:'Qua'},{v:4,l:'Qui'},{v:5,l:'Sex'},{v:6,l:'Sáb'}].map(d=>(
-                <button key={d.v} onClick={()=>toggleDia(d.v)} className={`w-10 h-10 rounded-xl text-xs font-bold border transition-all ${diasAtivos.includes(d.v)?'bg-zinc-900 text-white border-zinc-900':'bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400'}`}>{d.l}</button>
+                <button key={d.v} onClick={()=>toggleDia(d.v)} className={`w-10 h-10 rounded-xl text-xs font-bold border transition-all ${diasAtivos.includes(d.v)?'bg-zinc-900 text-white border-zinc-900':'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-zinc-400'}`}>{d.l}</button>
               ))}
             </div>
           </div>
@@ -918,35 +934,35 @@ function TabLista({
           </div>
 
           {/* ── Seção de Acesso ao Sistema ──────────────────────────────── */}
-          <div className="border-t border-zinc-100 pt-4 mt-2">
+          <div className="border-t border-[var(--border)] pt-4 mt-2">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-sm font-black text-zinc-800">🔐 Acesso ao Sistema</p>
-                <p className="text-[11px] text-zinc-400">Permita que este funcionário faça login</p>
+                <p className="text-sm font-black text-[var(--text-main)]">🔐 Acesso ao Sistema</p>
+                <p className="text-[11px] text-[var(--text-muted)]">Permita que este funcionário faça login</p>
               </div>
               <button
                 type="button"
                 onClick={()=>setFormAcesso({...formAcesso, criar_acesso:!formAcesso.criar_acesso})}
                 className={`relative w-11 h-6 rounded-full transition-colors ${formAcesso.criar_acesso?'bg-zinc-900':'bg-zinc-200'}`}
               >
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${formAcesso.criar_acesso?'left-5':'left-0.5'}`}/>
+                <span className={`absolute top-0.5 w-5 h-5 bg-zinc-100 rounded-full shadow transition-all ${formAcesso.criar_acesso?'left-5':'left-0.5'}`}/>
               </button>
             </div>
 
             {formAcesso.criar_acesso && (
-              <div className="space-y-3 p-4 bg-zinc-50 rounded-2xl border border-zinc-200">
+              <div className="space-y-3 p-4 bg-[var(--bg-main)] rounded-2xl border border-[var(--border)]">
                 <div className="grid grid-cols-2 gap-3">
                   <FInput label="Login*" value={formAcesso.login} onChange={v=>setFormAcesso({...formAcesso,login:v})} placeholder="joao.silva"/>
                   <FInput label={modal!=='novo'?'Nova senha (deixe vazio para manter)':'Senha*'} type="password" value={formAcesso.senha} onChange={v=>setFormAcesso({...formAcesso,senha:v})} placeholder="••••••"/>
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Nível de acesso</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Nível de acesso</label>
                   <div className="flex gap-2 mt-1.5">
                     {(['atendente','gerente','dono'] as const).map(c=>(
                       <button key={c} type="button"
                         onClick={()=>setFormAcesso({...formAcesso, cargo_sistema:c, permissoes:CARGO_PRESETS[c] || formAcesso.permissoes})}
-                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all capitalize ${formAcesso.cargo_sistema===c?'bg-zinc-900 text-white border-zinc-900':'bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400'}`}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all capitalize ${formAcesso.cargo_sistema===c?'bg-zinc-900 text-white border-zinc-900':'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-zinc-400'}`}
                       >
                         {c==='dono'?'👑 Dono':c==='gerente'?'🔑 Gerente':'🪪 Atendente'}
                       </button>
@@ -956,7 +972,7 @@ function TabLista({
 
                 {formAcesso.cargo_sistema !== 'dono' && (
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Abas permitidas</label>
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Abas permitidas</label>
                     <div className="grid grid-cols-2 gap-1.5 mt-1.5">
                       {ABAS_SISTEMA.map(aba=>{
                         const checked = formAcesso.permissoes.includes(aba.key);
@@ -968,10 +984,10 @@ function TabLista({
                                 : [...formAcesso.permissoes, aba.key];
                               setFormAcesso({...formAcesso, permissoes:next});
                             }}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all text-left ${checked?'bg-zinc-900 text-white border-zinc-900':'bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400'}`}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all text-left ${checked?'bg-zinc-900 text-white border-zinc-900':'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-zinc-400'}`}
                           >
-                            <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked?'bg-white border-white':'border-zinc-300'}`}>
-                              {checked && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 text-zinc-900"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                            <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked?'bg-[var(--bg-card)] border-white':'border-[var(--border)]'}`}>
+                              {checked && <svg viewBox="0 0 10 10" className="w-2.5 h-2.5 text-[var(--text-main)]"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
                             </span>
                             {aba.label}
                           </button>
@@ -992,9 +1008,9 @@ function TabLista({
         <div className="space-y-3">
           <FInput label="Data" type="date" value={formEvento.data} onChange={v=>setFormEvento({...formEvento,data:v})}/>
           <div>
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Tipo de evento</label>
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Tipo de evento</label>
             <div className="grid grid-cols-2 gap-2 mt-1.5">
-              {TIPOS_EVENTO.map(t=><button key={t.value} onClick={()=>setFormEvento({...formEvento,tipo:t.value})} className={`py-2 rounded-xl text-xs font-bold border transition-all ${formEvento.tipo===t.value?'bg-zinc-900 text-white border-zinc-900':'bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400'}`}>{t.label}</button>)}
+              {TIPOS_EVENTO.map(t=><button key={t.value} onClick={()=>setFormEvento({...formEvento,tipo:t.value})} className={`py-2 rounded-xl text-xs font-bold border transition-all ${formEvento.tipo===t.value?'bg-zinc-900 text-white border-zinc-900':'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-zinc-400'}`}>{t.label}</button>)}
             </div>
           </div>
           {formEvento.tipo==='declaracao_parcial'&&<FInput label="Horas ausentes" value={formEvento.horas_ausentes} onChange={v=>setFormEvento({...formEvento,horas_ausentes:v})} placeholder="Ex: 2.5"/>}
@@ -1009,7 +1025,7 @@ function TabLista({
         <div className="space-y-3">
           <FInput label="Valor (R$)" value={formAdiant.valor} onChange={v=>setFormAdiant({...formAdiant,valor:v})} placeholder="500,00"/>
           <FInput label="Motivo" value={formAdiant.motivo} onChange={v=>setFormAdiant({...formAdiant,motivo:v})} placeholder="Emergência, solicitação..."/>
-          {adiantamentos.filter(a=>!a.descontado).length>0&&<div className="p-3 bg-zinc-50 rounded-xl"><p className="text-xs font-bold text-zinc-600 mb-2">Pendentes</p>{adiantamentos.filter(a=>!a.descontado).map(a=><div key={a.id} className="flex justify-between text-xs text-zinc-500"><span>{fmtDate(a.data)} · {a.motivo}</span><span className="font-bold text-amber-600">{fmt(a.valor)}</span></div>)}</div>}
+          {adiantamentos.filter(a=>!a.descontado).length>0&&<div className="p-3 bg-[var(--bg-main)] rounded-xl"><p className="text-xs font-bold text-[var(--text-muted)] mb-2">Pendentes</p>{adiantamentos.filter(a=>!a.descontado).map(a=><div key={a.id} className="flex justify-between text-xs text-[var(--text-muted)]"><span>{fmtDate(a.data)} · {a.motivo}</span><span className="font-bold text-amber-600">{fmt(a.valor)}</span></div>)}</div>}
         </div>
         <MBtns onCancel={()=>setModal(null)} onConfirm={handleAdiantamento} saving={saving} label="Registrar"/>
       </Modal>
@@ -1018,11 +1034,11 @@ function TabLista({
       <Modal open={modal==='ajuste'} onClose={()=>setModal(null)} title={`Ajuste Salarial — ${selected?.nome}`}>
         <div className="space-y-3">
           <div className="flex gap-2">
-            {(['aumento','reducao'] as const).map(t=><button key={t} onClick={()=>setFormAjuste({...formAjuste,tipo:t})} className={`flex-1 py-2 rounded-xl text-sm font-bold border transition-all ${formAjuste.tipo===t?(t==='aumento'?'bg-emerald-600 text-white border-emerald-600':'bg-red-600 text-white border-red-600'):'bg-white text-zinc-500 border-zinc-200'}`}>{t==='aumento'?'▲ Aumento':'▼ Redução'}</button>)}
+            {(['aumento','reducao'] as const).map(t=><button key={t} onClick={()=>setFormAjuste({...formAjuste,tipo:t})} className={`flex-1 py-2 rounded-xl text-sm font-bold border transition-all ${formAjuste.tipo===t?(t==='aumento'?'bg-emerald-600 text-white border-emerald-600':'bg-red-600 text-white border-red-600'):'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)]'}`}>{t==='aumento'?'▲ Aumento':'▼ Redução'}</button>)}
           </div>
           <FInput label="Valor (R$)" value={formAjuste.valor} onChange={v=>setFormAjuste({...formAjuste,valor:v})} placeholder="200,00"/>
           <FInput label="Motivo" value={formAjuste.motivo} onChange={v=>setFormAjuste({...formAjuste,motivo:v})} placeholder="Promoção, reajuste..."/>
-          {selected&&formAjuste.valor&&<div className="p-3 bg-zinc-50 rounded-xl text-xs space-y-1"><div className="flex justify-between"><span className="text-zinc-500">Atual</span><span className="font-bold">{fmt(selected.salario_base)}</span></div><div className="flex justify-between"><span className="text-zinc-500">Novo</span><span className={`font-black ${formAjuste.tipo==='aumento'?'text-emerald-600':'text-red-600'}`}>{fmt(selected.salario_base+(formAjuste.tipo==='aumento'?1:-1)*(parseFloat(formAjuste.valor)||0))}</span></div></div>}
+          {selected&&formAjuste.valor&&<div className="p-3 bg-[var(--bg-main)] rounded-xl text-xs space-y-1"><div className="flex justify-between"><span className="text-[var(--text-muted)]">Atual</span><span className="font-bold">{fmt(selected.salario_base)}</span></div><div className="flex justify-between"><span className="text-[var(--text-muted)]">Novo</span><span className={`font-black ${formAjuste.tipo==='aumento'?'text-emerald-600':'text-red-600'}`}>{fmt(selected.salario_base+(formAjuste.tipo==='aumento'?1:-1)*(parseFloat(formAjuste.valor)||0))}</span></div></div>}
         </div>
         <MBtns onCancel={()=>setModal(null)} onConfirm={handleAjuste} saving={saving} label="Confirmar Ajuste"/>
       </Modal>
@@ -1037,11 +1053,11 @@ function TabLista({
         wide
       >
         <div className="space-y-4 pr-0.5 2xl:space-y-6">
-          {rhGestaoLoading && <p className="text-xs text-zinc-400">Carregando…</p>}
+          {rhGestaoLoading && <p className="text-xs text-[var(--text-muted)]">Carregando…</p>}
           {selected && (
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 text-sm text-zinc-700">
-              <p className="font-black text-zinc-900">Edicao detalhada do colaborador</p>
-              <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-main)]/80 p-4 text-sm text-[var(--text-main)]">
+              <p className="font-black text-[var(--text-main)]">Edicao detalhada do colaborador</p>
+              <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
                 Esta ficha concentra beneficios, ferias e 13o no nivel individual. A aba Gestao RH continua sendo o painel de triagem; aqui fica a acao detalhada por colaborador.
               </p>
             </div>
@@ -1059,26 +1075,26 @@ function TabLista({
           {selected && isFixo(normalizeTipoContrato(selected.tipo_contrato)) && (
           <>
           {/* Benefícios */}
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 space-y-3">
-            <p className="text-xs font-black uppercase tracking-wider text-zinc-500">Benefícios (folha)</p>
-            <p className="text-[11px] text-zinc-400">Valores fixos ou % do salário base; efeito na folha como acréscimo ou desconto gerencial.</p>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)]/80 p-4 space-y-3">
+            <p className="text-xs font-black uppercase tracking-wider text-[var(--text-muted)]">Benefícios (folha)</p>
+            <p className="text-[11px] text-[var(--text-muted)]">Valores fixos ou % do salário base; efeito na folha como acréscimo ou desconto gerencial.</p>
             {BEN_TIPOS.map((t) => (
-              <div key={t.key} className="flex flex-wrap items-end gap-2 bg-white border border-zinc-100 rounded-xl p-3">
+              <div key={t.key} className="flex flex-wrap items-end gap-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-3">
                 <div className="flex items-center gap-2 min-w-[140px]">
                   <button
                     type="button"
                     onClick={() => setRhBen((b) => ({ ...b, [t.key]: { ...b[t.key], ativo: !b[t.key].ativo } }))}
                     className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${rhBen[t.key].ativo ? 'bg-emerald-600' : 'bg-zinc-200'}`}
                   >
-                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${rhBen[t.key].ativo ? 'left-4' : 'left-0.5'}`} />
+                    <span className={`absolute top-0.5 w-5 h-5 bg-zinc-100 rounded-full shadow transition-all ${rhBen[t.key].ativo ? 'left-4' : 'left-0.5'}`} />
                   </button>
-                  <span className="text-sm font-bold text-zinc-800">{t.label}</span>
+                  <span className="text-sm font-bold text-[var(--text-main)]">{t.label}</span>
                 </div>
                 <input
                   type="text"
                   value={rhBen[t.key].valor}
                   onChange={(e) => setRhBen((b) => ({ ...b, [t.key]: { ...b[t.key], valor: e.target.value } }))}
-                  className="w-24 px-2 py-1.5 border border-zinc-200 rounded-lg text-sm font-mono"
+                  className="w-24 px-2 py-1.5 border border-[var(--border)] rounded-lg text-sm font-mono"
                   placeholder="0"
                 />
                 <select
@@ -1089,7 +1105,7 @@ function TabLista({
                       [t.key]: { ...b[t.key], tipo_valor: e.target.value as 'fixo' | 'percentual' },
                     }))
                   }
-                  className="px-2 py-1.5 border border-zinc-200 rounded-lg text-xs font-bold"
+                  className="px-2 py-1.5 border border-[var(--border)] rounded-lg text-xs font-bold"
                 >
                   <option value="fixo">R$ fixo</option>
                   <option value="percentual">% salário</option>
@@ -1102,7 +1118,7 @@ function TabLista({
                       [t.key]: { ...b[t.key], efeito: e.target.value as 'acrescimo' | 'desconto' },
                     }))
                   }
-                  className="px-2 py-1.5 border border-zinc-200 rounded-lg text-xs font-bold"
+                  className="px-2 py-1.5 border border-[var(--border)] rounded-lg text-xs font-bold"
                 >
                   <option value="acrescimo">Soma na folha</option>
                   <option value="desconto">Desconta na folha</option>
@@ -1157,7 +1173,7 @@ function TabLista({
                 const modo = String(d.calculo_modo || 'automatico');
                 const emAberto = !d.pago_primeira && !d.pago_segunda;
                 return (
-                  <div className="text-sm space-y-2 text-zinc-700">
+                  <div className="text-sm space-y-2 text-[var(--text-main)]">
                     <p className="text-[11px] leading-relaxed text-violet-900/90">
                       O total é <strong>proporcional ao tempo trabalhado no ano civil</strong> (dias desde a admissão até 31/12),
                       com base no salário base atual. Convencionalmente a <strong>1ª parcela</strong> costuma ser paga em{' '}
@@ -1176,7 +1192,7 @@ function TabLista({
                       Modo: {modo === 'manual' ? 'Valor manual' : 'Automático (proporcional)'}
                     </p>
                     {emAberto && selected && (
-                      <div className="rounded-xl border border-violet-200 bg-white/80 p-3 space-y-2">
+                      <div className="rounded-xl border border-violet-200 bg-[var(--bg-card)]/80 p-3 space-y-2">
                         <p className="text-[10px] font-black uppercase tracking-wider text-violet-700">Ajustar total do 13º</p>
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -1207,7 +1223,7 @@ function TabLista({
                         </div>
                         <div className="flex flex-wrap items-end gap-2">
                           <div className="flex-1 min-w-[140px]">
-                            <label className="text-[10px] font-bold text-zinc-500">Valor total manual (R$)</label>
+                            <label className="text-[10px] font-bold text-[var(--text-muted)]">Valor total manual (R$)</label>
                             <input
                               type="text"
                               className="mt-1 w-full px-2 py-2 border border-violet-200 rounded-lg text-sm font-mono"
@@ -1294,11 +1310,11 @@ function TabLista({
                 {(rhPackFerias.ferias || []).map((row: any) => (
                   <div
                     key={row.id}
-                    className="flex flex-col gap-2 bg-white/90 border border-teal-100 rounded-lg px-2 py-2"
+                    className="flex flex-col gap-2 bg-[var(--bg-card)]/90 border border-teal-100 rounded-lg px-2 py-2"
                   >
                     <div className="flex flex-wrap justify-between gap-2">
-                      <span className="text-zinc-600">
-                        <span className="font-mono text-zinc-400">#{row.id}</span> · Aquis. {row.data_inicio_aquisitivo} →{' '}
+                      <span className="text-[var(--text-muted)]">
+                        <span className="font-mono text-[var(--text-muted)]">#{row.id}</span> · Aquis. {row.data_inicio_aquisitivo} →{' '}
                         {row.data_fim_aquisitivo} · <strong>{row.status}</strong>
                         {row.data_inicio_gozo ? ` · gozo ${row.data_inicio_gozo}–${row.data_fim_gozo}` : ''}
                       </span>
@@ -1384,9 +1400,9 @@ function TabLista({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500">Período (ID interno)</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)]">Período (ID interno)</label>
                   <select
-                    className="w-full mt-1 px-2 py-2 border border-zinc-200 rounded-lg text-xs"
+                    className="w-full mt-1 px-2 py-2 border border-[var(--border)] rounded-lg text-xs"
                     value={rhSchedId === '' ? '' : String(rhSchedId)}
                     onChange={(e) => setRhSchedId(e.target.value ? Number(e.target.value) : '')}
                   >
@@ -1435,7 +1451,7 @@ function TabLista({
               >
                 Agendar férias
               </button>
-              <p className="text-[10px] text-zinc-400">Dica: use Iniciar / Concluir em cada linha do histórico. O valor no prompt de conclusão sugere o campo abaixo.</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Dica: use Iniciar / Concluir em cada linha do histórico. O valor no prompt de conclusão sugere o campo abaixo.</p>
               <FInput
                 label="Sugestão valor pago (R$) — usada no prompt ao concluir"
                 value={rhValFerias}
@@ -1447,10 +1463,10 @@ function TabLista({
           </>
           )}
         </div>
-        <div className="flex justify-end pt-2 border-t border-zinc-100 mt-2">
+        <div className="flex justify-end pt-2 border-t border-[var(--border)] mt-2">
           <button
             type="button"
-            className="px-4 py-2 text-sm font-bold text-zinc-600"
+            className="px-4 py-2 text-sm font-bold text-[var(--text-muted)]"
             onClick={() => {
               setRhDecimoConfirm(null);
               setModal(null);
@@ -1467,7 +1483,7 @@ function TabLista({
         title="13º salário — revisar antes de registrar"
       >
         {rhDecimoConfirm && selected && rhPackDecimo?.decimo ? (
-          <div className="space-y-4 text-sm text-zinc-700">
+          <div className="space-y-4 text-sm text-[var(--text-main)]">
             {(() => {
               const d = rhPackDecimo.decimo as any;
               const p = rhDecimoConfirm.parcela;
@@ -1477,17 +1493,17 @@ function TabLista({
               return (
                 <>
                   <p>
-                    <span className="text-zinc-500">Colaborador:</span>{' '}
-                    <span className="font-bold text-zinc-900">{selected.nome}</span>
+                    <span className="text-[var(--text-muted)]">Colaborador:</span>{' '}
+                    <span className="font-bold text-[var(--text-main)]">{selected.nome}</span>
                   </p>
                   <p>
-                    <span className="text-zinc-500">Exercício:</span>{' '}
+                    <span className="text-[var(--text-muted)]">Exercício:</span>{' '}
                     <span className="font-mono font-bold">{rhDecimoAno}</span>
                   </p>
                   <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-wider text-violet-800">{label}</p>
                     <p className="text-2xl font-black text-violet-900">{fmt(valor)}</p>
-                    <p className="text-xs text-zinc-600 leading-relaxed">
+                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                       Ao confirmar, o FlowPDV marca esta parcela como <strong>paga no controle gerencial</strong> (data de
                       hoje). Não há integração bancária: o pagamento efetivo continua sendo feito por você fora do
                       sistema.
@@ -1497,7 +1513,7 @@ function TabLista({
                     <button
                       type="button"
                       disabled={rhDecimoSaving}
-                      className="px-4 py-2 rounded-xl text-sm font-bold border border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+                      className="px-4 py-2 rounded-xl text-sm font-bold border border-[var(--border)] text-[var(--text-main)] bg-[var(--bg-card)] hover:bg-[var(--bg-main)] disabled:opacity-50"
                       onClick={() => setRhDecimoConfirm(null)}
                     >
                       Voltar
@@ -1572,6 +1588,117 @@ function TabLista({
 // ═══════════════════════════════════════════════════════════════════════════════
 interface PontoRaw { id: number; tipo: string; hora: string; data: string; ip: string; }
 
+function PendenteHoraExtraRow({
+  item,
+  heBancoOk,
+  jHdrs,
+  onApplied,
+}: {
+  item: HoraExtraPendenteApi;
+  heBancoOk: boolean;
+  jHdrs: Record<string, string>;
+  onApplied: () => void;
+}) {
+  const [dest, setDest] = useState<'folha' | 'banco' | 'dividir'>('folha');
+  const [pagoFolha, setPagoFolha] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const aplicar = async () => {
+    const total = item.minutos;
+    const body: Record<string, unknown> = {
+      destino: dest === 'dividir' ? 'dividido' : dest,
+    };
+    if (dest === 'banco') body.minutos_pago_folha = 0;
+    else if (dest === 'folha') body.minutos_pago_folha = total;
+    else {
+      const p = parseInt(pagoFolha, 10);
+      if (!Number.isFinite(p) || p <= 0 || p >= total) {
+        alert('Na divisão, informe minutos na folha entre 1 e (total − 1).');
+        return;
+      }
+      body.minutos_pago_folha = p;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/funcionarios/horas-extras/${item.id}`, {
+        method: 'PATCH',
+        headers: jHdrs,
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert((d as { error?: string }).error || 'Erro ao definir destino');
+        return;
+      }
+      onApplied();
+    } catch {
+      alert('Erro de conexão');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const opcoes: { k: 'folha' | 'banco' | 'dividir'; label: string }[] = [
+    { k: 'folha', label: 'Folha' },
+    ...(heBancoOk
+      ? ([
+          { k: 'banco' as const, label: 'Banco' },
+          { k: 'dividir' as const, label: 'Dividir' },
+        ] as const)
+      : []),
+  ];
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-3 sm:px-4 sm:py-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-black text-[var(--text-main)]">
+          {fmtDate(item.data)} · {item.minutos} min
+        </p>
+        {item.observacao ? (
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{item.observacao}</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          {opcoes.map((o) => (
+            <button
+              key={o.k}
+              type="button"
+              onClick={() => setDest(o.k)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                dest === o.k
+                  ? 'bg-orange-500 text-white border-orange-500'
+                  : 'bg-[var(--bg-main)] text-[var(--text-muted)] border-[var(--border)]'
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {dest === 'dividir' && (
+          <input
+            type="number"
+            min={1}
+            max={479}
+            className="w-[4.5rem] px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] text-sm font-mono"
+            placeholder="min folha"
+            value={pagoFolha}
+            onChange={(e) => setPagoFolha(e.target.value)}
+          />
+        )}
+        <button
+          type="button"
+          disabled={saving}
+          onClick={aplicar}
+          className="px-3 py-1.5 rounded-lg text-[11px] font-black bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40"
+        >
+          {saving ? '…' : 'Aplicar destino'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => void }) {
   const [funcs, setFuncs]         = useState<Func[]>([]);
   const [sel, setSel]             = useState<number|''>('');
@@ -1596,7 +1723,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
   // ── Hora Extra ──────────────────────────────────────────────────────────
   const [horaExtraMin, setHoraExtraMin]         = useState('');
   const [horaExtraObs, setHoraExtraObs]         = useState('');
-  const [horaExtraDestino, setHoraExtraDestino] = useState<'folha'|'banco'|'dividir'>('folha');
+  const [horaExtraDestino, setHoraExtraDestino] = useState<'folha' | 'banco' | 'dividir' | 'pendente'>('folha');
   const [horaExtraPagoFolha, setHoraExtraPagoFolha] = useState('');
   const [savingExtra, setSavingExtra]           = useState(false);
   const [compBancoMin, setCompBancoMin] = useState('');
@@ -1794,7 +1921,8 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
 
     const heApurPdf = espelho.resumo.totalExtraMin ?? 0;
     const heFolhaPdf = espelho.resumo.totalExtraMinPagoFolha ?? 0;
-    const heBancoMesPdf = espelho.resumo.totalExtraMinBancoMes ?? Math.max(0, heApurPdf - heFolhaPdf);
+    const heBancoMesPdf = espelho.resumo.totalExtraMinBancoMes ?? 0;
+    const hePendPdf = espelho.resumo.totalExtraMinPendentes ?? 0;
     const saldoBancoPdf = espelho.resumo.saldoBancoHorasMin ?? 0;
 
     const linhas = diasExp.map(d=>`
@@ -1846,7 +1974,8 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
         <div class="resumo-card"><div class="resumo-label">Desc. Total</div><div class="resumo-val" style="color:#dc2626;font-size:13px">${fmtMoney(espelho.resumo.totalDescontos)}</div></div>
       </div>
       <p style="font-size:10px;color:#52525b;margin:-10px 0 18px;line-height:1.55">
-        <strong>Resumo HE / banco:</strong> HE apuradas ${heApurPdf} min (${fmtH(heApurPdf)}) · HE -&gt; folha ${heFolhaPdf} min · HE -&gt; banco ${heBancoMesPdf} min · Saldo disponível para compensação ${saldoBancoPdf} min
+        <strong>Resumo HE / banco:</strong> HE apuradas ${heApurPdf} min (${fmtH(heApurPdf)}) · HE -&gt; folha ${heFolhaPdf} min · HE -&gt; banco ${heBancoMesPdf} min
+        ${hePendPdf > 0 ? ` · HE pendentes de destino ${hePendPdf} min` : ''} · Saldo disponível para compensação ${saldoBancoPdf} min
       </p>
       <table>
         <thead><tr><th>Data</th><th>Status</th><th>Entrada</th><th>Saída</th><th>Atraso</th></tr></thead>
@@ -1892,15 +2021,15 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
     <>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0 overflow-x-auto overflow-y-hidden pb-0.5 -mx-0.5 px-0.5 sm:mx-0 sm:px-0 sm:overflow-visible sm:pb-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch]">
-        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none shrink-0 max-w-[min(100%,16rem)]">
+        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm font-medium focus:outline-none shrink-0 max-w-[min(100%,16rem)]">
           {funcs.filter(f=>f.status==='ativo').map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
-        <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl px-2 shrink-0">
+        <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-2 shrink-0">
           <button onClick={()=>chgMonth(-1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronLeft size={16}/></button>
-          <span className="text-sm font-bold text-zinc-900 w-28 text-center">{MESES[month-1]} {year}</span>
+          <span className="text-sm font-bold text-[var(--text-main)] w-28 text-center">{MESES[month-1]} {year}</span>
           <button onClick={()=>chgMonth(1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronRight size={16}/></button>
         </div>
-        <button onClick={fetchEspelho} className="p-2 bg-white border border-zinc-200 rounded-xl text-zinc-400 hover:text-zinc-700 shrink-0"><RefreshCw size={15}/></button>
+        <button onClick={fetchEspelho} className="p-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] shrink-0"><RefreshCw size={15}/></button>
         {espelho && (
           <button onClick={exportarPDF} className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0">
             <Download size={14}/>Exportar PDF
@@ -1910,7 +2039,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
           <button
             type="button"
             onClick={onIrFolha}
-            className="flex items-center gap-2 px-3 py-2 border border-zinc-200 bg-white rounded-xl text-xs sm:text-sm font-bold text-zinc-700 hover:bg-zinc-50 shrink-0"
+            className="flex items-center gap-2 px-3 py-2 border border-[var(--border)] bg-[var(--bg-card)] rounded-xl text-xs sm:text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-main)] shrink-0"
           >
             <FileText size={14} />
             Folha deste mês
@@ -1918,18 +2047,18 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
         )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-3 sm:p-4 min-w-0">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 sm:p-4 min-w-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between min-w-0">
           <div className="max-w-3xl min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Espelho</p>
-            <h2 className="mt-1 text-lg sm:text-xl font-black text-zinc-900">Operacao do dia e conferencia mensal de presenca</h2>
-            <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-zinc-600">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Espelho</p>
+            <h2 className="mt-1 text-lg sm:text-xl font-black text-[var(--text-main)]">Operacao do dia e conferencia mensal de presenca</h2>
+            <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-[var(--text-muted)]">
               Aqui fica a area principal para resolver ponto, faltas, atrasos, folgas, atestados, ponto manual, HE e compensacao com banco.
             </p>
           </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm text-zinc-600 min-w-0 w-full lg:max-w-xs xl:min-w-[240px]">
-            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Leitura rapida</p>
-            <p className="mt-1 font-semibold text-zinc-800">Clique em um dia para resolver a operacao.</p>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)] px-3 py-2.5 sm:px-4 sm:py-3 text-xs sm:text-sm text-[var(--text-muted)] min-w-0 w-full lg:max-w-xs xl:min-w-[240px]">
+            <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Leitura rapida</p>
+            <p className="mt-1 font-semibold text-[var(--text-main)]">Clique em um dia para resolver a operacao.</p>
             <p className="mt-1 text-xs leading-relaxed">
               O resumo e a lista abaixo servem para fechar o mes com clareza de presenca, descontos, HE e banco.
             </p>
@@ -1968,67 +2097,72 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
           {(() => {
             const heApur = espelho.resumo.totalExtraMin ?? 0;
             const heFolha = espelho.resumo.totalExtraMinPagoFolha ?? 0;
-            const heBancoMes = espelho.resumo.totalExtraMinBancoMes ?? Math.max(0, heApur - heFolha);
+            const heBancoMes = espelho.resumo.totalExtraMinBancoMes ?? 0;
+            const hePend = espelho.resumo.totalExtraMinPendentes ?? 0;
             const saldoDisp = espelho.resumo.saldoBancoHorasMin ?? 0;
             const tudoNaFolha = heApur > 0 && heFolha >= heApur && heBancoMes === 0;
             return (
-              <div className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-orange-50/80 to-cyan-50/40 p-3 sm:p-4 space-y-2 sm:space-y-3 min-w-0">
+              <div className="rounded-2xl border border-[var(--border)] bg-gradient-to-br from-orange-50/80 to-cyan-50/40 p-3 sm:p-4 space-y-2 sm:space-y-3 min-w-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-[11px] font-black uppercase tracking-wider text-zinc-600">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-[var(--text-muted)]">
                     Resumo HE e compensação · {MESES[month - 1]} {year}
                   </p>
                   {!espBancoOk && (
-                    <span className="text-[10px] font-bold text-zinc-500">Banco não se aplica a contrato por evento</span>
+                    <span className="text-[10px] font-bold text-[var(--text-muted)]">Banco não se aplica a contrato por evento</span>
                   )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-xl bg-white/90 border border-orange-100 px-3 py-2.5">
+                  <div className="rounded-xl bg-[var(--bg-card)]/90 border border-orange-100 px-3 py-2.5">
                     <p className="text-[9px] font-black uppercase tracking-wider text-orange-800/80">HE apuradas</p>
                     <p className="text-lg font-black text-orange-900 tabular-nums mt-0.5">{heApur} min</p>
-                    <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Total aprovado no Espelho neste período.</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1 leading-snug">Total aprovado no Espelho neste período.</p>
                   </div>
-                  <div className="rounded-xl bg-white/90 border border-orange-100 px-3 py-2.5">
+                  <div className="rounded-xl bg-[var(--bg-card)]/90 border border-orange-100 px-3 py-2.5">
                     <p className="text-[9px] font-black uppercase tracking-wider text-orange-800/80">HE -&gt; folha</p>
                     <p className="text-lg font-black text-orange-900 tabular-nums mt-0.5">{heFolha} min</p>
-                    <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Minutos enviados para pagamento na folha.</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1 leading-snug">Minutos enviados para pagamento na folha.</p>
                   </div>
-                  <div className="rounded-xl bg-white/90 border border-cyan-100 px-3 py-2.5">
+                  <div className="rounded-xl bg-[var(--bg-card)]/90 border border-cyan-100 px-3 py-2.5">
                     <p className="text-[9px] font-black uppercase tracking-wider text-cyan-900/85">HE -&gt; banco</p>
                     <p className="text-lg font-black text-cyan-950 tabular-nums mt-0.5">{heBancoMes} min</p>
-                    <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Minutos das HE deste período que viraram crédito no banco.</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1 leading-snug">Minutos das HE deste período que viraram crédito no banco.</p>
                   </div>
                   {espBancoOk ? (
-                    <div className="rounded-xl bg-white/90 border border-cyan-200 px-3 py-2.5">
+                    <div className="rounded-xl bg-[var(--bg-card)]/90 border border-cyan-200 px-3 py-2.5">
                       <p className="text-[9px] font-black uppercase tracking-wider text-cyan-900">Saldo disponível para compensação</p>
                       <p className="text-lg font-black text-cyan-950 tabular-nums mt-0.5">{saldoDisp} min</p>
-                      <p className="text-[10px] text-zinc-500 mt-1 leading-snug">Saldo acumulado até agora. Use no calendário: dia -&gt; compensação.</p>
+                      <p className="text-[10px] text-[var(--text-muted)] mt-1 leading-snug">Saldo acumulado até agora. Use no calendário: dia -&gt; compensação.</p>
                     </div>
                   ) : (
-                    <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-3 py-2.5 flex items-center">
-                      <p className="text-[10px] text-zinc-500 leading-relaxed">Sem banco de horas neste perfil; HE ficam somente como registro operacional.</p>
+                    <div className="rounded-xl bg-[var(--bg-main)] border border-[var(--border)] px-3 py-2.5 flex items-center">
+                      <p className="text-[10px] text-[var(--text-muted)] leading-relaxed">Sem banco de horas neste perfil; HE ficam somente como registro operacional.</p>
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-zinc-600 bg-white/70 border border-zinc-200/80 rounded-xl px-3 py-2 leading-relaxed">
-                  <span className="font-bold text-zinc-800">Como ler este resumo:</span> HE apuradas = total aprovado no Espelho. HE -&gt; folha = minutos enviados para pagamento.
-                  HE -&gt; banco = creditos gerados neste periodo. Saldo disponivel para compensacao = o que ainda pode ser usado nos dias seguintes.
+                <p className="text-xs text-[var(--text-muted)] bg-[var(--bg-card)]/70 border border-[var(--border)]/80 rounded-xl px-3 py-2 leading-relaxed">
+                  <span className="font-bold text-[var(--text-main)]">Como ler este resumo:</span> HE apuradas = total aprovado no Espelho. HE -&gt; folha = minutos enviados para pagamento.
+                  HE -&gt; banco = creditos gerados neste periodo.
+                  {hePend > 0 ? (
+                    <> HE pendentes = aprovadas com &quot;Definir depois&quot; — ainda sem reflexo na folha ou no banco até você aplicar o destino na seção abaixo.</>
+                  ) : null}{' '}
+                  Saldo disponivel para compensacao = o que ainda pode ser usado nos dias seguintes.
                 </p>
                 {espBancoOk && saldoDisp === 0 && (
-                  <p className="text-xs text-zinc-600 bg-white/70 border border-zinc-200/80 rounded-xl px-3 py-2 leading-relaxed">
+                  <p className="text-xs text-[var(--text-muted)] bg-[var(--bg-card)]/70 border border-[var(--border)]/80 rounded-xl px-3 py-2 leading-relaxed">
                     {tudoNaFolha ? (
                       <>
-                        <span className="font-bold text-zinc-800">Por que o banco está em zero?</span> Neste mês, todas as horas extras foram para a folha;
+                        <span className="font-bold text-[var(--text-main)]">Por que o banco está em zero?</span> Neste mês, todas as horas extras foram para a folha;
                         nada foi creditado no banco pelos lançamentos de HE. O saldo mostrado é o disponível no banco em geral (créditos anteriores já
                         compensados ou inexistentes).
                       </>
                     ) : heBancoMes > 0 ? (
                       <>
-                        <span className="font-bold text-zinc-800">Saldo zerado com crédito no mês?</span> É possível se houve compensações (débitos) ou se o
+                        <span className="font-bold text-[var(--text-main)]">Saldo zerado com crédito no mês?</span> É possível se houve compensações (débitos) ou se o
                         saldo anterior já tinha sido usado. Confira a lista de movimentações abaixo.
                       </>
                     ) : (
                       <>
-                        <span className="font-bold text-zinc-800">Saldo zerado.</span> Não há minutos acumulados no banco para compensar. Créditos entram ao
+                        <span className="font-bold text-[var(--text-main)]">Saldo zerado.</span> Não há minutos acumulados no banco para compensar. Créditos entram ao
                         aprovar HE com destino &quot;banco&quot; ou por lançamento manual na Folha (conferência).
                       </>
                     )}
@@ -2038,15 +2172,42 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
             );
           })()}
 
+          {(espelho.horas_extras_pendentes?.length ?? 0) > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-3 sm:p-4 space-y-3 min-w-0">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider text-amber-900">Horas extras pendentes</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
+                  Lançamentos aprovados com destino &quot;Definir depois&quot;. Não entram na folha nem geram crédito no banco até você escolher folha, banco ou
+                  divisão.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {espelho.horas_extras_pendentes!.map((pe) => (
+                  <React.Fragment key={pe.id}>
+                    <PendenteHoraExtraRow
+                      item={pe}
+                      heBancoOk={heBancoOk}
+                      jHdrs={jHdrs as Record<string, string>}
+                      onApplied={() => {
+                        void fetchEspelho();
+                        if (gestaoData) void abrirGestao(gestaoData);
+                      }}
+                    />
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+
           {espBancoOk && espelho.banco_horas_mes && espelho.banco_horas_mes.length > 0 && (
-            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden">
               <div className="px-4 py-2 bg-cyan-50 border-b border-cyan-100 text-[10px] font-black text-cyan-800 uppercase tracking-wider">
                 Banco de horas - movimentações do mês
               </div>
-              <div className="max-h-40 overflow-y-auto divide-y divide-zinc-100 text-xs">
+              <div className="max-h-40 overflow-y-auto divide-y divide-[var(--border)] text-xs">
                 {espelho.banco_horas_mes.map((m) => (
-                  <div key={m.id} className="px-4 py-2 flex justify-between gap-2 text-zinc-600">
-                    <span className="font-mono text-[10px] text-zinc-400 shrink-0">{fmtDate(m.data_referencia)}</span>
+                  <div key={m.id} className="px-4 py-2 flex justify-between gap-2 text-[var(--text-muted)]">
+                    <span className="font-mono text-[10px] text-[var(--text-muted)] shrink-0">{fmtDate(m.data_referencia)}</span>
                     <span className="flex-1 truncate">{HOUR_BANK_MOVEMENT_LABEL[m.tipo] || m.tipo} · {HOUR_BANK_ORIGIN_LABEL[m.origem] || m.origem}{m.observacao ? ` - ${m.observacao}` : ''}</span>
                     <span className={`font-black tabular-nums shrink-0 ${
                       m.tipo === 'manual_adjust'
@@ -2068,42 +2229,49 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
           )}
 
           {/* Calendário */}
-          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
-            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-zinc-100 bg-zinc-50/80">
-              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Operacao do dia</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">Calendario para resolver ponto, ocorrencias, HE e compensacao.</p>
-              <p className="mt-1 text-xs text-zinc-500">Clique em um dia para abrir a gestao do dia e corrigir o que ficou pendente.</p>
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden min-w-0">
+            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-[var(--border)] bg-[var(--bg-main)]/80">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Operacao do dia</p>
+              <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">Calendario para resolver ponto, ocorrencias, HE e compensacao.</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Clique em um dia para abrir a gestao do dia e corrigir o que ficou pendente.</p>
             </div>
             <div className="overflow-x-auto min-w-0 overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
               <div className="min-w-[520px]">
-            <div className="grid grid-cols-7 border-b border-zinc-100">
-              {DIAS_LABEL.map(d=><div key={d} className="py-2 text-center text-[10px] font-black text-zinc-400 uppercase tracking-wider">{d}</div>)}
+            <div className="grid grid-cols-7 border-b border-[var(--border)]">
+              {DIAS_LABEL.map(d=><div key={d} className="py-2 text-center text-[10px] font-black text-[var(--text-muted)] uppercase tracking-wider">{d}</div>)}
             </div>
             <div className="grid grid-cols-7">
               {(()=>{
                 const first = new Date(`${year}-${String(month).padStart(2,'0')}-01`).getDay();
                 const cells = [...Array(first).fill(null), ...espelho.dias];
                 return cells.map((dia,i)=>!dia?(
-                  <div key={`e${i}`} className="aspect-square border-r border-b border-zinc-50"/>
+                  <div key={`e${i}`} className="aspect-square border-r border-b border-[var(--border)]/40"/>
                 ):(
                   <div key={dia.data} onClick={()=>abrirGestao(dia.data)}
-                    className={`aspect-square border-r border-b border-zinc-100 p-1 cursor-pointer hover:ring-2 hover:ring-inset hover:ring-zinc-400 transition-all ${dia.status==='sem_expediente'&&!dia.eventos?.length?'bg-zinc-50/50':''}`}>
+                    className={`aspect-square border-r border-b border-[var(--border)] p-1 cursor-pointer hover:ring-2 hover:ring-inset hover:ring-zinc-400 transition-all ${dia.status==='sem_expediente'&&!dia.eventos?.length?'bg-[var(--bg-main)]/50':''}`}>
                     <div className="flex flex-col h-full">
-                      <span className="text-[10px] font-bold text-zinc-500">{dia.dia}</span>
+                      <span className="text-[10px] font-bold text-[var(--text-muted)]">{dia.dia}</span>
                       {dia.isExpediente && dia.status !== 'futuro' && <div className="flex-1 flex flex-col justify-center items-center gap-0.5">
                         <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${STATUS_COLOR[dia.status]||''}`}>{STATUS_LABEL[dia.status]}</span>
-                        {dia.entrada&&<span className="text-[8px] text-zinc-400">E: {dia.entrada?.slice(0,5)}</span>}
-                        {dia.saida&&<span className="text-[8px] text-zinc-400">S: {dia.saida?.slice(0,5)}</span>}
+                        {dia.entrada&&<span className="text-[8px] text-[var(--text-muted)]">E: {dia.entrada?.slice(0,5)}</span>}
+                        {dia.saida&&<span className="text-[8px] text-[var(--text-muted)]">S: {dia.saida?.slice(0,5)}</span>}
                         {dia.atrasoMin>0&&<span className="text-[8px] text-amber-600 font-bold">+{dia.atrasoMin}m atr.</span>}
                         {/* Badge de hora extra aprovada */}
                         {dia.extraAprov && (
-                          <span className="text-[8px] font-black px-1 py-0.5 rounded bg-orange-100 text-orange-700 border border-orange-200">
+                          <span
+                            className={`text-[8px] font-black px-1 py-0.5 rounded border ${
+                              dia.extraAprov.destino === 'pendente'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : 'bg-orange-100 text-orange-700 border-orange-200'
+                            }`}
+                          >
                             HE +{dia.extraAprov.minutos}m{(dia.extraAprov.quantidade ?? 1) > 1 ? ` (${dia.extraAprov.quantidade})` : ''}
+                            {dia.extraAprov.destino === 'pendente' ? ' · ?' : ''}
                           </span>
                         )}
                         {/* Indicador de saída tardia ainda não aprovada como extra */}
                         {!dia.extraAprov && dia.saidaRealExtraMin && dia.saidaRealExtraMin > 0 && (
-                          <span className="text-[8px] text-zinc-400 italic">+{dia.saidaRealExtraMin}m?</span>
+                          <span className="text-[8px] text-[var(--text-muted)] italic">+{dia.saidaRealExtraMin}m?</span>
                         )}
                       </div>}
                       {/* Folga/atestado em dias fora do expediente */}
@@ -2126,14 +2294,14 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
           </div>
 
           {/* Tabela detalhada */}
-          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
-            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-zinc-100 bg-white">
-              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Conferencia detalhada</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">Linha a linha para revisar presenca e agir rapido quando houver divergencia.</p>
+          <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden min-w-0">
+            <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-[var(--border)] bg-[var(--bg-card)]">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Conferencia detalhada</p>
+              <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">Linha a linha para revisar presenca e agir rapido quando houver divergencia.</p>
             </div>
             <div className="overflow-x-auto min-w-0 overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
               <div className="min-w-[720px]">
-            <div className="grid grid-cols-7 px-3 sm:px-4 py-2 bg-zinc-50 border-b border-zinc-100 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
+            <div className="grid grid-cols-7 px-3 sm:px-4 py-2 bg-[var(--bg-main)] border-b border-[var(--border)] text-[10px] font-black text-[var(--text-muted)] uppercase tracking-wider">
               <span>Data</span><span>Status</span><span>Entrada</span><span>Saída</span><span>Atraso</span><span>HE</span><span>Ação no dia</span>
             </div>
             <div className="divide-y divide-zinc-100 max-h-[min(18rem,50vh)] sm:max-h-72 overflow-y-auto overscroll-y-contain">
@@ -2142,27 +2310,27 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                 .map(dia => {
                   const eventoDestaque = dia.eventos?.find((e:any) => ['folga','atestado'].includes(e.tipo));
                   return (
-                    <div key={dia.data} className="grid grid-cols-7 px-3 sm:px-4 py-2.5 text-xs hover:bg-zinc-50 items-center">
-                      <span className="font-medium text-zinc-600">{fmtDate(dia.data)}</span>
+                    <div key={dia.data} className="grid grid-cols-7 px-3 sm:px-4 py-2.5 text-xs hover:bg-[var(--bg-main)] items-center">
+                      <span className="font-medium text-[var(--text-muted)]">{fmtDate(dia.data)}</span>
                       <div className="flex flex-col gap-0.5">
                         <span className={`w-fit px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_COLOR[dia.status]}`}>{STATUS_LABEL[dia.status]}</span>
                         {eventoDestaque?.observacao && (
-                          <span className="text-[9px] text-zinc-400 truncate max-w-[80px]" title={eventoDestaque.observacao}>{eventoDestaque.observacao}</span>
+                          <span className="text-[9px] text-[var(--text-muted)] truncate max-w-[80px]" title={eventoDestaque.observacao}>{eventoDestaque.observacao}</span>
                         )}
                       </div>
-                      <span className="text-zinc-500">{dia.entrada ? dia.entrada.slice(0,5) : '—'}</span>
-                      <span className="text-zinc-500">{dia.saida  ? dia.saida.slice(0,5)  : '—'}</span>
+                      <span className="text-[var(--text-muted)]">{dia.entrada ? dia.entrada.slice(0,5) : '—'}</span>
+                      <span className="text-[var(--text-muted)]">{dia.saida  ? dia.saida.slice(0,5)  : '—'}</span>
                       <span className={dia.atrasoMin>0?'text-amber-600 font-bold':'text-zinc-300'}>{dia.atrasoMin>0?`${dia.atrasoMin}min`:'—'}</span>
                       <span>
                         {dia.extraAprov
                           ? <span className="text-orange-600 font-bold text-[10px]">+{dia.extraAprov.minutos}min ✓</span>
                           : dia.saidaRealExtraMin && dia.saidaRealExtraMin > 0
-                            ? <span className="text-zinc-400 text-[10px] italic">+{dia.saidaRealExtraMin}m?</span>
+                            ? <span className="text-[var(--text-muted)] text-[10px] italic">+{dia.saidaRealExtraMin}m?</span>
                             : <span className="text-zinc-300">—</span>
                         }
                       </span>
                       <div className="flex gap-2">
-                        <button onClick={()=>setAddEvento(dia.data)} className="text-zinc-400 hover:text-zinc-700 text-[10px] font-bold">+ ocorrencia</button>
+                        <button onClick={()=>setAddEvento(dia.data)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-[10px] font-bold">+ ocorrencia</button>
                         <button onClick={()=>abrirGestao(dia.data)} className="text-blue-500 hover:text-blue-700 text-[10px] font-bold">resolver dia</button>
                       </div>
                     </div>
@@ -2178,11 +2346,11 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
       {/* ── Modal: Evento ── */}
       <Modal open={!!addEvento} onClose={()=>setAddEvento(null)} title={`Ocorrência do dia — ${addEvento?fmtDate(addEvento):''}`}>
         <div className="space-y-3">
-          <p className="text-sm text-zinc-600 leading-relaxed">
+          <p className="text-sm text-[var(--text-muted)] leading-relaxed">
             Registre aqui faltas, folgas, atestados ou ausência parcial para deixar o dia coerente no Espelho.
           </p>
           <div className="grid grid-cols-2 gap-2">
-            {TIPOS_EVENTO.map(t=><button key={t.value} onClick={()=>setFormEvento({...formEvento,tipo:t.value})} className={`py-2 rounded-xl text-xs font-bold border transition-all ${formEvento.tipo===t.value?'bg-zinc-900 text-white border-zinc-900':'bg-white text-zinc-500 border-zinc-200'}`}>{t.label}</button>)}
+            {TIPOS_EVENTO.map(t=><button key={t.value} onClick={()=>setFormEvento({...formEvento,tipo:t.value})} className={`py-2 rounded-xl text-xs font-bold border transition-all ${formEvento.tipo===t.value?'bg-zinc-900 text-white border-zinc-900':'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)]'}`}>{t.label}</button>)}
           </div>
           {formEvento.tipo==='declaracao_parcial'&&<FInput label="Horas ausentes" value={formEvento.horas_ausentes} onChange={v=>setFormEvento({...formEvento,horas_ausentes:v})} placeholder="Ex: 2.5"/>}
           <FInput label="Observação (opcional)" value={formEvento.observacao} onChange={v=>setFormEvento({...formEvento,observacao:v})} placeholder="..."/>
@@ -2194,26 +2362,26 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
       <Modal open={!!gestaoData} onClose={()=>{setGestaoData(null);setEditPonto(null);setCompBancoMin('');setCompBancoObs('');}} title={`Gestão do dia — ${funcSel?.nome||''} · ${gestaoData?fmtDate(gestaoData):''}`} wide>
         {loadingPontos ? <LoadSpinner/> : (
           <div className="space-y-5">
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Resolver este dia</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">Ajuste ponto, registre ausências, aprove HE e use banco de horas sem sair do Espelho.</p>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)] px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Resolver este dia</p>
+              <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">Ajuste ponto, registre ausências, aprove HE e use banco de horas sem sair do Espelho.</p>
             </div>
 
             {/* Registros existentes */}
             <div>
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-2">Ponto do dia</p>
+              <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-wider mb-2">Ponto do dia</p>
               {pontosRaw.length === 0 ? (
-                <div className="text-center py-6 text-sm text-zinc-400 bg-zinc-50 rounded-xl">Nenhum ponto registrado neste dia. Use Ponto manual se precisar corrigir a operação.</div>
+                <div className="text-center py-6 text-sm text-[var(--text-muted)] bg-[var(--bg-main)] rounded-xl">Nenhum ponto registrado neste dia. Use Ponto manual se precisar corrigir a operação.</div>
               ) : (
-                <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-xl overflow-hidden">
+                <div className="divide-y divide-zinc-100 border border-[var(--border)] rounded-xl overflow-hidden">
                   {pontosRaw.map(p=>(
-                    <div key={p.id} className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-zinc-50">
+                    <div key={p.id} className="flex items-center gap-3 px-4 py-3 bg-[var(--bg-card)] hover:bg-[var(--bg-main)]">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${p.tipo==='entrada'?'bg-emerald-100 text-emerald-700':'bg-blue-100 text-blue-700'}`}>
                         {p.tipo==='entrada'?'▲ Entrada':'▼ Saída'}
                       </span>
-                      <span className="font-mono font-bold text-zinc-900 text-sm">{p.hora}</span>
+                      <span className="font-mono font-bold text-[var(--text-main)] text-sm">{p.hora}</span>
                       {p.ip==='manual-admin'&&<span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">Manual</span>}
-                      <span className="text-[10px] text-zinc-400 flex-1">{p.ip!=='manual-admin'?`IP: ${p.ip}`:''}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] flex-1">{p.ip!=='manual-admin'?`IP: ${p.ip}`:''}</span>
                       <div className="flex gap-2">
                         {/* Editar */}
                         {editPonto?.id===p.id ? (
@@ -2222,9 +2390,9 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                               type="time"
                               value={editHora.slice(0,5)}
                               onChange={e=>setEditHora(e.target.value)}
-                              className="px-2 py-1 border border-zinc-200 rounded-lg text-sm font-mono focus:outline-none focus:border-zinc-400"
+                              className="px-2 py-1 border border-[var(--border)] rounded-lg text-sm font-mono focus:outline-none focus:border-zinc-400"
                             />
-                            <select value={editTipo} onChange={e=>setEditTipo(e.target.value)} className="px-2 py-1 border border-zinc-200 rounded-lg text-xs focus:outline-none">
+                            <select value={editTipo} onChange={e=>setEditTipo(e.target.value)} className="px-2 py-1 border border-[var(--border)] rounded-lg text-xs focus:outline-none">
                               <option value="entrada">Entrada</option>
                               <option value="saida">Saída</option>
                             </select>
@@ -2236,7 +2404,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                         ) : (
                           <>
                             <button onClick={()=>{setEditPonto(p);setEditHora(p.hora);setEditTipo(p.tipo);}}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-zinc-200 text-zinc-600 bg-zinc-50 hover:bg-zinc-100">
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-main)] hover:bg-zinc-100">
                               <Pencil size={10}/>Editar
                             </button>
                             <button onClick={()=>handleDeletarPonto(p.id)}
@@ -2267,10 +2435,10 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                     Use quando a resolução do dia for folga compensatória, descanso combinado ou liberação formal.
                   </p>
                   {temFolga ? (
-                    <div className="flex items-center justify-between bg-white border border-blue-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center justify-between bg-[var(--bg-card)] border border-blue-200 rounded-xl px-4 py-3">
                       <div>
                         <p className="text-sm font-black text-blue-700">Folga concedida</p>
-                        {eventoFolga?.observacao && <p className="text-xs text-zinc-400 mt-0.5">{eventoFolga.observacao}</p>}
+                        {eventoFolga?.observacao && <p className="text-xs text-[var(--text-muted)] mt-0.5">{eventoFolga.observacao}</p>}
                       </div>
                       <button
                         onClick={async () => {
@@ -2289,10 +2457,10 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                   ) : (
                     <div className="flex items-end gap-3">
                       <div className="flex-1">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Motivo (opcional)</label>
+                        <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Motivo (opcional)</label>
                         <input type="text" id="folga-obs-input"
                           placeholder="Ex: Folga compensatória, banco de horas..."
-                          className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400"
+                          className="w-full px-3 py-2.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-400"
                         />
                       </div>
                       <button
@@ -2334,7 +2502,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                   </span>
                 </div>
                 {saldoBancoDisponivel <= 0 ? (
-                  <p className="text-[11px] text-zinc-500 bg-white/60 rounded-lg px-3 py-2 border border-cyan-100">
+                  <p className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-card)]/60 rounded-lg px-3 py-2 border border-cyan-100">
                     Sem saldo no banco. Credite HE para o banco ao aprovar hora extra, ou use a Folha apenas para ajuste administrativo.
                   </p>
                 ) : (
@@ -2346,7 +2514,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                             key={`${atalho.label}-${atalho.min}`}
                             type="button"
                             onClick={() => setCompBancoMin(String(atalho.min))}
-                            className="px-3 py-1.5 rounded-full border border-cyan-200 bg-white text-[11px] font-bold text-cyan-700 hover:bg-cyan-100 transition-all"
+                            className="px-3 py-1.5 rounded-full border border-cyan-200 bg-[var(--bg-card)] text-[11px] font-bold text-cyan-700 hover:bg-cyan-100 transition-all"
                           >
                             {atalho.label}
                           </button>
@@ -2355,24 +2523,24 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                     )}
                     <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
                     <div className="w-full sm:w-32">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Quanto vai compensar</label>
+                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Quanto vai compensar</label>
                       <input
                         type="text"
                         inputMode="numeric"
                         value={compBancoMin}
                         onChange={(e) => setCompBancoMin(e.target.value)}
                         placeholder="ex: 60"
-                        className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                        className="w-full px-3 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
                       />
                     </div>
                     <div className="flex-1 min-w-[160px]">
-                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Observação (opcional)</label>
+                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Observação (opcional)</label>
                       <input
                         type="text"
                         value={compBancoObs}
                         onChange={(e) => setCompBancoObs(e.target.value)}
                         placeholder="Ex: Folga compensatória, saída antecipada"
-                        className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
+                        className="w-full px-3 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400/25"
                       />
                     </div>
                     <button
@@ -2390,30 +2558,30 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
             )}
 
             {/* Inserir ponto manual */}
-            <div className="border border-dashed border-zinc-300 rounded-xl p-4 bg-zinc-50">
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-3">Ponto manual</p>
-              <p className="text-[11px] text-zinc-600 mb-3 leading-relaxed">
+            <div className="border border-dashed border-[var(--border)] rounded-xl p-4 bg-[var(--bg-main)]">
+              <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-wider mb-3">Ponto manual</p>
+              <p className="text-[11px] text-[var(--text-muted)] mb-3 leading-relaxed">
                 Use quando precisar corrigir um registro que não entrou no dia. O lançamento fica marcado para auditoria.
               </p>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Tipo</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Tipo</label>
                   <div className="flex gap-2">
                     {(['entrada','saida'] as const).map(t=>(
                       <button key={t} onClick={()=>setManualTipo(t)}
-                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${manualTipo===t?(t==='entrada'?'bg-emerald-600 text-white border-emerald-600':'bg-blue-600 text-white border-blue-600'):'bg-white text-zinc-500 border-zinc-200'}`}>
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${manualTipo===t?(t==='entrada'?'bg-emerald-600 text-white border-emerald-600':'bg-blue-600 text-white border-blue-600'):'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)]'}`}>
                         {t==='entrada'?'▲ Entrada':'▼ Saída'}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="flex-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Horário</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Horário</label>
                   <input
                     type="time"
                     value={manualHora}
                     onChange={e=>setManualHora(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                    className="w-full px-3 py-2.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                   />
                 </div>
                 <button
@@ -2425,7 +2593,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                   Registrar ponto
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-400 mt-2">Registros manuais ficam marcados para auditoria.</p>
+              <p className="text-[10px] text-[var(--text-muted)] mt-2">Registros manuais ficam marcados para auditoria.</p>
             </div>
 
             {/* Hora Extra */}
@@ -2446,7 +2614,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
 
                   {/* Informativo: saída além do horário */}
                   {diaEspelho?.saidaRealExtraMin && diaEspelho.saidaRealExtraMin > 0 && (
-                    <div className="mb-3 flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-700">
+                    <div className="mb-3 flex items-center gap-2 bg-[var(--bg-card)] border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-700">
                       <span className="text-base">⏱</span>
                       <span>Saída registrada <strong>{diaEspelho.saidaRealExtraMin} min além</strong> do horário previsto. Aprove abaixo se for hora extra.</span>
                     </div>
@@ -2455,10 +2623,19 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                   {extraExistente ? (
                     /* Já aprovada — mostra info e botão de cancelar */
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-white border border-orange-200 rounded-xl px-4 py-3">
+                      <div className="flex items-center justify-between bg-[var(--bg-card)] border border-orange-200 rounded-xl px-4 py-3">
                         <div>
                           <p className="text-sm font-black text-orange-700">{extraExistente.minutos} minutos aprovados</p>
                           {(() => {
+                            const d = resolveHoraExtraDestino(extraExistente);
+                            if (d === 'pendente') {
+                              return (
+                                <p className="text-[11px] text-amber-800 mt-1">
+                                  Pendente: não entra na folha nem no banco. Defina o destino na seção <strong>Horas extras pendentes</strong> acima do
+                                  calendário.
+                                </p>
+                              );
+                            }
                             const pagoF =
                               extraExistente.minutos_pago_folha == null
                                 ? extraExistente.minutos
@@ -2470,15 +2647,15 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                               <p className="text-[11px] text-orange-600/90 mt-1">
                                 Na folha: {pagoF} min · Banco: {Math.max(0, extraExistente.minutos - pagoF)} min
                                 {extraExistente.minutos_pago_folha == null ? (
-                                  <span className="text-zinc-400"> (legado: destino não gravado — considerado 100% folha)</span>
+                                  <span className="text-[var(--text-muted)]"> (legado: destino não gravado — considerado 100% folha)</span>
                                 ) : null}
                               </p>
                             );
                           })()}
-                          <p className="text-[10px] text-zinc-500 mt-1">
+                          <p className="text-[10px] text-[var(--text-muted)] mt-1">
                             {horaExtraDestinoLabel(resolveHoraExtraDestino(extraExistente))}
                           </p>
-                          {extraExistente.observacao && <p className="text-xs text-zinc-400 mt-0.5">{extraExistente.observacao}</p>}
+                          {extraExistente.observacao && <p className="text-xs text-[var(--text-muted)] mt-0.5">{extraExistente.observacao}</p>}
                         </div>
                         {(extraExistente.quantidade ?? 1) <= 1 && <button
                           onClick={() => handleCancelarExtra(extraExistente.id)}
@@ -2491,24 +2668,31 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                       {extraLancamentos.length > 1 && (
                         <div className="space-y-2">
                           {extraLancamentos.map((item) => {
+                            const d = resolveHoraExtraDestino(item);
                             const pagoF =
                               item.minutos_pago_folha == null
                                 ? item.minutos
                                 : Math.min(item.minutos, Math.max(0, Number(item.minutos_pago_folha)));
                             return (
-                              <div key={item.id} className="flex items-center justify-between bg-white border border-orange-200 rounded-xl px-4 py-3 gap-3">
+                              <div key={item.id} className="flex items-center justify-between bg-[var(--bg-card)] border border-orange-200 rounded-xl px-4 py-3 gap-3">
                                 <div>
                                   <p className="text-sm font-black text-orange-700">{item.minutos} minutos aprovados</p>
+                                  {d === 'pendente' ? (
+                                    <p className="text-[11px] text-amber-800 mt-1">
+                                      Pendente: defina o destino na seção <strong>Horas extras pendentes</strong>.
+                                    </p>
+                                  ) : (
                                   <p className="text-[11px] text-orange-600/90 mt-1">
                                     Na folha: {pagoF} min · Banco: {Math.max(0, item.minutos - pagoF)} min
                                     {item.minutos_pago_folha == null ? (
-                                      <span className="text-zinc-400"> (legado: destino nao gravado, considerado 100% folha)</span>
+                                      <span className="text-[var(--text-muted)]"> (legado: destino nao gravado, considerado 100% folha)</span>
                                     ) : null}
                                   </p>
-                                  <p className="text-[10px] text-zinc-500 mt-1">
+                                  )}
+                                  <p className="text-[10px] text-[var(--text-muted)] mt-1">
                                     {horaExtraDestinoLabel(resolveHoraExtraDestino(item))}
                                   </p>
-                                  {item.observacao && <p className="text-xs text-zinc-400 mt-0.5">{item.observacao}</p>}
+                                  {item.observacao && <p className="text-xs text-[var(--text-muted)] mt-0.5">{item.observacao}</p>}
                                 </div>
                                 <button
                                   onClick={() => handleCancelarExtra(item.id)}
@@ -2526,7 +2710,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                     /* Ainda não aprovada — formulário de aprovação */
                     <div className="space-y-3">
                       <div>
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
                           Destino da hora extra neste dia
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -2538,6 +2722,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                                   { k: 'dividir' as const, label: 'Dividir (folha + banco)' },
                                 ] as const)
                               : []),
+                            { k: 'pendente' as const, label: 'Definir depois' },
                           ]).map((o) => (
                             <button
                               key={o.k}
@@ -2546,20 +2731,21 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                               className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
                                 horaExtraDestino === o.k
                                   ? 'bg-orange-500 text-white border-orange-500'
-                                  : 'bg-white text-zinc-500 border-zinc-200 hover:border-orange-200'
+                                  : 'bg-[var(--bg-card)] text-[var(--text-muted)] border-[var(--border)] hover:border-orange-200'
                               }`}
                             >
                               {o.label}
                             </button>
                           ))}
                         </div>
-                        <p className="mt-2 text-[11px] text-zinc-500">
-                          Defina aqui se a hora extra será paga na folha, virará crédito no banco ou será dividida entre os dois.
+                        <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+                          Defina aqui se a hora extra será paga na folha, virará crédito no banco, será dividida entre os dois ou ficará pendente até decidir
+                          (sem reflexo na folha ou no banco).
                         </p>
                       </div>
                       {horaExtraDestino === 'dividir' && (
                         <div className="w-40">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos que vão para a folha</label>
+                          <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Minutos que vão para a folha</label>
                           <input
                             type="number"
                             min="1"
@@ -2567,13 +2753,13 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                             value={horaExtraPagoFolha}
                             onChange={(e) => setHoraExtraPagoFolha(e.target.value)}
                             placeholder="ex: 60"
-                            className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20"
+                            className="w-full px-3 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20"
                           />
                         </div>
                       )}
                       <div className="flex flex-wrap items-end gap-3">
                         <div className="w-36">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Minutos extras</label>
+                          <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Minutos extras</label>
                           <input
                             type="number"
                             min="1"
@@ -2581,17 +2767,17 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                             value={horaExtraMin}
                             onChange={e => setHoraExtraMin(e.target.value)}
                             placeholder={diaEspelho?.saidaRealExtraMin ? String(diaEspelho.saidaRealExtraMin) : '30'}
-                            className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
+                            className="w-full px-3 py-2.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
                           />
                         </div>
                         <div className="flex-1 min-w-[160px]">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Observação (opcional)</label>
+                          <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">Observação (opcional)</label>
                           <input
                             type="text"
                             value={horaExtraObs}
                             onChange={e => setHoraExtraObs(e.target.value)}
                             placeholder="Ex: Cobertura de turno, evento especial..."
-                            className="w-full px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
+                            className="w-full px-3 py-2.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400"
                           />
                         </div>
                         <button
@@ -2607,8 +2793,8 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
                   )}
                   <p className="text-[10px] text-orange-500/70 mt-2">
                     {heBancoOk
-                      ? 'O que for para a folha entra como pagamento. O que for para o banco vira saldo disponível para compensar depois.'
-                      : 'Contrato por evento: horas extras ficam apenas como referência de ponto (sem destino banco neste módulo).'}
+                      ? 'O que for para a folha entra como pagamento. O que for para o banco vira saldo disponível para compensar depois. “Definir depois” mantém a HE aprovada sem entrar na folha nem no banco até você aplicar o destino na seção de pendentes.'
+                      : 'Contrato por evento: horas extras ficam como referência de ponto; use “Definir depois” se ainda não souber como pagar neste mês.'}
                   </p>
                 </div>
               );
@@ -2836,7 +3022,7 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
       ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
       : paySummary?.status === 'partial'
         ? 'bg-amber-100 text-amber-900 border-amber-200'
-        : 'bg-zinc-100 text-zinc-600 border-zinc-200';
+        : 'bg-zinc-100 text-[var(--text-muted)] border-[var(--border)]';
 
   const registrarMovBanco = async () => {
     if (!sel || !bancoDataRef) return;
@@ -2902,19 +3088,19 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0 overflow-x-auto overflow-y-hidden pb-0.5 -mx-0.5 px-0.5 sm:mx-0 sm:px-0 sm:overflow-visible sm:pb-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch]">
-        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none shrink-0 max-w-[min(100%,16rem)]">
+        <select value={sel} onChange={e=>setSel(Number(e.target.value))} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm font-medium focus:outline-none shrink-0 max-w-[min(100%,16rem)]">
           {funcs.filter(f=>f.status==='ativo').map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
-        <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl px-2 shrink-0">
+        <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-2 shrink-0">
           <button onClick={()=>chgMonth(-1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronLeft size={16}/></button>
-          <span className="text-sm font-bold text-zinc-900 w-28 text-center">{MESES[month-1]} {year}</span>
+          <span className="text-sm font-bold text-[var(--text-main)] w-28 text-center">{MESES[month-1]} {year}</span>
           <button onClick={()=>chgMonth(1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronRight size={16}/></button>
         </div>
         {onIrEspelho && (
           <button
             type="button"
             onClick={onIrEspelho}
-            className="flex items-center gap-2 px-3 py-2 border border-zinc-200 bg-white rounded-xl text-xs sm:text-sm font-bold text-zinc-700 hover:bg-zinc-50 shrink-0"
+            className="flex items-center gap-2 px-3 py-2 border border-[var(--border)] bg-[var(--bg-card)] rounded-xl text-xs sm:text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-main)] shrink-0"
           >
             <Calendar size={14} />
             Espelho deste mês
@@ -2930,11 +3116,11 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
 
       {loading ? <LoadSpinner/> : folha && folha.funcionario && folhaView ? (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4 min-w-0">
-            <div className="xl:col-span-2 bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
+            <div className="xl:col-span-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden min-w-0">
             <div className="p-3 sm:p-4 space-y-3 min-w-0 2xl:p-6 2xl:space-y-5">
-              <div className="border-b border-zinc-200 pb-3 2xl:pb-5">
+              <div className="border-b border-[var(--border)] pb-3 2xl:pb-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-base font-black text-zinc-900 sm:text-lg 2xl:text-xl">
+                  <h1 className="text-base font-black text-[var(--text-main)] sm:text-lg 2xl:text-xl">
                     {evF ? 'Pagamentos por competência' : 'Folha de pagamento'}
                   </h1>
                   {paySummary && (
@@ -2949,17 +3135,17 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                   Competência {MESES[month - 1]} {year}
                   {folhaView.periodRange ? ` · ${folhaView.periodRange}` : ''}
                 </p>
-                <p className="text-xs font-bold text-zinc-500 mt-0.5">Referência {folhaView.referencia}</p>
+                <p className="text-xs font-bold text-[var(--text-muted)] mt-0.5">Referência {folhaView.referencia}</p>
               </div>
 
-              <section className="rounded-2xl border border-zinc-200 bg-zinc-50/60 px-4 py-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Resumo do colaborador</p>
+              <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)]/60 px-4 py-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Resumo do colaborador</p>
                 <div className="flex flex-wrap items-start gap-4">
                   <Avatar func={folha.funcionario} size={52} />
                   <div className="min-w-0 flex-1 space-y-1 text-sm">
-                    <p className="font-black text-zinc-900 text-lg">{folha.funcionario.nome}</p>
-                    <p className="text-zinc-500">{folha.funcionario.cargo}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                    <p className="font-black text-[var(--text-main)] text-lg">{folha.funcionario.nome}</p>
+                    <p className="text-[var(--text-muted)]">{folha.funcionario.cargo}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
                       {folha.funcionario.cpf && <span>CPF: {folha.funcionario.cpf}</span>}
                       {folha.funcionario.data_admissao && (
                         <span>Admissão: {fmtDate(folha.funcionario.data_admissao)}</span>
@@ -2983,9 +3169,9 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               )}
 
               {!evF && (
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50/90 px-4 py-3 text-xs text-zinc-700">
-                  <p className="font-bold text-zinc-900">Conferência e pagamento</p>
-                  <p className="mt-1 leading-relaxed text-zinc-600">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-main)]/90 px-4 py-3 text-xs text-[var(--text-main)]">
+                  <p className="font-bold text-[var(--text-main)]">Conferência e pagamento</p>
+                  <p className="mt-1 leading-relaxed text-[var(--text-muted)]">
                     Os valores de <strong>hora extra na folha</strong> vêm do destino escolhido ao aprovar no Espelho. Pagamentos, adiantamentos e
                     recibos ficam na coluna à direita. Use <strong>Espelho deste mês</strong> no topo para conferir ponto e banco.
                   </p>
@@ -3001,25 +3187,25 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                       (serviço/evento), não salário líquido calculado.
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
-                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">Valor referência (cadastro)</p>
-                    <p className="text-2xl font-black text-zinc-900 tabular-nums mt-1">{fmt(folha.salarioBruto)}</p>
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-main)] px-4 py-4">
+                    <p className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-wider">Valor referência (cadastro)</p>
+                    <p className="text-2xl font-black text-[var(--text-main)] tabular-nums mt-1">{fmt(folha.salarioBruto)}</p>
                   </div>
                   {folha.adiantamentos.length > 0 && (
-                    <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-main)]/80 px-4 py-3 space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">
                         Histórico na competência (legado)
                       </p>
-                      <p className="text-[11px] text-zinc-600 leading-relaxed">
+                      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                         Lançamentos antigos feitos como adiantamento de folha permanecem cadastrados só para consulta; não entram no fluxo de
                         pagamento por evento. Novos valores use a coluna de pagamentos ao lado.
                       </p>
-                      <div className="divide-y divide-zinc-200/80">
+                      <div className="divide-y divide-[var(--border)]">
                         {folha.adiantamentos.map((a) => (
-                          <div key={a.id} className="flex justify-between gap-2 py-2 text-xs text-zinc-700">
+                          <div key={a.id} className="flex justify-between gap-2 py-2 text-xs text-[var(--text-main)]">
                             <span className="min-w-0">
                               {fmtDate(a.data)} · {a.motivo || '—'}
-                              <span className="ml-1.5 text-[10px] font-bold text-zinc-400">
+                              <span className="ml-1.5 text-[10px] font-bold text-[var(--text-muted)]">
                                 {a.descontado ? 'Baixado' : 'Pendente'}
                               </span>
                             </span>
@@ -3033,8 +3219,10 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               ) : (
               <>
               <section className="space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Variáveis da competência</p>
-              {((folha.totalExtraMin ?? 0) > 0 || (folha.totalBancoConvertidoFolhaMin ?? 0) > 0) && (
+                <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Variáveis da competência</p>
+              {((folha.totalExtraMin ?? 0) > 0 ||
+                (folha.totalBancoConvertidoFolhaMin ?? 0) > 0 ||
+                (folha.totalExtraMinPendentes ?? 0) > 0) && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-xs text-cyan-950 space-y-1">
                   <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Horas extras e banco (reflexo na folha)</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -3050,6 +3238,13 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                       <span className="text-cyan-700/80">Para o banco (crédito no mês):</span>{' '}
                       <strong>{folha.totalExtraMinBancoMes ?? 0} min</strong>
                     </span>
+                    {(folha.totalExtraMinPendentes ?? 0) > 0 && (
+                      <span>
+                        <span className="text-cyan-700/80">HE pendentes de destino:</span>{' '}
+                        <strong>{folha.totalExtraMinPendentes} min</strong>
+                        <span className="text-[var(--text-muted)]"> (definir no Espelho)</span>
+                      </span>
+                    )}
                     <span>
                       <span className="text-cyan-700/80">Baixa do banco paga na folha:</span>{' '}
                       <strong>{folha.totalBancoConvertidoFolhaMin ?? 0} min</strong>
@@ -3110,7 +3305,7 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               </section>
 
               <section className="space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Apuração — proventos e descontos</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Apuração — proventos e descontos</p>
               <div>
                 <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
                   Proventos
@@ -3138,21 +3333,21 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               </div>
               </section>
 
-              <section className="rounded-2xl bg-zinc-100 border border-zinc-200 px-4 py-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Resumo financeiro</p>
+              <section className="rounded-2xl bg-zinc-100 border border-[var(--border)] px-4 py-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Resumo financeiro</p>
                 <div className="flex justify-between text-sm">
                   <span style={{ color: '#9ca3af' }}>Bruto apurado</span>
-                  <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
+                  <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(folhaView.gross)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span style={{ color: '#9ca3af' }}>Descontos da competência</span>
-                  <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.dedTotal)}</span>
+                  <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(folhaView.dedTotal)}</span>
                 </div>
                 {paySummary && (
                   <>
                     <div className="flex justify-between text-sm">
                       <span style={{ color: '#9ca3af' }}>Pago nesta competência</span>
-                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
+                      <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(paySummary.total_paid)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span style={{ color: '#9ca3af' }}>Pendente para quitar</span>
@@ -3160,8 +3355,8 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                     </div>
                   </>
                 )}
-                <div className="flex justify-between items-center pt-2 border-t border-zinc-200">
-                  <span className="font-black text-zinc-900">
+                <div className="flex justify-between items-center pt-2 border-t border-[var(--border)]">
+                  <span className="font-black text-[var(--text-main)]">
                     {folha.managerial ? 'Líquido de referência (com gerencial)' : 'Líquido de referência'}
                   </span>
                   <span className="text-2xl font-black tabular-nums" style={{ color: '#22c55e' }}>
@@ -3181,16 +3376,16 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               )}
 
               {folha.adiantamentos.length > 0 && (
-                <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-2">
+                <div className="p-4 bg-[var(--bg-main)] rounded-xl border border-[var(--border)]">
+                  <p className="text-xs font-black text-[var(--text-muted)] uppercase tracking-wider mb-2">
                     Adiantamentos que compõem o cálculo
                   </p>
-                  <p className="text-[10px] text-zinc-500 mb-2 leading-relaxed">
+                  <p className="text-[10px] text-[var(--text-muted)] mb-2 leading-relaxed">
                     Preferência: registros feitos em <strong>Pagamentos</strong> (mesma competência). A tabela legada só entra no total se não houver
                     adiantamento por pagamentos.
                   </p>
                   {folha.adiantamentos.map((a) => (
-                    <div key={a.id} className="flex justify-between text-xs text-zinc-600 py-1">
+                    <div key={a.id} className="flex justify-between text-xs text-[var(--text-muted)] py-1">
                       <span>
                         {fmtDate(a.data)} · {a.motivo}
                         {a.origem === 'pagamento_folha' ? (
@@ -3224,7 +3419,7 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               )}
 
               {showBancoBloco && (
-                <div className="p-4 rounded-xl border border-cyan-200 bg-white space-y-3">
+                <div className="p-4 rounded-xl border border-cyan-200 bg-[var(--bg-card)] space-y-3">
                   <div className="space-y-1">
                     <div className="flex justify-between items-center gap-2 flex-wrap">
                       <p className="text-xs font-black text-cyan-900 uppercase tracking-wider">Banco de horas na competência — conferência</p>
@@ -3232,13 +3427,13 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                         Saldo {folha.hour_bank.saldo_minutos} min
                       </span>
                     </div>
-                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                       Use este bloco para conferir o saldo que impacta a competência e, quando necessário, registrar ajuste administrativo autorizado.
-                      Compensação no dia a dia continua no <span className="font-bold text-zinc-700">Espelho</span>.
+                      Compensação no dia a dia continua no <span className="font-bold text-[var(--text-main)]">Espelho</span>.
                     </p>
                   </div>
                   {folha.hour_bank.movimentacoes?.length ? (
-                    <div className="max-h-36 overflow-y-auto divide-y divide-zinc-100 text-[11px] text-zinc-600">
+                    <div className="max-h-36 overflow-y-auto divide-y divide-zinc-100 text-[11px] text-[var(--text-muted)]">
                       {folha.hour_bank.movimentacoes.map((m) => (
                         <div key={m.id} className="py-1.5 flex justify-between gap-2">
                           <span className="truncate">
@@ -3257,17 +3452,17 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[11px] text-zinc-400">Nenhuma movimentação neste mês.</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">Nenhuma movimentação neste mês.</p>
                   )}
-                  <div className="pt-2 border-t border-zinc-100 space-y-2">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Ajuste administrativo</p>
+                  <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                    <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-wider">Ajuste administrativo</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Tipo</label>
+                        <label className="text-[10px] text-[var(--text-muted)] font-bold block mb-0.5">Tipo</label>
                         <select
                           value={bancoTipo}
                           onChange={(e) => setBancoTipo(e.target.value as typeof bancoTipo)}
-                          className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-medium"
+                          className="w-full px-2 py-2 border border-[var(--border)] rounded-lg text-xs font-medium"
                         >
                           <option value="debit">Débito administrativo (baixa saldo)</option>
                           <option value="credit">Crédito administrativo</option>
@@ -3276,17 +3471,17 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Data referência</label>
+                        <label className="text-[10px] text-[var(--text-muted)] font-bold block mb-0.5">Data referência</label>
                         <input
                           type="date"
                           value={bancoDataRef}
                           onChange={(e) => setBancoDataRef(e.target.value)}
-                          className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-mono"
+                          className="w-full px-2 py-2 border border-[var(--border)] rounded-lg text-xs font-mono"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">
+                      <label className="text-[10px] text-[var(--text-muted)] font-bold block mb-0.5">
                         Minutos {bancoTipo === 'manual_adjust' ? '(+ ou −)' : ''}
                       </label>
                       <input
@@ -3295,17 +3490,17 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                         value={bancoMin}
                         onChange={(e) => setBancoMin(e.target.value)}
                         placeholder={bancoTipo === 'manual_adjust' ? 'ex: -30 ou +60' : 'ex: 60'}
-                        className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs font-mono"
+                        className="w-full px-2 py-2 border border-[var(--border)] rounded-lg text-xs font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-zinc-500 font-bold block mb-0.5">Observação</label>
+                      <label className="text-[10px] text-[var(--text-muted)] font-bold block mb-0.5">Observação</label>
                       <input
                         type="text"
                         value={bancoObs}
                         onChange={(e) => setBancoObs(e.target.value)}
                         placeholder="Motivo autorizado"
-                        className="w-full px-2 py-2 border border-zinc-200 rounded-lg text-xs"
+                        className="w-full px-2 py-2 border border-[var(--border)] rounded-lg text-xs"
                       />
                     </div>
                     <button
@@ -3324,13 +3519,13 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               )}
 
               {!evF && (
-              <div className="pt-6 border-t border-zinc-200 grid grid-cols-2 gap-8 text-center text-xs text-zinc-400">
+              <div className="pt-6 border-t border-[var(--border)] grid grid-cols-2 gap-8 text-center text-xs text-[var(--text-muted)]">
                 <div>
-                  <div className="border-b border-zinc-300 mb-2 h-10" />
+                  <div className="border-b border-[var(--border)] mb-2 h-10" />
                   <p>Assinatura do Funcionário</p>
                 </div>
                 <div>
-                  <div className="border-b border-zinc-300 mb-2 h-10" />
+                  <div className="border-b border-[var(--border)] mb-2 h-10" />
                   <p>Assinatura do Responsável</p>
                 </div>
               </div>
@@ -3339,27 +3534,27 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
           </div>
 
           <div className="space-y-3 sm:space-y-4 min-w-0">
-            <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 min-w-0">
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
                 Resumo da folha
               </p>
-              <p className="text-xs text-zinc-500 mb-3">
+              <p className="text-xs text-[var(--text-muted)] mb-3">
                 Apuração desta competência, pagamentos registrados e saldo a quitar (mesma base usada em Pagamentos).
               </p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span style={{ color: '#9ca3af' }}>Competência</span>
-                  <span className="font-bold text-zinc-800">{folhaView.referencia}</span>
+                  <span className="font-bold text-[var(--text-main)]">{folhaView.referencia}</span>
                 </div>
                 {!evF && (
                   <>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Bruto apurado</span>
-                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
+                      <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(folhaView.gross)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Descontos da competência</span>
-                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.dedTotal)}</span>
+                      <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(folhaView.dedTotal)}</span>
                     </div>
                   </>
                 )}
@@ -3367,11 +3562,11 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                   <>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Líquido apurado</span>
-                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.net_liquid)}</span>
+                      <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(paySummary.net_liquid)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Pago nesta competência</span>
-                      <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
+                      <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(paySummary.total_paid)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Pendente para quitar</span>
@@ -3388,18 +3583,18 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                 {paySummary?.unbounded && (
                   <div className="flex justify-between">
                     <span style={{ color: '#9ca3af' }}>Total pago (competência)</span>
-                    <span className="font-bold text-zinc-800 tabular-nums">{fmt(paySummary.total_paid)}</span>
+                    <span className="font-bold text-[var(--text-main)] tabular-nums">{fmt(paySummary.total_paid)}</span>
                   </div>
                 )}
                 {!evF && (
                   <>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Faltas</span>
-                      <span className="font-bold text-zinc-700">{folha.totalFaltas}×</span>
+                      <span className="font-bold text-[var(--text-main)]">{folha.totalFaltas}×</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: '#9ca3af' }}>Atrasos</span>
-                      <span className="font-bold text-zinc-700">{folha.totalAtrasoMin} min</span>
+                      <span className="font-bold text-[var(--text-main)]">{folha.totalAtrasoMin} min</span>
                     </div>
                   </>
                 )}
@@ -3410,10 +3605,10 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                   </div>
                 )}
               </div>
-              <div className="mt-4 p-3 rounded-xl bg-zinc-100 border border-zinc-200 flex justify-between items-center">
-                <span className="text-sm font-black text-zinc-800">{evF ? 'Salário líquido (CLT)' : 'Líquido da competência'}</span>
+              <div className="mt-4 p-3 rounded-xl bg-zinc-100 border border-[var(--border)] flex justify-between items-center">
+                <span className="text-sm font-black text-[var(--text-main)]">{evF ? 'Salário líquido (CLT)' : 'Líquido da competência'}</span>
                 {evF ? (
-                  <span className="text-xs font-bold text-zinc-500 text-right max-w-[140px]">Não aplicável (contrato por evento)</span>
+                  <span className="text-xs font-bold text-[var(--text-muted)] text-right max-w-[140px]">Não aplicável (contrato por evento)</span>
                 ) : (
                   <span className="text-xl font-black tabular-nums" style={{ color: '#22c55e' }}>
                     {fmt(Math.max(0, folhaView.net))}
@@ -3422,11 +3617,11 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               </div>
             </div>
 
-            <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 min-w-0">
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
                 Pagamentos
               </p>
-              <p className="text-xs text-zinc-500 mb-3">
+              <p className="text-xs text-[var(--text-muted)] mb-3">
                 Use este bloco para registrar adiantamento, pagamento parcial ou quitação da competência. O lançamento entra no financeiro,
                 atualiza o histórico e permite emitir recibo, sem alterar salário base nem ponto do dia a dia.
                 {evF && (
@@ -3437,13 +3632,13 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               </p>
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Tipo</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Tipo</label>
                   <select
                     value={payForm.tipo}
                     onChange={(e) =>
                       setPayForm((f) => ({ ...f, tipo: e.target.value as typeof payForm.tipo }))
                     }
-                    className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                    className="mt-1 w-full px-3 py-2.5 bg-[var(--bg-main)] border border-[var(--border)] rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                   >
                     <option value="advance">Adiantamento</option>
                     <option value="partial_payment">Pagamento parcial</option>
@@ -3458,12 +3653,12 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                   placeholder="0,00"
                 />
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Observação</label>
+                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Observação</label>
                   <textarea
                     value={payForm.observacao}
                     onChange={(e) => setPayForm((f) => ({ ...f, observacao: e.target.value }))}
                     rows={2}
-                    className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                    className="mt-1 w-full px-3 py-2.5 bg-[var(--bg-main)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     placeholder="Opcional"
                   />
                 </div>
@@ -3495,7 +3690,7 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
               </div>
 
               {(folha.payroll_payments?.length ?? 0) > 0 && (
-                <div className="mt-5 pt-5 border-t border-zinc-100">
+                <div className="mt-5 pt-5 border-t border-[var(--border)]">
                   <p className="text-[10px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
                     Pagamentos já registrados na competência
                   </p>
@@ -3503,13 +3698,13 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                     {(folha.payroll_payments || []).map((p) => (
                       <li
                         key={p.id}
-                        className="flex flex-wrap items-center justify-between gap-2 text-xs bg-zinc-50 rounded-lg px-3 py-2 border border-zinc-100"
+                        className="flex flex-wrap items-center justify-between gap-2 text-xs bg-[var(--bg-main)] rounded-lg px-3 py-2 border border-[var(--border)]"
                       >
                         <div>
-                          <span className="font-bold text-zinc-800">{PAYMENT_TIPO_LABEL[p.tipo] || p.tipo}</span>
-                          <span className="text-zinc-400 mx-1">·</span>
+                          <span className="font-bold text-[var(--text-main)]">{PAYMENT_TIPO_LABEL[p.tipo] || p.tipo}</span>
+                          <span className="text-[var(--text-muted)] mx-1">·</span>
                           <span className="font-black text-emerald-700 tabular-nums">{fmt(Number(p.valor))}</span>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">
+                          <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
                             {p.recibo_numero || `RHF-${p.id}`} ·{' '}
                             {p.created_at ? new Date(p.created_at).toLocaleString('pt-BR') : ''}
                           </p>
@@ -3517,7 +3712,7 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                         <button
                           type="button"
                           onClick={() => printReceipt(p)}
-                          className="shrink-0 px-2 py-1 rounded-lg border border-zinc-200 bg-white text-[11px] font-bold text-zinc-700 hover:bg-zinc-100"
+                          className="shrink-0 px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[11px] font-bold text-[var(--text-main)] hover:bg-zinc-100"
                         >
                           Recibo
                         </button>
@@ -3545,18 +3740,18 @@ function Avatar({ func, size=40, className='' }: { func:Pick<Func,'nome'|'foto_u
   );
 }
 function InfoChip({ label, value }: { label:string; value:string }) {
-  return <div className="bg-zinc-50 rounded-lg px-2 py-1.5"><p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p><p className="text-xs font-bold text-zinc-700 mt-0.5">{value}</p></div>;
+  return <div className="bg-[var(--bg-main)] rounded-lg px-2 py-1.5"><p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</p><p className="text-xs font-bold text-[var(--text-main)] mt-0.5">{value}</p></div>;
 }
 function ABtn({ label, icon, onClick, danger=false }: { label:string; icon:React.ReactNode; onClick:()=>void; danger?:boolean }) {
-  return <button onClick={onClick} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${danger?'border-red-200 text-red-500 bg-red-50 hover:bg-red-100':'border-zinc-200 text-zinc-600 bg-zinc-50 hover:bg-zinc-100'}`}>{icon}{label}</button>;
+  return <button onClick={onClick} className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${danger?'border-red-200 text-red-500 bg-red-50 hover:bg-red-100':'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-main)] hover:bg-zinc-100'}`}>{icon}{label}</button>;
 }
 function SCard({ label, value, color, small=false, hint }: { label:string; value:string|number; color:string; small?:boolean; hint?: string }) {
   const bg:Record<string,string>={emerald:'bg-emerald-50 border-emerald-200',red:'bg-red-50 border-red-200',blue:'bg-blue-50 border-blue-200',purple:'bg-purple-50 border-purple-200',amber:'bg-amber-50 border-amber-200',orange:'bg-orange-50 border-orange-200',cyan:'bg-cyan-50 border-cyan-200'};
   const txt:Record<string,string>={emerald:'text-emerald-700',red:'text-red-700',blue:'text-blue-700',purple:'text-purple-700',amber:'text-amber-700',orange:'text-orange-700',cyan:'text-cyan-800'};
-  return <div className={`${bg[color]} border rounded-xl p-3`}><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p><p className={`font-black mt-1 ${txt[color]} ${small?'text-sm':'text-2xl'}`}>{value}</p>{hint && <p className="mt-1 text-[10px] text-zinc-500 leading-snug">{hint}</p>}</div>;
+  return <div className={`${bg[color]} border rounded-xl p-3`}><p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</p><p className={`font-black mt-1 ${txt[color]} ${small?'text-sm':'text-2xl'}`}>{value}</p>{hint && <p className="mt-1 text-[10px] text-[var(--text-muted)] leading-snug">{hint}</p>}</div>;
 }
 function FInput({ label, value, onChange, placeholder='', type='text' }: { label:string; value:string; onChange:(v:string)=>void; placeholder?:string; type?:string }) {
-  return <div><label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{label}</label><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"/></div>;
+  return <div><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</label><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full px-3 py-2.5 bg-[var(--bg-main)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"/></div>;
 }
 function Modal({ open, onClose, title, children, wide=false }: { open:boolean; onClose:()=>void; title:string; children:React.ReactNode; wide?:boolean }) {
   return (
@@ -3567,11 +3762,11 @@ function Modal({ open, onClose, title, children, wide=false }: { open:boolean; o
             initial={{ scale: 0.93, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.93, opacity: 0 }}
-            className={`my-auto flex max-h-[min(92dvh,100svh)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
+            className={`my-auto flex max-h-[min(92dvh,100svh)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
           >
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3 2xl:px-6 2xl:py-4">
-              <h3 className="min-w-0 pr-2 text-base font-black text-zinc-900 2xl:text-lg">{title}</h3>
-              <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 2xl:p-1.5" aria-label="Fechar">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 2xl:px-6 2xl:py-4">
+              <h3 className="min-w-0 pr-2 text-base font-black text-[var(--text-main)] 2xl:text-lg">{title}</h3>
+              <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] hover:bg-zinc-100 2xl:p-1.5" aria-label="Fechar">
                 <X size={18}/>
               </button>
             </div>
@@ -3587,4 +3782,4 @@ function Modal({ open, onClose, title, children, wide=false }: { open:boolean; o
 function MBtns({ onCancel, onConfirm, saving, label }: { onCancel:()=>void; onConfirm:()=>void; saving:boolean; label:string }) {
   return <div className="flex gap-3 mt-5"><button onClick={onCancel} className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold">Cancelar</button><button onClick={onConfirm} disabled={saving} className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">{saving?<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:label}</button></div>;
 }
-function LoadSpinner() { return <div className="flex justify-center py-10 sm:py-12"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin"/></div>; }
+function LoadSpinner() { return <div className="flex justify-center py-10 sm:py-12"><div className="w-8 h-8 border-2 border-[var(--border)] border-t-[var(--text-main)] rounded-full animate-spin"/></div>; }

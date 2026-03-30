@@ -20,6 +20,7 @@ import {
   syncBankCreditFromHoraExtra,
   deleteHourBankMovementsLinkedToHoraExtra,
   extraMinutesForPayrollRow,
+  extraMinutesForBankFromRow,
   roundMoney,
 } from '../services/payrollService';
 import { deletePointRecord, updatePointRecord } from '../services/pointService';
@@ -46,6 +47,18 @@ function inferHoraExtraDestino(total: number, minutosPagoFolha: number): HoraExt
   if (minutosPagoFolha <= 0) return 'banco';
   if (minutosPagoFolha >= total) return 'folha';
   return 'dividido';
+}
+
+/** Destino exibido no espelho (inclui pendente e legado). */
+function destinoUiHoraExtra(curr: {
+  minutos: number;
+  minutos_pago_folha?: number | null;
+  destino_pendente?: number | null;
+}): HoraExtraDestino | 'pendente' | 'legado_folha' {
+  if (Number(curr.destino_pendente) === 1) return 'pendente';
+  const total = Math.max(0, Number(curr.minutos) || 0);
+  if (curr.minutos_pago_folha == null) return 'legado_folha';
+  return inferHoraExtraDestino(total, extraMinutesForPayrollRow(curr));
 }
 
 function validateHoraExtraDestino(params: {
@@ -381,6 +394,34 @@ export function createRhRouter() {
       if (!data||!minutos) return res.status(400).json({ error:'data e minutos obrigatórios' });
       const total = Math.floor(Number(minutos));
       if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error:'minutos inválidos' });
+      const funcRow = await q1<{ tipo_contrato: string | null }>(
+        'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [req.params.id, req.tenantId]
+      );
+      if (!funcRow) return res.status(404).json({ error: 'Funcionario nao encontrado' });
+      const createdBy = req.user?.username != null ? String(req.user.username) : null;
+
+      const destinoStr = destino != null ? String(destino).trim() : '';
+      if (destinoStr === 'pendente') {
+        const id = await qInsert(
+          'INSERT INTO func_horas_extras (tenant_id,funcionario_id,data,minutos,observacao,minutos_pago_folha,destino_pendente) VALUES (?,?,?,?,?,NULL,1)',
+          [req.tenantId, req.params.id, data, total, observacao || null]
+        );
+        if (id != null) {
+          await syncBankCreditFromHoraExtra({
+            tenantId: req.tenantId,
+            employeeId: Number(req.params.id),
+            horaExtraId: Number(id),
+            data,
+            minutos: total,
+            minutosPagoFolha: null,
+            createdBy,
+            destinoPendente: true,
+          });
+        }
+        return res.json({ success: true, id, destino: 'pendente' });
+      }
+
       if (minutos_pago_folha === undefined || minutos_pago_folha === null || String(minutos_pago_folha).trim() === '') {
         return res.status(400).json({
           error: 'Informe explicitamente quantos minutos da HE vão para a folha. Use 0 para banco e o total para pagamento integral.',
@@ -390,11 +431,6 @@ export function createRhRouter() {
       if (!Number.isFinite(pagoFolha) || pagoFolha < 0 || pagoFolha > total) {
         return res.status(400).json({ error:'minutos_pago_folha deve estar entre 0 e o total de minutos' });
       }
-      const funcRow = await q1<{ tipo_contrato: string | null }>(
-        'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
-        [req.params.id, req.tenantId]
-      );
-      if (!funcRow) return res.status(404).json({ error: 'Funcionario nao encontrado' });
       const destinoCheck = validateHoraExtraDestino({
         total,
         minutosPagoFolha: pagoFolha,
@@ -402,9 +438,8 @@ export function createRhRouter() {
         bancoAplicavel: hourBankApplicable(normalizeTipoContrato(funcRow.tipo_contrato)),
       });
       if (destinoCheck.ok === false) return res.status(400).json({ error: destinoCheck.error });
-      const createdBy = req.user?.username != null ? String(req.user.username) : null;
       const id = await qInsert(
-        'INSERT INTO func_horas_extras (tenant_id,funcionario_id,data,minutos,observacao,minutos_pago_folha) VALUES (?,?,?,?,?,?)',
+        'INSERT INTO func_horas_extras (tenant_id,funcionario_id,data,minutos,observacao,minutos_pago_folha,destino_pendente) VALUES (?,?,?,?,?,?,0)',
         [req.tenantId,req.params.id,data,total,observacao||null,pagoFolha]
       );
       if (id != null) {
@@ -425,8 +460,15 @@ export function createRhRouter() {
   router.patch('/horas-extras/:id', async (req: any, res) => {
     try {
       const heId = Number(req.params.id);
-      const row = await q1<{ id: number; funcionario_id: number; data: string; minutos: number; minutos_pago_folha: number | null }>(
-        'SELECT id, funcionario_id, data, minutos, minutos_pago_folha FROM func_horas_extras WHERE id=? AND tenant_id=?',
+      const row = await q1<{
+        id: number;
+        funcionario_id: number;
+        data: string;
+        minutos: number;
+        minutos_pago_folha: number | null;
+        destino_pendente?: number | null;
+      }>(
+        'SELECT id, funcionario_id, data, minutos, minutos_pago_folha, COALESCE(destino_pendente,0) AS destino_pendente FROM func_horas_extras WHERE id=? AND tenant_id=?',
         [heId, req.tenantId]
       );
       if (!row) return res.status(404).json({ error: 'Registro não encontrado' });
@@ -441,6 +483,10 @@ export function createRhRouter() {
         pagoFolha = Math.floor(Number(minutos_pago_folha));
       } else if (row.minutos_pago_folha != null) {
         pagoFolha = Math.floor(Number(row.minutos_pago_folha));
+      } else if (Number(row.destino_pendente) === 1) {
+        return res.status(400).json({
+          error: 'HE pendente: informe minutos_pago_folha e destino (folha, banco ou dividido) para concluir.',
+        });
       } else {
         return res.status(400).json({
           error: 'Informe minutos_pago_folha e destino para atualizar a hora extra.',
@@ -463,7 +509,7 @@ export function createRhRouter() {
       const data = req.body?.data != null ? String(req.body.data).trim() : row.data;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return res.status(400).json({ error: 'data inválida' });
       const createdBy = req.user?.username != null ? String(req.user.username) : null;
-      let uq = `UPDATE func_horas_extras SET data=?, minutos=?, minutos_pago_folha=?`;
+      let uq = `UPDATE func_horas_extras SET data=?, minutos=?, minutos_pago_folha=?, destino_pendente=0`;
       const up: unknown[] = [data, total, pagoFolha];
       if (observacao !== undefined) {
         uq += ', observacao=?';
@@ -761,6 +807,20 @@ export function createRhRouter() {
       let totalFaltas=0,totalAtrasos=0,diasTrab=0,diasFolga=0,diasAtestado=0;
       const totalExtraMin = extras.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0);
       const totalExtraMinPagoFolha = extras.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0);
+      const totalExtraMinBancoMes = extras.reduce((acc, curr) => acc + extraMinutesForBankFromRow(curr), 0);
+      const totalExtraMinPendentes = extras.reduce(
+        (acc, curr) =>
+          acc + (Number((curr as { destino_pendente?: number }).destino_pendente) === 1 ? Number(curr.minutos) || 0 : 0),
+        0
+      );
+      const horas_extras_pendentes = extras
+        .filter((e: { destino_pendente?: number }) => Number(e.destino_pendente) === 1)
+        .map((e: { id: number; data: string; minutos: number; observacao?: string | null }) => ({
+          id: e.id,
+          data: e.data,
+          minutos: Number(e.minutos) || 0,
+          observacao: e.observacao ?? null,
+        }));
 
       const dias: any[] = [];
       for (let d=1;d<=diasNoMes;d++) {
@@ -769,7 +829,14 @@ export function createRhRouter() {
         const isExp=diasSemana.includes(diaSem);
         const evts=ebd[dataStr]||[];
         const pts=pbd[dataStr]||[];
-        const extrasDia=(hbd[dataStr]||[]) as Array<{ id: number; minutos: number; minutos_pago_folha?: number | null; observacao?: string | null }>;
+        const extrasDia=(hbd[dataStr]||[]) as Array<{
+          id: number;
+          minutos: number;
+          minutos_pago_folha?: number | null;
+          destino_pendente?: number | null;
+          observacao?: string | null;
+        }>;
+        const anyPendenteDia = extrasDia.some((c) => Number(c.destino_pendente) === 1);
         const extraAprov=extrasDia.length ? {
           id: extrasDia[extrasDia.length - 1].id,
           quantidade: extrasDia.length,
@@ -780,27 +847,19 @@ export function createRhRouter() {
               : extrasDia.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0),
           destino:
             extrasDia.length === 1
-              ? (extrasDia[0].minutos_pago_folha == null
-                  ? 'legado_folha'
-                  : inferHoraExtraDestino(
-                      Math.max(0, Number(extrasDia[0].minutos) || 0),
-                      extraMinutesForPayrollRow(extrasDia[0])
-                    ))
-              : inferHoraExtraDestino(
-                  extrasDia.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0),
-                  extrasDia.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0)
-                ),
+              ? destinoUiHoraExtra(extrasDia[0])
+              : anyPendenteDia
+                ? 'pendente'
+                : inferHoraExtraDestino(
+                    extrasDia.reduce((acc, curr) => acc + (Number(curr.minutos) || 0), 0),
+                    extrasDia.reduce((acc, curr) => acc + extraMinutesForPayrollRow(curr), 0)
+                  ),
           observacao: extrasDia.length === 1 ? extrasDia[0].observacao ?? null : null,
           itens: extrasDia.map((curr) => ({
             id: curr.id,
             minutos: Number(curr.minutos) || 0,
             minutos_pago_folha: curr.minutos_pago_folha ?? null,
-            destino: curr.minutos_pago_folha == null
-              ? 'legado_folha'
-              : inferHoraExtraDestino(
-                  Math.max(0, Number(curr.minutos) || 0),
-                  extraMinutesForPayrollRow(curr)
-                ),
+            destino: destinoUiHoraExtra(curr),
             observacao: curr.observacao ?? null,
           })),
         } : null;
@@ -857,9 +916,10 @@ export function createRhRouter() {
         func,
         funcionario: func,
         dias,
+        horas_extras_pendentes,
         resumo:{
           diasTrabalhados:diasTrab,totalFaltas,diasFolga,diasAtestado,totalAtrasoMin:totalAtrasos,
-          totalExtraMin,totalExtraMinPagoFolha,totalExtraMinBancoMes:Math.max(0,totalExtraMin-totalExtraMinPagoFolha),
+          totalExtraMin,totalExtraMinPagoFolha,totalExtraMinBancoMes,totalExtraMinPendentes,
           saldoBancoHorasMin:banco.saldo_minutos,
           descontoFaltas:totalFaltas*valorDia,descontoAtrasos:(totalAtrasos/60)*valorHora,
           totalDescontos:(totalFaltas*valorDia)+((totalAtrasos/60)*valorHora),
