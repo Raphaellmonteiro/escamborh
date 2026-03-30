@@ -224,8 +224,8 @@ const darkPremium: DeliveryCardapioTheme = {
   menuItemActive:
     'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-white/25 transition-colors hover:bg-[#ececee]',
   menuCategoryActive:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-cyan-400/40 transition-colors hover:bg-[#ececee]',
-  menuCategoryCountActive: 'text-xs font-black tabular-nums text-cyan-800',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-red-500 text-white shadow-sm ring-1 ring-red-400/50 transition-colors hover:bg-red-600 hover:text-white',
+  menuCategoryCountActive: 'text-xs font-black tabular-nums text-white/80',
   menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
     'inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 transition-colors hover:bg-white/8',
@@ -448,8 +448,8 @@ const lightRed: DeliveryCardapioTheme = {
   menuItemActive:
     'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-red-200/90 transition-colors hover:bg-[#ececee]',
   menuCategoryActive:
-    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-[#f4f4f5] text-zinc-950 shadow-sm ring-1 ring-red-300/80 transition-colors hover:bg-[#ececee]',
-  menuCategoryCountActive: 'text-xs font-black tabular-nums text-red-800',
+    'flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-semibold bg-red-500 text-white shadow-sm ring-1 ring-red-400/50 transition-colors hover:bg-red-600 hover:text-white',
+  menuCategoryCountActive: 'text-xs font-black tabular-nums text-white/80',
   menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
     'inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-bold text-zinc-800 transition-colors hover:bg-zinc-50',

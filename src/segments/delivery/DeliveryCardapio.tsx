@@ -1642,10 +1642,10 @@ export default function DeliveryCardapio() {
                       menuCatalogoAberto
                         ? isLightRed
                           ? 'border-red-200 bg-red-50 text-red-950'
-                          : 'border-cyan-500/30 bg-cyan-500/10 text-white'
+                          : 'border-red-500/60 bg-red-500 text-white hover:bg-red-600 hover:text-white'
                         : isLightRed
                           ? 'border-zinc-200 bg-white text-zinc-950 hover:bg-zinc-50 hover:text-zinc-950'
-                          : 'border-white/12 bg-zinc-950 text-white hover:bg-white/10'
+                          : 'border-white/12 bg-zinc-800 text-white/80 hover:bg-zinc-700 hover:text-white'
                     }`}
                   >
                     <Menu size={16} />
