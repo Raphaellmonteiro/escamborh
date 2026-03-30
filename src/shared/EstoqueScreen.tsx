@@ -66,35 +66,35 @@ const SIMPLE_MODE_ACTIONS: TutorialAction[] = [
     description: 'Soma estoque quando chega compra, reposicao ou devolucao do fornecedor.',
     icon: ArrowUpCircle,
     iconClass:
-      'bg-emerald-100 text-emerald-700 [.admin-dark_&]:bg-emerald-500/20 [.admin-dark_&]:text-emerald-200',
+      'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   },
   {
     title: 'Saida',
     description: 'Desconta manualmente perdas, uso interno ou vendas feitas fora do fluxo automatico.',
     icon: ArrowDownCircle,
     iconClass:
-      'bg-red-100 text-red-700 [.admin-dark_&]:bg-red-500/20 [.admin-dark_&]:text-red-200',
+      'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
   },
   {
     title: 'Zerar',
     description: 'Transforma todo o saldo atual em uma saida unica para reiniciar a contagem.',
     icon: RotateCcw,
     iconClass:
-      'bg-zinc-200 text-zinc-700 [.admin-dark_&]:bg-zinc-700 [.admin-dark_&]:text-zinc-200',
+      'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
   },
   {
     title: 'Editar',
     description: 'Altera nome, unidade, custo e fornecedor. Se mudar o saldo, o sistema registra ajuste.',
     icon: FileText,
     iconClass:
-      'bg-amber-100 text-amber-700 [.admin-dark_&]:bg-amber-500/20 [.admin-dark_&]:text-amber-200',
+      'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
   },
   {
     title: 'Historico',
     description: 'Mostra as ultimas movimentacoes do item para conferir entradas, saidas e ajustes.',
     icon: History,
     iconClass:
-      'bg-sky-100 text-sky-700 [.admin-dark_&]:bg-sky-500/20 [.admin-dark_&]:text-sky-200',
+      'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
   },
 ];
 
@@ -808,29 +808,29 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="stock-surface stock-tutorial-shell mb-3 rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-zinc-50 p-4 shadow-sm sm:mb-4 sm:p-5 2xl:p-6 [.admin-dark_&]:border-sky-500/35"
+              className="stock-surface stock-tutorial-shell mb-3 rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-zinc-50 p-4 shadow-sm sm:mb-4 sm:p-5 2xl:p-6 dark:border-zinc-800 dark:bg-gradient-to-br dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900 dark:shadow-black/30"
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-sm [.admin-dark_&]:bg-sky-500/20 [.admin-dark_&]:text-sky-200 [.admin-dark_&]:shadow-none">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-700 shadow-sm dark:bg-sky-500/15 dark:text-sky-300 dark:shadow-none">
                       <Info size={20} aria-hidden />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-lg font-black text-zinc-900 sm:text-xl [.admin-dark_&]:text-zinc-50">Como funciona o estoque</p>
-                      <p className="mt-1 max-w-3xl text-sm leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
+                      <p className="text-lg font-black text-zinc-900 sm:text-xl dark:text-white">Como funciona o estoque</p>
+                      <p className="mt-1 max-w-3xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
                         Este tutorial mostra o jeito mais simples e o jeito mais completo de trabalhar com estoque no FlowPDV. A ideia e ler uma vez, entender o fluxo e depois ocultar sem medo.
                       </p>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="stock-tutorial-chip stock-tutorial-chip-simple rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 [.admin-dark_&]:border [.admin-dark_&]:border-emerald-500/30 [.admin-dark_&]:bg-emerald-500/15 [.admin-dark_&]:text-emerald-200">
+                    <span className="stock-tutorial-chip stock-tutorial-chip-simple rounded-full border border-transparent bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300">
                       Modo simples em verde
                     </span>
-                    <span className="stock-tutorial-chip stock-tutorial-chip-advanced rounded-full bg-orange-100 px-3 py-1 text-[11px] font-bold text-orange-800 [.admin-dark_&]:border [.admin-dark_&]:border-orange-500/35 [.admin-dark_&]:bg-orange-500/15 [.admin-dark_&]:text-orange-200">
+                    <span className="stock-tutorial-chip stock-tutorial-chip-advanced rounded-full border border-transparent bg-orange-100 px-3 py-1 text-[11px] font-bold text-orange-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                       Modo avançado em laranja
                     </span>
-                    <span className="stock-tutorial-chip stock-tutorial-chip-neutral rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold text-zinc-700 [.admin-dark_&]:border [.admin-dark_&]:border-zinc-600 [.admin-dark_&]:bg-zinc-800/90 [.admin-dark_&]:text-zinc-200">
+                    <span className="stock-tutorial-chip stock-tutorial-chip-neutral rounded-full border border-transparent bg-zinc-100 px-3 py-1 text-[11px] font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
                       Baixa automática depende de vínculo correto
                     </span>
                   </div>
@@ -838,62 +838,62 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                 <button
                   type="button"
                   onClick={() => setIntroCollapsedPersist(true)}
-                  className="stock-secondary-action inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-800 shadow-sm hover:bg-sky-50 [.admin-dark_&]:border-sky-500/40 [.admin-dark_&]:text-sky-200 [.admin-dark_&]:shadow-[0_1px_0_rgba(0,0,0,0.35)] [.admin-dark_&]:hover:bg-sky-500/10"
+                  className="stock-secondary-action inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-800 shadow-sm hover:bg-sky-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:shadow-none"
                   aria-expanded="true"
                 >
-                  <ChevronUp size={14} className="[.admin-dark_&]:text-sky-300" aria-hidden />
+                  <ChevronUp size={14} className="dark:text-zinc-300" aria-hidden />
                   Ocultar tutorial
                 </button>
               </div>
 
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                <section className="stock-tutorial-panel stock-tutorial-panel-simple rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-emerald-500/35 [.admin-dark_&]:bg-gradient-to-br [.admin-dark_&]:from-emerald-950/50 [.admin-dark_&]:via-[#0f1411] [.admin-dark_&]:to-emerald-950/25 [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(52,211,153,0.08)]">
+                <section className="stock-tutorial-panel stock-tutorial-panel-simple rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-4 shadow-sm sm:p-5 dark:border-emerald-800 dark:bg-gradient-to-br dark:from-emerald-950/35 dark:via-zinc-950 dark:to-emerald-950/25 dark:shadow-[inset_0_1px_0_rgba(52,211,153,0.06)]">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 [.admin-dark_&]:bg-emerald-500/20 [.admin-dark_&]:text-emerald-200">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
                       <Package size={20} aria-hidden />
                     </div>
                     <div>
-                      <span className="inline-flex rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white [.admin-dark_&]:bg-emerald-500 [.admin-dark_&]:ring-1 [.admin-dark_&]:ring-emerald-400/35">
+                      <span className="inline-flex rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white dark:bg-emerald-600 dark:ring-1 dark:ring-emerald-500/40">
                         Modo simples
                       </span>
-                      <p className="mt-2 text-lg font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Ideal para bebida, lata, garrafa e item vendido por unidade</p>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-700 [.admin-dark_&]:text-zinc-300">
+                      <p className="mt-2 text-lg font-black text-zinc-900 dark:text-white">Ideal para bebida, lata, garrafa e item vendido por unidade</p>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
                         Use quando o que voce vende e praticamente o mesmo item que sai do estoque. Exemplo classico: Coca-Cola lata, agua, cerveja long neck, sobremesa pronta ou produto embalado.
                       </p>
                     </div>
                   </div>
 
-                  <div className="stock-tutorial-card mt-4 rounded-2xl border border-emerald-200 bg-white/90 p-4 [.admin-dark_&]:border-emerald-500/25 [.admin-dark_&]:bg-[#0a0f0d]/95">
-                    <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Passo a passo com Coca-Cola lata</p>
+                  <div className="stock-tutorial-card mt-4 rounded-2xl border border-emerald-200 bg-white/90 p-4 dark:border-emerald-800 dark:bg-zinc-900">
+                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Passo a passo com Coca-Cola lata</p>
                     <div className="mt-3 space-y-3">
                       {SIMPLE_MODE_STEPS.map((step, index) => (
                         <div key={step} className="flex items-start gap-3">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white [.admin-dark_&]:bg-emerald-500 [.admin-dark_&]:ring-2 [.admin-dark_&]:ring-emerald-400/25">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white dark:bg-emerald-600 dark:ring-2 dark:ring-emerald-500/30">
                             {index + 1}
                           </div>
-                          <p className="text-sm leading-relaxed text-zinc-700 [.admin-dark_&]:text-zinc-300">{step}</p>
+                          <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200">{step}</p>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">O que cada acao faz no modo simples</p>
+                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">O que cada acao faz no modo simples</p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {SIMPLE_MODE_ACTIONS.map((action) => {
                         const Icon = action.icon;
                         return (
                           <div
                             key={action.title}
-                            className="stock-tutorial-card rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm [.admin-dark_&]:border-emerald-500/20 [.admin-dark_&]:bg-[#080c0a]/90 [.admin-dark_&]:shadow-none"
+                            className="stock-tutorial-card rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm dark:border-emerald-800 dark:bg-zinc-900 dark:shadow-none"
                           >
                             <div className="flex items-start gap-3">
                               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${action.iconClass}`}>
                                 <Icon size={18} aria-hidden />
                               </div>
                               <div>
-                                <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">{action.title}</p>
-                                <p className="mt-1 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">{action.description}</p>
+                                <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">{action.title}</p>
+                                <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">{action.description}</p>
                               </div>
                             </div>
                           </div>
@@ -903,52 +903,52 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                   </div>
                 </section>
 
-                <section className="stock-tutorial-panel stock-tutorial-panel-advanced rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-100/60 p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-orange-500/40 [.admin-dark_&]:bg-gradient-to-br [.admin-dark_&]:from-orange-950/45 [.admin-dark_&]:via-[#14100c] [.admin-dark_&]:to-amber-950/30 [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(251,146,60,0.1)]">
+                <section className="stock-tutorial-panel stock-tutorial-panel-advanced rounded-3xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-100/60 p-4 shadow-sm sm:p-5 dark:border-amber-800 dark:bg-gradient-to-br dark:from-amber-950/30 dark:via-zinc-950 dark:to-amber-950/20 dark:shadow-[inset_0_1px_0_rgba(251,146,60,0.06)]">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 [.admin-dark_&]:bg-orange-500/20 [.admin-dark_&]:text-orange-200">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-orange-700 dark:bg-amber-500/15 dark:text-amber-300">
                       <BookOpen size={20} aria-hidden />
                     </div>
                     <div>
-                      <span className="inline-flex rounded-full bg-orange-500 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white [.admin-dark_&]:bg-orange-600 [.admin-dark_&]:ring-1 [.admin-dark_&]:ring-orange-400/35">
+                      <span className="inline-flex rounded-full bg-orange-500 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white dark:bg-orange-600 dark:ring-1 dark:ring-amber-500/35">
                         Modo avancado
                       </span>
-                      <p className="mt-2 text-lg font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Ideal para ficha tecnica, producao e controle por ingredientes</p>
-                      <p className="mt-1 text-sm leading-relaxed text-zinc-700 [.admin-dark_&]:text-zinc-300">
+                      <p className="mt-2 text-lg font-black text-zinc-900 dark:text-white">Ideal para ficha tecnica, producao e controle por ingredientes</p>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
                         Use quando um produto vendido consome varios itens do estoque. E o caso de marmita, lanche, prato feito, pizza, porcao e qualquer preparacao feita na cozinha.
                       </p>
                     </div>
                   </div>
 
-                  <div className="stock-tutorial-card mt-4 rounded-2xl border border-orange-200 bg-white/90 p-4 [.admin-dark_&]:border-orange-500/30 [.admin-dark_&]:bg-[#120e0a]/95">
-                    <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Passo a passo com marmita</p>
+                  <div className="stock-tutorial-card mt-4 rounded-2xl border border-orange-200 bg-white/90 p-4 dark:border-amber-800 dark:bg-zinc-900">
+                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Passo a passo com marmita</p>
                     <div className="mt-3 space-y-3">
                       {ADVANCED_MODE_STEPS.map((step, index) => (
                         <div key={step} className="flex items-start gap-3">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-black text-white [.admin-dark_&]:bg-orange-600 [.admin-dark_&]:ring-2 [.admin-dark_&]:ring-orange-400/30">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-black text-white dark:bg-orange-600 dark:ring-2 dark:ring-amber-500/30">
                             {index + 1}
                           </div>
-                          <p className="text-sm leading-relaxed text-zinc-700 [.admin-dark_&]:text-zinc-300">{step}</p>
+                          <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200">{step}</p>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
-                      <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Quando usar</p>
-                      <p className="mt-2 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
+                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 dark:border-amber-800 dark:bg-zinc-900">
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Quando usar</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
                         Quando voce quer saber consumo real, custo por receita e baixa automatica de ingredientes em gramas, quilos, litros ou mililitros.
                       </p>
                     </div>
-                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
-                      <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Resultado na venda</p>
-                      <p className="mt-2 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
+                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 dark:border-amber-800 dark:bg-zinc-900">
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Resultado na venda</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
                         Se vender 2 marmitas, a baixa e multiplicada por 2 em cada ingrediente da ficha tecnica. O historico registra cada saida no estoque.
                       </p>
                     </div>
-                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 sm:col-span-2 [.admin-dark_&]:border-orange-500/25 [.admin-dark_&]:bg-[#100c08]/92">
-                      <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Resumo pratico</p>
-                      <p className="mt-2 text-xs leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
+                    <div className="stock-tutorial-card rounded-2xl border border-orange-100 bg-white/85 p-4 sm:col-span-2 dark:border-amber-800 dark:bg-zinc-900">
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Resumo pratico</p>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
                         No modo avancado, o produto vendido nao precisa ser o mesmo item do estoque. O importante e a ficha tecnica estar certa, porque e ela que diz exatamente o que sera baixado.
                       </p>
                     </div>
@@ -956,14 +956,14 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                 </section>
               </div>
 
-              <div className="stock-tutorial-panel stock-tutorial-panel-neutral mt-4 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 [.admin-dark_&]:border-zinc-600/90 [.admin-dark_&]:bg-[#0d0f12] [.admin-dark_&]:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="stock-tutorial-panel stock-tutorial-panel-neutral mt-4 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 [.admin-dark_&]:bg-zinc-800 [.admin-dark_&]:text-zinc-200 [.admin-dark_&]:ring-1 [.admin-dark_&]:ring-zinc-600/50">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-1 dark:ring-zinc-700">
                     <Link2 size={18} aria-hidden />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-base font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Como o sistema identifica o item de estoque na venda</p>
-                    <p className="mt-1 text-sm leading-relaxed text-zinc-600 [.admin-dark_&]:text-zinc-400">
+                    <p className="text-base font-black text-zinc-900 dark:text-white">Como o sistema identifica o item de estoque na venda</p>
+                    <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
                       A baixa automatica so acontece quando existe um vinculo valido entre o produto vendido e o estoque. Hoje a logica do FlowPDV segue esta ordem:
                     </p>
                   </div>
@@ -974,22 +974,22 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     {STOCK_IDENTIFICATION_STEPS.map((step, index) => (
                       <div
                         key={step}
-                        className="stock-tutorial-card flex items-start gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 [.admin-dark_&]:border-zinc-600/80 [.admin-dark_&]:bg-zinc-900/55"
+                        className="stock-tutorial-card flex items-start gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900"
                       >
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-black text-white [.admin-dark_&]:bg-zinc-100 [.admin-dark_&]:text-zinc-900">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-black text-white dark:bg-zinc-700 dark:text-white dark:ring-1 dark:ring-zinc-600">
                           {index + 1}
                         </div>
-                        <p className="text-sm leading-relaxed text-zinc-700 [.admin-dark_&]:text-zinc-300">{step}</p>
+                        <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200">{step}</p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="stock-tutorial-card stock-tutorial-note rounded-2xl border border-sky-200 bg-sky-50/70 p-4 [.admin-dark_&]:border-sky-500/35 [.admin-dark_&]:bg-sky-950/40">
+                  <div className="stock-tutorial-card stock-tutorial-note rounded-2xl border border-sky-200 bg-sky-50/70 p-4 dark:border-sky-800 dark:bg-zinc-900">
                     <div className="flex items-center gap-2">
-                      <Zap size={16} className="text-sky-700 [.admin-dark_&]:text-sky-300" aria-hidden />
-                      <p className="text-sm font-black text-zinc-900 [.admin-dark_&]:text-zinc-50">Importante para o cliente final</p>
+                      <Zap size={16} className="text-sky-700 dark:text-sky-400" aria-hidden />
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Importante para o cliente final</p>
                     </div>
-                    <div className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-700 [.admin-dark_&]:text-zinc-300">
+                    <div className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-200">
                       <p>Se nao existir ficha tecnica, variacao vinculada ou codigo de barras exato, o sistema nao tem como adivinhar qual item deve baixar.</p>
                       <p>Nas vendas do PDV e nas mesas, esse vinculo precisa estar certo para a baixa acontecer com seguranca.</p>
                       <p>No delivery online, se o pedido entrar sem vinculo valido, ele pode ser autorizado sem a baixa automatica do estoque.</p>
@@ -1010,10 +1010,10 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
               <button
                 type="button"
                 onClick={() => setIntroCollapsedPersist(false)}
-                className="stock-secondary-action inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-700 shadow-sm hover:bg-zinc-50 [.admin-dark_&]:border-sky-500/35 [.admin-dark_&]:text-zinc-100 [.admin-dark_&]:shadow-[0_1px_0_rgba(0,0,0,0.35)] [.admin-dark_&]:hover:bg-sky-500/10"
+                className="stock-secondary-action inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:shadow-none"
                 aria-expanded="false"
               >
-                <ChevronDown size={14} className="text-sky-600 [.admin-dark_&]:text-sky-400" aria-hidden />
+                <ChevronDown size={14} className="text-sky-600 dark:text-sky-400" aria-hidden />
                 Mostrar tutorial do estoque
               </button>
             </motion.div>
