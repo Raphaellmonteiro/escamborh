@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  LogOut, Monitor, Lock, Bell, Menu, Volume2, VolumeX,
+  Monitor, Lock, Menu,
 } from 'lucide-react';
 
 import type { Product, CaixaStatusApi, Order } from './types';
@@ -1027,12 +1027,13 @@ const handleAuth = async (e: React.FormEvent) => {
           <div className={`grid gap-2 ${alertsEnabled ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {alertsEnabled && (
               <button
+                type="button"
                 onClick={() => setNotifCenterOpen(true)}
-                title="Central de Notificações"
-                className="relative flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs"
+                title="Alertas"
+                aria-label="Alertas"
+                className="relative flex min-h-[48px] w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-2 text-[18px] leading-none text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
               >
-                <Bell size={16} />
-                <span>Alertas</span>
+                <span className="select-none" aria-hidden>🔔</span>
                 {avisosNaoLidos > 0 && (
                   <span className="absolute right-2 top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black leading-none text-white">
                     {avisosNaoLidos > 9 ? '9+' : avisosNaoLidos}
@@ -1041,44 +1042,35 @@ const handleAuth = async (e: React.FormEvent) => {
               </button>
             )}
             <button
+              type="button"
               onClick={() => setOperationalSoundEnabled((value) => !value)}
               title={operationalSoundEnabled ? 'Desativar som da Operação' : 'Ativar som da Operação'}
-              className={`flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] font-semibold transition-all lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs ${
+              aria-label={operationalSoundEnabled ? 'Desativar som da Operação' : 'Ativar som da Operação'}
+              className={`flex min-h-[48px] w-full items-center justify-center rounded-xl border px-2 text-[18px] leading-none transition-all active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3 ${
                 operationalSoundEnabled
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100'
                   : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900'
               }`}
             >
-              {operationalSoundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              <span>{operationalSoundEnabled ? 'Som Operação' : 'Som mudo'}</span>
+              <span className="select-none" aria-hidden>{operationalSoundEnabled ? '🔊' : '🔇'}</span>
             </button>
             <button
+              type="button"
               onClick={() => setDarkMode(v => !v)}
               title={darkMode ? 'Modo claro' : 'Modo escuro'}
-              className="flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs"
+              aria-label={darkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
+              className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-2 text-[18px] leading-none text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
             >
-              {darkMode ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"/>
-                  <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-              )}
-              <span>{darkMode ? 'Tema claro' : 'Tema escuro'}</span>
+              <span className="select-none" aria-hidden>{darkMode ? '🌙' : '☀️'}</span>
             </button>
             <button
+              type="button"
               onClick={handleLogout}
               title="Sair do sistema"
-              className="flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 lg:min-h-[52px] lg:gap-2 lg:rounded-2xl lg:px-3 lg:text-xs"
+              aria-label="Sair do sistema"
+              className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-2 text-[18px] leading-none text-zinc-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
             >
-              <LogOut size={16} />
-              <span>Sair</span>
+              <span className="select-none" aria-hidden>🚪</span>
             </button>
           </div>
         </div>
