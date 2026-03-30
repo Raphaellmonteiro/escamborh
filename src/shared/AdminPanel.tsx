@@ -1314,7 +1314,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                       )
                     </p>
                     <p className="text-xs text-zinc-400 mb-2">
-                      Produtos ativos sem ingredientes na ficha técnica (nem variação com ingrediente). Vincule no Estoque ou use login como cliente.
+                      Produtos ativos sem itens na receita / produção (nem variação com ingrediente). Vincule no Estoque ou use login como cliente.
                     </p>
                     {Array.isArray(tenantModuleData.produtos_sem_vinculo) && tenantModuleData.produtos_sem_vinculo.length > 0 ? (
                       <div className="max-h-64 overflow-y-auto overflow-x-auto rounded-xl border border-zinc-800 min-w-0">
@@ -1338,9 +1338,9 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                                       pendingEstoqueDeeplinkRef.current = Number(p.id);
                                       openActionConfirm({
                                         action: 'login_as_cliente',
-                                        label: 'Login como cliente — ficha técnica',
+                                        label: 'Login como cliente — Receita / Produção',
                                         impact:
-                                          'Você será redirecionado ao app do estabelecimento na aba Estoque › Ficha técnica com este produto selecionado. Use apenas com autorização do cliente.',
+                                          'Você será redirecionado ao app do estabelecimento na aba Estoque › Receita / Produção com este produto selecionado. Use apenas com autorização do cliente.',
                                       });
                                     }}
                                     className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-lg text-violet-300 bg-violet-900 hover:bg-violet-800 mr-1"

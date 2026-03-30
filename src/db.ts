@@ -519,6 +519,7 @@ export async function runMigrations() {
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS cpf TEXT;
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_id INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS delivery_endereco_id INTEGER;
     `);
 
     await client.query(`

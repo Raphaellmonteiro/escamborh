@@ -5,8 +5,8 @@ import {
   Plus, Minus, Trash2, FileText, Lock, AlertCircle,
   History, ArrowUpCircle, ArrowDownCircle, Search,
   BarChart2, ChevronDown, ChevronUp, X, Package,
-  TrendingDown, DollarSign, Filter, BookOpen, Link2, RefreshCw,
-  SlidersHorizontal, RotateCcw,
+  BookOpen, Link2, RefreshCw,
+  SlidersHorizontal, RotateCcw, Zap,   Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type {
@@ -52,14 +52,36 @@ type Tab    = 'ingredientes' | 'movimentacoes' | 'relatorio' | 'ficha' | 'padron
 type Ordem  = 'nome' | 'status' | 'quantidade' | 'custo';
 type Filtro = 'todos' | 'ok' | 'baixo' | 'esgotado';
 
-export default function EstoqueScreen({ token, segmento }: { token: string; segmento: string }) {
-  const labelItem   = 'Ingrediente';
-  const labelNovo   = 'Novo Ingrediente';
+const ESTOQUE_INTRO_COLLAPSED_KEY = 'flowpdv_estoque_intro_collapsed';
+
+/** Valores sugeridos para saída rápida conforme a unidade do item. */
+function quickSaidaPresets(unidade: string): number[] {
+  const u = (unidade || '').toLowerCase();
+  if (u === 'g' || u === 'ml') return [50, 100, 250];
+  if (u === 'kg' || u === 'litro') return [0.1, 0.25, 0.5];
+  return [1, 5, 10];
+}
+
+function fmtQuickQtyBtn(q: number): string {
+  const s = Number.isInteger(q) ? String(q) : String(q).replace('.', ',');
+  return `−${s}`;
+}
+
+export default function EstoqueScreen({ token, segmento: _segmento }: { token: string; segmento: string }) {
+  const labelItem   = 'Item';
+  const labelNovo   = 'Novo item';
   const tituloTela  = 'Controle de Estoque';
   const unidades    = ['kg', 'g', 'unidade', 'litro', 'ml', 'pacote', 'caixa', 'saco', 'bandeja'];
 
   // ── state principal ──────────────────────────────────────────
   const [tab, setTab]                         = useState<Tab>('ingredientes');
+  const [introCollapsed, setIntroCollapsed]   = useState(() => {
+    try {
+      return localStorage.getItem(ESTOQUE_INTRO_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [ingredientes, setIngredientes]       = useState<Ingrediente[]>([]);
   const [movimentacoes, setMovimentacoes]     = useState<MovimentacaoEstoque[]>([]);
   const [relatorio, setRelatorio]             = useState<RelatorioConsumo | null>(null);
@@ -100,7 +122,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const jHdrs = { ...hdrs, 'Content-Type': 'application/json' };
 
   // ── carga inicial ────────────────────────────────────────────
-  // Deeplink admin → Ficha técnica: só aplica depois que `produtos` carrega; senão o <select>
+  // Deeplink admin → aba Receita / Produção: só aplica depois que `produtos` carrega; senão o <select>
   // fica com value sem <option> correspondente e o browser mostra o primeiro item da lista.
   useEffect(() => {
     try {
@@ -141,12 +163,55 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   useEffect(() => { if (tab === 'padronizacao') fetchPadronizacao(); }, [tab]);
   useEffect(() => { if (tab === 'ficha' && fichaProduto) fetchFicha(fichaProduto as number); }, [fichaProduto]);
 
-  const fetchIngredientes = async () => {
-    setLoading(true);
+  const fetchIngredientes = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) setLoading(true);
     try {
       const r = await fetch('/api/estoque', { headers: hdrs });
       setIngredientes(await r.json());
-    } catch {} finally { setLoading(false); }
+    } catch {} finally { if (!silent) setLoading(false); }
+  };
+
+  const postMovimentacao = async (
+    ingredienteId: number,
+    tipo: 'entrada' | 'saida',
+    quantidade: number,
+    motivo: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    try {
+      const r = await fetch(`/api/estoque/${ingredienteId}/movimentacao`, {
+        method: 'POST',
+        headers: jHdrs,
+        body: JSON.stringify({ tipo, quantidade, motivo }),
+      });
+      const d = await r.json();
+      if (d.success) return { ok: true };
+      return { ok: false, message: d.message || d.error || 'Erro ao registrar.' };
+    } catch {
+      return { ok: false, message: 'Erro de conexão.' };
+    }
+  };
+
+  const handleQuickSaida = async (ing: Ingrediente, quantidade: number) => {
+    if (quantidade <= 0) return;
+    const atual = toNumber(ing.estoque_atual);
+    if (atual < quantidade) {
+      alert('Estoque insuficiente para esta saída rápida.');
+      return;
+    }
+    const res = await postMovimentacao(ing.id, 'saida', quantidade, 'Saída rápida');
+    if (res.ok) await fetchIngredientes({ silent: true });
+    else alert(res.message || 'Erro ao registrar.');
+  };
+
+  const setIntroCollapsedPersist = (collapsed: boolean) => {
+    setIntroCollapsed(collapsed);
+    try {
+      if (collapsed) localStorage.setItem(ESTOQUE_INTRO_COLLAPSED_KEY, '1');
+      else localStorage.removeItem(ESTOQUE_INTRO_COLLAPSED_KEY);
+    } catch {
+      /* ignore */
+    }
   };
 
   const fetchProdutos = async () => {
@@ -261,7 +326,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
       setPadronizacao(data.report);
       await Promise.all([fetchProdutos(), fetchIngredientes()]);
       alert(
-        `Fase 1 aplicada: ${data.appliedCount} correcao(oes) segura(s) (${data.recipeFixes} ficha(s), ${data.barcodeFixes} barcode(s)).`
+        `Fase 1 aplicada: ${data.appliedCount} correcao(oes) segura(s) (${data.recipeFixes} receita(s), ${data.barcodeFixes} barcode(s)).`
       );
     } catch {
       alert('Erro de conexao ao aplicar as correcoes seguras.');
@@ -291,7 +356,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
       setPadronizacao(data.report);
       await Promise.all([fetchProdutos(), fetchIngredientes()]);
       alert(
-        `Fase manual segura aplicada: ${data.appliedCount} correcao(oes) (${data.createdIngredients} ingrediente(s), ${data.createdRecipes} ficha(s)).`
+        `Fase manual segura aplicada: ${data.appliedCount} correcao(oes) (${data.createdIngredients} item(ns) de estoque, ${data.createdRecipes} receita(s)).`
       );
     } catch {
       alert('Erro de conexao ao aplicar a fase manual segura.');
@@ -331,8 +396,6 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   const handleMovimentacao = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showMovModal) return;
-    const motivo = (movForm.motivo || '').trim();
-    if (!motivo) { alert('Informe o motivo (obrigatório).'); return; }
 
     const ing = ingredientes.find(i => i.id === showMovModal.id);
     if (!ing) return;
@@ -359,18 +422,20 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
       quantidade = qtd;
     }
 
-    try {
-      const r = await fetch(`/api/estoque/${showMovModal.id}/movimentacao`, {
-        method: 'POST', headers: jHdrs,
-        body: JSON.stringify({ tipo, quantidade, motivo })
-      });
-      const d = await r.json();
-      if (d.success) {
-        setShowMovModal(null);
-        setMovForm({ quantidade: '', motivo: 'Uso do dia', novoValor: '' });
-        fetchIngredientes();
-      } else alert(d.message || d.error || 'Erro ao registrar.');
-    } catch { alert('Erro de conexão.'); }
+    let motivo = (movForm.motivo || '').trim();
+    if (!motivo) {
+      if (showMovModal.tipo === 'entrada') motivo = 'Compra';
+      else if (showMovModal.tipo === 'saida') motivo = 'Uso do dia';
+      else if (showMovModal.tipo === 'zerar') motivo = 'Zeramento manual';
+      else if (showMovModal.tipo === 'ajustar') motivo = 'Ajuste/Inventário';
+    }
+
+    const res = await postMovimentacao(showMovModal.id, tipo, quantidade, motivo);
+    if (res.ok) {
+      setShowMovModal(null);
+      setMovForm({ quantidade: '', motivo: 'Uso do dia', novoValor: '' });
+      fetchIngredientes();
+    } else alert(res.message || 'Erro ao registrar.');
   };
 
   // ── ficha técnica ────────────────────────────────────────────
@@ -392,7 +457,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
   };
 
   const handleRemoveFicha = async (ingrediente_id: number) => {
-    if (!fichaProduto || !confirm('Remover este ingrediente da ficha técnica?')) return;
+    if (!fichaProduto || !confirm('Remover este item da receita / produção deste produto?')) return;
     await fetch(`/api/estoque/ficha-tecnica/${fichaProduto}/${ingrediente_id}`, { method: 'DELETE', headers: hdrs });
     fetchFicha(fichaProduto as number);
     if (tab === 'padronizacao') fetchPadronizacao();
@@ -529,12 +594,12 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
 
   const getFichaItemNome = (item: FichaTecnicaItem) => {
     const nome = item?.nome ?? item?.ingrediente_nome ?? '';
-    return typeof nome === 'string' && nome.trim() ? nome.trim() : 'Ingrediente sem nome';
+    return typeof nome === 'string' && nome.trim() ? nome.trim() : 'Item sem nome';
   };
 
   const ingredienteEmoji = (nome?: string | null) => {
     const n = (nome ?? '').toLowerCase();
-    if (!n) return 'ðŸ“¦';
+    if (!n) return String.fromCodePoint(0x1f4e6);
     if (n.includes('carne') || n.includes('boi') || n.includes('frango') || n.includes('bacon')) return '🥩';
     if (n.includes('pão') || n.includes('pao') || n.includes('brioche')) return '🍞';
     if (n.includes('queijo')) return '🧀';
@@ -569,28 +634,57 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
           title={tituloTela}
           subtitle={
             <p className="mt-0.5 text-xs text-zinc-400 2xl:text-sm">
-              {ingredientes.length} ingredientes
+              {ingredientes.length} {ingredientes.length === 1 ? 'item cadastrado' : 'itens cadastrados'}
               {totalEsgotados > 0 && <span className="ml-2 text-red-600 font-bold">· {totalEsgotados} esgotado(s)</span>}
               {totalBaixos    > 0 && <span className="ml-1 text-amber-600 font-bold">· {totalBaixos} baixo(s)</span>}
             </p>
           }
           actions={
             <>
-              <div className="flex max-w-full min-w-0 gap-0.5 overflow-x-auto overflow-y-hidden rounded-xl bg-zinc-100 p-1 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
-                {([
-                  { key: 'ingredientes',  label: 'Ingredientes', icon: <Package size={14}/> },
-                  { key: 'movimentacoes', label: 'Movimentações', icon: <History size={14}/> },
-                  { key: 'relatorio',     label: 'Relatório', icon: <BarChart2 size={14}/> },
-                  { key: 'padronizacao',  label: 'Padronizacao', icon: <Link2 size={14}/> },
-                  { key: 'ficha',         label: 'Ficha Técnica', icon: <BookOpen size={14}/> },
-                ] as { key: Tab; label: string; icon: React.ReactNode }[]).map(t => (
-                  <button key={t.key} onClick={() => setTab(t.key)}
-                    className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-bold transition-all min-h-[40px] lg:min-h-0 lg:py-2 ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                    {t.icon}{t.label}
-                  </button>
-                ))}
+              <div className="flex max-w-full min-w-0 items-stretch gap-1.5 overflow-x-auto overflow-y-hidden touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1 pb-0.5">
+                <div className="flex min-w-0 shrink-0 flex-col gap-0.5 rounded-xl border border-zinc-200/80 bg-zinc-100 p-1">
+                  <span className="hidden px-2 pt-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400 sm:block">Estoque simples</span>
+                  <div className="flex gap-0.5">
+                    {([
+                      { key: 'ingredientes' as const, label: 'Ingredientes (controle por gramas)', icon: <Package size={14}/> },
+                      { key: 'movimentacoes' as const, label: 'Entradas e Saídas', icon: <History size={14}/> },
+                      { key: 'relatorio' as const, label: 'Relatório', icon: <BarChart2 size={14}/> },
+                    ]).map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        title={t.label}
+                        onClick={() => setTab(t.key)}
+                        className={`flex max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-left text-xs font-bold transition-all min-h-[40px] sm:max-w-[14rem] sm:px-3 lg:min-h-0 lg:max-w-none lg:py-2 ${tab === t.key ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                      >
+                        <span className="shrink-0">{t.icon}</span>
+                        <span className="min-w-0 truncate leading-tight sm:whitespace-normal">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="hidden w-px shrink-0 self-stretch bg-zinc-200 sm:block" aria-hidden />
+                <div className="flex min-w-0 shrink-0 flex-col gap-0.5 rounded-xl border border-violet-200/80 bg-violet-50/60 p-1">
+                  <span className="hidden px-2 pt-0.5 text-[9px] font-black uppercase tracking-wider text-violet-700 sm:block">Produção / receitas</span>
+                  <div className="flex gap-0.5">
+                    {([
+                      { key: 'ficha' as const, label: 'Receita / Produção', icon: <BookOpen size={14}/> },
+                      { key: 'padronizacao' as const, label: 'Padronização', icon: <Link2 size={14}/> },
+                    ]).map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setTab(t.key)}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2.5 text-xs font-bold transition-all min-h-[40px] sm:px-3 lg:min-h-0 lg:py-2 ${tab === t.key ? 'bg-white text-violet-950 shadow-sm ring-1 ring-violet-200/80' : 'text-violet-800/90 hover:text-violet-950'}`}
+                      >
+                        {t.icon}
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <button onClick={() => setEditing({ nome: '', unidade: 'kg', estoque_atual: 0, estoque_minimo: 0, custo_unitario: 0 })}
+              <button onClick={() => setEditing({ nome: '', unidade: 'unidade', estoque_atual: 0, estoque_minimo: 0, custo_unitario: 0 })}
                 className="flex shrink-0 items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-zinc-800 active:scale-95">
                 <Plus size={16}/>{labelNovo}
               </button>
@@ -602,9 +696,69 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
       {/* ── Conteúdo ── */}
       <div className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden ${adminScreenPagePaddingClass}`}>
 
+        {/* Bloco explicativo: modos simples e avançado */}
+        {!introCollapsed ? (
+          <div className="mb-3 rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 to-white p-3 shadow-sm sm:mb-4 sm:p-4 2xl:rounded-3xl 2xl:p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                  <Info size={18} aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-zinc-900 sm:text-base">Como funciona o estoque</p>
+                  <p className="mt-0.5 text-xs text-zinc-600 sm:text-sm">Dois jeitos de usar — escolha o que combina com o seu negócio.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIntroCollapsedPersist(true)}
+                className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-sky-800 hover:bg-sky-100/80"
+              >
+                Ocultar
+              </button>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-zinc-200/80 bg-white/90 p-3 sm:p-4">
+                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Modo simples</p>
+                <p className="mt-1 text-sm font-bold text-zinc-900">Quantidade manual</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-zinc-600">
+                  Cadastre cada item (ex.: <strong className="font-semibold text-zinc-800">marmita</strong>, <strong className="font-semibold text-zinc-800">refrigerante 2L</strong>) na unidade que você vende ou conta —
+                  use <strong className="font-semibold text-zinc-800">unidade</strong>, <strong className="font-semibold text-zinc-800">pacote</strong>, etc. Registre <strong className="font-semibold text-zinc-800">entrada</strong> quando comprar e{' '}
+                  <strong className="font-semibold text-zinc-800">saída</strong> (ou saída rápida) quando consumir ou vender fora do PDV.
+                </p>
+                <p className="mt-2 text-[11px] text-zinc-500">Abas: <span className="font-semibold text-zinc-700">Ingredientes</span>, <span className="font-semibold text-zinc-700">Entradas e Saídas</span>, <span className="font-semibold text-zinc-700">Relatório</span>.</p>
+              </div>
+              <div className="rounded-xl border border-violet-200/80 bg-violet-50/40 p-3 sm:p-4">
+                <p className="text-[10px] font-black uppercase tracking-wider text-violet-700">Modo avançado</p>
+                <p className="mt-1 text-sm font-bold text-zinc-900">Ingredientes em gramas + receita</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-zinc-600">
+                  Cadastre insumos com <strong className="font-semibold text-zinc-800">kg, g, litro…</strong> Em <strong className="font-semibold text-zinc-800">Receita / Produção</strong>, diga quanto de cada insumo entra em cada produto do cardápio.
+                  Assim o sistema pode calcular custo e consumo com mais precisão quando houver venda no PDV.
+                </p>
+                <p className="mt-2 text-[11px] text-violet-900/80"><span className="font-semibold">Padronização</span> ajuda a alinhar produtos antigos a receitas explícitas — use quando o suporte indicar.</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-3 flex justify-end sm:mb-4">
+            <button
+              type="button"
+              onClick={() => setIntroCollapsedPersist(false)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-600 shadow-sm hover:bg-zinc-50"
+            >
+              <Info size={14} className="text-sky-600" aria-hidden />
+              Como funciona o estoque
+            </button>
+          </div>
+        )}
+
         {/* ═══ ABA: INGREDIENTES ═══ */}
         {tab === 'ingredientes' && (
           <div className="space-y-2 2xl:space-y-4">
+            <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 sm:px-4">
+              <span className="font-bold text-zinc-800">Estoque simples · </span>
+              Lista de itens com entrada, saída e ajuste. Unidade em <strong className="font-semibold text-zinc-800">gramas</strong> ou outra — você escolhe ao cadastrar.
+            </div>
             {/* Alertas rápidos */}
             {(totalEsgotados > 0 || totalBaixos > 0) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -682,8 +836,8 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
             ) : ingredientesVisiveis.length === 0 ? (
               <EmptyState
                 icon={Package}
-                title={debouncedBusca ? 'Nenhum item encontrado' : 'Nenhum ingrediente cadastrado'}
-                description={debouncedBusca ? 'Ajuste a busca ou os filtros.' : 'Adicione ingredientes para controlar compras e fichas técnicas.'}
+                title={debouncedBusca ? 'Nenhum item encontrado' : 'Nenhum item cadastrado'}
+                description={debouncedBusca ? 'Ajuste a busca ou os filtros.' : 'Cadastre itens para controlar quantidade, compras e (se quiser) receitas por produto.'}
               />
             ) : (
               <>
@@ -747,6 +901,23 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                           <RotateCcw size={9}/> Zerar
                         </button>
                       </div>
+                      <div className="mt-1.5 flex w-full flex-wrap items-center gap-1 border-t border-zinc-100/80 pt-1.5">
+                        <span className="flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide text-zinc-500">
+                          <Zap size={10} className="text-amber-500" aria-hidden />
+                          Saída rápida
+                        </span>
+                        {quickSaidaPresets(ing.unidade).map((q) => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => handleQuickSaida(ing, q)}
+                            title={`Registrar saída de ${fmtN(q, ing.unidade)} com motivo automático`}
+                            className="rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-zinc-700 shadow-sm hover:bg-zinc-50 active:scale-95"
+                          >
+                            {fmtQuickQtyBtn(q)} <span className="font-bold text-zinc-500">{ing.unidade}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -767,6 +938,10 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         {/* ═══ ABA: MOVIMENTAÇÕES ═══ */}
         {tab === 'movimentacoes' && (
           <div className="space-y-2 2xl:space-y-4">
+            <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 sm:px-4">
+              <span className="font-bold text-zinc-800">Entradas e saídas · </span>
+              Histórico do que entrou e saiu do estoque no período (compras, consumo, ajustes). Para lançar algo novo, use a aba <strong className="font-semibold text-zinc-800">Ingredientes</strong>.
+            </div>
             {/* Filtro de período */}
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-zinc-200 bg-white p-3 sm:p-4 min-w-0">
               <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider shrink-0">Período</span>
@@ -789,7 +964,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
               {loading ? (
                 <div className="flex justify-center py-10 sm:py-12"><div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-700 rounded-full animate-spin"/></div>
               ) : movimentacoes.length === 0 ? (
-                <div className="text-center py-10 sm:py-12 text-zinc-400"><History size={40} className="mx-auto mb-3 opacity-20"/><p>Nenhuma movimentação no período</p></div>
+                <div className="text-center py-10 sm:py-12 text-zinc-400"><History size={40} className="mx-auto mb-3 opacity-20"/><p>Nenhuma entrada ou saída neste período</p></div>
               ) : (
                 <>
                 <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch]">
@@ -810,7 +985,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                         <td className="px-4 py-2 sm:px-4 sm:py-2.5 2xl:px-5 2xl:py-3 text-sm font-bold text-zinc-900">{m.ingrediente_nome}</td>
                         <td className="px-4 py-2 sm:px-4 sm:py-2.5 2xl:px-5 2xl:py-3">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${m.tipo === 'entrada' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                            {m.tipo}
+                            {m.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                           </span>
                         </td>
                         <td className={`px-4 py-2 sm:px-4 sm:py-2.5 2xl:px-5 2xl:py-3 text-sm font-black ${m.tipo === 'entrada' ? 'text-emerald-700' : 'text-red-600'}`}>
@@ -839,6 +1014,10 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         {/* ═══ ABA: RELATÓRIO ═══ */}
         {tab === 'relatorio' && (
           <div className="space-y-2 2xl:space-y-4">
+            <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 sm:px-4">
+              <span className="font-bold text-zinc-800">Relatório · </span>
+              Resumo de consumo e custos no período, a partir das <strong className="font-semibold text-zinc-800">entradas e saídas</strong> lançadas.
+            </div>
             {/* Período */}
             <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3 rounded-2xl border border-zinc-200 bg-white p-3 sm:p-4">
               <span className="shrink-0 text-xs font-bold uppercase tracking-wider text-zinc-500">Período</span>
@@ -868,7 +1047,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     <p className="text-2xl font-black text-red-600">{fmt(relatorio.custo_total_periodo)}</p>
                   </div>
                   <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
-                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Itens Movimentados</p>
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Itens com movimento</p>
                     <p className="text-2xl font-black text-zinc-900">{relatorioConsumo.filter(c => c.total_saida > 0 || c.total_entrada > 0).length}</p>
                   </div>
                   <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
@@ -937,11 +1116,15 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         {/* ═══ ABA: PADRONIZACAO ═══ */}
         {tab === 'padronizacao' && (
           <div className="space-y-2 2xl:space-y-4">
+            <div className="rounded-xl border border-violet-200 bg-violet-50/50 px-3 py-2 text-xs text-violet-950 sm:px-4">
+              <span className="font-bold">Produção / receitas · </span>
+              Ferramenta para alinhar produtos do cardápio a <strong className="font-semibold">receitas</strong> e códigos de barras. Uso típico com suporte ou migração — não é necessário para o controle simples por quantidade.
+            </div>
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-3 sm:p-4">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Auditoria de padronizacao de estoque</p>
+                <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Auditoria de padronização de estoque</p>
                 <p className="mt-1 text-xs text-zinc-500 sm:text-sm">
-                  Lista os produtos sem vinculo explicito por ficha tecnica ou barcode e separa os casos seguros dos que ainda precisam de revisao manual.
+                  Lista produtos sem vínculo explícito por receita (produção) ou código de barras e separa correções seguras das que exigem revisão manual.
                 </p>
               </div>
               <div className="flex w-full min-w-0 flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto">
@@ -995,7 +1178,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     <p className="text-2xl font-black text-emerald-600">{padronizacaoSummary.singleMatchPendingProducts}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
-                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Seguros via ficha</p>
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Seguros via receita</p>
                     <p className="text-2xl font-black text-sky-600">{padronizacaoSummary.safeRecipeCandidates}</p>
                   </div>
                   <div className="bg-white border border-zinc-200 rounded-2xl p-5">
@@ -1013,7 +1196,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
                     <div className="rounded-xl bg-white/5 border border-white/10 p-4">
                       <p className="text-sm font-black">Produto preparado</p>
-                      <p className="text-xs text-zinc-300 mt-1">Na fase 1, materializamos o vinculo atual em ficha tecnica 1:1 para sair do fallback sem mudar a baixa de estoque.</p>
+                      <p className="text-xs text-zinc-300 mt-1">Na fase 1, materializamos o vínculo atual em receita 1:1 para sair do fallback sem mudar a baixa de estoque.</p>
                     </div>
                     <div className="rounded-xl bg-white/5 border border-white/10 p-4">
                       <p className="text-sm font-black">Item 1:1</p>
@@ -1021,7 +1204,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     </div>
                     <div className="rounded-xl bg-white/5 border border-white/10 p-4">
                       <p className="text-sm font-black">Casos manuais</p>
-                      <p className="text-xs text-zinc-300 mt-1">Nos sem match seguros, criamos ingrediente dedicado e ficha 1:1. Ambiguidades continuam pendentes ate a revisao final.</p>
+                      <p className="text-xs text-zinc-300 mt-1">Nos sem match seguros, criamos item de estoque dedicado e receita 1:1. Ambiguidades continuam pendentes até a revisão final.</p>
                     </div>
                   </div>
                 </div>
@@ -1029,7 +1212,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                 {padronizacaoItems.length === 0 ? (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
                     <p className="text-lg font-black text-emerald-800">Nenhum produto pendente de padronizacao foi encontrado.</p>
-                    <p className="text-sm text-emerald-700 mt-2">Com ficha tecnica ou barcode cobrindo tudo, a futura remocao do fallback fica bem mais segura.</p>
+                    <p className="text-sm text-emerald-700 mt-2">Com receita ou código de barras cobrindo tudo, a futura remoção do fallback fica bem mais segura.</p>
                   </div>
                 ) : (
                   <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
@@ -1043,7 +1226,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                       <table className="w-full text-left min-w-[1240px]">
                         <thead className="border-b border-zinc-100">
                           <tr>
-                            {['Produto', 'Ingrediente atual', 'Classificacao', 'Uso', 'Correcao sugerida'].map(h => (
+                            {['Produto', 'Item de estoque atual', 'Classificacao', 'Uso', 'Correcao sugerida'].map(h => (
                               <th key={h} className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-zinc-400 sm:px-4 2xl:px-5 2xl:py-3">{h}</th>
                             ))}
                           </tr>
@@ -1096,7 +1279,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                                   {item.classification === 'safe_barcode_alignment'
                                     ? '1:1 via barcode'
                                     : item.classification === 'safe_recipe_explicit'
-                                      ? item.isPreparedProduct ? 'preparado via ficha' : 'match unico seguro'
+                                      ? item.isPreparedProduct ? 'preparado via receita' : 'match unico seguro'
                                       : item.classification === 'ambiguous_exact_name'
                                         ? `${item.exactNameMatchCount} matches por nome`
                                         : 'sem match'}
@@ -1167,6 +1350,10 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         {/* ═══ ABA: FICHA TÉCNICA ═══ */}
         {tab === 'ficha' && (
           <div className="space-y-2 2xl:space-y-4">
+            <div className="rounded-xl border border-violet-200 bg-violet-50/50 px-3 py-2 text-xs text-violet-950 sm:px-4">
+              <span className="font-bold">Receita / produção · </span>
+              Defina quanto de cada item de estoque entra em <strong className="font-semibold">uma unidade vendida</strong> deste produto (ex.: 0,15 kg de carne por espetinho). O custo da receita é estimado a partir dos custos cadastrados nos itens.
+            </div>
             {/* Seleção do produto */}
             <div className="bg-white border border-zinc-200 rounded-2xl p-5 flex flex-wrap items-end gap-4">
               <div className="flex-1 min-w-[200px]">
@@ -1187,7 +1374,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   )}
                   <button onClick={() => setShowAddFicha(true)}
                     className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all">
-                    <Plus size={14}/> Adicionar Ingrediente
+                    <Plus size={14}/> Adicionar à receita
                   </button>
                 </div>
               )}
@@ -1196,19 +1383,19 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
             {fichaProduto === '' ? (
               <div className="text-center py-10 sm:py-12 text-zinc-400">
                 <BookOpen size={48} className="mx-auto mb-3 opacity-20"/>
-                <p className="font-semibold">Selecione um produto para ver ou editar sua ficha técnica</p>
-                <p className="text-sm mt-1">A ficha técnica vincula ingredientes aos produtos e calcula o custo automaticamente.</p>
+                <p className="font-semibold">Selecione um produto para ver ou editar a receita / produção</p>
+                <p className="text-sm mt-1">A receita liga itens de estoque ao produto do cardápio e ajuda a calcular custo por venda.</p>
               </div>
             ) : fichaItens.length === 0 ? (
               <div className="text-center py-12 text-zinc-400 bg-white border border-dashed border-zinc-300 rounded-2xl">
                 <BookOpen size={36} className="mx-auto mb-3 opacity-20"/>
-                <p className="font-semibold">Nenhum ingrediente na ficha técnica</p>
-                <p className="text-sm mt-1">Clique em "Adicionar Ingrediente" para montar a receita deste produto.</p>
+                <p className="font-semibold">Nenhum item nesta receita</p>
+                <p className="text-sm mt-1">Use &quot;Adicionar à receita&quot; para informar os insumos deste produto.</p>
               </div>
             ) : (
               <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
                 <div className="px-4 py-2 sm:px-4 sm:py-2.5 2xl:px-5 2xl:py-3 bg-zinc-50 border-b border-zinc-100 flex items-center justify-between">
-                  <p className="text-xs font-black text-zinc-600 uppercase tracking-wider">Ingredientes da Receita</p>
+                  <p className="text-xs font-black text-zinc-600 uppercase tracking-wider">Itens da receita</p>
                   {custoProduto > 0 && (
                     <span className="text-xs font-bold text-zinc-500">Custo total: <strong className="text-zinc-900">{fmt(custoProduto)}</strong></span>
                   )}
@@ -1216,7 +1403,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                 <table className="w-full text-left">
                   <thead className="border-b border-zinc-100">
                     <tr>
-                      {['Ingrediente', 'Qtd. usada', 'Estoque atual', 'Custo unit.', 'Custo parcial', ''].map(h => (
+                      {['Item', 'Qtd. usada', 'Estoque atual', 'Custo unit.', 'Custo parcial', ''].map(h => (
                         <th key={h} className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-zinc-400 sm:px-4 2xl:px-5 2xl:py-3">{h}</th>
                       ))}
                     </tr>
@@ -1256,7 +1443,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
 
       {/* ════════════════════ MODAIS ════════════════════ */}
 
-      {/* Modal: Novo/Editar Ingrediente */}
+      {/* Modal: Novo/Editar item de estoque */}
       <AnimatePresence>
         {editing && (
           <div className="fixed inset-0 z-[150] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
@@ -1304,7 +1491,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     placeholder="0"
                     className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
                   {editing.id && (
-                    <p className="text-[10px] text-zinc-400 mt-1">Ajuste direto. Para auditoria, use movimentações (entrada/saída).</p>
+                    <p className="text-[10px] text-zinc-400 mt-1">Ajuste direto. Para auditoria, use entradas e saídas na lista de itens.</p>
                   )}
                 </div>
 
@@ -1396,11 +1583,22 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                     </div>
                   )}
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Motivo *</label>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">
+                      Motivo {(showMovModal.tipo === 'entrada' || showMovModal.tipo === 'saida') ? '(opcional)' : '*'}
+                    </label>
                     <input type="text" value={movForm.motivo}
                       onChange={e => setMovForm(f => ({...f, motivo: e.target.value}))}
-                      placeholder="ex: Compra, Ajuste inventário, Perda..."
-                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400" required/>
+                      placeholder={
+                        showMovModal.tipo === 'entrada' ? 'Vazio = Compra'
+                        : showMovModal.tipo === 'saida' ? 'Vazio = Uso do dia'
+                        : 'ex: Ajuste inventário, Perda...'
+                      }
+                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"
+                      required={showMovModal.tipo !== 'entrada' && showMovModal.tipo !== 'saida'}
+                    />
+                    {(showMovModal.tipo === 'entrada' || showMovModal.tipo === 'saida') && (
+                      <p className="mt-1 text-[10px] text-zinc-400">Se deixar em branco, usamos um motivo padrão para ir mais rápido.</p>
+                    )}
                   </div>
                   <div className="flex gap-3 pt-1">
                     <button type="button" onClick={() => setShowMovModal(null)}
@@ -1425,7 +1623,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
               <div className="mb-4 flex shrink-0 items-center justify-between sm:mb-5">
                 <div className="min-w-0 pr-2">
                   <h3 className="text-lg font-black text-zinc-900 sm:text-xl">Histórico — {showHistorico.nome}</h3>
-                  <p className="text-sm text-zinc-400">{historico.length === 0 ? 'Nenhuma movimentação' : `${totalHistorico} movimentação(ões)`}</p>
+                  <p className="text-sm text-zinc-400">{historico.length === 0 ? 'Nenhuma entrada ou saída' : `${totalHistorico} lançamento(s)`}</p>
                 </div>
                 <button type="button" onClick={() => setShowHistorico(null)} className="shrink-0 rounded-xl p-2 text-zinc-400 hover:bg-zinc-100"><X size={18}/></button>
               </div>
@@ -1440,12 +1638,12 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   </thead>
                   <tbody className="divide-y divide-zinc-50">
                     {historico.length === 0 ? (
-                      <tr><td colSpan={4} className="py-8 text-center text-zinc-400 italic sm:py-10">Nenhuma movimentação registrada</td></tr>
+                      <tr><td colSpan={4} className="py-8 text-center text-zinc-400 italic sm:py-10">Nenhum lançamento registrado</td></tr>
                     ) : historicoVisiveis.map((h, i) => (
                       <tr key={i} className="hover:bg-zinc-50">
                         <td className="py-3 pr-4 text-xs text-zinc-500">{new Date(h.created_at).toLocaleString('pt-BR')}</td>
                         <td className="py-3 pr-4">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${h.tipo === 'entrada' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{h.tipo}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${h.tipo === 'entrada' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{h.tipo === 'entrada' ? 'Entrada' : 'Saída'}</span>
                         </td>
                         <td className={`py-3 pr-4 text-xs font-black ${h.tipo === 'entrada' ? 'text-emerald-700' : 'text-red-600'}`}>
                           {h.tipo === 'entrada' ? '+' : '-'}{h.quantidade} {showHistorico.unidade}
@@ -1472,19 +1670,19 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
         )}
       </AnimatePresence>
 
-      {/* Modal: Adicionar à Ficha Técnica */}
+      {/* Modal: Adicionar à receita */}
       <AnimatePresence>
         {showAddFicha && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
               className="bg-white rounded-3xl p-7 max-w-sm w-full shadow-2xl">
               <div className="flex items-center justify-between mb-5">
-                <h3 className="text-xl font-black text-zinc-900">Adicionar Ingrediente</h3>
+                <h3 className="text-xl font-black text-zinc-900">Adicionar à receita</h3>
                 <button onClick={() => setShowAddFicha(false)} className="p-2 hover:bg-zinc-100 rounded-xl text-zinc-400"><X size={18}/></button>
               </div>
               <form onSubmit={handleAddFicha} className="space-y-4">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Ingrediente</label>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Item de estoque</label>
                   <select value={fichaForm.ingrediente_id} onChange={e => setFichaForm(f => ({...f, ingrediente_id: e.target.value}))}
                     className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none" required>
                     <option value="">Selecione...</option>
@@ -1562,7 +1760,7 @@ export default function EstoqueScreen({ token, segmento }: { token: string; segm
                   <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-5"><AlertCircle size={28}/></div>
                   <h3 className="text-xl font-black text-zinc-900">{deleteStep === 'confirm1' ? 'Tem certeza?' : 'Confirmação Final'}</h3>
                   <p className="text-zinc-400 text-sm mt-2 mb-6">
-                    {deleteStep === 'confirm1' ? 'Todas as movimentações vinculadas serão apagadas.' : 'Esta ação é irreversível. Confirma a exclusão?'}
+                    {deleteStep === 'confirm1' ? 'Todo o histórico de entradas e saídas deste item será apagado.' : 'Esta ação é irreversível. Confirma a exclusão?'}
                   </p>
                   <div className="flex gap-3">
                     <button onClick={() => { setShowAuthModal(false); setItemToDelete(null); }}

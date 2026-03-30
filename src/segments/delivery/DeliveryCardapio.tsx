@@ -239,6 +239,99 @@ interface CartItem extends Produto {
   variation_id?: number | null;
 }
 interface Endereco { id: number; label: string; logradouro: string; numero?: string; complemento?: string; bairro?: string; referencia?: string; principal: number; }
+
+/** Campos de endereço alinhados ao modelo `delivery_enderecos` (checkout + Meus endereços). */
+type DeliveryEnderecoCampos = {
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  referencia: string;
+};
+
+function emptyDeliveryEnderecoCampos(): DeliveryEnderecoCampos {
+  return { logradouro: '', numero: '', complemento: '', bairro: '', referencia: '' };
+}
+
+function formatEnderecoResumoTexto(campos: DeliveryEnderecoCampos): string {
+  const parts = [
+    [campos.logradouro.trim(), campos.numero.trim()].filter(Boolean).join(', '),
+    campos.complemento.trim() || '',
+    campos.bairro.trim() || '',
+    campos.referencia.trim() ? `Ref: ${campos.referencia.trim()}` : '',
+  ].filter(Boolean);
+  return parts.join(' • ');
+}
+
+function DeliveryEnderecoCamposInputs({
+  value,
+  onChange,
+  inpClass,
+  temZonas,
+  labelClassName,
+}: {
+  value: DeliveryEnderecoCampos;
+  onChange: (next: DeliveryEnderecoCampos) => void;
+  inpClass: string;
+  temZonas: boolean;
+  labelClassName: string;
+}) {
+  const patch = (partial: Partial<DeliveryEnderecoCampos>) => onChange({ ...value, ...partial });
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="sm:col-span-2">
+          <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Rua / Avenida *</label>
+          <input
+            value={value.logradouro}
+            onChange={(e) => patch({ logradouro: e.target.value })}
+            placeholder="Rua das Flores"
+            className={inpClass}
+          />
+        </div>
+        <div>
+          <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Número *</label>
+          <input
+            value={value.numero}
+            onChange={(e) => patch({ numero: e.target.value })}
+            placeholder="123"
+            className={inpClass}
+          />
+        </div>
+      </div>
+      <div>
+        <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Complemento</label>
+        <input
+          value={value.complemento}
+          onChange={(e) => patch({ complemento: e.target.value })}
+          placeholder="Apto, bloco..."
+          className={inpClass}
+        />
+      </div>
+      <div>
+        <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>
+          Bairro *{temZonas ? ' (taxa de entrega)' : ''}
+        </label>
+        <input
+          value={value.bairro}
+          onChange={(e) => patch({ bairro: e.target.value })}
+          placeholder={temZonas ? 'Informe o bairro para calcular a taxa' : 'Centro'}
+          className={inpClass}
+        />
+      </div>
+      <div>
+        <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Referência</label>
+        <input
+          value={value.referencia}
+          onChange={(e) => patch({ referencia: e.target.value })}
+          placeholder="Próximo ao mercado..."
+          className={inpClass}
+        />
+      </div>
+    </div>
+  );
+}
+
 interface ClienteAuth { id: number; nome: string; telefone: string; email?: string; favoritos: number[]; }
 interface PedidoHistItem { product_id: number; quantity: number; price_at_time: number; variation_id?: number | null; }
 interface PedidoHist { id: number; order_number: string; status: string; total_amount: number; created_at: string; resumo_itens: string; itens?: PedidoHistItem[]; }

@@ -1016,6 +1016,8 @@ export function createDeliveryPublicRouter() {
     try {
       const { label, logradouro, numero, complemento, bairro, referencia, principal } = req.body;
       if (!logradouro?.trim()) return res.status(400).json({ error: 'Logradouro obrigatorio' });
+      if (!String(numero || '').trim()) return res.status(400).json({ error: 'Numero obrigatorio' });
+      if (!String(bairro || '').trim()) return res.status(400).json({ error: 'Bairro obrigatorio' });
       if (principal) await qRun('UPDATE delivery_enderecos SET principal=0 WHERE cliente_id=? AND tenant_id=?', [req.clienteId, req.tenantId]);
       const id = await qInsert(
         'INSERT INTO delivery_enderecos (tenant_id,cliente_id,label,logradouro,numero,complemento,bairro,referencia,principal) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -1067,6 +1069,13 @@ export function createDeliveryPublicRouter() {
         clienteId,
         enderecoId: endereco_id,
       });
+      if (canalPedido === 'delivery' && clienteId && !enderecoSalvo) {
+        throw new AppError(
+          'Informe um endereco completo e salvo (endereco_id).',
+          400,
+          'DELIVERY_ENDERECO_ID_OBRIGATORIO'
+        );
+      }
       const checkoutSummary = await buildCheckoutSummary({
         tenantId: tenant.id,
         config: dcfg,
@@ -1088,11 +1097,9 @@ export function createDeliveryPublicRouter() {
 
       const enderecoFinal = canalPedido === 'retirada'
         ? null
-        : (
-            enderecoSalvo
-              ? formatSavedDeliveryAddress(enderecoSalvo)
-              : String(endereco || '').trim()
-          );
+        : enderecoSalvo
+          ? formatSavedDeliveryAddress(enderecoSalvo)
+          : String(endereco || '').trim();
 
       if (canalPedido === 'delivery' && !enderecoFinal) {
         throw new AppError('Endereco de entrega obrigatorio', 400, 'DELIVERY_ENDERECO_OBRIGATORIO');
@@ -1120,6 +1127,7 @@ export function createDeliveryPublicRouter() {
         desconto_primeiro_cliente: checkoutSummary.desconto_primeiro_cliente,
         primeiro_cliente: checkoutSummary.primeiro_cliente,
         total: checkoutSummary.total,
+        delivery_endereco_id: enderecoSalvo?.id ?? null,
       };
 
       const dateObj = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
@@ -1136,10 +1144,31 @@ export function createDeliveryPublicRouter() {
         const num = Number(n?.c || 0) + 1;
         const orderNumber = `${prefix}-${String(num).padStart(3, '0')}`;
 
+        const deliveryEnderecoId =
+          canalPedido === 'delivery' && enderecoSalvo?.id != null ? Number(enderecoSalvo.id) : null;
+
         const orderId = await txInsert(
           client,
-          `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,cliente_id,delivery_checkout_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [orderNumber, totalFinal, taxaEntrega, observation || null, tenant.id, canalPedido, tipoRetirada, cliente_nome || null, String(cliente_tel || '').replace(/\D/g, '') || null, enderecoFinal, pagamento_tipo || 'pix', pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente', initialOrderStatus, clienteId, clienteId, JSON.stringify(checkoutSnapshot)]
+          `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,cliente_id,delivery_checkout_snapshot,delivery_endereco_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            orderNumber,
+            totalFinal,
+            taxaEntrega,
+            observation || null,
+            tenant.id,
+            canalPedido,
+            tipoRetirada,
+            cliente_nome || null,
+            String(cliente_tel || '').replace(/\D/g, '') || null,
+            enderecoFinal,
+            pagamento_tipo || 'pix',
+            pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente',
+            initialOrderStatus,
+            clienteId,
+            clienteId,
+            JSON.stringify(checkoutSnapshot),
+            deliveryEnderecoId,
+          ]
         );
 
           for (const item of itensValidados) {

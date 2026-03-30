@@ -250,6 +250,10 @@ const getDaysWithoutPurchaseLabel = (dias?: number | null) => {
 const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
   customer.ultima_compra_at || customer.ultimo_pedido ? getDaysWithoutPurchaseLabel(customer.dias_sem_comprar) : 'Sem compras registradas';
 
+const deliverySecondaryButtonActiveClass = 'bg-zinc-900 dark:bg-zinc-700 text-white';
+const deliverySecondaryButtonInactiveClass =
+  'bg-zinc-50 border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-700 dark:hover:border-zinc-600';
+
 /** Atalho: não embute lista de balcão — envia para a tela Operação (Central) com filtro Balcão. */
 function DeliveryBalcaoCentralShortcut({ onOpen }: { onOpen: () => void }) {
   return (
@@ -542,7 +546,7 @@ function TabPainel({ token }: { token: string }) {
             ...Object.entries(STATUS_CFG).filter(([k]) => k !== 'Pedido Recebido').map(([k,v]) => ({ key:k, label:v.label })),
           ].map(f => (
             <button key={f.key} type="button" onClick={() => setStatusFilter(f.key)}
-              className={`shrink-0 snap-start px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold transition-all whitespace-nowrap ${statusFilter===f.key?'bg-zinc-900 dark:bg-zinc-700 text-white':'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-400 dark:hover:border-zinc-600 active:opacity-90'}`}>
+              className={`shrink-0 snap-start px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold transition-all whitespace-nowrap ${statusFilter===f.key ? deliverySecondaryButtonActiveClass : `${deliverySecondaryButtonInactiveClass} active:opacity-90`}`}>
               {f.label}
             </button>
           ))}
@@ -1576,7 +1580,7 @@ function TabRelatorio({ token }: { token: string }) {
       <div className="flex gap-1.5">
         {periodos.map(p=>(
           <button key={p.key} onClick={()=>setPeriodo(p.key)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${periodo===p.key?'bg-zinc-900 dark:bg-zinc-700 text-white':'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-400 dark:hover:border-zinc-600'}`}>
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${periodo===p.key ? deliverySecondaryButtonActiveClass : deliverySecondaryButtonInactiveClass}`}>
             {p.label}
           </button>
         ))}
@@ -1972,7 +1976,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
   const SectionBtn = ({ k, label, icon }: { k: typeof activeSection; label: string; icon: React.ReactNode }) => (
     <button onClick={() => setActiveSection(k)}
-      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeSection===k?'bg-zinc-900 dark:bg-zinc-700 text-white':'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-400 dark:hover:border-zinc-600'}`}>
+      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeSection===k ? deliverySecondaryButtonActiveClass : deliverySecondaryButtonInactiveClass}`}>
       {icon}{label}
     </button>
   );
@@ -1983,8 +1987,8 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       onClick={() => setLojaSub(id)}
       className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
         lojaSub === id
-          ? 'bg-zinc-900 dark:bg-zinc-700 text-white'
-          : 'bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:border-zinc-400'
+          ? deliverySecondaryButtonActiveClass
+          : deliverySecondaryButtonInactiveClass
       }`}
     >
       {label}
