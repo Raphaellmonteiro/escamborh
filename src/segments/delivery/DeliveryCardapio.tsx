@@ -1738,10 +1738,10 @@ export default function DeliveryCardapio() {
                     className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition-colors ${
                       menuCatalogoAberto
                         ? isLightRed
-                          ? 'border-red-200 bg-red-50 text-red-950'
+                          ? 'border-red-200 bg-red-50 text-red-950 [.flowpdv-dark_&]:border-zinc-700 [.flowpdv-dark_&]:bg-zinc-800 [.flowpdv-dark_&]:text-white [.flowpdv-dark_&]:hover:bg-zinc-700 [.flowpdv-dark_&]:hover:text-white'
                           : 'border-red-500/60 bg-red-500 text-white hover:bg-red-600 hover:text-white'
                         : isLightRed
-                          ? 'border-zinc-200 bg-white text-zinc-950 hover:bg-zinc-50 hover:text-zinc-950'
+                          ? 'border-zinc-200 bg-white text-zinc-950 hover:bg-zinc-50 hover:text-zinc-950 [.flowpdv-dark_&]:border-zinc-700 [.flowpdv-dark_&]:bg-zinc-900 [.flowpdv-dark_&]:text-white [.flowpdv-dark_&]:hover:bg-zinc-800 [.flowpdv-dark_&]:hover:text-white'
                           : 'border-white/12 bg-zinc-800 text-white/80 hover:bg-zinc-700 hover:text-white'
                     }`}
                   >
@@ -5153,4 +5153,3 @@ function TelaNovo({ Endereco: _, slug, token, onBack, onSaved }: { Endereco?: an
     </div>
   );
 }
-

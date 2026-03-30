@@ -403,6 +403,9 @@ export async function runMigrations() {
       );
       CREATE INDEX IF NOT EXISTS idx_banco_horas_tenant_func_data
         ON func_banco_horas_mov (tenant_id, funcionario_id, data_referencia);
+
+      ALTER TABLE func_decimo_terceiro ADD COLUMN IF NOT EXISTS calculo_modo TEXT DEFAULT 'automatico';
+      ALTER TABLE func_decimo_terceiro ADD COLUMN IF NOT EXISTS valor_total_manual REAL NULL;
     `);
 
     await client.query(`

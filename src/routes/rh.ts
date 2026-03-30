@@ -33,6 +33,7 @@ import {
   countFeriasOverlap,
   ensureDecimoRow,
   payDecimoParcela,
+  updateDecimoCalculoModo,
   listBeneficios,
   upsertBeneficio,
 } from '../services/hrManagerialService';
@@ -206,8 +207,26 @@ export function createRhRouter() {
       const gate = await assertFixoForDecimoOps(req.tenantId, dtId);
       if (gate.ok === false) return res.status(400).json({ error: gate.error });
       const { action } = req.body || {};
+      if (action === 'set_calculo') {
+        const modo = String(req.body?.modo || '').trim();
+        if (modo !== 'automatico' && modo !== 'manual') {
+          return res.status(400).json({ error: 'modo deve ser automatico ou manual.' });
+        }
+        const valorTotalManual =
+          modo === 'manual' && req.body?.valor_total_manual != null
+            ? Number(req.body.valor_total_manual)
+            : null;
+        const r = await updateDecimoCalculoModo({
+          tenantId: req.tenantId,
+          decimoId: dtId,
+          modo,
+          valorTotalManual,
+        });
+        if (r.ok === false) return res.status(400).json({ error: r.error });
+        return res.json({ success: true, decimo: r.row });
+      }
       if (action !== 'pay_primeira' && action !== 'pay_segunda') {
-        return res.status(400).json({ error: 'Use action pay_primeira ou pay_segunda.' });
+        return res.status(400).json({ error: 'Use action pay_primeira, pay_segunda ou set_calculo.' });
       }
       const r = await payDecimoParcela({
         tenantId: req.tenantId,
@@ -401,6 +420,71 @@ export function createRhRouter() {
       }
       res.json({success:true,id,destino: destinoCheck.destino});
     } catch(e: any) { res.status(500).json({ error:e.message }); }
+  });
+
+  router.patch('/horas-extras/:id', async (req: any, res) => {
+    try {
+      const heId = Number(req.params.id);
+      const row = await q1<{ id: number; funcionario_id: number; data: string; minutos: number; minutos_pago_folha: number | null }>(
+        'SELECT id, funcionario_id, data, minutos, minutos_pago_folha FROM func_horas_extras WHERE id=? AND tenant_id=?',
+        [heId, req.tenantId]
+      );
+      if (!row) return res.status(404).json({ error: 'Registro não encontrado' });
+      const { minutos, minutos_pago_folha, destino, observacao } = req.body || {};
+      const total =
+        minutos != null && String(minutos).trim() !== ''
+          ? Math.floor(Number(minutos))
+          : Math.floor(Number(row.minutos));
+      if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error: 'minutos inválidos' });
+      let pagoFolha: number;
+      if (minutos_pago_folha !== undefined && minutos_pago_folha !== null && String(minutos_pago_folha).trim() !== '') {
+        pagoFolha = Math.floor(Number(minutos_pago_folha));
+      } else if (row.minutos_pago_folha != null) {
+        pagoFolha = Math.floor(Number(row.minutos_pago_folha));
+      } else {
+        return res.status(400).json({
+          error: 'Informe minutos_pago_folha e destino para atualizar a hora extra.',
+        });
+      }
+      if (!Number.isFinite(pagoFolha) || pagoFolha < 0 || pagoFolha > total) {
+        return res.status(400).json({ error: 'minutos_pago_folha deve estar entre 0 e o total de minutos' });
+      }
+      const funcRow = await q1<{ tipo_contrato: string | null }>(
+        'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+        [row.funcionario_id, req.tenantId]
+      );
+      const destinoCheck = validateHoraExtraDestino({
+        total,
+        minutosPagoFolha: pagoFolha,
+        destinoRaw: destino,
+        bancoAplicavel: hourBankApplicable(normalizeTipoContrato(funcRow?.tipo_contrato)),
+      });
+      if (destinoCheck.ok === false) return res.status(400).json({ error: destinoCheck.error });
+      const data = req.body?.data != null ? String(req.body.data).trim() : row.data;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return res.status(400).json({ error: 'data inválida' });
+      const createdBy = req.user?.username != null ? String(req.user.username) : null;
+      let uq = `UPDATE func_horas_extras SET data=?, minutos=?, minutos_pago_folha=?`;
+      const up: unknown[] = [data, total, pagoFolha];
+      if (observacao !== undefined) {
+        uq += ', observacao=?';
+        up.push(observacao != null ? String(observacao) : null);
+      }
+      uq += ' WHERE id=? AND tenant_id=?';
+      up.push(heId, req.tenantId);
+      await qRun(uq, up);
+      await syncBankCreditFromHoraExtra({
+        tenantId: req.tenantId,
+        employeeId: row.funcionario_id,
+        horaExtraId: heId,
+        data,
+        minutos: total,
+        minutosPagoFolha: pagoFolha,
+        createdBy,
+      });
+      res.json({ success: true, destino: destinoCheck.destino });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   router.delete('/horas-extras/:id', async (req: any, res) => {
@@ -809,7 +893,8 @@ export function createRhRouter() {
         employeeId: Number(req.params.id),
         referencia: competencia.referencia,
       });
-      const payroll_payment_summary = computePayrollPaymentSummary(totals.net, payroll_payments, {
+      const netParaPagamentos = totals.net_gerencial ?? totals.net;
+      const payroll_payment_summary = computePayrollPaymentSummary(netParaPagamentos, payroll_payments, {
         unbounded: Boolean(computed.pagamentos_sem_teto_folha),
       });
       const tipoFolha = computed.contract_profile.tipo;

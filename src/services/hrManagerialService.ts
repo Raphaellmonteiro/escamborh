@@ -49,6 +49,9 @@ export interface FuncDecimoRow {
   primeira_pago_em: string | null;
   segunda_pago_em: string | null;
   created_at: string;
+  /** automatico = proporcional ao tempo no ano; manual = valor_total_manual */
+  calculo_modo?: string | null;
+  valor_total_manual?: number | null;
 }
 
 export interface FuncBeneficioRow {
@@ -109,6 +112,32 @@ export function mesesTrabalhadosNoAno(dataAdmissao: string | null | undefined, a
   if (adm.getFullYear() > ano) return 0;
   if (adm.getFullYear() < ano) return 12;
   return 12 - adm.getMonth();
+}
+
+/**
+ * Proporção 0..1 do ano civil em que o colaborador já estava admitido (dias úteis do calendário / dias do ano).
+ * 13º proporcional: valor_total ≈ salário_base × fator.
+ */
+export function fatorProporcional13NoAno(dataAdmissao: string | null | undefined, ano: number): number {
+  const jan1 = `${ano}-01-01`;
+  const dec31 = `${ano}-12-31`;
+  const diasAno = daysBetweenInclusive(jan1, dec31);
+  if (diasAno <= 0) return 1;
+  const adm = parseISODate(dataAdmissao || null);
+  if (!adm) return 1;
+  if (adm.getFullYear() > ano) return 0;
+  if (adm.getFullYear() < ano) return 1;
+  const admStr = formatISODate(adm);
+  const inicio = admStr > jan1 ? admStr : jan1;
+  const trabalhados = daysBetweenInclusive(inicio, dec31);
+  return Math.min(1, Math.max(0, trabalhados / diasAno));
+}
+
+function splitDecimoParcelas(total: number): { p1: number; p2: number } {
+  const t = roundMoney(total);
+  const p1 = roundMoney(t / 2);
+  const p2 = roundMoney(t - p1);
+  return { p1, p2 };
 }
 
 export async function ensureFeriasPeriods(params: { tenantId: number; employeeId: number }): Promise<void> {
@@ -293,40 +322,118 @@ export async function ensureDecimoRow(params: {
       [params.tenantId, params.employeeId, params.ano]
     );
   }
-  const meses = mesesTrabalhadosNoAno(func.data_admissao, params.ano);
+  const fator = fatorProporcional13NoAno(func.data_admissao, params.ano);
+  const mesesEq = Math.min(12, Math.max(0, Math.round(fator * 12)));
   const sal = roundMoney(Number(func.salario_base) || 0);
-  const total = roundMoney((sal / 12) * meses);
-  const p1 = roundMoney(total / 2);
-  const p2 = roundMoney(total - p1);
+  const autoTotal = roundMoney(sal * fator);
 
   let row = await q1<FuncDecimoRow>(
     'SELECT * FROM func_decimo_terceiro WHERE tenant_id=? AND funcionario_id=? AND ano=?',
     [params.tenantId, params.employeeId, params.ano]
   );
+
+  const modo = String(row?.calculo_modo || 'automatico').trim() || 'automatico';
+  const manualRaw = row?.valor_total_manual;
+  const manualTotal =
+    manualRaw != null && Number.isFinite(Number(manualRaw)) ? roundMoney(Number(manualRaw)) : null;
+  const effectiveTotal =
+    modo === 'manual' && manualTotal != null && manualTotal > 0 ? manualTotal : autoTotal;
+  const { p1, p2 } = splitDecimoParcelas(effectiveTotal);
+
   if (!row) {
     const id = await qInsert(
       `INSERT INTO func_decimo_terceiro
-        (tenant_id, funcionario_id, ano, meses_trabalhados, valor_total, valor_primeira_parcela, valor_segunda_parcela, pago_primeira, pago_segunda)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [params.tenantId, params.employeeId, params.ano, meses, total, p1, p2, 0, 0]
+        (tenant_id, funcionario_id, ano, meses_trabalhados, valor_total, valor_primeira_parcela, valor_segunda_parcela, pago_primeira, pago_segunda, calculo_modo, valor_total_manual)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        params.tenantId,
+        params.employeeId,
+        params.ano,
+        mesesEq,
+        effectiveTotal,
+        p1,
+        p2,
+        0,
+        0,
+        'automatico',
+        null,
+      ]
     );
     if (id == null) return null;
-    row = await q1<FuncDecimoRow>('SELECT * FROM func_decimo_terceiro WHERE id=? AND tenant_id=?', [
+    return await q1<FuncDecimoRow>('SELECT * FROM func_decimo_terceiro WHERE id=? AND tenant_id=?', [
       id,
       params.tenantId,
     ]);
-  } else {
+  }
+
+  const emAberto = !row.pago_primeira && !row.pago_segunda;
+
+  if (emAberto) {
+    const cm = modo === 'manual' && manualTotal != null && manualTotal > 0 ? 'manual' : 'automatico';
+    const vm = cm === 'manual' ? manualTotal : null;
     await qRun(
-      `UPDATE func_decimo_terceiro SET meses_trabalhados=?, valor_total=?, valor_primeira_parcela=?, valor_segunda_parcela=?
+      `UPDATE func_decimo_terceiro SET meses_trabalhados=?, valor_total=?, valor_primeira_parcela=?, valor_segunda_parcela=?, calculo_modo=?, valor_total_manual=?
        WHERE id=? AND tenant_id=?`,
-      [meses, total, p1, p2, row.id, params.tenantId]
+      [mesesEq, effectiveTotal, p1, p2, cm, vm, row.id, params.tenantId]
     );
-    row = await q1<FuncDecimoRow>('SELECT * FROM func_decimo_terceiro WHERE id=? AND tenant_id=?', [
+  } else {
+    await qRun(`UPDATE func_decimo_terceiro SET meses_trabalhados=? WHERE id=? AND tenant_id=?`, [
+      mesesEq,
       row.id,
       params.tenantId,
     ]);
   }
-  return row;
+
+  return await q1<FuncDecimoRow>('SELECT * FROM func_decimo_terceiro WHERE id=? AND tenant_id=?', [
+    row.id,
+    params.tenantId,
+  ]);
+}
+
+export async function updateDecimoCalculoModo(params: {
+  tenantId: number;
+  decimoId: number;
+  modo: 'automatico' | 'manual';
+  valorTotalManual?: number | null;
+}): Promise<{ ok: true; row: FuncDecimoRow } | { ok: false; error: string }> {
+  const row = await q1<FuncDecimoRow>(
+    'SELECT * FROM func_decimo_terceiro WHERE id=? AND tenant_id=?',
+    [params.decimoId, params.tenantId]
+  );
+  if (!row) return { ok: false, error: 'Registro não encontrado.' };
+  const f = await q1<{ tipo_contrato: string | null }>(
+    'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
+    [row.funcionario_id, params.tenantId]
+  );
+  if (!isFixo(normalizeTipoContrato(f?.tipo_contrato))) {
+    return { ok: false, error: '13º gerencial automático não se aplica a este tipo de contrato.' };
+  }
+  if (row.pago_primeira || row.pago_segunda) {
+    return { ok: false, error: 'Não é possível alterar o modo de cálculo após registrar pagamento de parcela.' };
+  }
+  if (params.modo === 'manual') {
+    const v = roundMoney(Number(params.valorTotalManual));
+    if (!Number.isFinite(v) || v <= 0) {
+      return { ok: false, error: 'Informe valor_total_manual válido para modo manual.' };
+    }
+    await qRun(
+      `UPDATE func_decimo_terceiro SET calculo_modo='manual', valor_total_manual=? WHERE id=? AND tenant_id=?`,
+      [v, params.decimoId, params.tenantId]
+    );
+  } else {
+    await qRun(
+      `UPDATE func_decimo_terceiro SET calculo_modo='automatico', valor_total_manual=NULL WHERE id=? AND tenant_id=?`,
+      [params.decimoId, params.tenantId]
+    );
+  }
+  const ano = Number(row.ano);
+  const refreshed = await ensureDecimoRow({
+    tenantId: params.tenantId,
+    employeeId: row.funcionario_id,
+    ano,
+  });
+  if (!refreshed) return { ok: false, error: 'Falha ao recalcular 13º.' };
+  return { ok: true, row: refreshed };
 }
 
 export async function payDecimoParcela(params: {

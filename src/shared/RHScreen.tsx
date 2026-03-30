@@ -33,7 +33,14 @@ interface UsuarioFuncionario {
   permissoes?: string[] | null;
 }
 interface Evento { id: number; funcionario_id: number; data: string; tipo: string; horas_ausentes: number; observacao?: string; }
-interface Adiantamento { id: number; valor: number; motivo: string; data: string; descontado: number; }
+interface Adiantamento {
+  id: number;
+  valor: number;
+  motivo: string;
+  data: string;
+  descontado: number;
+  origem?: string;
+}
 interface HoraExtraDia {
   id: number;
   minutos: number;
@@ -123,6 +130,7 @@ interface Folha {
   inss: number;
   totalAdiantamentos: number;
   adiantamentos: Adiantamento[];
+  adiantamentos_legado_nao_contabilizados?: Adiantamento[];
   totalExtraMin: number;
   totalExtraMinPago?: number;
   totalExtraMinBancoMes?: number;
@@ -191,20 +199,20 @@ const resolveHoraExtraDestino = (item: { minutos: number; minutos_pago_folha?: n
 const horaExtraDestinoLabel = (destino: HoraExtraDia['destino']) => {
   switch (destino) {
     case 'banco':
-      return 'Destino: banco';
+      return 'Destino da hora extra: banco de horas';
     case 'dividido':
-      return 'Destino: dividido';
+      return 'Destino da hora extra: parte na folha, parte no banco';
     case 'folha':
-      return 'Destino: folha';
+      return 'Destino da hora extra: pagamento na folha';
     default:
-      return 'Legado: 100% folha';
+      return 'Legado: 100% considerado na folha (sem destino gravado)';
   }
 };
 const HOUR_BANK_MOVEMENT_LABEL: Record<string, string> = {
   credit: 'Credito',
   debit: 'Compensacao',
   manual_adjust: 'Ajuste manual',
-  converted_to_payroll: 'Conversao para folha',
+  converted_to_payroll: 'Destino da HE na folha (baixa do banco)',
 };
 const HOUR_BANK_ORIGIN_LABEL: Record<string, string> = {
   espelho: 'Espelho',
@@ -322,8 +330,8 @@ export default function RHScreen({ token }: { token: string }) {
             onGestaoAtalhoConsumed={() => setGestaoAtalho(null)}
           />
         )}
-        {tab==='espelho' && <TabEspelho token={token}/>}
-        {tab==='folha'   && <TabFolha   token={token}/>}
+        {tab==='espelho' && <TabEspelho token={token} onIrFolha={() => setTab('folha')} />}
+        {tab==='folha'   && <TabFolha   token={token} onIrEspelho={() => setTab('espelho')} />}
         {tab==='gestao'  && (
           <TabGestaoRH
             token={token}
@@ -611,6 +619,8 @@ function TabLista({
   const [rhGestaoLoading, setRhGestaoLoading] = useState(false);
   const [rhDecimoConfirm, setRhDecimoConfirm] = useState<null | { parcela: 1 | 2 }>(null);
   const [rhDecimoSaving, setRhDecimoSaving] = useState(false);
+  const [rhDecimoCalculoSaving, setRhDecimoCalculoSaving] = useState(false);
+  const [rhDecimoValorManualStr, setRhDecimoValorManualStr] = useState('');
 
   const loadRhGestao = async (fid: number, ano: number) => {
     setRhGestaoLoading(true);
@@ -661,6 +671,16 @@ function TabLista({
     if (modal !== 'rh_gestao' || !selected) return;
     void loadRhGestao(selected.id, rhDecimoAno);
   }, [modal, selected, rhDecimoAno]);
+  useEffect(() => {
+    const d = rhPackDecimo?.decimo as { valor_total?: number; valor_total_manual?: number | null } | null;
+    if (modal === 'rh_gestao' && d) {
+      const v =
+        d.valor_total_manual != null && Number(d.valor_total_manual) > 0
+          ? Number(d.valor_total_manual)
+          : Number(d.valor_total) || 0;
+      setRhDecimoValorManualStr(v.toFixed(2).replace('.', ','));
+    }
+  }, [rhPackDecimo?.decimo, modal]);
   useEffect(() => {
     if (!gestaoAtalho) return;
     setSelected(gestaoAtalho);
@@ -1134,16 +1154,105 @@ function TabLista({
               </div>
               {(() => {
                 const d = rhPackDecimo.decimo as any;
+                const modo = String(d.calculo_modo || 'automatico');
+                const emAberto = !d.pago_primeira && !d.pago_segunda;
                 return (
-                  <div className="text-sm space-y-1 text-zinc-700">
+                  <div className="text-sm space-y-2 text-zinc-700">
+                    <p className="text-[11px] leading-relaxed text-violet-900/90">
+                      O total é <strong>proporcional ao tempo trabalhado no ano civil</strong> (dias desde a admissão até 31/12),
+                      com base no salário base atual. Convencionalmente a <strong>1ª parcela</strong> costuma ser paga em{' '}
+                      <strong>novembro</strong> e a <strong>2ª em dezembro</strong> — aqui você só registra quando efetivou cada
+                      pagamento (controle gerencial).
+                    </p>
                     <p>
-                      Meses trabalhados (ano): <strong>{d.meses_trabalhados}</strong>
+                      Meses equivalentes (≈12 × proporção do ano): <strong>{d.meses_trabalhados}</strong>
                     </p>
                     <p>
                       Total: <strong>{fmt(Number(d.valor_total) || 0)}</strong> · Pago:{' '}
                       <strong>{fmt(rhPackDecimo.pago_total)}</strong> · Pendente:{' '}
                       <strong>{fmt(rhPackDecimo.pendente)}</strong>
                     </p>
+                    <p className="text-[10px] font-bold text-violet-800">
+                      Modo: {modo === 'manual' ? 'Valor manual' : 'Automático (proporcional)'}
+                    </p>
+                    {emAberto && selected && (
+                      <div className="rounded-xl border border-violet-200 bg-white/80 p-3 space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-violet-700">Ajustar total do 13º</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={rhDecimoCalculoSaving}
+                            className="px-3 py-1.5 rounded-lg bg-violet-100 text-violet-900 text-[11px] font-bold border border-violet-200 hover:bg-violet-200 disabled:opacity-40"
+                            onClick={async () => {
+                              if (!selected) return;
+                              setRhDecimoCalculoSaving(true);
+                              try {
+                                const r = await fetch(`/api/funcionarios/decimo-terceiro/${d.id}`, {
+                                  method: 'PATCH',
+                                  headers: jHdrs,
+                                  body: JSON.stringify({ action: 'set_calculo', modo: 'automatico' }),
+                                });
+                                const data = await r.json();
+                                if (!r.ok) alert(data.error || 'Erro');
+                                else await loadRhGestao(selected.id, rhDecimoAno);
+                              } catch {
+                                alert('Erro de conexão');
+                              } finally {
+                                setRhDecimoCalculoSaving(false);
+                              }
+                            }}
+                          >
+                            Voltar ao automático
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div className="flex-1 min-w-[140px]">
+                            <label className="text-[10px] font-bold text-zinc-500">Valor total manual (R$)</label>
+                            <input
+                              type="text"
+                              className="mt-1 w-full px-2 py-2 border border-violet-200 rounded-lg text-sm font-mono"
+                              value={rhDecimoValorManualStr}
+                              onChange={(e) => setRhDecimoValorManualStr(e.target.value)}
+                              placeholder="0,00"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            disabled={rhDecimoCalculoSaving}
+                            className="px-3 py-2 bg-violet-800 text-white rounded-lg text-[11px] font-bold disabled:opacity-40"
+                            onClick={async () => {
+                              if (!selected) return;
+                              const v = parseFloat(String(rhDecimoValorManualStr).replace(',', '.'));
+                              if (!Number.isFinite(v) || v <= 0) {
+                                alert('Informe um valor válido.');
+                                return;
+                              }
+                              setRhDecimoCalculoSaving(true);
+                              try {
+                                const r = await fetch(`/api/funcionarios/decimo-terceiro/${d.id}`, {
+                                  method: 'PATCH',
+                                  headers: jHdrs,
+                                  body: JSON.stringify({
+                                    action: 'set_calculo',
+                                    modo: 'manual',
+                                    valor_total_manual: v,
+                                  }),
+                                });
+                                const data = await r.json();
+                                if (!r.ok) alert(data.error || 'Erro');
+                                else await loadRhGestao(selected.id, rhDecimoAno);
+                              } catch {
+                                alert('Erro de conexão');
+                              } finally {
+                                setRhDecimoCalculoSaving(false);
+                              }
+                            }}
+                          >
+                            Aplicar manual
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2 pt-2">
                       <button
                         type="button"
@@ -1151,7 +1260,7 @@ function TabLista({
                         className="px-3 py-2 bg-violet-700 text-white rounded-xl text-xs font-bold disabled:opacity-40"
                         onClick={() => setRhDecimoConfirm({ parcela: 1 })}
                       >
-                        Registrar 1ª parcela…
+                        Registrar 1ª parcela (ex.: nov)…
                       </button>
                       <button
                         type="button"
@@ -1159,7 +1268,7 @@ function TabLista({
                         className="px-3 py-2 bg-violet-900 text-white rounded-xl text-xs font-bold disabled:opacity-40"
                         onClick={() => setRhDecimoConfirm({ parcela: 2 })}
                       >
-                        Registrar 2ª parcela…
+                        Registrar 2ª parcela (ex.: dez)…
                       </button>
                     </div>
                     <p className="text-[10px] text-violet-700/80 pt-1">
@@ -1463,7 +1572,7 @@ function TabLista({
 // ═══════════════════════════════════════════════════════════════════════════════
 interface PontoRaw { id: number; tipo: string; hora: string; data: string; ip: string; }
 
-function TabEspelho({ token }: { token: string }) {
+function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => void }) {
   const [funcs, setFuncs]         = useState<Func[]>([]);
   const [sel, setSel]             = useState<number|''>('');
   const [month, setMonth]         = useState(new Date().getMonth()+1);
@@ -1795,6 +1904,16 @@ function TabEspelho({ token }: { token: string }) {
         {espelho && (
           <button onClick={exportarPDF} className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0">
             <Download size={14}/>Exportar PDF
+          </button>
+        )}
+        {onIrFolha && (
+          <button
+            type="button"
+            onClick={onIrFolha}
+            className="flex items-center gap-2 px-3 py-2 border border-zinc-200 bg-white rounded-xl text-xs sm:text-sm font-bold text-zinc-700 hover:bg-zinc-50 shrink-0"
+          >
+            <FileText size={14} />
+            Folha deste mês
           </button>
         )}
       </div>
@@ -2317,7 +2436,7 @@ function TabEspelho({ token }: { token: string }) {
               return (
                 <div className="border border-dashed border-orange-300 rounded-xl p-4 bg-orange-50/50">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Hora extra do dia</p>
+                    <p className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Aprovar hora extra (destino)</p>
                     {extraExistente && (
                       <span className="text-[10px] font-black px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full border border-orange-200">
                         ✓ Aprovada: {extraExistente.minutos}min
@@ -2407,14 +2526,16 @@ function TabEspelho({ token }: { token: string }) {
                     /* Ainda não aprovada — formulário de aprovação */
                     <div className="space-y-3">
                       <div>
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Para onde vai a HE deste dia</p>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                          Destino da hora extra neste dia
+                        </p>
                         <div className="flex flex-wrap gap-2">
                           {([
-                            { k: 'folha' as const, label: 'HE -> folha' },
+                            { k: 'folha' as const, label: 'Pagar na folha' },
                             ...(heBancoOk
                               ? ([
-                                  { k: 'banco' as const, label: 'HE -> banco' },
-                                  { k: 'dividir' as const, label: 'Dividir' },
+                                  { k: 'banco' as const, label: 'Enviar ao banco' },
+                                  { k: 'dividir' as const, label: 'Dividir (folha + banco)' },
                                 ] as const)
                               : []),
                           ]).map((o) => (
@@ -2479,7 +2600,7 @@ function TabEspelho({ token }: { token: string }) {
                           className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-all flex items-center gap-2 whitespace-nowrap"
                         >
                           {savingExtra ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Check size={14}/>}
-                          Aprovar HE desta data
+                          Aprovar hora extra
                         </button>
                       </div>
                     </div>
@@ -2506,7 +2627,7 @@ function TabEspelho({ token }: { token: string }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA FOLHA
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabFolha({ token }: { token: string }) {
+function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => void }) {
   const [funcs, setFuncs] = useState<Func[]>([]);
   const [sel, setSel] = useState<number|''>('');
   const [month, setMonth] = useState(new Date().getMonth()+1);
@@ -2550,7 +2671,10 @@ function TabFolha({ token }: { token: string }) {
     const payments = [...(folha.payroll_payments || [])].sort((a, b) => a.id - b.id);
     const ix = payments.findIndex((p) => p.id === pay.id);
     const totalAfter = payments.slice(0, ix + 1).reduce((s, p) => s + (Number(p.valor) || 0), 0);
-    const netL = folha.payroll_payment_summary?.net_liquid ?? Math.max(0, folha.payroll?.totals.net ?? folha.salarioLiquido);
+    const netL =
+      folha.managerial?.net_adjusted ??
+      folha.payroll_payment_summary?.net_liquid ??
+      Math.max(0, folha.payroll?.totals.net ?? folha.salarioLiquido);
     const totalAfterR = Math.round(totalAfter * 100) / 100;
     const balanceAfter = Math.max(0, Math.round((netL - totalAfterR) * 100) / 100);
     const paidAt = pay.created_at
@@ -2637,7 +2761,7 @@ function TabFolha({ token }: { token: string }) {
           ? [{ label: `Adiantamentos (${folha.adiantamentos.length})`, amount: folha.totalAdiantamentos }]
           : []),
       ];
-    const net = folha.payroll?.totals.net ?? folha.salarioLiquido;
+    const net = folha.managerial?.net_adjusted ?? folha.payroll?.totals.net ?? folha.salarioLiquido;
     const html = generatePayrollPdf({
       employeeName: folha.funcionario.nome,
       periodLabel,
@@ -2661,7 +2785,7 @@ function TabFolha({ token }: { token: string }) {
         deductions: folha.payroll.deductions,
         gross: folha.payroll.totals.gross,
         dedTotal: folha.payroll.totals.deductions,
-        net: folha.payroll.totals.net,
+        net: folha.managerial?.net_adjusted ?? folha.payroll.totals.net,
         referencia: folha.competencia?.referencia ?? folha.mes,
         periodRange:
           folha.competencia &&
@@ -2691,7 +2815,7 @@ function TabFolha({ token }: { token: string }) {
       deductions,
       gross,
       dedTotal: folha.totalDescontos,
-      net: folha.salarioLiquido,
+      net: folha.managerial?.net_adjusted ?? folha.salarioLiquido,
       referencia: folha.mes,
       periodRange: undefined as string | undefined,
     };
@@ -2700,7 +2824,10 @@ function TabFolha({ token }: { token: string }) {
   const paySummary = useMemo(() => {
     if (!folha) return null;
     if (folha.payroll_payment_summary) return folha.payroll_payment_summary;
-    const net = Math.max(0, folha.payroll?.totals.net ?? folha.salarioLiquido);
+    const net = Math.max(
+      0,
+      folha.payroll?.totals.net_gerencial ?? folha.payroll?.totals.net ?? folha.salarioLiquido
+    );
     return { net_liquid: net, total_paid: 0, balance_due: net, status: 'pending' as const };
   }, [folha]);
 
@@ -2783,6 +2910,16 @@ function TabFolha({ token }: { token: string }) {
           <span className="text-sm font-bold text-zinc-900 w-28 text-center">{MESES[month-1]} {year}</span>
           <button onClick={()=>chgMonth(1)} className="p-1.5 hover:bg-zinc-100 rounded-lg"><ChevronRight size={16}/></button>
         </div>
+        {onIrEspelho && (
+          <button
+            type="button"
+            onClick={onIrEspelho}
+            className="flex items-center gap-2 px-3 py-2 border border-zinc-200 bg-white rounded-xl text-xs sm:text-sm font-bold text-zinc-700 hover:bg-zinc-50 shrink-0"
+          >
+            <Calendar size={14} />
+            Espelho deste mês
+          </button>
+        )}
         {folha && !evF && (
           <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-zinc-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-zinc-800 transition-all shrink-0">
             <Download size={15} />
@@ -2795,35 +2932,46 @@ function TabFolha({ token }: { token: string }) {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4 min-w-0">
             <div className="xl:col-span-2 bg-white border border-zinc-200 rounded-2xl overflow-hidden min-w-0">
             <div className="p-3 sm:p-4 space-y-3 min-w-0 2xl:p-6 2xl:space-y-5">
-              <div className="flex justify-between items-start border-b border-zinc-200 pb-3 2xl:pb-5">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-base font-black text-zinc-900 sm:text-lg 2xl:text-xl">
-                      {evF ? 'Pagamentos por competencia' : 'Folha de pagamento da competencia'}
-                    </h1>
-                    {paySummary && (
-                      <span
-                        className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${payStatusClass}`}
-                      >
-                        {paySummary.unbounded ? 'Pagamentos por competência' : PAYROLL_STATUS_LABEL[paySummary.status] || paySummary.status}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm mt-1" style={{ color: '#9ca3af' }}>
-                    Competência de {MESES[month - 1]} {year}
-                    {folhaView.periodRange ? ` · ${folhaView.periodRange}` : ''}
-                  </p>
-                  <p className="text-xs font-bold text-zinc-500 mt-0.5">Referência da competência {folhaView.referencia}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-black text-zinc-900 text-lg">{folha.funcionario.nome}</p>
-                  <p className="text-sm" style={{ color: '#9ca3af' }}>{folha.funcionario.cargo}</p>
-                  {folha.funcionario.cpf && <p className="text-xs text-zinc-400">CPF: {folha.funcionario.cpf}</p>}
-                  {folha.funcionario.data_admissao && (
-                    <p className="text-xs text-zinc-400">Admissão: {fmtDate(folha.funcionario.data_admissao)}</p>
+              <div className="border-b border-zinc-200 pb-3 2xl:pb-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-base font-black text-zinc-900 sm:text-lg 2xl:text-xl">
+                    {evF ? 'Pagamentos por competência' : 'Folha de pagamento'}
+                  </h1>
+                  {paySummary && (
+                    <span
+                      className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${payStatusClass}`}
+                    >
+                      {paySummary.unbounded ? 'Pagamentos por competência' : PAYROLL_STATUS_LABEL[paySummary.status] || paySummary.status}
+                    </span>
                   )}
                 </div>
+                <p className="text-sm mt-1" style={{ color: '#9ca3af' }}>
+                  Competência {MESES[month - 1]} {year}
+                  {folhaView.periodRange ? ` · ${folhaView.periodRange}` : ''}
+                </p>
+                <p className="text-xs font-bold text-zinc-500 mt-0.5">Referência {folhaView.referencia}</p>
               </div>
+
+              <section className="rounded-2xl border border-zinc-200 bg-zinc-50/60 px-4 py-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Resumo do colaborador</p>
+                <div className="flex flex-wrap items-start gap-4">
+                  <Avatar func={folha.funcionario} size={52} />
+                  <div className="min-w-0 flex-1 space-y-1 text-sm">
+                    <p className="font-black text-zinc-900 text-lg">{folha.funcionario.nome}</p>
+                    <p className="text-zinc-500">{folha.funcionario.cargo}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                      {folha.funcionario.cpf && <span>CPF: {folha.funcionario.cpf}</span>}
+                      {folha.funcionario.data_admissao && (
+                        <span>Admissão: {fmtDate(folha.funcionario.data_admissao)}</span>
+                      )}
+                      <span>
+                        Jornada: {folha.funcionario.horario_entrada} – {folha.funcionario.horario_saida} ·{' '}
+                        {folha.funcionario.carga_horaria}h · tolerância {folha.funcionario.tolerancia_minutos} min
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
               {!folhaTradicional && !evF && (
                 <div className="rounded-xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-xs text-violet-950">
@@ -2836,10 +2984,10 @@ function TabFolha({ token }: { token: string }) {
 
               {!evF && (
                 <div className="rounded-xl border border-zinc-200 bg-zinc-50/90 px-4 py-3 text-xs text-zinc-700">
-                  <p className="font-bold text-zinc-900">Conferencia e pagamento da competencia</p>
+                  <p className="font-bold text-zinc-900">Conferência e pagamento</p>
                   <p className="mt-1 leading-relaxed text-zinc-600">
-                    Esta aba centraliza calculo da competencia, proventos, descontos, adiantamentos, pagamentos, recibos e status.
-                    Operacao diaria, compensacoes e ajustes de jornada continuam no Espelho; aqui o foco e conferencia, recibo e quitacao.
+                    Os valores de <strong>hora extra na folha</strong> vêm do destino escolhido ao aprovar no Espelho. Pagamentos, adiantamentos e
+                    recibos ficam na coluna à direita. Use <strong>Espelho deste mês</strong> no topo para conferir ponto e banco.
                   </p>
                 </div>
               )}
@@ -2884,66 +3032,41 @@ function TabFolha({ token }: { token: string }) {
                 </div>
               ) : (
               <>
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
-                  Proventos da competência
-                </p>
-                <div className="rounded-2xl bg-emerald-950 px-4 py-3 space-y-2">
-                  {folhaView.earnings.map((row, i) => (
-                    <div key={i} className="flex justify-between items-center gap-3 text-sm">
-                      <span className="text-white font-medium">{row.label}</span>
-                      <span className="font-black tabular-nums shrink-0 text-emerald-300">{fmt(row.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+              <section className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Variáveis da competência</p>
               {((folha.totalExtraMin ?? 0) > 0 || (folha.totalBancoConvertidoFolhaMin ?? 0) > 0) && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-xs text-cyan-950 space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Horas extras no mês</p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-cyan-800">Horas extras e banco (reflexo na folha)</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     <span>
-                      <span className="text-cyan-700/80">Apuradas:</span>{' '}
+                      <span className="text-cyan-700/80">HE apuradas:</span>{' '}
                       <strong>{folha.totalExtraMin} min</strong>
                     </span>
                     <span>
-                      <span className="text-cyan-700/80">Pagas na folha:</span>{' '}
+                      <span className="text-cyan-700/80">Minutos pagos na folha:</span>{' '}
                       <strong>{folha.totalExtraMinPago ?? folha.totalExtraMin} min</strong>
                     </span>
                     <span>
-                      <span className="text-cyan-700/80">Para o banco (este mês):</span>{' '}
+                      <span className="text-cyan-700/80">Para o banco (crédito no mês):</span>{' '}
                       <strong>{folha.totalExtraMinBancoMes ?? 0} min</strong>
                     </span>
                     <span>
-                      <span className="text-cyan-700/80">Convertidas do banco para folha:</span>{' '}
+                      <span className="text-cyan-700/80">Baixa do banco paga na folha:</span>{' '}
                       <strong>{folha.totalBancoConvertidoFolhaMin ?? 0} min</strong>
                     </span>
                   </div>
                 </div>
               )}
-
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>Descontos da competência</p>
-                <div className="rounded-2xl bg-rose-950 px-4 py-3 space-y-2">
-                  {folhaView.deductions.map((row, i) => (
-                    <div key={i} className="flex justify-between items-center gap-3 text-sm">
-                      <span className="text-white font-medium">{row.label}</span>
-                      <span className="font-black tabular-nums shrink-0 text-red-300">{fmt(row.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {folha.managerial &&
                 (folha.managerial.informativos.length > 0 ||
                   folha.managerial.benefit_credits.length > 0 ||
                   folha.managerial.benefit_deductions.length > 0) && (
                   <div className="rounded-2xl border border-indigo-200 bg-indigo-50/90 px-4 py-4 space-y-3">
                     <p className="text-[10px] font-black uppercase tracking-wider text-indigo-900">
-                      Complemento gerencial (Etapa 4)
+                      Adicionais e descontos gerenciais
                     </p>
                     <p className="text-[11px] text-indigo-800/90">
-                      Pagamentos da folha (Etapa 2) continuam baseados no líquido da folha principal abaixo. Itens informativos não alteram esse cálculo.
+                      Benefícios e informativos da ficha (Etapa gerencial). Pagamentos continuam alinhados ao líquido após estes ajustes.
                     </p>
                     {folha.managerial.informativos.length > 0 && (
                       <div className="space-y-1">
@@ -2984,9 +3107,39 @@ function TabFolha({ token }: { token: string }) {
                     </div>
                   </div>
                 )}
+              </section>
 
-              <div className="rounded-2xl bg-zinc-100 border border-zinc-200 px-4 py-4 space-y-3">
-                <p className="text-[11px] font-black uppercase tracking-wider" style={{ color: '#9ca3af' }}>Resumo da competência</p>
+              <section className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Apuração — proventos e descontos</p>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>
+                  Proventos
+                </p>
+                <div className="rounded-2xl bg-emerald-950 px-4 py-3 space-y-2">
+                  {folhaView.earnings.map((row, i) => (
+                    <div key={i} className="flex justify-between items-center gap-3 text-sm">
+                      <span className="text-white font-medium">{row.label}</span>
+                      <span className="font-black tabular-nums shrink-0 text-emerald-300">{fmt(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider mb-2" style={{ color: '#9ca3af' }}>Descontos</p>
+                <div className="rounded-2xl bg-rose-950 px-4 py-3 space-y-2">
+                  {folhaView.deductions.map((row, i) => (
+                    <div key={i} className="flex justify-between items-center gap-3 text-sm">
+                      <span className="text-white font-medium">{row.label}</span>
+                      <span className="font-black tabular-nums shrink-0 text-red-300">{fmt(row.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </section>
+
+              <section className="rounded-2xl bg-zinc-100 border border-zinc-200 px-4 py-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Resumo financeiro</p>
                 <div className="flex justify-between text-sm">
                   <span style={{ color: '#9ca3af' }}>Bruto apurado</span>
                   <span className="font-bold text-zinc-800 tabular-nums">{fmt(folhaView.gross)}</span>
@@ -3008,12 +3161,14 @@ function TabFolha({ token }: { token: string }) {
                   </>
                 )}
                 <div className="flex justify-between items-center pt-2 border-t border-zinc-200">
-                  <span className="font-black text-zinc-900">Líquido da competência</span>
+                  <span className="font-black text-zinc-900">
+                    {folha.managerial ? 'Líquido de referência (com gerencial)' : 'Líquido de referência'}
+                  </span>
                   <span className="text-2xl font-black tabular-nums" style={{ color: '#22c55e' }}>
                     {fmt(Math.max(0, folhaView.net))}
                   </span>
                 </div>
-              </div>
+              </section>
 
               {folha.totalDescontos > folha.salarioBruto && (
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
@@ -3027,11 +3182,40 @@ function TabFolha({ token }: { token: string }) {
 
               {folha.adiantamentos.length > 0 && (
                 <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-2">Adiantamentos já descontados na competência</p>
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-2">
+                    Adiantamentos que compõem o cálculo
+                  </p>
+                  <p className="text-[10px] text-zinc-500 mb-2 leading-relaxed">
+                    Preferência: registros feitos em <strong>Pagamentos</strong> (mesma competência). A tabela legada só entra no total se não houver
+                    adiantamento por pagamentos.
+                  </p>
                   {folha.adiantamentos.map((a) => (
                     <div key={a.id} className="flex justify-between text-xs text-zinc-600 py-1">
                       <span>
                         {fmtDate(a.data)} · {a.motivo}
+                        {a.origem === 'pagamento_folha' ? (
+                          <span className="ml-1 text-[9px] font-bold text-emerald-600">· Pagamentos</span>
+                        ) : null}
+                      </span>
+                      <span className="font-bold tabular-nums">{fmt(a.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(folha.adiantamentos_legado_nao_contabilizados?.length ?? 0) > 0 && (
+                <div className="p-4 bg-amber-50/80 rounded-xl border border-amber-200 text-xs text-amber-950 space-y-2">
+                  <p className="font-black text-amber-900 uppercase tracking-wider text-[10px]">
+                    Adiantamentos legados (fora do total)
+                  </p>
+                  <p className="text-[11px] leading-relaxed">
+                    Existem lançamentos na tabela antiga de adiantamentos no mesmo mês, mas o total já usa os valores registrados em{' '}
+                    <strong>Pagamentos</strong>. Estes itens não foram somados de novo para evitar duplicidade.
+                  </p>
+                  {(folha.adiantamentos_legado_nao_contabilizados ?? []).map((a) => (
+                    <div key={a.id} className="flex justify-between text-amber-900 py-0.5 border-t border-amber-200/80 pt-1">
+                      <span>
+                        {fmtDate(a.data)} · {a.motivo || '—'}
                       </span>
                       <span className="font-bold tabular-nums">{fmt(a.valor)}</span>
                     </div>
@@ -3058,7 +3242,8 @@ function TabFolha({ token }: { token: string }) {
                       {folha.hour_bank.movimentacoes.map((m) => (
                         <div key={m.id} className="py-1.5 flex justify-between gap-2">
                           <span className="truncate">
-                            {fmtDate(m.data_referencia)} · {m.tipo} · {m.origem}
+                            {fmtDate(m.data_referencia)} · {HOUR_BANK_MOVEMENT_LABEL[m.tipo] || m.tipo} ·{' '}
+                            {HOUR_BANK_ORIGIN_LABEL[m.origem] || m.origem}
                             {m.observacao ? ` — ${m.observacao}` : ''}
                           </span>
                           <span className="shrink-0 font-bold tabular-nums text-cyan-900">
@@ -3087,7 +3272,7 @@ function TabFolha({ token }: { token: string }) {
                           <option value="debit">Débito administrativo (baixa saldo)</option>
                           <option value="credit">Crédito administrativo</option>
                           <option value="manual_adjust">Ajuste manual (+/− min)</option>
-                          <option value="converted_to_payroll">Baixa para pagamento da competência</option>
+                          <option value="converted_to_payroll">Destino da HE na folha (baixa do banco nesta competência)</option>
                         </select>
                       </div>
                       <div>
@@ -3156,10 +3341,10 @@ function TabFolha({ token }: { token: string }) {
           <div className="space-y-3 sm:space-y-4 min-w-0">
             <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
-                Situação da competência
+                Resumo da folha
               </p>
               <p className="text-xs text-zinc-500 mb-3">
-                O que foi apurado nesta competência, o que já foi pago e o que ainda falta quitar.
+                Apuração desta competência, pagamentos registrados e saldo a quitar (mesma base usada em Pagamentos).
               </p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -3193,7 +3378,7 @@ function TabFolha({ token }: { token: string }) {
                       <span className="font-bold text-amber-800 tabular-nums">{fmt(paySummary.balance_due)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-1">
-                      <span style={{ color: '#9ca3af' }}>Status da competência</span>
+                      <span style={{ color: '#9ca3af' }}>Status do pagamento</span>
                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${payStatusClass}`}>
                         {PAYROLL_STATUS_LABEL[paySummary.status]}
                       </span>
@@ -3239,7 +3424,7 @@ function TabFolha({ token }: { token: string }) {
 
             <div className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
-                Pagamentos da competência
+                Pagamentos
               </p>
               <p className="text-xs text-zinc-500 mb-3">
                 Use este bloco para registrar adiantamento, pagamento parcial ou quitação da competência. O lançamento entra no financeiro,
@@ -3343,34 +3528,6 @@ function TabFolha({ token }: { token: string }) {
               )}
             </div>
 
-            <div className="bg-white border border-zinc-200 rounded-2xl p-5">
-              <p className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: '#9ca3af' }}>
-                Funcionário
-              </p>
-              <div className="flex items-center gap-3 mb-3">
-                <Avatar func={folha.funcionario} size={44} />
-                <div>
-                  <p className="font-black text-zinc-900">{folha.funcionario.nome}</p>
-                  <p className="text-xs text-zinc-400">{folha.funcionario.cargo}</p>
-                </div>
-              </div>
-              <div className="space-y-1 text-xs text-zinc-500">
-                <div className="flex justify-between">
-                  <span style={{ color: '#9ca3af' }}>Entrada/Saída</span>
-                  <span className="font-bold text-zinc-700">
-                    {folha.funcionario.horario_entrada} – {folha.funcionario.horario_saida}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: '#9ca3af' }}>Carga diária</span>
-                  <span className="font-bold text-zinc-700">{folha.funcionario.carga_horaria}h</span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: '#9ca3af' }}>Tolerância</span>
-                  <span className="font-bold text-zinc-700">{folha.funcionario.tolerancia_minutos} min</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       ) : null}

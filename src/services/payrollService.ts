@@ -118,6 +118,8 @@ export interface CalculatePayrollResult extends PayrollStructured {
     inss: number;
     totalAdiantamentos: number;
     adiantamentos: unknown[];
+    /** Lançamentos em func_adiantamentos do mês que não entram no total porque há adiantamento em Pagamentos (evita duplicidade). */
+    adiantamentos_legado_nao_contabilizados?: unknown[];
     totalExtraMin: number;
     /** Minutos de HE pagos em dinheiro na folha (≤ totalExtraMin) */
     totalExtraMinPago: number;
@@ -550,6 +552,7 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
         inss: 0,
         totalAdiantamentos: roundMoney(totalAdiantamentosPendentes),
         adiantamentos: adiantamentosMes,
+        adiantamentos_legado_nao_contabilizados: undefined,
         totalExtraMin: 0,
         totalExtraMinPago: 0,
         totalExtraMinBancoMes: 0,
@@ -593,13 +596,22 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
       valor: Number(p.valor) || 0,
       motivo:
         (p.observacao && String(p.observacao).trim()) ||
-        'Adiantamento (pagamentos da competência)',
+        'Adiantamento (registrado em Pagamentos da competência)',
       data: /^\d{4}-\d{2}-\d{2}$/.test(created) ? created : competencia.end_date,
       descontado: 1,
       origem: 'pagamento_folha' as const,
     };
   });
-  const adiantamentos = [...adiantamentosTabela, ...adiantamentosFromPagamentos];
+  /** Fonte única para o total: preferir adiantamentos lançados em Pagamentos; senão tabela legada. */
+  const sumPag = adiantamentosFromPagamentos.reduce((acc, a) => acc + (Number(a.valor) || 0), 0);
+  const sumTab = (adiantamentosTabela as { valor?: unknown }[]).reduce(
+    (acc, curr) => acc + (Number(curr.valor) || 0),
+    0
+  );
+  const adiantamentosUsadosNoCalculo: unknown[] =
+    sumPag > 0 ? adiantamentosFromPagamentos : adiantamentosTabela;
+  const adiantamentosLegadoNaoSomados: unknown[] =
+    sumPag > 0 && sumTab > 0 ? adiantamentosTabela : [];
 
   const pbd: Record<string, unknown[]> = {};
   const ebd: Record<string, unknown[]> = {};
@@ -632,7 +644,10 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
         year: yy,
       })
     : { minutos_convertidos_folha: 0 };
-  const totalAdiantamentos = adiantamentos.reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0);
+  const totalAdiantamentos = adiantamentosUsadosNoCalculo.reduce<number>(
+    (acc, curr) => acc + (Number((curr as { valor?: unknown }).valor) || 0),
+    0
+  );
 
   for (let d = 1; d <= diasNoMes; d++) {
     const dataStr = `${yy}-${mm}-${String(d).padStart(2, '0')}`;
@@ -719,7 +734,7 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
   if (totalAdiantamentos > 0) {
     deductions.push({
       type: 'advances',
-      label: `Adiantamentos (${adiantamentos.length})`,
+      label: `Adiantamentos (${adiantamentosUsadosNoCalculo.length})`,
       amount: roundMoney(totalAdiantamentos),
     });
   }
@@ -778,7 +793,9 @@ export async function calculatePayroll(params: CalculatePayrollParams): Promise<
       descontoParcial,
       inss,
       totalAdiantamentos: roundMoney(totalAdiantamentos),
-      adiantamentos,
+      adiantamentos: adiantamentosUsadosNoCalculo,
+      adiantamentos_legado_nao_contabilizados:
+        adiantamentosLegadoNaoSomados.length > 0 ? adiantamentosLegadoNaoSomados : undefined,
       totalExtraMin,
       totalExtraMinPago,
       totalExtraMinBancoMes,
@@ -899,7 +916,7 @@ export async function registerPayrollPayment(params: {
   if (isEvento(tipoEmp)) {
     /* Pagamentos avulsos por competência, sem teto de folha mensal */
   } else {
-    const netRaw = computed.totals.net;
+    const netRaw = computed.totals.net_gerencial ?? computed.totals.net;
     const summaryBefore = computePayrollPaymentSummary(netRaw, history);
     const paidSettlementBefore = payrollSettlementPaidTotal(history);
     const balanceSettlement = roundMoney(Math.max(0, netRaw - paidSettlementBefore));
