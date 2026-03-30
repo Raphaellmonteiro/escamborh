@@ -78,17 +78,23 @@ function resolveAssetUrl(origin: string, url: string | null | undefined): string
   return `${base}${path}`;
 }
 
-function buildMarks(p: CardapioPdfProduct): string {
+function buildMarks(p: CardapioPdfProduct, mode: CardapioPdfMode): string {
   const parts: string[] = [];
   if (Number(p.destaque) > 0) parts.push('<span class="mark" title="Destaque">⭐</span>');
-  if (validPromo(p)) parts.push('<span class="mark" title="Promoção">🏷</span>');
+  if (validPromo(p)) {
+    if (mode === 'modern') {
+      parts.push('<span class="mark mark--promo" title="Promoção">PROMOÇÃO</span>');
+    } else {
+      parts.push('<span class="mark" title="Promoção">🏷</span>');
+    }
+  }
   if (Number(p.mais_vendido) > 0) parts.push('<span class="mark" title="Mais vendidos">🏆</span>');
   if (parts.length === 0) return '';
   return `<span class="marks">${parts.join('')}</span>`;
 }
 
 function buildModernItem(p: CardapioPdfProduct): string {
-  const marks = buildMarks(p);
+  const marks = buildMarks(p, 'modern');
   const desc = (p.descricao || '').trim();
   const promo = validPromo(p);
   const orig = Number(p.preco_original);
@@ -113,7 +119,7 @@ function buildModernItem(p: CardapioPdfProduct): string {
 }
 
 function buildSimpleItem(p: CardapioPdfProduct): string {
-  const marks = buildMarks(p);
+  const marks = buildMarks(p, 'simple');
   const desc = (p.descricao || '').trim();
   return `
     <div class="item">
@@ -257,6 +263,7 @@ ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
   .dish-main{min-width:0;flex:1;display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 10px}
   .marks{display:inline-flex;gap:6px;flex-shrink:0;align-items:center;padding-top:2px}
   .mark{font-size:13px;line-height:1}
+  .mark--promo{font-size:8px;font-weight:800;letter-spacing:.06em;color:#fff;background:#0d9488;padding:4px 8px;border-radius:5px;line-height:1;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .dish-name{font-size:16px;font-weight:900;margin:0;letter-spacing:-0.02em;line-height:1.3;color:#0f172a;flex:1;min-width:0}
   .dish-desc{margin:10px 0 0;font-size:11px;color:#64748b;line-height:1.45;font-weight:400;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .price-col{flex-shrink:0;text-align:right;align-self:flex-start;min-width:7rem;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-start;gap:3px}

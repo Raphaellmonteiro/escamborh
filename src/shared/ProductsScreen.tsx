@@ -23,16 +23,16 @@ const fmtR$ = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace
 const fmtQtdEstoque = (q: number, unidade: string) =>
   `${Number(q || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}${unidade ? ` ${unidade}` : ''}`;
 
-const COLOR_MAP: Record<string, { bg: string; ring: string; dot: string }> = {
-  zinc:   { bg: 'bg-zinc-100',   ring: 'ring-zinc-400',   dot: 'bg-zinc-300' },
-  red:    { bg: 'bg-red-100',    ring: 'ring-red-400',    dot: 'bg-red-400' },
-  orange: { bg: 'bg-orange-100', ring: 'ring-orange-400', dot: 'bg-orange-400' },
-  amber:  { bg: 'bg-amber-100',  ring: 'ring-amber-400',  dot: 'bg-amber-400' },
-  green:  { bg: 'bg-green-100',  ring: 'ring-green-400',  dot: 'bg-green-500' },
-  teal:   { bg: 'bg-teal-100',   ring: 'ring-teal-400',   dot: 'bg-teal-500' },
-  blue:   { bg: 'bg-blue-100',   ring: 'ring-blue-400',   dot: 'bg-blue-500' },
-  purple: { bg: 'bg-purple-100', ring: 'ring-purple-400', dot: 'bg-purple-500' },
-  pink:   { bg: 'bg-pink-100',   ring: 'ring-pink-400',   dot: 'bg-pink-400' },
+const COLOR_MAP: Record<string, { bg: string }> = {
+  zinc:   { bg: 'bg-zinc-100' },
+  red:    { bg: 'bg-red-100' },
+  orange: { bg: 'bg-orange-100' },
+  amber:  { bg: 'bg-amber-100' },
+  green:  { bg: 'bg-green-100' },
+  teal:   { bg: 'bg-teal-100' },
+  blue:   { bg: 'bg-blue-100' },
+  purple: { bg: 'bg-purple-100' },
+  pink:   { bg: 'bg-pink-100' },
 };
 
 interface ProductExtended extends Product {
@@ -805,10 +805,10 @@ export default function ProductsScreen({
         {editing && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto overscroll-contain">
             <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              className="my-auto flex min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl max-h-[min(92dvh,100svh)] sm:max-h-[min(90vh,900px)] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 pt-3 pb-2 sm:px-5 sm:pt-4 2xl:px-7 2xl:pt-7 2xl:pb-3">
+              className="product-form-modal my-auto flex min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl max-h-[min(92dvh,100svh)] sm:max-h-[min(90vh,900px)] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+              <div className="product-form-modal-header flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 pt-3 pb-2 sm:px-5 sm:pt-4 2xl:px-7 2xl:pt-7 2xl:pb-3">
                 <h3 className="pr-2 text-base font-black text-zinc-900 sm:text-lg 2xl:text-xl">{editing.id ? 'Editar Produto' : 'Novo Produto'}</h3>
-                <button type="button" onClick={() => { setEditing(null); setPendingPhoto(null); }} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-zinc-100 rounded-xl text-zinc-400 shrink-0"><X size={18}/></button>
+                <button type="button" onClick={() => { setEditing(null); setPendingPhoto(null); }} className="product-form-modal-close p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-zinc-100 rounded-xl text-zinc-400 shrink-0"><X size={18}/></button>
               </div>
 
               <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 min-w-0">
@@ -845,15 +845,15 @@ export default function ProductsScreen({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 space-y-3">
+                <div className="product-form-promo-block rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-zinc-800">Promocao no cardapio online</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="product-form-section-title text-sm font-semibold text-zinc-800">Promocao no cardapio online</p>
+                      <p className="product-form-section-description text-xs text-zinc-500 mt-0.5">
                         O preco atual continua sendo o Preco de venda. O campo abaixo serve apenas para exibir o valor antigo riscado.
                       </p>
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                    <label className={`product-form-checkbox-row flex items-center gap-2 cursor-pointer shrink-0 rounded-xl border px-3 py-2 transition-all ${editing.em_promocao ? 'is-active border-rose-300 bg-white shadow-sm' : 'border-rose-100/70 bg-white/70 hover:border-rose-200'}`}>
                       <input
                         type="checkbox"
                         checked={!!editing.em_promocao}
@@ -862,9 +862,9 @@ export default function ProductsScreen({
                           em_promocao: e.target.checked ? 1 : 0,
                           preco_original: e.target.checked ? prev?.preco_original ?? undefined : null,
                         }))}
-                        className="w-4 h-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                        className="product-form-checkbox h-4 w-4 rounded border-rose-300 accent-rose-500"
                       />
-                      <span className="text-sm font-medium text-zinc-700">Produto em promocao</span>
+                      <span className="product-form-checkbox-label text-sm font-medium text-zinc-700">Produto em promocao</span>
                     </label>
                   </div>
 
@@ -881,10 +881,10 @@ export default function ProductsScreen({
                             ...prev,
                             preco_original: e.target.value === '' ? null : (parseFloat(e.target.value) || 0),
                           }))}
-                          className="w-full px-3.5 py-2.5 border border-rose-200 bg-white rounded-xl text-sm focus:outline-none focus:border-rose-400"
+                          className="product-form-promo-input w-full px-3.5 py-2.5 border border-rose-200 bg-white rounded-xl text-sm focus:outline-none focus:border-rose-400"
                         />
                       </div>
-                      <div className="rounded-xl border border-rose-100 bg-white px-3.5 py-2.5 flex flex-col justify-center">
+                      <div className="product-form-promo-preview rounded-xl border border-rose-100 bg-white px-3.5 py-2.5 flex flex-col justify-center">
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Preview</span>
                         <div className="mt-1 flex items-baseline gap-2">
                           <span className="text-base font-black text-zinc-900">{fmtR$(Number(editing.price || 0))}</span>
@@ -897,7 +897,7 @@ export default function ProductsScreen({
                   )}
 
                   {getPromotionValidationMessage(editing) && (
-                    <div className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
+                    <div className="product-form-promo-alert rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
                       {getPromotionValidationMessage(editing)}
                     </div>
                   )}
@@ -942,10 +942,10 @@ export default function ProductsScreen({
                   </div>
                 </div>
 
-                <div className={adminOpsMutedBlockClass}>
+                <div className={`${adminOpsMutedBlockClass} product-form-production-block`}>
                   <div>
-                    <span className="block text-sm font-semibold text-zinc-800">Setor de producao</span>
-                    <span className="block text-xs text-zinc-500 mt-0.5">
+                    <span className="product-form-section-title block text-sm font-semibold text-zinc-800">Setor de producao</span>
+                    <span className="product-form-section-description block text-xs text-zinc-500 mt-0.5">
                       Define se o item vai para cozinha, bar, balcao/pronto ou se nao entra em fila de producao.
                     </span>
                   </div>
@@ -962,26 +962,18 @@ export default function ProductsScreen({
                             production_type: value,
                             requires_preparation: value === 'kitchen' || value === 'bar' ? 1 : 0,
                           }))}
-                          className={`rounded-xl border px-3 py-3 text-left transition-all ${isSelected ? 'border-zinc-900 bg-white shadow-sm' : 'border-zinc-200 bg-white/70 hover:bg-white'}`}
+                          aria-pressed={isSelected}
+                          data-production-type={value}
+                          className={`product-form-production-option rounded-xl border px-3 py-3 text-left transition-all ${isSelected ? 'is-selected border-zinc-900 bg-white shadow-sm' : 'border-zinc-200 bg-white/70 hover:bg-white'}`}
                         >
-                          <span className="block text-sm font-bold text-zinc-900">{meta.label}</span>
-                          <span className="block text-xs text-zinc-500 mt-1">{meta.description}</span>
+                          <span className="product-form-option-title block text-sm font-bold text-zinc-900">{meta.label}</span>
+                          <span className="product-form-option-description block text-xs text-zinc-500 mt-1">{meta.description}</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Cor */}
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">Cor de destaque</label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(COLOR_MAP).map(([color, cls]) => (
-                      <button key={color} type="button" onClick={() => setEditing(p => ({...p, color}))}
-                        className={`w-8 h-8 rounded-full border-2 transition-all ${cls.bg} border-transparent ${editing.color === color ? `ring-2 ${cls.ring} ring-offset-2 scale-110 border-white` : 'opacity-60 hover:opacity-100'}`}/>
-                    ))}
-                  </div>
-                </div>
 
                 {/* Código de barras + Marca */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

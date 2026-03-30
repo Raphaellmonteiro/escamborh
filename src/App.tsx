@@ -5,10 +5,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  LayoutDashboard, ShoppingCart, Package, LogOut, Archive,
-  Settings, Monitor, UtensilsCrossed,
-  DollarSign, History, FileText, Users, Lock, Bell, Bike,
-  Menu, LayoutGrid, List, Volume2, VolumeX,
+  LogOut, Monitor, Lock, Bell, Menu, Volume2, VolumeX,
 } from 'lucide-react';
 
 import type { Product, CaixaStatusApi, Order } from './types';
@@ -311,9 +308,9 @@ export default function App() {
       .flowpdv-dark .shadow-xl  { box-shadow: 0 16px 48px rgba(0,0,0,.7) !important; }
       .flowpdv-dark .shadow-2xl { box-shadow: 0 24px 64px rgba(0,0,0,.8) !important; }
 
-      /* Sidebar link active */
-      .flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) span,
-      .flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) svg { color: #111 !important; }
+      /* Ícones SVG em superfície zinc-900 — herdam cor do botão (evita forçar cor em spans/emojis) */
+      .flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) svg { color: currentColor !important; }
+      .flowpdv-dark .flowpdv-nav-item-icon-slot { color: inherit !important; }
 
       /* Amber / yellow tones (keep warm) */
       .flowpdv-dark .bg-amber-50  { background-color: #1e1800 !important; }
@@ -979,7 +976,7 @@ const handleAuth = async (e: React.FormEvent) => {
 
      <nav className="flex-1 min-h-0 space-y-1.5 overflow-y-auto p-2.5 lg:p-2.5 lg:space-y-1 xl:p-3 xl:space-y-1.5">
           {(() => { return (<> 
-            {canAccess('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon={<ShoppingCart size={20} />} label={segCfg.labelSidebarPOS} />}
+            {canAccess('pos')    && <NavItem active={activeTab === 'pos'}    onClick={() => handleTabChange('pos')}    icon="🛒" label={segCfg.labelSidebarPOS} />}
             {canAccess('orders') && (
               <>
                 <NavItem
@@ -987,39 +984,39 @@ const handleAuth = async (e: React.FormEvent) => {
                   attention={operationalNeedsAttention}
                   badgeCount={operationalAlertCount > 0 ? operationalAlertCount : undefined}
                   onClick={() => handleTabChange('central')}
-                  icon={<LayoutGrid size={20} />}
+                  icon="🧩"
                   label="Operação"
                 />
                 <NavItem
                   active={activeTab === 'orders'}
                   onClick={() => handleTabChange('orders')}
-                  icon={<List size={20} />}
+                  icon="📜"
                   label="Consulta de pedidos"
                 />
               </>
             )}
             {canAccess('delivery') && permiteDelivery && (
-              <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon={<Bike size={20} />} label="Delivery" />
+              <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon="🛵" label="Delivery" />
             )}
             {permiteMesas && canAccess('mesas') && (
-              <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon={<UtensilsCrossed size={20} />} label="Mesas" />
+              <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon="🍽️" label="Mesas" />
             )}
-            {canAccess('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon={<Package size={20} />} label={segCfg.labelSidebarProdutos} />}
-            {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon={<Archive size={20} />}  label="Estoque" />}
+            {canAccess('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon="📖" label={segCfg.labelSidebarProdutos} />}
+            {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon="📦"  label="Estoque" />}
           </>); })()}
           {canAccess('nfse') && (
             <a href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer"
               onClick={() => setMobileNavOpen(false)}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 min-h-[44px]">
-              <FileText size={20} />
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[16px] leading-none" aria-hidden>📄</span>
               <span className="font-medium">NFS-e</span>
             </a>
           )}
-          {canAccess('dashboard')    && <NavItem active={activeTab === 'dashboard'}    onClick={() => handleTabChange('dashboard')}    icon={<LayoutDashboard size={20} />} label="Dashboard" />}
-          {canAccess('finance')      && <NavItem active={activeTab === 'finance'}      onClick={() => handleTabChange('finance')}      icon={<DollarSign size={20} />}      label="Financeiro" />}
-          {canAccess('funcionarios') && <NavItem active={activeTab === 'funcionarios'} onClick={() => handleTabChange('funcionarios')} icon={<Users size={20} />}           label="RH" />}
-          {canAccess('logs')         && <NavItem active={activeTab === 'logs'}         onClick={() => handleTabChange('logs')}         icon={<History size={20} />}         label="Logs" />}
-          {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon={<Settings size={20} />}        label="Configurações" />}
+          {canAccess('dashboard')    && <NavItem active={activeTab === 'dashboard'}    onClick={() => handleTabChange('dashboard')}    icon="📊" label="Dashboard" />}
+          {canAccess('finance')      && <NavItem active={activeTab === 'finance'}      onClick={() => handleTabChange('finance')}      icon="💰"      label="Financeiro" />}
+          {canAccess('funcionarios') && <NavItem active={activeTab === 'funcionarios'} onClick={() => handleTabChange('funcionarios')} icon="👥"           label="RH" />}
+          {canAccess('logs')         && <NavItem active={activeTab === 'logs'}         onClick={() => handleTabChange('logs')}         icon="🕘"         label="Logs" />}
+          {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon="⚙️"        label="Configurações" />}
         </nav>
 
         <div className="flex-shrink-0 space-y-2 border-t border-zinc-100 p-2.5 lg:p-2.5 xl:space-y-2.5 xl:p-3">
@@ -1146,7 +1143,7 @@ const handleAuth = async (e: React.FormEvent) => {
                 {operationalAlertCount > 99 ? '99+' : operationalAlertCount}
               </span>
             )}
-            <LayoutGrid size={22} strokeWidth={2.2} />
+            <span className="text-[20px] leading-none" aria-hidden>🧩</span>
           </div>
         </div>
       )}

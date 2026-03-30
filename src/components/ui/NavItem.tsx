@@ -27,7 +27,7 @@ export default function NavItem({ active = false, attention = false, badgeCount,
         }`}
       />
       <span
-        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all lg:h-10 lg:w-10 ${
+        className={`flowpdv-nav-item-icon-slot inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all lg:h-10 lg:w-10 ${
           active
             ? 'border-white/10 bg-white/12 text-white'
             : attention
@@ -35,7 +35,9 @@ export default function NavItem({ active = false, attention = false, badgeCount,
             : 'border-zinc-200 bg-zinc-50 text-zinc-500 group-hover:border-zinc-300 group-hover:bg-white group-hover:text-zinc-700'
         }`}
       >
-        {icon}
+        <span className="flex h-full w-full items-center justify-center text-[16px] leading-none tracking-normal [.flowpdv-dark_&]:text-[15px]" aria-hidden>
+          {icon}
+        </span>
       </span>
       <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold leading-snug tracking-tight lg:text-sm">
         {label}
