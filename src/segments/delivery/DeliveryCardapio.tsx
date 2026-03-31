@@ -1825,7 +1825,14 @@ export default function DeliveryCardapio() {
 
   if (tela==='confirmado'&&pedidoOk) return (
     <CardapioThemeShell theme={cardapioTheme}>
-      <TelaConfirmado pedidoOk={pedidoOk} config={config} slug={slug} tipoAtendimento={tipoAtendimento || 'entrega'} onNovo={()=>{setPedidoOk(null);setTipoAtendimento(null);setTela('cardapio');}} />
+      <TelaConfirmado
+        pedidoOk={pedidoOk}
+        config={config}
+        slug={slug}
+        tipoAtendimento={tipoAtendimento || 'entrega'}
+        clienteToken={cliToken}
+        onNovo={()=>{setPedidoOk(null);setTipoAtendimento(null);setTela('cardapio');}}
+      />
     </CardapioThemeShell>
   );
   if (tela==='identificar') return (
@@ -3115,14 +3122,14 @@ function SacolaUpsellCard({
       className={
         featured
           ? isLightRed
-            ? 'flex min-h-[288px] flex-col rounded-[24px] border-2 border-red-400/80 bg-[linear-gradient(180deg,#fffdf9_0%,#ffe8e0_100%)] p-4 shadow-[0_18px_40px_rgba(220,38,38,0.14)] ring-1 ring-red-200/90 sm:min-h-[308px]'
-            : 'flex min-h-[288px] flex-col rounded-[24px] border-2 border-cyan-400/45 bg-[linear-gradient(180deg,rgba(18,20,32,1)_0%,rgba(12,28,38,0.98)_100%)] p-4 shadow-[0_20px_48px_rgba(34,211,238,0.14)] ring-1 ring-cyan-300/25 sm:min-h-[308px]'
+            ? 'flex min-h-[236px] flex-col rounded-[20px] border-2 border-red-400/70 bg-[linear-gradient(180deg,#fffdf9_0%,#ffe8e0_100%)] p-3 shadow-[0_10px_28px_rgba(220,38,38,0.10)] ring-1 ring-red-200/70 sm:min-h-[248px] sm:p-3.5'
+            : 'flex min-h-[236px] flex-col rounded-[20px] border border-cyan-400/35 bg-[linear-gradient(180deg,rgba(16,18,28,1)_0%,rgba(10,22,30,0.99)_100%)] p-3 shadow-[0_12px_32px_rgba(0,0,0,0.35)] ring-1 ring-cyan-400/25 sm:min-h-[248px] sm:p-3.5'
           : isLightRed
-            ? 'flex h-full min-h-[248px] flex-col rounded-[22px] border border-stone-300/80 bg-[#fffefc] p-3 shadow-sm sm:min-h-[256px] sm:p-3.5'
-            : 'flex h-full min-h-[248px] flex-col rounded-[22px] border border-white/12 bg-zinc-950 p-3 sm:min-h-[256px] sm:p-3.5'
+            ? 'flex h-full min-h-[200px] flex-col rounded-[18px] border border-stone-300/80 bg-[#fffefc] p-3 shadow-sm sm:min-h-[208px] sm:rounded-[20px] sm:p-3.5'
+            : 'flex h-full min-h-[200px] flex-col rounded-[18px] border border-white/12 bg-zinc-950 p-3 sm:min-h-[208px] sm:rounded-[20px] sm:p-3.5'
       }
     >
-      <div className="shrink-0 space-y-2.5 sm:space-y-3">
+      <div className="shrink-0 space-y-2 sm:space-y-2.5">
         {card.item.photo_url ? (
           <img
             src={card.item.photo_url}
@@ -3130,11 +3137,11 @@ function SacolaUpsellCard({
             className={
               featured
                 ? isLightRed
-                  ? 'aspect-[16/9] w-full rounded-[20px] border-2 border-red-200/90 object-cover shadow-[0_12px_28px_rgba(220,38,38,0.12)] sm:aspect-[16/10]'
-                  : 'aspect-[16/9] w-full rounded-[20px] border border-cyan-300/30 object-cover shadow-[0_18px_40px_rgba(0,0,0,0.32)] sm:aspect-[16/10]'
+                  ? 'aspect-[4/3] w-full rounded-[14px] border-2 border-red-200/85 object-cover shadow-[0_8px_22px_rgba(220,38,38,0.10)] sm:rounded-[16px]'
+                  : 'aspect-[4/3] w-full rounded-[14px] border border-cyan-400/25 object-cover shadow-[0_10px_26px_rgba(0,0,0,0.28)] sm:rounded-[16px]'
                 : isLightRed
-                  ? 'aspect-[5/4] w-full rounded-[16px] border border-stone-200 object-cover shadow-sm sm:rounded-[18px]'
-                  : 'aspect-[5/4] w-full rounded-[16px] border border-white/10 object-cover shadow-[0_12px_28px_rgba(0,0,0,0.22)] sm:rounded-[18px]'
+                  ? 'aspect-[4/3] w-full rounded-[14px] border border-stone-200 object-cover shadow-sm sm:rounded-[16px]'
+                  : 'aspect-[4/3] w-full rounded-[14px] border border-white/10 object-cover shadow-[0_8px_22px_rgba(0,0,0,0.2)] sm:rounded-[16px]'
             }
           />
         ) : (
@@ -3142,11 +3149,11 @@ function SacolaUpsellCard({
             className={
               featured
                 ? isLightRed
-                  ? 'flex aspect-[16/9] w-full items-center justify-center rounded-[20px] border-2 border-red-200/90 bg-red-50/80 text-xs font-black tracking-[0.18em] text-red-700 sm:aspect-[16/10]'
-                  : 'flex aspect-[16/9] w-full items-center justify-center rounded-[20px] border border-cyan-300/25 bg-cyan-400/10 text-xs font-black tracking-[0.18em] text-cyan-200 sm:aspect-[16/10]'
+                  ? 'flex aspect-[4/3] w-full items-center justify-center rounded-[14px] border-2 border-red-200/85 bg-red-50/80 text-[10px] font-black tracking-[0.16em] text-red-700 sm:rounded-[16px]'
+                  : 'flex aspect-[4/3] w-full items-center justify-center rounded-[14px] border border-cyan-400/25 bg-cyan-400/[0.08] text-[10px] font-black tracking-[0.16em] text-cyan-200 sm:rounded-[16px]'
                 : isLightRed
-                  ? 'flex aspect-[5/4] w-full items-center justify-center rounded-[16px] border border-stone-200 bg-stone-100 text-[10px] font-black tracking-[0.16em] text-stone-600 sm:rounded-[18px]'
-                  : 'flex aspect-[5/4] w-full items-center justify-center rounded-[16px] border border-white/10 bg-black/25 text-[10px] font-black tracking-[0.16em] text-cyan-200 sm:rounded-[18px]'
+                  ? 'flex aspect-[4/3] w-full items-center justify-center rounded-[14px] border border-stone-200 bg-stone-100 text-[10px] font-black tracking-[0.16em] text-stone-600 sm:rounded-[16px]'
+                  : 'flex aspect-[4/3] w-full items-center justify-center rounded-[14px] border border-white/10 bg-black/25 text-[10px] font-black tracking-[0.16em] text-cyan-200 sm:rounded-[16px]'
             }
           >
             ITEM
@@ -3154,13 +3161,13 @@ function SacolaUpsellCard({
         )}
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`inline-flex w-fit max-w-full items-center truncate rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${featured ? (isLightRed ? 'bg-red-600 text-white ring-1 ring-red-600/70' : 'bg-cyan-300 text-zinc-950 ring-1 ring-cyan-200/80') : (isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10')}`}
+            className={`inline-flex w-fit max-w-full items-center truncate rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] sm:px-2.5 sm:py-1 sm:text-[10px] ${featured ? (isLightRed ? 'bg-red-600 text-white ring-1 ring-red-600/70' : 'bg-cyan-300/95 text-zinc-950 ring-1 ring-cyan-200/50') : (isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/[0.07] text-zinc-200 ring-1 ring-white/10')}`}
           >
             {card.badge}
           </span>
           {featured && (
             <span
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-cyan-300/20'}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] sm:px-2.5 sm:py-1 sm:text-[10px] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/[0.08] text-cyan-100 ring-1 ring-cyan-400/25'}`}
             >
               Escolha da casa
             </span>
@@ -3168,21 +3175,21 @@ function SacolaUpsellCard({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 pt-2.5 sm:pt-3">
+      <div className="min-h-0 flex-1 pt-2 sm:pt-2.5">
         {card.item.category ? (
           <p
-            className={`line-clamp-1 text-[10px] font-black uppercase tracking-[0.14em] ${featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/80') : (isLightRed ? 'text-stone-500' : 'text-zinc-400')}`}
+            className={`line-clamp-1 text-[9px] font-black uppercase tracking-[0.14em] sm:text-[10px] ${featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/75') : (isLightRed ? 'text-stone-500' : 'text-zinc-400')}`}
           >
             {card.item.category}
           </p>
         ) : (
-          <div className="h-[12px]" aria-hidden />
+          <div className="h-[10px] sm:h-[12px]" aria-hidden />
         )}
         <p
           className={
             featured
-              ? `mt-2 line-clamp-2 text-[17px] font-black leading-snug tracking-tight sm:text-[19px] ${isLightRed ? 'text-stone-900' : 'text-white'}`
-              : `mt-1.5 line-clamp-2 text-[14px] font-black leading-snug sm:mt-2 sm:text-[15px] ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`
+              ? `mt-1 line-clamp-2 text-[15px] font-black leading-snug tracking-tight sm:mt-1.5 sm:text-base ${isLightRed ? 'text-stone-900' : 'text-white'}`
+              : `mt-1 line-clamp-2 text-[13px] font-black leading-snug sm:text-[14px] ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`
           }
         >
           {card.item.name}
@@ -3190,33 +3197,33 @@ function SacolaUpsellCard({
         <p
           className={
             featured
-              ? `mt-2 line-clamp-2 text-[12px] leading-relaxed sm:text-[13px] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`
-              : `mt-1.5 line-clamp-2 min-h-[2.25rem] text-[11px] leading-relaxed sm:min-h-[2.5rem] sm:text-[12px] ${isLightRed ? 'text-stone-600' : 'text-zinc-400'}`
+              ? `mt-1 line-clamp-2 text-[11px] leading-relaxed sm:text-[12px] ${isLightRed ? 'text-stone-600' : 'text-zinc-400'}`
+              : `mt-1 line-clamp-2 text-[11px] leading-relaxed sm:min-h-[2.25rem] sm:text-[11.5px] ${isLightRed ? 'text-stone-600' : 'text-zinc-400'}`
           }
         >
           {card.headline}
         </p>
         {featured && (
-          <p className={`mt-2 line-clamp-2 text-[11px] leading-relaxed sm:text-xs ${isLightRed ? 'text-stone-500' : 'text-zinc-500'}`}>
+          <p className={`mt-1 line-clamp-1 text-[10px] leading-relaxed sm:line-clamp-2 sm:text-[11px] ${isLightRed ? 'text-stone-500' : 'text-zinc-500'}`}>
             {card.support}
           </p>
         )}
       </div>
 
       <div
-        className={`mt-3 flex shrink-0 flex-col gap-3 border-t pt-3 sm:mt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 ${featured ? (isLightRed ? 'border-red-200/80' : 'border-cyan-300/15') : (isLightRed ? 'border-stone-200/80' : 'border-white/10')}`}
+        className={`mt-2.5 flex shrink-0 flex-col gap-2.5 border-t pt-2.5 sm:mt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:pt-3 ${featured ? (isLightRed ? 'border-red-200/70' : 'border-cyan-400/12') : (isLightRed ? 'border-stone-200/80' : 'border-white/10')}`}
       >
         <div className="min-w-0 flex-1">
           <p
-            className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/75') : (isLightRed ? 'text-stone-500' : 'text-zinc-500')}`}
+            className={`text-[9px] font-semibold uppercase tracking-[0.16em] sm:text-[10px] ${featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/70') : (isLightRed ? 'text-stone-500' : 'text-zinc-500')}`}
           >
             {card.pricePrefix}
           </p>
           <p
             className={
               featured
-                ? `mt-1 break-words text-2xl font-black tabular-nums leading-none sm:text-[1.65rem] ${isLightRed ? 'text-red-700' : 'text-cyan-200'}`
-                : `mt-0.5 break-words text-base font-black tabular-nums leading-tight sm:text-lg ${isLightRed ? 'text-red-700' : 'text-cyan-300'}`
+                ? `mt-0.5 break-words text-xl font-black tabular-nums leading-none sm:text-[1.35rem] ${isLightRed ? 'text-red-700' : 'text-cyan-200'}`
+                : `mt-0.5 break-words text-[15px] font-black tabular-nums leading-tight sm:text-base ${isLightRed ? 'text-red-700' : 'text-cyan-300'}`
             }
           >
             {fmt(card.displayPrice)}
@@ -3228,11 +3235,11 @@ function SacolaUpsellCard({
           className={
             featured
               ? isLightRed
-                ? 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-2xl bg-red-600 px-4 py-3 text-xs font-black text-white shadow-[0_10px_24px_rgba(220,38,38,0.20)] transition-colors hover:bg-red-700 sm:min-h-[44px] sm:w-auto sm:min-w-[7.5rem]'
-                : 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-2xl bg-cyan-300 px-4 py-3 text-xs font-black text-zinc-950 shadow-[0_10px_24px_rgba(34,211,238,0.16)] transition-colors hover:bg-cyan-200 sm:min-h-[44px] sm:w-auto sm:min-w-[7.5rem]'
+                ? 'inline-flex min-h-[44px] w-full shrink-0 items-center justify-center rounded-xl bg-red-600 px-3.5 py-2.5 text-[11px] font-black text-white shadow-[0_8px_20px_rgba(220,38,38,0.18)] transition-colors hover:bg-red-700 sm:min-h-[42px] sm:w-auto sm:min-w-[6.75rem] sm:text-xs'
+                : 'inline-flex min-h-[44px] w-full shrink-0 items-center justify-center rounded-xl bg-cyan-300 px-3.5 py-2.5 text-[11px] font-black text-zinc-950 shadow-[0_8px_20px_rgba(34,211,238,0.12)] transition-colors hover:bg-cyan-200 sm:min-h-[42px] sm:w-auto sm:min-w-[6.75rem] sm:text-xs'
               : isLightRed
-                ? 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-red-600 px-3 py-2.5 text-[11px] font-black text-white transition-colors hover:bg-red-700 sm:min-h-[44px] sm:w-auto sm:min-w-[6.75rem]'
-                : 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2.5 text-[11px] font-black text-zinc-950 transition-colors hover:bg-cyan-300 sm:min-h-[44px] sm:w-auto sm:min-w-[6.75rem]'
+                ? 'inline-flex min-h-[44px] w-full shrink-0 items-center justify-center rounded-xl bg-red-600 px-3 py-2.5 text-[11px] font-black text-white transition-colors hover:bg-red-700 sm:min-h-[42px] sm:w-auto sm:min-w-[6.5rem]'
+                : 'inline-flex min-h-[44px] w-full shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2.5 text-[11px] font-black text-zinc-950 transition-colors hover:bg-cyan-300 sm:min-h-[42px] sm:w-auto sm:min-w-[6.5rem]'
           }
         >
           {card.cta}
@@ -3433,8 +3440,8 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 id="sacola-upsell"
                 className={
                   isLightRed
-                    ? 'scroll-mt-4 space-y-4 rounded-[30px] border border-stone-500/40 bg-[#faf6f0] p-4 shadow-sm ring-1 ring-stone-400/15 sm:p-5'
-                    : 'scroll-mt-4 space-y-4 rounded-[30px] border border-white/10 bg-zinc-900 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)] sm:p-5'
+                    ? 'scroll-mt-4 space-y-3 rounded-[24px] border border-stone-500/40 bg-[#faf6f0] p-3.5 shadow-sm ring-1 ring-stone-400/15 sm:space-y-4 sm:rounded-[28px] sm:p-5'
+                    : 'scroll-mt-4 space-y-3 rounded-[24px] border border-white/10 bg-zinc-900 p-3.5 shadow-[0_14px_40px_rgba(0,0,0,0.2)] sm:space-y-4 sm:rounded-[28px] sm:p-5'
                 }
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -3466,34 +3473,36 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 )}
 
                 {showSuggestionSkeleton && (
-                  <div className="flex min-h-[200px] flex-col gap-3 motion-reduce:animate-none" aria-busy="true" aria-live="polite">
+                  <div className="flex min-h-[160px] flex-col gap-3 sm:gap-3.5 motion-reduce:animate-none" aria-busy="true" aria-live="polite">
                     <div
-                      className={`rounded-[24px] border-2 p-4 opacity-75 motion-reduce:opacity-100 ${isLightRed ? 'border-red-200/80 bg-[#fffefc]' : 'border-cyan-500/20 bg-zinc-950'}`}
+                      className={`rounded-[20px] border p-3 opacity-75 motion-reduce:opacity-100 sm:p-3.5 ${isLightRed ? 'border-red-200/80 bg-[#fffefc] ring-1 ring-red-100/80' : 'border-cyan-400/20 bg-zinc-950 ring-1 ring-cyan-400/15'}`}
                     >
-                      <div className={`aspect-[16/9] w-full rounded-[20px] animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/90' : 'bg-white/[0.08]'}`} />
-                      <div className={`mt-3 h-5 w-32 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.07]'}`} />
-                      <div className={`mt-4 h-4 w-24 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/70' : 'bg-white/[0.06]'}`} />
-                      <div className={`mt-2 h-6 w-[88%] rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/70' : 'bg-white/[0.08]'}`} />
-                      <div className={`mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-end sm:justify-between ${isLightRed ? 'border-stone-200/60' : 'border-white/10'}`}>
-                        <div className="space-y-2">
-                          <div className={`h-3 w-16 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.06]'}`} />
-                          <div className={`h-8 w-28 rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.08]'}`} />
+                      <div className={`aspect-[4/3] w-full rounded-[14px] animate-pulse motion-reduce:animate-none sm:rounded-[16px] ${isLightRed ? 'bg-stone-200/90' : 'bg-white/[0.08]'}`} />
+                      <div className={`mt-2 flex gap-2`}>
+                        <div className={`h-4 w-24 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.07]'}`} />
+                        <div className={`h-4 w-20 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/70' : 'bg-white/[0.06]'}`} />
+                      </div>
+                      <div className={`mt-2 h-4 w-[90%] rounded-lg animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/70' : 'bg-white/[0.08]'}`} />
+                      <div className={`mt-2 flex flex-col gap-2.5 border-t pt-2.5 sm:flex-row sm:items-end sm:justify-between ${isLightRed ? 'border-stone-200/60' : 'border-white/10'}`}>
+                        <div className="space-y-1.5">
+                          <div className={`h-2.5 w-14 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.06]'}`} />
+                          <div className={`h-6 w-24 rounded-md animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.08]'}`} />
                         </div>
-                        <div className={`h-12 w-full rounded-2xl animate-pulse motion-reduce:animate-none sm:h-11 sm:w-[7.5rem] ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.09]'}`} />
+                        <div className={`h-10 w-full rounded-xl animate-pulse motion-reduce:animate-none sm:h-[42px] sm:w-[6.75rem] ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.09]'}`} />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:items-stretch sm:gap-3.5">
                       {[0, 1].map((index) => (
                         <div
                           key={`suggestion-skeleton-compact-${index}`}
-                          className={`flex min-h-[220px] flex-col rounded-[22px] border p-3 opacity-70 motion-reduce:opacity-100 ${isLightRed ? 'border-stone-300/70 bg-[#fffefc]' : 'border-white/10 bg-zinc-950'}`}
+                          className={`flex min-h-[200px] flex-col rounded-[18px] border p-3 opacity-70 motion-reduce:opacity-100 sm:min-h-[208px] sm:rounded-[20px] sm:p-3.5 ${isLightRed ? 'border-stone-300/70 bg-[#fffefc]' : 'border-white/10 bg-zinc-950'}`}
                         >
-                          <div className={`aspect-[5/4] w-full rounded-[16px] animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/90' : 'bg-white/[0.08]'}`} />
-                          <div className={`mt-2.5 h-3 w-14 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.06]'}`} />
-                          <div className={`mt-2 h-10 w-full rounded-lg animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/70' : 'bg-white/[0.07]'}`} />
-                          <div className={`mt-auto flex flex-col gap-2 border-t pt-3 ${isLightRed ? 'border-stone-200/60' : 'border-white/10'}`}>
-                            <div className={`h-6 w-20 rounded-md animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.08]'}`} />
-                            <div className={`h-11 w-full rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.09]'}`} />
+                          <div className={`aspect-[4/3] w-full rounded-[14px] animate-pulse motion-reduce:animate-none sm:rounded-[16px] ${isLightRed ? 'bg-stone-200/90' : 'bg-white/[0.08]'}`} />
+                          <div className={`mt-2 h-3 w-14 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.06]'}`} />
+                          <div className={`mt-2 h-9 w-full rounded-lg animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/70' : 'bg-white/[0.07]'}`} />
+                          <div className={`mt-auto flex flex-col gap-2 border-t pt-2.5 ${isLightRed ? 'border-stone-200/60' : 'border-white/10'}`}>
+                            <div className={`h-5 w-20 rounded-md animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.08]'}`} />
+                            <div className={`h-10 w-full rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.09]'}`} />
                           </div>
                         </div>
                       ))}
@@ -3502,14 +3511,14 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 )}
 
                 {!showSuggestionSkeleton && suggestionCards.length > 0 && (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 sm:gap-3.5">
                     <SacolaUpsellCard card={suggestionCards[0]} isLightRed={isLightRed} onAdd={handleSuggestionAdd} />
                     {suggestionCards.length > 1 && (
                       <div
                         className={
                           suggestionCards.length === 2
-                            ? 'flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:items-stretch'
-                            : 'grid grid-cols-2 gap-3 sm:items-stretch'
+                            ? 'grid grid-cols-1 gap-3 sm:gap-3.5'
+                            : 'grid grid-cols-2 gap-3 sm:items-stretch sm:gap-3.5'
                         }
                       >
                         {suggestionCards.slice(1).map((card) => (
@@ -5319,7 +5328,7 @@ const finalizar = async () => {
   );
 }
 
-function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { pedidoOk:any;config:Config;slug:string;tipoAtendimento: TipoAtendimento;onNovo:()=>void }) {
+function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken, onNovo }: { pedidoOk:any;config:Config;slug:string;tipoAtendimento: TipoAtendimento;clienteToken:string|null;onNovo:()=>void }) {
   const isPix = pedidoOk.pagamento_tipo === 'pix';
   const isRetirada = pedidoOk.canal === 'retirada' || tipoAtendimento === 'retirada';
   const pixResolvidoNoCheckoutModal = pedidoOk.checkout_modal_concluido === true;
@@ -5362,7 +5371,10 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, onNovo }: { p
   const confirmarPagamento = async () => {
     setConfirmando(true);
     try {
-      await fetch(`/public/delivery/${slug}/pedido/${pedidoOk.orderId}/confirmar-pix`, { method:'POST' });
+      const headers: Record<string, string> = {};
+      if (clienteToken) headers.Authorization = `Bearer ${clienteToken}`;
+      const r = await fetch(`/public/delivery/${slug}/pedido/${pedidoOk.orderId}/confirmar-pix`, { method:'POST', headers });
+      if (!r.ok) throw new Error('confirmar-pix');
       setPixPago(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {}

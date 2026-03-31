@@ -9,6 +9,7 @@ import {
   deliveryPublicPedidoCreateRateLimit,
   deliveryPublicPedidoResumoRateLimit,
   authDeliveryCliente,
+  optionalAuthDeliveryCliente,
 } from '../middleware';
 import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
@@ -1490,24 +1491,71 @@ export function createDeliveryPublicRouter() {
       }
     });
 
-  router.post('/:slug/pedido/:pedidoId/confirmar-pix', requireDeliveryTrackingPlan, async (req, res) => {
-    try {
-      const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [req.params.slug, 'ativo']);
-      if (!tenant) return res.status(404).json({ error: 'Estabelecimento nao encontrado' });
-      const pedido = await q1('SELECT id, pagamento_status, canal FROM pedidos WHERE id=? AND tenant_id=?', [req.params.pedidoId, tenant.id]);
-      if (!pedido) return res.status(404).json({ error: 'Pedido nao encontrado' });
-      if (pedido.canal !== 'delivery' && pedido.canal !== 'retirada') {
-        return res.status(400).json({ error: 'Canal do pedido nao permite confirmacao por aqui' });
+  router.post(
+    '/:slug/pedido/:pedidoId/confirmar-pix',
+    publicRateLimit,
+    requireDeliveryTrackingPlan,
+    optionalAuthDeliveryCliente,
+    async (req: any, res) => {
+      try {
+        const pedidoId = Number(req.params.pedidoId);
+        if (!Number.isInteger(pedidoId) || pedidoId <= 0) {
+          return res.status(400).json({ error: 'Pedido invalido' });
+        }
+
+        const tenant = await q1('SELECT id FROM clientes WHERE usuario=? AND status=?', [req.params.slug, 'ativo']);
+        if (!tenant) return res.status(404).json({ error: 'Estabelecimento nao encontrado' });
+
+        const pedido = await q1<{
+          id: number;
+          pagamento_status: string | null;
+          canal: string | null;
+          delivery_cliente_id: number | null;
+          cliente_id: number | null;
+        }>(
+          'SELECT id, pagamento_status, canal, delivery_cliente_id, cliente_id FROM pedidos WHERE id=? AND tenant_id=?',
+          [pedidoId, tenant.id]
+        );
+        if (!pedido) return res.status(404).json({ error: 'Pedido nao encontrado' });
+        if (pedido.canal !== 'delivery' && pedido.canal !== 'retirada') {
+          return res.status(400).json({ error: 'Canal do pedido nao permite confirmacao por aqui' });
+        }
+
+        const ownerClienteId = Number(pedido.delivery_cliente_id || pedido.cliente_id || 0);
+        if (ownerClienteId > 0) {
+          if (req.clienteId == null) {
+            return res.status(401).json({
+              error: 'Identifique-se para confirmar o pagamento deste pedido',
+              code: 'DELIVERY_CONFIRMAR_PIX_AUTH',
+            });
+          }
+          if (Number(req.tenantId) !== Number(tenant.id)) {
+            return res.status(403).json({ error: 'Token nao corresponde a esta loja' });
+          }
+          if (Number(req.clienteId) !== ownerClienteId) {
+            return res.status(403).json({ error: 'Pedido nao pertence a esta conta' });
+          }
+        }
+
+        const ps = String(pedido.pagamento_status || '').trim().toLowerCase();
+        if (ps === 'pago') {
+          return res.json({ success: true, pagamento_status: 'pago' });
+        }
+        if (ps === 'aguardando_confirmacao') {
+          return res.json({ success: true, pagamento_status: 'aguardando_confirmacao' });
+        }
+
+        await qRun("UPDATE pedidos SET pagamento_status='aguardando_confirmacao' WHERE id=? AND tenant_id=?", [
+          pedido.id,
+          tenant.id,
+        ]);
+        notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(pedido.id) });
+        res.json({ success: true, pagamento_status: 'aguardando_confirmacao' });
+      } catch (e: any) {
+        sendInternalError(res, 'delivery-public', e);
       }
-      if (pedido.pagamento_status !== 'pago') {
-        await qRun("UPDATE pedidos SET pagamento_status='aguardando_confirmacao' WHERE id=? AND tenant_id=?", [pedido.id, tenant.id]);
-      }
-      notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(pedido.id) });
-      res.json({ success: true, pagamento_status: 'aguardando_confirmacao' });
-    } catch (e: any) {
-      sendInternalError(res, 'delivery-public', e);
     }
-  });
+  );
 
   router.post('/:slug/suggestions', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {

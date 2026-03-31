@@ -505,6 +505,23 @@ export const authDeliveryCliente = (req: any, res: any, next: any) => {
   } catch { return res.status(403).json({ error: 'Token de cliente inválido' }); }
 };
 
+/** JWT de cliente delivery quando enviado; se o header existir e for inválido, responde 403. Pedidos sem vínculo de cliente não exigem token na rota que usar isto. */
+export const optionalAuthDeliveryCliente = (req: any, res: any, next: any) => {
+  const token = extractBearerToken(req);
+  if (!token) return next();
+  try {
+    const dec: any = jwt.verify(token, JWT_SECRET);
+    if (dec.tipo !== 'delivery_cliente') {
+      return res.status(403).json({ error: 'Token inválido' });
+    }
+    req.clienteId = dec.clienteId;
+    req.tenantId = dec.tenantId;
+    next();
+  } catch {
+    return res.status(403).json({ error: 'Token de cliente inválido' });
+  }
+};
+
 // ── Logging: nunca registrar credenciais / segredos em texto puro ─────────────
 const FULL_REDACT_BODY_PATHS = new Set([
   '/api/login',
