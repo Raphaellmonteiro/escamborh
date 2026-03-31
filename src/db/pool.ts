@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { resolveNodePgSslConfig } from './pgSsl';
 
 /** Limite do pooler Supabase em Session mode = pool_size do projeto; acima disso → MaxClientsInSessionMode. */
 function resolvePoolMax(): number {
@@ -17,11 +18,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 10000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  ssl: process.env.NODE_ENV === 'production'
-    ? {
-        rejectUnauthorized: false
-      }
-    : false,
+  ssl: resolveNodePgSslConfig(),
 });
 
 pool.on('error', (err) => {

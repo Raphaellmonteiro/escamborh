@@ -3,7 +3,7 @@ import { Router, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
-import { loginRateLimiter, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
+import { loginRateLimiter, authenticateToken, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
 import { logError } from '../utils/logger';
 import { generatePublicId } from '../utils/publicIds';
 import { notifyTenantOrderStreams } from '../sse';
@@ -254,8 +254,9 @@ export function createAdminRouter() {
     res.status(401).json({ success: false, message: 'Credenciais inválidas' });
   });
 
-  // Todas as rotas abaixo são protegidas por authenticateAdmin
+  // Todas as rotas abaixo: sessão validada (tenant ou admin) + papel admin
   const admin = Router();
+  admin.use(authenticateToken);
   admin.use(authenticateAdmin);
 
   admin.get('/solicitacoes', async (_req, res) => {

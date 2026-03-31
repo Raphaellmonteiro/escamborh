@@ -8,6 +8,8 @@ declare namespace Express {
       id: number;
       username: string;
       token_version?: number;
+      /** JWT de painel admin (platform) — não é usuário de tenant */
+      role?: string;
     };
     // Campos injetados para sub-usuários (atendentes, gerentes, etc.)
     userCargo?: string;

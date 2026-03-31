@@ -209,6 +209,29 @@ function applyAuthenticatedSession(req: Request, session: Extract<AuthenticatedS
   req.userName = session.userName;
 }
 
+/** Rotas /api/admin/* (exceto login): JWT de admin não passa em resolveAuthenticatedSession; este fallback mantém o painel com um único Bearer. */
+function isProtectedPlatformAdminApiPath(reqPath: string): boolean {
+  if (reqPath !== '/api/admin' && !reqPath.startsWith('/api/admin/')) return false;
+  return reqPath !== '/api/admin/login';
+}
+
+function tryApplyPlatformAdminBearer(req: Request): boolean {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return false;
+  try {
+    const decoded: any = jwt.verify(token, ADMIN_SECRET);
+    if (decoded.role !== 'admin') return false;
+    req.user = { id: 0, username: 'platform_admin', role: 'platform_admin' };
+    req.userCargo = 'dono';
+    req.userPermissoes = null;
+    req.userName = 'platform_admin';
+    delete (req as any).tenantId;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeCargo(value?: string | null) {
   return String(value || '').trim().toLowerCase();
 }
@@ -394,15 +417,17 @@ export async function resolveAuthenticatedSession(req: Request, tokenOverride?: 
 }
 
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
-  if (req.path.startsWith('/admin')) return next();
-
   const session = await resolveAuthenticatedSession(req);
-  if (session.ok === false) {
-    return res.status(session.status).json(session.body);
+  if (session.ok === true) {
+    applyAuthenticatedSession(req, session);
+    return next();
   }
 
-  applyAuthenticatedSession(req, session);
-  next();
+  if (isProtectedPlatformAdminApiPath(req.path) && tryApplyPlatformAdminBearer(req)) {
+    return next();
+  }
+
+  return res.status(session.status).json(session.body);
 };
 
 export const authenticateAdmin = (req: any, res: any, next: any) => {

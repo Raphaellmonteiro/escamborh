@@ -1,5 +1,6 @@
 // src/db.ts - reexport e migrações
 import { Client } from 'pg';
+import { resolveNodePgSslConfig } from './db/pgSsl';
 import { normalizeProductProductionInput } from './utils/preparation';
 
 export * from './db/index';
@@ -19,7 +20,7 @@ export async function runMigrations() {
   const client = new Client({
     connectionString: resolveMigrationConnectionString(),
     connectionTimeoutMillis: 30000,
-    ssl: { rejectUnauthorized: false },
+    ssl: resolveNodePgSslConfig(),
   });
   await client.connect();
 
