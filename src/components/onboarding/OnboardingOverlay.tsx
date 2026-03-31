@@ -3,7 +3,12 @@ import { createPortal } from 'react-dom';
 import type { OnboardingStepConfig } from './onboardingTypes';
 
 const PADDING = 10;
-/** Abaixo de modais (z-50) para não cobrir fluxos críticos */
+/**
+ * Camadas: escurecimento captura clique fora do buraco; moldura e wrapper do painel
+ * são pointer-events: none para o hit-test chegar ao DOM abaixo (alvo, modais z-50, etc.).
+ * Botões do tutorial usam pointer-events: auto.
+ * Abaixo de modais (z-50) para não cobrir fluxos críticos.
+ */
 const Z_DIM = 40;
 const Z_FRAME = 41;
 const Z_PANEL = 42;
@@ -221,58 +226,61 @@ export function OnboardingOverlay({
       )}
       {step && !hole && <div className="fixed inset-0 z-40 bg-black/45 pointer-events-auto" aria-hidden />}
       <div
-        className="pointer-events-auto fixed rounded-2xl border border-fp-border bg-fp-card p-4 shadow-xl"
+        className="pointer-events-none fixed rounded-2xl border border-fp-border bg-fp-card p-4 shadow-xl"
         style={{ zIndex: Z_PANEL + 1, ...panelStyle }}
       >
-        <div className="mb-3 space-y-2">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[11px] font-bold tabular-nums text-fptext-muted">
-              Passo {stepIndex + 1} de {stepCount}
-            </p>
-            <p className="text-[11px] font-black tabular-nums text-fptext-secondary">{progressPct}%</p>
+        {/* pointer-events não é herdado: força filhos a não interceptar cliques sobre o alvo por baixo */}
+        <div className="pointer-events-none [&_*]:pointer-events-none">
+          <div className="mb-3 space-y-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-[11px] font-bold tabular-nums text-fptext-muted">
+                Passo {stepIndex + 1} de {stepCount}
+              </p>
+              <p className="text-[11px] font-black tabular-nums text-fptext-secondary">{progressPct}%</p>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-fp-secondary" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso do tutorial">
+              <div
+                className="h-full rounded-full bg-fp-accent transition-[width] duration-500 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
           </div>
-          <div className="h-1 overflow-hidden rounded-full bg-fp-secondary" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso do tutorial">
-            <div
-              className="h-full rounded-full bg-fp-accent transition-[width] duration-500 ease-out"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
 
-        {step?.title ? (
-          <p id="onboarding-title" className="text-xs font-black uppercase tracking-wider text-fptext-muted">
-            {step.title}
+          {step?.title ? (
+            <p id="onboarding-title" className="text-xs font-black uppercase tracking-wider text-fptext-muted">
+              {step.title}
+            </p>
+          ) : (
+            <p id="onboarding-title" className="sr-only">
+              Tutorial
+            </p>
+          )}
+          <p id="onboarding-body" className={`text-sm leading-relaxed text-fptext-primary ${step?.title ? 'mt-2' : ''}`}>
+            {step?.body}
           </p>
-        ) : (
-          <p id="onboarding-title" className="sr-only">
-            Tutorial
-          </p>
-        )}
-        <p id="onboarding-body" className={`text-sm leading-relaxed text-fptext-primary ${step?.title ? 'mt-2' : ''}`}>
-          {step?.body}
-        </p>
-        {step?.requireAction ? (
-          <div className="mt-2 min-h-[1.375rem]">
-            {canAdvance ? (
-              <p
-                className={`flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 transition-all duration-300 ease-out motion-reduce:transition-none ${
-                  actionDoneVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-0.5 scale-[0.98] opacity-0'
-                }`}
-                role="status"
-                aria-live="polite"
-              >
-                <span aria-hidden>✔</span>
-                Ação concluída
-              </p>
-            ) : (
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-400/90" role="status">
-                <span aria-hidden>⏳</span>
-                Pendente — faça a ação no sistema
-              </p>
-            )}
-          </div>
-        ) : null}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {step?.requireAction ? (
+            <div className="mt-2 min-h-[1.375rem]">
+              {canAdvance ? (
+                <p
+                  className={`flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 transition-all duration-300 ease-out motion-reduce:transition-none ${
+                    actionDoneVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-0.5 scale-[0.98] opacity-0'
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span aria-hidden>✔</span>
+                  Ação concluída
+                </p>
+              ) : (
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-400/90" role="status">
+                  <span aria-hidden>⏳</span>
+                  Pendente — faça a ação no sistema
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+        <div className="pointer-events-auto mt-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onSkip}
