@@ -211,15 +211,17 @@ const darkPremium: DeliveryCardapioTheme = {
   },
   hero: {
     gridBg:
-      'grid w-full grid-cols-4 grid-rows-1 gap-0.5 bg-zinc-950 max-sm:h-[4.5rem] sm:grid-cols-2 sm:h-auto sm:grid-rows-none lg:grid-cols-4',
+      'grid w-full grid-cols-4 grid-rows-1 gap-0.5 bg-zinc-950 max-sm:h-[3.5rem] sm:grid-cols-2 sm:h-auto sm:grid-rows-none lg:grid-cols-4',
     cellBg:
       'relative h-full w-full overflow-hidden bg-zinc-950 max-sm:aspect-auto sm:aspect-[4/3]',
     fallbackLetter: 'flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950',
   },
   lojaBlock:
-    'bg-zinc-900/95 px-4 pb-4 pt-5 max-sm:pt-3.5 sm:px-5 sm:pb-5 sm:pt-6 md:px-6 md:pt-8 lg:pt-10',
-  statusPillOpen: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-emerald-400/30 bg-emerald-500/12 text-emerald-100',
-  statusPillClosed: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-white/10 bg-white/5 text-zinc-100',
+    'bg-zinc-900/95 px-4 pb-4 pt-5 max-sm:px-3 max-sm:pb-3 max-sm:pt-2.5 sm:px-5 sm:pb-5 sm:pt-6 md:px-6 md:pt-8 lg:pt-10',
+  statusPillOpen:
+    'flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-400/30 bg-emerald-500/12 px-2.5 py-0.5 text-[11px] text-emerald-100 sm:gap-2 sm:px-3 sm:py-1 sm:text-xs',
+  statusPillClosed:
+    'flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] text-zinc-100 sm:gap-2 sm:px-3 sm:py-1 sm:text-xs',
   menuDropdown:
     'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-white/12 bg-zinc-950 p-3 text-zinc-100 shadow-[0_24px_70px_rgba(0,0,0,0.38)]',
   menuItem:
@@ -231,19 +233,19 @@ const darkPremium: DeliveryCardapioTheme = {
   menuCategoryCountActive: 'text-xs font-black tabular-nums text-white/80',
   menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
-    'inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-zinc-950 px-3 py-2 text-xs font-bold text-zinc-100 transition-colors hover:bg-white/8 sm:px-4 sm:py-3 sm:text-sm',
+    'inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/12 bg-zinc-950 px-2.5 py-1.5 text-[11px] font-bold text-zinc-100 transition-colors hover:bg-white/8 max-sm:shrink-0 sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm',
   searchInput:
-    'w-full rounded-2xl border border-white/12 bg-zinc-950 py-3 pl-11 pr-10 text-sm text-white shadow-[0_14px_30px_rgba(0,0,0,0.24)] placeholder:text-zinc-300 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 sm:py-4 sm:pl-12',
+    'w-full rounded-xl border border-white/12 bg-zinc-950 py-2.5 pl-10 pr-9 text-sm text-white shadow-[0_14px_30px_rgba(0,0,0,0.24)] placeholder:text-zinc-300 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 sm:rounded-2xl sm:py-4 sm:pl-12 sm:pr-10',
   vitrine: {
     showcaseCard:
-      'group flex h-[min(308px,46vh)] min-h-0 w-[min(calc(100vw-1.25rem),300px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/14 bg-[linear-gradient(180deg,rgba(52,52,60,0.98),rgba(28,28,34,1))] shadow-[0_24px_56px_rgba(0,0,0,0.38)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_28px_64px_rgba(34,211,238,0.18)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px] sm:rounded-[30px]',
+      'group flex h-[min(268px,38vh)] min-h-0 w-[min(calc(100vw-1rem),280px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[20px] border border-white/14 bg-[linear-gradient(180deg,rgba(52,52,60,0.98),rgba(28,28,34,1))] shadow-[0_24px_56px_rgba(0,0,0,0.38)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-1 hover:border-cyan-400/35 hover:shadow-[0_28px_64px_rgba(34,211,238,0.18)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px] sm:rounded-[30px]',
     compactCard:
-      'group flex h-[224px] w-[min(calc(100vw-1.25rem),300px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[24px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] shadow-[0_20px_52px_rgba(0,0,0,0.32)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-0.5 hover:border-cyan-400/32 hover:shadow-[0_26px_60px_rgba(34,211,238,0.14)] sm:h-[240px] sm:min-w-[290px] sm:rounded-[28px]',
+      'group flex h-[200px] w-[min(calc(100vw-1rem),280px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[20px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.98),rgba(24,24,27,1))] shadow-[0_20px_52px_rgba(0,0,0,0.32)] ring-1 ring-white/[0.04] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-0.5 hover:border-cyan-400/32 hover:shadow-[0_26px_60px_rgba(34,211,238,0.14)] sm:h-[240px] sm:min-w-[290px] sm:rounded-[28px]',
     compactOfferBg: 'border-rose-500/15 bg-[linear-gradient(135deg,rgba(39,39,42,1),rgba(39,39,42,0.98),rgba(76,5,25,0.88))]',
-    imageBg: 'relative h-[9.5rem] cursor-pointer overflow-hidden bg-zinc-800 sm:h-44',
-    compactThumb: 'relative h-full min-h-0 w-[108px] shrink-0 cursor-pointer overflow-hidden bg-zinc-800 sm:w-[118px]',
+    imageBg: 'relative h-[8.25rem] cursor-pointer overflow-hidden bg-zinc-800 sm:h-44',
+    compactThumb: 'relative h-full min-h-0 w-[96px] shrink-0 cursor-pointer overflow-hidden bg-zinc-800 sm:w-[118px]',
     noPhoto: 'flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950',
-    title: 'line-clamp-2 min-h-[2.35rem] break-words text-base font-black leading-tight tracking-tight text-white drop-shadow-sm sm:min-h-[2.5rem] sm:text-lg',
+    title: 'line-clamp-2 min-h-[2.1rem] break-words text-[15px] font-black leading-tight tracking-tight text-white drop-shadow-sm sm:min-h-[2.5rem] sm:text-lg',
     desc: 'line-clamp-1 text-sm leading-relaxed text-zinc-200/95',
     hint: 'mt-1.5 line-clamp-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-300',
     priceFrom: 'text-[10px] font-semibold uppercase tracking-wide text-zinc-300',
@@ -443,15 +445,17 @@ const lightRed: DeliveryCardapioTheme = {
   },
   hero: {
     gridBg:
-      'grid w-full grid-cols-4 grid-rows-1 gap-0.5 bg-zinc-100 max-sm:h-[4.5rem] sm:grid-cols-2 sm:h-auto sm:grid-rows-none lg:grid-cols-4',
+      'grid w-full grid-cols-4 grid-rows-1 gap-0.5 bg-zinc-100 max-sm:h-[3.5rem] sm:grid-cols-2 sm:h-auto sm:grid-rows-none lg:grid-cols-4',
     cellBg:
       'relative h-full w-full overflow-hidden bg-zinc-100 max-sm:aspect-auto sm:aspect-[4/3]',
     fallbackLetter: 'flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-100 via-zinc-50 to-white',
   },
   lojaBlock:
-    'bg-white px-4 pb-4 pt-5 max-sm:pt-3.5 sm:px-5 sm:pb-5 sm:pt-6 md:px-6 md:pt-8 lg:pt-10 border-t border-zinc-100',
-  statusPillOpen: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-emerald-200 bg-emerald-50 text-emerald-800',
-  statusPillClosed: 'flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 border border-zinc-200 bg-zinc-50 text-zinc-700',
+    'bg-white px-4 pb-4 pt-5 max-sm:px-3 max-sm:pb-3 max-sm:pt-2.5 sm:px-5 sm:pb-5 sm:pt-6 md:px-6 md:pt-8 lg:pt-10 border-t border-zinc-100',
+  statusPillOpen:
+    'flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] text-emerald-800 sm:gap-2 sm:px-3 sm:py-1 sm:text-xs',
+  statusPillClosed:
+    'flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-[11px] text-zinc-700 sm:gap-2 sm:px-3 sm:py-1 sm:text-xs',
   menuDropdown:
     'absolute left-0 top-[calc(100%+12px)] z-20 w-[280px] rounded-[24px] border border-white/12 bg-zinc-950 p-3 text-zinc-100 shadow-[0_24px_70px_rgba(0,0,0,0.38)] ring-1 ring-red-950/20',
   menuItem:
@@ -463,20 +467,20 @@ const lightRed: DeliveryCardapioTheme = {
   menuCategoryCountActive: 'text-xs font-black tabular-nums text-white/80',
   menuCategoryCountIdle: 'text-xs font-bold tabular-nums text-zinc-400',
   searchToggle:
-    'inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-800 transition-colors hover:bg-zinc-50 sm:px-4 sm:py-3 sm:text-sm',
+    'inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-zinc-800 transition-colors hover:bg-zinc-50 max-sm:shrink-0 sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm',
   searchInput:
-    'w-full rounded-2xl border border-zinc-200 bg-white py-3 pl-11 pr-10 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500/15 sm:py-4 sm:pl-12',
+    'w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-9 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500/15 sm:rounded-2xl sm:py-4 sm:pl-12 sm:pr-10',
   vitrine: {
     ...darkPremium.vitrine,
     showcaseCard:
-      'group flex h-[min(308px,46vh)] min-h-0 w-[min(calc(100vw-1.25rem),300px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[24px] border border-zinc-200/90 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-1 hover:border-red-200 hover:shadow-[0_22px_48px_rgba(220,38,38,0.12)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px] sm:rounded-[30px]',
+      'group flex h-[min(268px,38vh)] min-h-0 w-[min(calc(100vw-1rem),280px)] max-w-full shrink-0 flex-col overflow-hidden rounded-[20px] border border-zinc-200/90 bg-white shadow-[0_16px_40px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-1 hover:border-red-200 hover:shadow-[0_22px_48px_rgba(220,38,38,0.12)] sm:h-[348px] sm:min-w-[280px] sm:max-w-[320px] sm:rounded-[30px]',
     compactCard:
-      'group flex h-[224px] w-[min(calc(100vw-1.25rem),300px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[24px] border border-zinc-200/90 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_18px_40px_rgba(220,38,38,0.1)] sm:h-[240px] sm:min-w-[290px] sm:rounded-[28px]',
+      'group flex h-[200px] w-[min(calc(100vw-1rem),280px)] max-w-full shrink-0 items-stretch gap-0 overflow-hidden rounded-[20px] border border-zinc-200/90 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.07)] ring-1 ring-black/[0.03] transition-all duration-300 ease-out active:scale-[0.99] hover:-translate-y-0.5 hover:border-red-200 hover:shadow-[0_18px_40px_rgba(220,38,38,0.1)] sm:h-[240px] sm:min-w-[290px] sm:rounded-[28px]',
     compactOfferBg: 'border-rose-200 bg-gradient-to-br from-white via-white to-rose-50/80',
-    imageBg: 'relative h-[9.5rem] cursor-pointer overflow-hidden bg-zinc-100 sm:h-44',
-    compactThumb: 'relative h-full min-h-0 w-[108px] shrink-0 cursor-pointer overflow-hidden bg-zinc-100 sm:w-[118px]',
+    imageBg: 'relative h-[8.25rem] cursor-pointer overflow-hidden bg-zinc-100 sm:h-44',
+    compactThumb: 'relative h-full min-h-0 w-[96px] shrink-0 cursor-pointer overflow-hidden bg-zinc-100 sm:w-[118px]',
     noPhoto: 'flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100',
-    title: 'line-clamp-2 min-h-[2.35rem] break-words text-base font-black leading-tight tracking-tight text-zinc-900 sm:min-h-[2.5rem] sm:text-lg',
+    title: 'line-clamp-2 min-h-[2.1rem] break-words text-[15px] font-black leading-tight tracking-tight text-zinc-900 sm:min-h-[2.5rem] sm:text-lg',
     desc: 'line-clamp-1 text-sm leading-relaxed text-zinc-600',
     hint: 'mt-1.5 line-clamp-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500',
     priceFrom: 'text-[10px] font-semibold uppercase tracking-wide text-zinc-500',

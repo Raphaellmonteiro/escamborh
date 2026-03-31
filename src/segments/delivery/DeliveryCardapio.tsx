@@ -452,7 +452,8 @@ type PedidoConfirmado = {
   checkout_modal_concluido?: boolean;
 };
 
-const SUGGESTIONS_EXPOSURE_TIMEOUT_MS = 800;
+/** Só libera o checkout sem sugestões se a API não responder (evita sacola travada). */
+const SUGGESTIONS_CHECKOUT_FAILSAFE_MS = 10_000;
 
 const fmt = (v: number) => `R$ ${(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')}`;
 
@@ -1099,6 +1100,8 @@ export default function DeliveryCardapio() {
       .catch((error) => {
         if (requestId !== suggestionsReqRef.current) return;
         if (error instanceof DOMException && error.name === 'AbortError') return;
+        setPrefetchedSuggestions([]);
+        setSuggestionsReadySignature(suggestionProductSignature);
       })
       .finally(() => {
         if (requestId === suggestionsReqRef.current) {
@@ -1777,13 +1780,13 @@ export default function DeliveryCardapio() {
         <div className={`${cardapioTheme.shell.root} min-h-[100dvh]`}>
           <div className={cardapioTheme.shell.inner}>
             <header className={cardapioTheme.header.bar}>
-              <div className="mx-auto max-w-[1440px] px-3 py-2 sm:px-4 sm:py-3 lg:px-6">
+              <div className="mx-auto max-w-[1440px] px-3 py-1.5 sm:px-4 sm:py-3 lg:px-6">
                 <div className={`h-9 w-full max-w-2xl animate-pulse rounded-xl sm:h-10 ${sk.header}`} />
               </div>
             </header>
-            <div className="mx-auto max-w-[1440px] px-2 pt-2 pb-24 sm:px-3 sm:py-4 sm:pb-28 lg:px-6">
+            <div className="mx-auto max-w-[1440px] px-2 pt-1.5 pb-24 sm:px-3 sm:py-4 sm:pb-28 lg:px-6">
               <section className={`w-full overflow-hidden rounded-[22px] border p-0 shadow-none sm:rounded-[34px] ${sk.heroWrap}`}>
-                <div className="grid grid-cols-4 grid-rows-1 gap-px bg-black/5 max-sm:h-[4.5rem] dark:bg-white/5 sm:grid-cols-2 sm:h-auto lg:grid-cols-4">
+                <div className="grid grid-cols-4 grid-rows-1 gap-px bg-black/5 max-sm:h-[3.5rem] dark:bg-white/5 sm:grid-cols-2 sm:h-auto lg:grid-cols-4">
                   {[0, 1, 2, 3].map((i) => (
                     <div
                       key={i}
@@ -1791,15 +1794,15 @@ export default function DeliveryCardapio() {
                     />
                   ))}
                 </div>
-                <div className="flex min-h-[72px] items-center gap-3 px-3 py-3 sm:min-h-[96px] sm:gap-4 sm:px-5 sm:py-5 md:min-h-[104px] md:px-6">
-                  <div className={`h-[4.5rem] w-[4.5rem] shrink-0 animate-pulse rounded-[28px] sm:h-28 sm:w-28 sm:rounded-[36px] md:h-36 md:w-36 ${sk.logo}`} />
-                  <div className="min-w-0 flex-1 space-y-2 sm:space-y-3">
-                    <div className={`h-7 w-[78%] max-w-md animate-pulse rounded-lg sm:h-9 ${sk.line}`} />
-                    <div className={`h-3.5 w-[52%] animate-pulse rounded sm:h-4 ${sk.lineSm}`} />
+                <div className="flex min-h-[60px] items-center gap-2.5 px-3 py-2.5 sm:min-h-[96px] sm:gap-4 sm:px-5 sm:py-5 md:min-h-[104px] md:px-6">
+                  <div className={`h-14 w-14 shrink-0 animate-pulse rounded-2xl sm:h-28 sm:w-28 sm:rounded-[36px] md:h-36 md:w-36 ${sk.logo}`} />
+                  <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-3">
+                    <div className={`h-6 w-[78%] max-w-md animate-pulse rounded-lg sm:h-9 ${sk.line}`} />
+                    <div className={`h-3 w-[52%] animate-pulse rounded sm:h-4 ${sk.lineSm}`} />
                   </div>
                 </div>
               </section>
-              <div className="mt-4 space-y-3 sm:mt-6 sm:space-y-4">
+              <div className="mt-3 space-y-2.5 sm:mt-6 sm:space-y-4">
                 <div className={`h-12 w-full animate-pulse rounded-2xl ${sk.menu}`} />
                 <div className="grid gap-3 min-[480px]:grid-cols-2">
                   {[0, 1, 2, 3].map((i) => (
@@ -1905,7 +1908,7 @@ export default function DeliveryCardapio() {
       ) : null}
       <div className={cardapioTheme.shell.inner}>
       <header className={cardapioTheme.header.bar}>
-        <div className="mx-auto max-w-[1440px] px-3 py-2 sm:px-4 sm:py-3 lg:px-6">
+        <div className="mx-auto max-w-[1440px] px-3 py-1.5 sm:px-4 sm:py-3 lg:px-6">
           <div className="relative flex items-center justify-center pr-12 sm:pr-14">
             <nav className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
             <button
@@ -1965,7 +1968,7 @@ export default function DeliveryCardapio() {
         </div>
       )}
 
-      <div className="mx-auto max-w-[1440px] px-2 pt-2 pb-28 sm:px-3 sm:py-4 sm:pb-32 lg:px-6 lg:pb-10">
+      <div className="mx-auto max-w-[1440px] px-2 pt-1.5 pb-28 sm:px-3 sm:py-4 sm:pb-32 lg:px-6 lg:pb-10">
         <section className={cardapioTheme.mode === 'light_red'
           ? 'w-full overflow-hidden rounded-[22px] border border-zinc-200/90 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] sm:rounded-[34px]'
           : 'w-full overflow-hidden rounded-[22px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] shadow-[0_28px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.05] sm:rounded-[34px]'}>
@@ -1987,48 +1990,49 @@ export default function DeliveryCardapio() {
                       fetchPriority={heroIdx === 0 ? 'high' : 'low'}
                     />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent max-sm:from-black/25" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent max-sm:from-black/20" />
                 </div>
               ))}
             </div>
 
-            <div className="pointer-events-none absolute bottom-0 left-3 translate-y-[46%] sm:left-5 sm:translate-y-1/2 md:left-6">
+            <div className="pointer-events-none absolute bottom-0 left-2.5 translate-y-[38%] sm:left-5 sm:translate-y-1/2 md:left-6">
               <div className={cardapioTheme.mode === 'light_red'
-                ? 'flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-[28px] border-[3px] border-white bg-white shadow-[0_14px_36px_rgba(0,0,0,0.12)] sm:h-32 sm:w-32 sm:rounded-[36px] sm:border-4 md:h-36 md:w-36'
-                : 'flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-[28px] border-[3px] border-zinc-900 bg-zinc-950 shadow-[0_18px_40px_rgba(0,0,0,0.38)] sm:h-32 sm:w-32 sm:rounded-[36px] sm:border-4 md:h-36 md:w-36'}>
+                ? 'flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border-2 border-white bg-white shadow-[0_10px_28px_rgba(0,0,0,0.1)] sm:h-32 sm:w-32 sm:rounded-[36px] sm:border-4 sm:shadow-[0_14px_36px_rgba(0,0,0,0.12)] md:h-36 md:w-36'
+                : 'flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border-2 border-zinc-900 bg-zinc-950 shadow-[0_14px_32px_rgba(0,0,0,0.35)] sm:h-32 sm:w-32 sm:rounded-[36px] sm:border-4 sm:shadow-[0_18px_40px_rgba(0,0,0,0.38)] md:h-36 md:w-36'}>
                 {logoResolvido ? (
                   <img src={logoResolvido} alt={nome} className="h-full w-full object-cover" decoding="async" loading="eager" fetchPriority="high" />
                 ) : (
-                  <span className={`text-xl font-black sm:text-3xl ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
+                  <span className={`text-lg font-black sm:text-3xl ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
                 )}
               </div>
             </div>
           </div>
 
           <div className={cardapioTheme.lojaBlock}>
-            <div className="flex min-h-[4.5rem] items-center pl-[5.75rem] sm:min-h-[5.5rem] sm:pl-[9.5rem] md:min-h-[6.75rem] md:pl-[11rem]">
+            <div className="flex min-h-[3.25rem] items-center pl-[4.25rem] sm:min-h-[5.5rem] sm:pl-[9.5rem] md:min-h-[6.75rem] md:pl-[11rem]">
               <div className="min-w-0 pr-1">
-                <h2 className={`text-xl font-black leading-tight tracking-tight sm:text-3xl md:text-4xl md:leading-tight lg:text-[52px] lg:leading-none ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.08)]'}`}>{nome}</h2>
-                <div className={`mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:mt-3 sm:gap-x-6 sm:gap-y-2 sm:text-sm md:text-base ${cardapioTheme.mode === 'light_red' ? 'text-zinc-700' : 'text-zinc-100'}`}>
-                  <p className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 sm:gap-2 sm:px-3 sm:py-1 ${ativo ? cardapioTheme.statusPillOpen : cardapioTheme.statusPillClosed}`}>
-                    <Clock size={14} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${ativo ? 'text-emerald-300' : 'text-zinc-300'}`} />
-                    {horarioLoja}
+                <h2 className={`text-lg font-black leading-[1.15] tracking-tight sm:text-3xl md:text-4xl md:leading-tight lg:text-[52px] lg:leading-none ${cardapioTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.08)]'}`}>{nome}</h2>
+                <div className={`mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] sm:mt-3 sm:gap-x-6 sm:gap-y-2 sm:text-sm md:text-base ${cardapioTheme.mode === 'light_red' ? 'text-zinc-700' : 'text-zinc-100'}`}>
+                  <p className={`flex min-w-0 max-w-full items-center gap-1 rounded-full px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1 ${ativo ? cardapioTheme.statusPillOpen : cardapioTheme.statusPillClosed}`}>
+                    <Clock size={12} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${ativo ? 'text-emerald-300' : 'text-zinc-300'}`} />
+                    <span className="min-w-0 truncate max-sm:max-w-[10rem] sm:whitespace-nowrap">{horarioLoja}</span>
                   </p>
-                  <p className={`flex min-w-0 items-center gap-1.5 font-medium sm:gap-2 ${cardapioTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>
-                    <MapPin size={14} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-200'}`} />
+                  <p className={`flex min-w-0 max-w-full flex-[1_1_100%] items-center gap-1 font-medium sm:flex-[0_1_auto] sm:gap-2 ${cardapioTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>
+                    <MapPin size={12} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${cardapioTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-200'}`} />
                     <span className="min-w-0 truncate sm:overflow-visible sm:whitespace-normal">{resumoLocalizacao}</span>
                   </p>
                   <button
                     type="button"
                     onClick={() => setLojaInfoAberta(true)}
+                    aria-label="Mais informações da loja"
                     className={
                       isLightRed
-                        ? 'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-0 py-0.5 text-xs font-semibold text-red-700 transition-colors hover:text-red-800 sm:gap-2 sm:py-1 sm:text-sm md:text-base'
-                        : 'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-0 py-0.5 text-xs font-semibold text-cyan-100 transition-colors hover:text-cyan-50 sm:gap-2 sm:py-1 sm:text-sm md:text-base'
+                        ? 'inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-xs font-semibold text-red-700 transition-colors hover:text-red-800 sm:min-h-0 sm:min-w-0 sm:gap-1.5 sm:rounded-full sm:px-0 sm:py-1 sm:text-sm md:text-base'
+                        : 'inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-xs font-semibold text-cyan-100 transition-colors hover:text-cyan-50 sm:min-h-0 sm:min-w-0 sm:gap-1.5 sm:rounded-full sm:px-0 sm:py-1 sm:text-sm md:text-base'
                     }
                   >
                     <Info size={14} className={`shrink-0 sm:h-[15px] sm:w-[15px] ${isLightRed ? 'text-red-600' : 'text-cyan-200'}`} />
-                    Mais informacoes
+                    <span className="hidden sm:inline">Mais informacoes</span>
                   </button>
                 </div>
               </div>
@@ -2036,22 +2040,22 @@ export default function DeliveryCardapio() {
           </div>
         </section>
 
-        <div className="mt-4 grid gap-4 sm:mt-6 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-w-0 space-y-3 sm:space-y-4">
+        <div className="mt-3 grid gap-3 sm:mt-6 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-2.5 sm:space-y-4">
 
             <section
               className={
                 isLightRed
-                  ? 'rounded-[24px] border border-zinc-200/90 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] sm:rounded-[32px] sm:p-4'
-                  : 'rounded-[24px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] p-3 shadow-[0_22px_58px_rgba(0,0,0,0.3)] ring-1 ring-white/[0.04] sm:rounded-[32px] sm:p-4'
+                  ? 'rounded-[20px] border border-zinc-200/90 bg-white p-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.03] sm:rounded-[32px] sm:p-4'
+                  : 'rounded-[20px] border border-white/14 bg-[linear-gradient(180deg,rgba(42,42,48,0.98),rgba(24,24,28,1))] p-2.5 shadow-[0_22px_58px_rgba(0,0,0,0.3)] ring-1 ring-white/[0.04] sm:rounded-[32px] sm:p-4'
               }
             >
               <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-                <div className="relative">
+                <div className="relative min-w-0">
                   <button
                     type="button"
                     onClick={() => setMenuCatalogoAberto((prev) => !prev)}
-                    className={`inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2.5 text-xs font-bold transition-colors sm:gap-2 sm:px-4 sm:py-3 sm:text-sm ${
+                    className={`inline-flex min-h-[44px] max-w-full items-center gap-1.5 rounded-xl border px-2.5 py-2 text-[11px] font-bold transition-colors sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm ${
                       menuCatalogoAberto
                         ? isLightRed
                           ? 'border-red-200 bg-red-50 text-red-950 [.flowpdv-dark_&]:border-zinc-700 [.flowpdv-dark_&]:bg-zinc-800 [.flowpdv-dark_&]:text-white [.flowpdv-dark_&]:hover:bg-zinc-700 [.flowpdv-dark_&]:hover:text-white'
@@ -2163,7 +2167,7 @@ export default function DeliveryCardapio() {
                 <button
                   type="button"
                   onClick={() => setBuscaAberta((prev) => !prev)}
-                  className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition-colors ${
+                  className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-2 text-[11px] font-bold transition-colors sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm ${
                     buscaAberta || search
                       ? isLightRed
                         ? 'border-red-200 bg-red-50 text-red-900'
@@ -2173,8 +2177,9 @@ export default function DeliveryCardapio() {
                         : 'border-white/12 bg-zinc-950 text-zinc-50 hover:bg-white/8'
                   }`}
                 >
-                  <Search size={16} />
-                  {buscaAberta || search ? 'Ocultar busca' : 'Buscar no cardápio'}
+                  <Search size={15} className="shrink-0 sm:h-4 sm:w-4" />
+                  <span className="whitespace-nowrap sm:hidden">{buscaAberta || search ? 'Ocultar' : 'Buscar'}</span>
+                  <span className="hidden whitespace-nowrap sm:inline">{buscaAberta || search ? 'Ocultar busca' : 'Buscar no cardápio'}</span>
                 </button>
                 {search && (
                   <button
@@ -2182,19 +2187,20 @@ export default function DeliveryCardapio() {
                     onClick={() => { setSearch(''); setBuscaAberta(false); }}
                     className={
                       isLightRed
-                        ? 'inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-bold text-zinc-700 transition-colors hover:bg-white'
-                        : 'inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 transition-colors hover:bg-white/8'
+                        ? 'inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-[11px] font-bold text-zinc-700 transition-colors hover:bg-white sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm'
+                        : 'inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-white/12 bg-zinc-950 px-2.5 py-2 text-[11px] font-bold text-zinc-100 transition-colors hover:bg-white/8 sm:gap-2 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm'
                     }
                   >
-                    <X size={15} />
-                    Limpar busca
+                    <X size={14} className="shrink-0 sm:h-[15px] sm:w-[15px]" />
+                    <span className="sm:hidden">Limpar</span>
+                    <span className="hidden sm:inline">Limpar busca</span>
                   </button>
                 )}
               </div>
 
               {(buscaAberta || search) && (
-                <div className="relative mt-4">
-                  <Search size={16} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${isLightRed ? 'text-zinc-400' : 'text-zinc-300'}`}/>
+                <div className="relative mt-3 sm:mt-4">
+                  <Search size={16} className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 sm:left-4 ${isLightRed ? 'text-zinc-400' : 'text-zinc-300'}`}/>
                   <input
                     value={search}
                     onChange={e=>setSearch(e.target.value)}
@@ -2297,14 +2303,14 @@ export default function DeliveryCardapio() {
               <section
                 className={
                   isLightRed
-                    ? 'rounded-[24px] border border-zinc-200/90 bg-white p-3 shadow-[0_12px_36px_rgba(0,0,0,0.06)] sm:rounded-[30px] sm:p-4'
-                    : 'rounded-[24px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.96),rgba(24,24,27,1))] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.22)] sm:rounded-[30px] sm:p-4'
+                    ? 'rounded-[20px] border border-zinc-200/90 bg-white p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.06)] sm:rounded-[30px] sm:p-4'
+                    : 'rounded-[20px] border border-white/12 bg-[linear-gradient(180deg,rgba(39,39,42,0.96),rgba(24,24,27,1))] p-2.5 shadow-[0_18px_50px_rgba(0,0,0,0.22)] sm:rounded-[30px] sm:p-4'
                 }
               >
-                <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4 sm:gap-3">
-                  <div>
-                    <p className={`text-[11px] font-bold uppercase tracking-[0.22em] ${isLightRed ? 'text-red-700/90' : 'text-cyan-200/80'}`}>Destaques</p>
-                    <h3 className={`mt-0.5 text-lg font-black sm:mt-1 sm:text-xl ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Produtos em destaque</h3>
+                <div className="mb-2 flex items-center justify-between gap-2 sm:mb-4 sm:gap-3">
+                  <div className="min-w-0">
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.2em] sm:text-[11px] sm:tracking-[0.22em] ${isLightRed ? 'text-red-700/90' : 'text-cyan-200/80'}`}>Destaques</p>
+                    <h3 className={`mt-0.5 text-base font-black sm:mt-1 sm:text-lg md:text-xl ${isLightRed ? 'text-zinc-900' : 'text-white'}`}>Produtos em destaque</h3>
                   </div>
                   {totalPromocoesValidas > 0 && (
                     <button
@@ -2320,7 +2326,7 @@ export default function DeliveryCardapio() {
                     </button>
                   )}
                 </div>
-                <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto scroll-pl-1 pb-2 scrollbar-hide sm:gap-3 sm:scroll-pl-0">
+                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-pl-1 pb-1.5 scrollbar-hide sm:gap-3 sm:pb-2 sm:scroll-pl-0">
                   {produtosDestaque.slice(0, 6).map((produto) => (
                     <div key={`destaque-simples-${produto.id}`} className="snap-start shrink-0">
                       {renderVitrineCard(produto, 'compact')}
@@ -2454,8 +2460,8 @@ export default function DeliveryCardapio() {
             })()
           : prodsFiltrados.map(cat=>(
             <div key={cat.nome} ref={el=>{catRefs.current[cat.nome]=el}}>
-              <div className="mb-3 flex items-center gap-3 pt-2">
-                <h2 className={`text-lg font-black tracking-tight ${isLightRed ? 'text-zinc-950' : 'text-white drop-shadow-sm'}`}>{cat.nome}</h2>
+              <div className="mb-2 flex items-center gap-2 pt-1 sm:mb-3 sm:gap-3 sm:pt-2">
+                <h2 className={`text-base font-black tracking-tight sm:text-lg ${isLightRed ? 'text-zinc-950' : 'text-white drop-shadow-sm'}`}>{cat.nome}</h2>
                 <div className={`h-px flex-1 ${isLightRed ? 'bg-gradient-to-r from-zinc-200 via-zinc-100 to-transparent' : 'bg-gradient-to-r from-white/15 via-white/8 to-transparent'}`}/>
                 <span
                   className={
@@ -2467,7 +2473,7 @@ export default function DeliveryCardapio() {
                   {cat.itens.length} itens
                 </span>
               </div>
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
                 {cat.itens.map(p=>{
                   const qty=cartQty(p.id);
                   const isFav=cliente?.favoritos.includes(p.id)||false;
@@ -2495,11 +2501,11 @@ export default function DeliveryCardapio() {
                   return (
                     <div
                       key={p.id}
-                      className={`group h-[174px] min-h-0 overflow-hidden rounded-[26px] border transition-all duration-300 ease-out backdrop-blur-sm ring-1 [tap-highlight-color:transparent] active:scale-[0.995] sm:h-[168px] sm:rounded-[32px] ${gridCardRing} ${gridCardBody}`}
+                      className={`group h-[156px] min-h-0 overflow-hidden rounded-[22px] border transition-all duration-300 ease-out backdrop-blur-sm ring-1 [tap-highlight-color:transparent] active:scale-[0.995] sm:h-[168px] sm:rounded-[32px] ${gridCardRing} ${gridCardBody}`}
                     >
                       <div className="flex h-full min-h-0 items-stretch">
                         <div
-                          className={`relative h-[174px] w-[118px] flex-shrink-0 cursor-pointer overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 sm:h-[168px] sm:w-[146px] ${isLightRed ? 'bg-zinc-100' : 'bg-zinc-800'}`}
+                          className={`relative h-[156px] w-[100px] flex-shrink-0 cursor-pointer overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 sm:h-[168px] sm:w-[146px] ${isLightRed ? 'bg-zinc-100' : 'bg-zinc-800'}`}
                           onClick={()=>handleAddProduto(p)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -2534,12 +2540,12 @@ export default function DeliveryCardapio() {
                           </div>
                           {qty>0&&<div className={`absolute bottom-2 left-2 flex h-8 min-w-[30px] items-center justify-center rounded-full px-2 text-xs font-black shadow-lg ${isLightRed ? 'bg-red-600 text-white' : 'bg-cyan-400 text-zinc-950'}`}>{qty}</div>}
                         </div>
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between px-3 py-2.5 sm:px-4 sm:py-3.5">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between px-2.5 py-2 sm:px-4 sm:py-3.5">
                           <div className="flex min-h-0 flex-1 flex-col">
-                            <div className="flex shrink-0 items-start gap-3">
+                            <div className="flex shrink-0 items-start gap-2 sm:gap-3">
                               <div className="min-w-0 flex-1">
                                 <p
-                                  className={`line-clamp-2 min-h-[2.5rem] cursor-pointer break-words text-base font-black leading-snug tracking-tight selection:bg-red-100 selection:text-zinc-900 sm:text-[17px] ${isLightRed ? 'text-zinc-900' : 'text-white drop-shadow-sm'}`}
+                                  className={`line-clamp-2 min-h-[2.35rem] cursor-pointer break-words text-[14px] font-black leading-snug tracking-tight selection:bg-red-100 selection:text-zinc-900 sm:min-h-[2.5rem] sm:text-[17px] ${isLightRed ? 'text-zinc-900' : 'text-white drop-shadow-sm'}`}
                                   onClick={()=>handleAddProduto(p)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
@@ -2569,18 +2575,18 @@ export default function DeliveryCardapio() {
                               </div>
                             )}
                           </div>
-                          <div className="mt-2 flex shrink-0 items-end justify-between gap-2.5 sm:gap-3 pt-0.5">
+                          <div className="mt-1.5 flex shrink-0 items-end justify-between gap-2 sm:gap-3 sm:mt-2 pt-0.5">
                             {/* Preço: "A partir de" quando tem variações; preço fixo quando não tem */}
                             <div className="min-w-0">
                               {temVariacoes ? (
                                 <div>
                                   <span className={`text-[10px] font-semibold uppercase tracking-wide ${isLightRed ? 'text-zinc-500' : 'text-zinc-300'}`}>A partir de</span>
-                                  <p className={`mt-0.5 text-[22px] font-black tabular-nums leading-tight sm:text-[28px] ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
+                                  <p className={`mt-0.5 text-[19px] font-black tabular-nums leading-tight sm:text-[28px] ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
                                 </div>
                               ) : temPrecoVariavel ? (
                                 <div>
                                   <span className={`text-[10px] font-semibold uppercase tracking-wide ${isLightRed ? 'text-zinc-500' : 'text-zinc-300'}`}>A partir de</span>
-                                  <p className={`mt-0.5 text-[22px] font-black tabular-nums leading-tight sm:text-[28px] ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
+                                  <p className={`mt-0.5 text-[19px] font-black tabular-nums leading-tight sm:text-[28px] ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]'}`}>{fmt(precoMinimo)}</p>
                                 </div>
                               ) : (
                                 <div>
@@ -2590,7 +2596,7 @@ export default function DeliveryCardapio() {
                                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${isLightRed ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'}`}>-{percentualDesconto}%</span>
                                     </div>
                                   )}
-                                  <p className={`text-[22px] font-black tabular-nums leading-tight sm:text-[28px] ${promoValida ? (isLightRed ? 'text-emerald-600' : 'text-emerald-400 drop-shadow-[0_0_22px_rgba(52,211,153,0.35)]') : (isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]')}`}>{fmt(p.price)}</p>
+                                  <p className={`text-[19px] font-black tabular-nums leading-tight sm:text-[28px] ${promoValida ? (isLightRed ? 'text-emerald-600' : 'text-emerald-400 drop-shadow-[0_0_22px_rgba(52,211,153,0.35)]') : (isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_20px_rgba(34,211,238,0.28)]')}`}>{fmt(p.price)}</p>
                                   {promoValida && (
                                     <p className={`mt-0.5 line-clamp-2 text-[11px] font-bold leading-snug ${isLightRed ? 'text-emerald-800' : 'text-emerald-100/95'}`}>
                                       ✨ Economia de {fmt(Math.max(0, Number(p.preco_original || 0) - Number(p.price)))}
@@ -3083,10 +3089,164 @@ export default function DeliveryCardapio() {
 }
 
 
+type SacolaUpsellCardData = {
+  item: SuggestionItem;
+  featured: boolean;
+  badge: string;
+  headline: string;
+  support: string;
+  cta: string;
+  pricePrefix: string;
+  displayPrice: number;
+};
+
+function SacolaUpsellCard({
+  card,
+  isLightRed,
+  onAdd,
+}: {
+  card: SacolaUpsellCardData;
+  isLightRed: boolean;
+  onAdd: (item: SuggestionItem) => void;
+}) {
+  const featured = card.featured;
+  return (
+    <div
+      className={
+        featured
+          ? isLightRed
+            ? 'flex min-h-[288px] flex-col rounded-[24px] border-2 border-red-400/80 bg-[linear-gradient(180deg,#fffdf9_0%,#ffe8e0_100%)] p-4 shadow-[0_18px_40px_rgba(220,38,38,0.14)] ring-1 ring-red-200/90 sm:min-h-[308px]'
+            : 'flex min-h-[288px] flex-col rounded-[24px] border-2 border-cyan-400/45 bg-[linear-gradient(180deg,rgba(18,20,32,1)_0%,rgba(12,28,38,0.98)_100%)] p-4 shadow-[0_20px_48px_rgba(34,211,238,0.14)] ring-1 ring-cyan-300/25 sm:min-h-[308px]'
+          : isLightRed
+            ? 'flex h-full min-h-[248px] flex-col rounded-[22px] border border-stone-300/80 bg-[#fffefc] p-3 shadow-sm sm:min-h-[256px] sm:p-3.5'
+            : 'flex h-full min-h-[248px] flex-col rounded-[22px] border border-white/12 bg-zinc-950 p-3 sm:min-h-[256px] sm:p-3.5'
+      }
+    >
+      <div className="shrink-0 space-y-2.5 sm:space-y-3">
+        {card.item.photo_url ? (
+          <img
+            src={card.item.photo_url}
+            alt={card.item.name}
+            className={
+              featured
+                ? isLightRed
+                  ? 'aspect-[16/9] w-full rounded-[20px] border-2 border-red-200/90 object-cover shadow-[0_12px_28px_rgba(220,38,38,0.12)] sm:aspect-[16/10]'
+                  : 'aspect-[16/9] w-full rounded-[20px] border border-cyan-300/30 object-cover shadow-[0_18px_40px_rgba(0,0,0,0.32)] sm:aspect-[16/10]'
+                : isLightRed
+                  ? 'aspect-[5/4] w-full rounded-[16px] border border-stone-200 object-cover shadow-sm sm:rounded-[18px]'
+                  : 'aspect-[5/4] w-full rounded-[16px] border border-white/10 object-cover shadow-[0_12px_28px_rgba(0,0,0,0.22)] sm:rounded-[18px]'
+            }
+          />
+        ) : (
+          <div
+            className={
+              featured
+                ? isLightRed
+                  ? 'flex aspect-[16/9] w-full items-center justify-center rounded-[20px] border-2 border-red-200/90 bg-red-50/80 text-xs font-black tracking-[0.18em] text-red-700 sm:aspect-[16/10]'
+                  : 'flex aspect-[16/9] w-full items-center justify-center rounded-[20px] border border-cyan-300/25 bg-cyan-400/10 text-xs font-black tracking-[0.18em] text-cyan-200 sm:aspect-[16/10]'
+                : isLightRed
+                  ? 'flex aspect-[5/4] w-full items-center justify-center rounded-[16px] border border-stone-200 bg-stone-100 text-[10px] font-black tracking-[0.16em] text-stone-600 sm:rounded-[18px]'
+                  : 'flex aspect-[5/4] w-full items-center justify-center rounded-[16px] border border-white/10 bg-black/25 text-[10px] font-black tracking-[0.16em] text-cyan-200 sm:rounded-[18px]'
+            }
+          >
+            ITEM
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex w-fit max-w-full items-center truncate rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${featured ? (isLightRed ? 'bg-red-600 text-white ring-1 ring-red-600/70' : 'bg-cyan-300 text-zinc-950 ring-1 ring-cyan-200/80') : (isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10')}`}
+          >
+            {card.badge}
+          </span>
+          {featured && (
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-cyan-300/20'}`}
+            >
+              Escolha da casa
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 pt-2.5 sm:pt-3">
+        {card.item.category ? (
+          <p
+            className={`line-clamp-1 text-[10px] font-black uppercase tracking-[0.14em] ${featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/80') : (isLightRed ? 'text-stone-500' : 'text-zinc-400')}`}
+          >
+            {card.item.category}
+          </p>
+        ) : (
+          <div className="h-[12px]" aria-hidden />
+        )}
+        <p
+          className={
+            featured
+              ? `mt-2 line-clamp-2 text-[17px] font-black leading-snug tracking-tight sm:text-[19px] ${isLightRed ? 'text-stone-900' : 'text-white'}`
+              : `mt-1.5 line-clamp-2 text-[14px] font-black leading-snug sm:mt-2 sm:text-[15px] ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`
+          }
+        >
+          {card.item.name}
+        </p>
+        <p
+          className={
+            featured
+              ? `mt-2 line-clamp-2 text-[12px] leading-relaxed sm:text-[13px] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`
+              : `mt-1.5 line-clamp-2 min-h-[2.25rem] text-[11px] leading-relaxed sm:min-h-[2.5rem] sm:text-[12px] ${isLightRed ? 'text-stone-600' : 'text-zinc-400'}`
+          }
+        >
+          {card.headline}
+        </p>
+        {featured && (
+          <p className={`mt-2 line-clamp-2 text-[11px] leading-relaxed sm:text-xs ${isLightRed ? 'text-stone-500' : 'text-zinc-500'}`}>
+            {card.support}
+          </p>
+        )}
+      </div>
+
+      <div
+        className={`mt-3 flex shrink-0 flex-col gap-3 border-t pt-3 sm:mt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 ${featured ? (isLightRed ? 'border-red-200/80' : 'border-cyan-300/15') : (isLightRed ? 'border-stone-200/80' : 'border-white/10')}`}
+      >
+        <div className="min-w-0 flex-1">
+          <p
+            className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/75') : (isLightRed ? 'text-stone-500' : 'text-zinc-500')}`}
+          >
+            {card.pricePrefix}
+          </p>
+          <p
+            className={
+              featured
+                ? `mt-1 break-words text-2xl font-black tabular-nums leading-none sm:text-[1.65rem] ${isLightRed ? 'text-red-700' : 'text-cyan-200'}`
+                : `mt-0.5 break-words text-base font-black tabular-nums leading-tight sm:text-lg ${isLightRed ? 'text-red-700' : 'text-cyan-300'}`
+            }
+          >
+            {fmt(card.displayPrice)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onAdd(card.item)}
+          className={
+            featured
+              ? isLightRed
+                ? 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-2xl bg-red-600 px-4 py-3 text-xs font-black text-white shadow-[0_10px_24px_rgba(220,38,38,0.20)] transition-colors hover:bg-red-700 sm:min-h-[44px] sm:w-auto sm:min-w-[7.5rem]'
+                : 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-2xl bg-cyan-300 px-4 py-3 text-xs font-black text-zinc-950 shadow-[0_10px_24px_rgba(34,211,238,0.16)] transition-colors hover:bg-cyan-200 sm:min-h-[44px] sm:w-auto sm:min-w-[7.5rem]'
+              : isLightRed
+                ? 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-red-600 px-3 py-2.5 text-[11px] font-black text-white transition-colors hover:bg-red-700 sm:min-h-[44px] sm:w-auto sm:min-w-[6.75rem]'
+                : 'inline-flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2.5 text-[11px] font-black text-zinc-950 transition-colors hover:bg-cyan-300 sm:min-h-[44px] sm:w-auto sm:min-w-[6.75rem]'
+          }
+        >
+          {card.cta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SACOLA EM MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, suggestionsReady, suggestionsPending, onAdd, onAddSuggestion, onRemove, onContinuarComprando }: {
+function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, suggestionsReady, suggestionsPending, suggestionsTimedOut, onAdd, onAddSuggestion, onRemove, onContinuarComprando }: {
   slug: string;
   cliToken: string | null;
   cart: CartItem[]; config: Config;
@@ -3096,6 +3256,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   showSuggestions: boolean;
   suggestionsReady: boolean;
   suggestionsPending: boolean;
+  suggestionsTimedOut: boolean;
   onAdd: (p: CartItem)=>void; onRemove: (key: string)=>void;
   onAddSuggestion: (item: SuggestionItem)=>void;
   onContinuarComprando: ()=>void;
@@ -3187,7 +3348,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   ), [suggestions, cart]);
 
   const featuredSuggestion = suggestionCards[0] || null;
-  const showSuggestionSkeleton = showSuggestions && suggestionsPending && loadingSuggestions;
+  const showSuggestionSkeleton = showSuggestions && suggestionsPending && loadingSuggestions && !suggestionsTimedOut;
   const suggestionSubtitle = featuredSuggestion
     ? featuredSuggestion.sourceItem
       ? `Para acompanhar ${shortenSuggestionSourceName(featuredSuggestion.sourceItem.name, 34)}.`
@@ -3269,146 +3430,102 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
 
             {showSuggestions && (
               <div
+                id="sacola-upsell"
                 className={
                   isLightRed
-                    ? 'space-y-4 rounded-[30px] border border-stone-500/40 bg-[#faf6f0] p-4 shadow-sm ring-1 ring-stone-400/15'
-                    : 'space-y-4 rounded-[30px] border border-white/10 bg-zinc-900 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)]'
+                    ? 'scroll-mt-4 space-y-4 rounded-[30px] border border-stone-500/40 bg-[#faf6f0] p-4 shadow-sm ring-1 ring-stone-400/15 sm:p-5'
+                    : 'scroll-mt-4 space-y-4 rounded-[30px] border border-white/10 bg-zinc-900 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)] sm:p-5'
                 }
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${isLightRed ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-cyan-400/20 bg-cyan-400/10 text-cyan-200'}`}>
                       Sugestoes
                     </span>
-                    <p className={`mt-2 text-lg font-black tracking-tight ${isLightRed ? 'text-stone-900' : 'text-white'}`}>Leve junto</p>
-                    <p className={`mt-1 max-w-[24rem] text-[11px] leading-relaxed ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>
-                      {showSuggestionSkeleton ? 'Estamos preparando sugestoes para complementar sua sacola.' : suggestionSubtitle}
+                    <p className={`mt-2 text-xl font-black tracking-tight sm:text-[1.35rem] ${isLightRed ? 'text-stone-900' : 'text-white'}`}>Leve junto</p>
+                    <p className={`mt-1 max-w-[26rem] text-xs leading-relaxed sm:text-[13px] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>
+                      {showSuggestionSkeleton ? 'Buscando itens que combinam com o que voce ja escolheu.' : suggestionSubtitle}
                     </p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${isLightRed ? 'border border-stone-300 bg-[#fffefc] text-stone-700' : 'border border-white/10 bg-zinc-950 text-zinc-200'}`}>
+                  <span className={`shrink-0 self-start rounded-full px-3 py-1.5 text-[11px] font-bold sm:self-auto ${isLightRed ? 'border border-stone-300 bg-[#fffefc] text-stone-700' : 'border border-white/10 bg-zinc-950 text-zinc-200'}`}>
                     {showSuggestionSkeleton ? 'Carregando' : suggestionCards.length > 0 ? `${suggestionCards.length} opcoes` : 'Sem sugestoes'}
                   </span>
                 </div>
 
+                {suggestionsTimedOut && suggestionsPending && !suggestionsReady && (
+                  <div
+                    role="status"
+                    className={
+                      isLightRed
+                        ? 'rounded-2xl border border-amber-200/90 bg-amber-50/90 px-3 py-2.5 text-center text-xs font-semibold text-amber-950'
+                        : 'rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-center text-xs font-semibold text-amber-100'
+                    }
+                  >
+                    As sugestoes estao demorando. Voce ja pode finalizar o pedido abaixo; quando carregarem, elas aparecem aqui.
+                  </div>
+                )}
+
                 {showSuggestionSkeleton && (
-                  <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {[0, 1, 2].map((index) => (
-                      <div
-                        key={`suggestion-skeleton-${index}`}
-                        className={`grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border p-3.5 ${isLightRed ? 'border-stone-300/70 bg-[#fffefc] shadow-sm' : 'border-white/10 bg-zinc-950'}`}
-                      >
-                        <div className="space-y-3">
-                          <div className={`aspect-[16/10] w-full rounded-[20px] animate-pulse ${isLightRed ? 'bg-stone-200' : 'bg-white/10'}`} />
-                          <div className={`h-6 w-28 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
+                  <div className="flex min-h-[200px] flex-col gap-3 motion-reduce:animate-none" aria-busy="true" aria-live="polite">
+                    <div
+                      className={`rounded-[24px] border-2 p-4 opacity-75 motion-reduce:opacity-100 ${isLightRed ? 'border-red-200/80 bg-[#fffefc]' : 'border-cyan-500/20 bg-zinc-950'}`}
+                    >
+                      <div className={`aspect-[16/9] w-full rounded-[20px] animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/90' : 'bg-white/[0.08]'}`} />
+                      <div className={`mt-3 h-5 w-32 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.07]'}`} />
+                      <div className={`mt-4 h-4 w-24 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/70' : 'bg-white/[0.06]'}`} />
+                      <div className={`mt-2 h-6 w-[88%] rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/70' : 'bg-white/[0.08]'}`} />
+                      <div className={`mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-end sm:justify-between ${isLightRed ? 'border-stone-200/60' : 'border-white/10'}`}>
+                        <div className="space-y-2">
+                          <div className={`h-3 w-16 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.06]'}`} />
+                          <div className={`h-8 w-28 rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.08]'}`} />
                         </div>
-                        <div className="min-w-0 pt-3">
-                          <div className={`h-3 w-20 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
-                          <div className={`mt-2 h-6 w-4/5 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
-                          <div className={`mt-2 h-6 w-3/4 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
-                          <div className={`mt-3 h-4 w-full rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
-                          <div className={`mt-2 h-4 w-5/6 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
-                        </div>
-                        <div className={`mt-4 flex items-end justify-between gap-3 border-t pt-3 ${isLightRed ? 'border-stone-200/80' : 'border-white/10'}`}>
-                          <div className="min-w-0 flex-1 space-y-2">
-                            <div className={`h-3 w-16 rounded-full animate-pulse ${isLightRed ? 'bg-stone-200/80' : 'bg-white/10'}`} />
-                            <div className={`h-8 w-24 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
-                          </div>
-                          <div className={`h-11 w-[112px] shrink-0 rounded-2xl animate-pulse ${isLightRed ? 'bg-stone-300/80' : 'bg-white/10'}`} />
-                        </div>
+                        <div className={`h-12 w-full rounded-2xl animate-pulse motion-reduce:animate-none sm:h-11 sm:w-[7.5rem] ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.09]'}`} />
                       </div>
-                    ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[0, 1].map((index) => (
+                        <div
+                          key={`suggestion-skeleton-compact-${index}`}
+                          className={`flex min-h-[220px] flex-col rounded-[22px] border p-3 opacity-70 motion-reduce:opacity-100 ${isLightRed ? 'border-stone-300/70 bg-[#fffefc]' : 'border-white/10 bg-zinc-950'}`}
+                        >
+                          <div className={`aspect-[5/4] w-full rounded-[16px] animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/90' : 'bg-white/[0.08]'}`} />
+                          <div className={`mt-2.5 h-3 w-14 rounded-full animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-200/80' : 'bg-white/[0.06]'}`} />
+                          <div className={`mt-2 h-10 w-full rounded-lg animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/70' : 'bg-white/[0.07]'}`} />
+                          <div className={`mt-auto flex flex-col gap-2 border-t pt-3 ${isLightRed ? 'border-stone-200/60' : 'border-white/10'}`}>
+                            <div className={`h-6 w-20 rounded-md animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.08]'}`} />
+                            <div className={`h-11 w-full rounded-xl animate-pulse motion-reduce:animate-none ${isLightRed ? 'bg-stone-300/80' : 'bg-white/[0.09]'}`} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
                 {!showSuggestionSkeleton && suggestionCards.length > 0 && (
-                  <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {suggestionCards.map((card) => (
+                  <div className="flex flex-col gap-3">
+                    <SacolaUpsellCard card={suggestionCards[0]} isLightRed={isLightRed} onAdd={handleSuggestionAdd} />
+                    {suggestionCards.length > 1 && (
                       <div
-                        key={card.item.id}
                         className={
-                          card.featured
-                            ? isLightRed
-                              ? 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-red-300 bg-[linear-gradient(180deg,#fffdf9_0%,#fff3ee_100%)] p-3.5 shadow-[0_16px_36px_rgba(220,38,38,0.12)] ring-1 ring-red-200/80'
-                              : 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-cyan-300/35 bg-[linear-gradient(180deg,rgba(16,18,28,1)_0%,rgba(15,34,44,0.96)_100%)] p-3.5 shadow-[0_18px_40px_rgba(34,211,238,0.12)] ring-1 ring-cyan-300/20'
-                            : isLightRed
-                              ? 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-stone-300/70 bg-[#fffefc] p-3.5 shadow-sm'
-                              : 'grid min-h-[320px] grid-rows-[auto,1fr,auto] rounded-[24px] border border-white/10 bg-zinc-950 p-3.5'
+                          suggestionCards.length === 2
+                            ? 'flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:items-stretch'
+                            : 'grid grid-cols-2 gap-3 sm:items-stretch'
                         }
                       >
-                        <div className="space-y-3">
-                          {card.item.photo_url ? (
-                            <img
-                              src={card.item.photo_url}
-                              alt={card.item.name}
-                              className={`aspect-[16/10] w-full rounded-[20px] object-cover ${card.featured ? (isLightRed ? 'border border-red-200 shadow-[0_10px_22px_rgba(220,38,38,0.10)]' : 'border border-cyan-300/20 shadow-[0_18px_38px_rgba(0,0,0,0.28)]') : (isLightRed ? 'border border-stone-200 shadow-sm' : 'border border-white/10 shadow-[0_18px_38px_rgba(0,0,0,0.22)]')}`}
-                            />
-                          ) : (
-                            <div className={`flex aspect-[16/10] w-full items-center justify-center rounded-[20px] text-xs font-black tracking-[0.18em] ${card.featured ? (isLightRed ? 'border border-red-200 bg-red-50/70 text-red-700' : 'border border-cyan-300/20 bg-cyan-400/10 text-cyan-200') : (isLightRed ? 'border border-stone-200 bg-stone-100 text-stone-600' : 'border border-white/10 bg-black/20 text-cyan-200')}`}>
-                              ITEM
-                            </div>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`inline-flex w-fit max-w-full items-center truncate rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${card.featured ? (isLightRed ? 'bg-red-600 text-white ring-1 ring-red-600/70' : 'bg-cyan-300 text-zinc-950 ring-1 ring-cyan-200/80') : (isLightRed ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-white/8 text-zinc-100 ring-1 ring-white/10')}`}>
-                              {card.badge}
-                            </span>
-                            {card.featured && (
-                              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isLightRed ? 'bg-white text-red-700 ring-1 ring-red-200' : 'bg-white/10 text-cyan-100 ring-1 ring-cyan-300/20'}`}>
-                                Mais relevante
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="min-w-0 pt-3">
-                          {card.item.category ? (
-                            <p className={`line-clamp-1 text-[10px] font-black uppercase tracking-[0.14em] ${card.featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/80') : (isLightRed ? 'text-stone-500' : 'text-zinc-400')}`}>
-                              {card.item.category}
-                            </p>
-                          ) : (
-                            <div className="h-[12px]" aria-hidden />
-                          )}
-                          <p className={`mt-2 line-clamp-2 min-h-[3.25rem] text-[16px] font-black leading-snug sm:text-[17px] ${isLightRed ? 'text-stone-900' : 'text-zinc-100'}`}>
-                            {card.item.name}
-                          </p>
-                          <p className={`mt-2 line-clamp-2 min-h-[2.75rem] text-[11px] leading-relaxed sm:text-[12px] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>
-                            {card.headline}
-                          </p>
-                        </div>
-
-                        <div className={`mt-4 flex items-end justify-between gap-3 border-t pt-3 ${card.featured ? (isLightRed ? 'border-red-200/80' : 'border-cyan-300/15') : (isLightRed ? 'border-stone-200/80' : 'border-white/10')}`}>
-                          <div className="min-w-0 flex-1">
-                            <p className={`truncate text-[10px] font-semibold uppercase tracking-[0.16em] ${card.featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200/75') : (isLightRed ? 'text-stone-500' : 'text-zinc-500')}`}>
-                              {card.pricePrefix}
-                            </p>
-                            <p className={`mt-1 truncate whitespace-nowrap text-lg font-black leading-none sm:text-xl ${card.featured ? (isLightRed ? 'text-red-700' : 'text-cyan-200') : (isLightRed ? 'text-red-700' : 'text-cyan-300')}`}>
-                              {fmt(card.displayPrice)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleSuggestionAdd(card.item)}
-                            className={
-                              card.featured
-                                ? isLightRed
-                                  ? 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-red-600 px-3 py-2 text-xs font-black text-white shadow-[0_10px_24px_rgba(220,38,38,0.20)] transition-colors hover:bg-red-700'
-                                  : 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-cyan-300 px-3 py-2 text-xs font-black text-zinc-950 shadow-[0_10px_24px_rgba(34,211,238,0.16)] transition-colors hover:bg-cyan-200'
-                                : isLightRed
-                                  ? 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-red-600 px-3 py-2 text-xs font-black text-white transition-colors hover:bg-red-700'
-                                  : 'inline-flex h-11 w-[112px] shrink-0 items-center justify-center rounded-2xl bg-white px-3 py-2 text-xs font-black text-zinc-950 transition-colors hover:bg-cyan-300'
-                            }
-                          >
-                            {card.cta}
-                          </button>
-                        </div>
+                        {suggestionCards.slice(1).map((card) => (
+                          <Fragment key={card.item.id}>
+                            <SacolaUpsellCard card={card} isLightRed={isLightRed} onAdd={handleSuggestionAdd} />
+                          </Fragment>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
 
                 {!showSuggestionSkeleton && suggestionCards.length === 0 && (
-                  <div className={`rounded-[24px] border border-dashed p-4 text-center ${isLightRed ? 'border-stone-300/80 bg-[#fffefc] text-stone-600' : 'border-white/10 bg-zinc-950 text-zinc-300'}`}>
+                  <div className={`rounded-[24px] border border-dashed p-4 text-center sm:p-5 ${isLightRed ? 'border-stone-300/80 bg-[#fffefc] text-stone-600' : 'border-white/10 bg-zinc-950 text-zinc-300'}`}>
                     <p className={`text-sm font-bold ${isLightRed ? 'text-stone-800' : 'text-white'}`}>Ainda nao encontramos uma sugestao ideal para esta sacola.</p>
-                    <p className="mt-1 text-xs leading-relaxed">Voce pode seguir normalmente para o checkout assim mesmo.</p>
+                    <p className="mt-1 text-xs leading-relaxed sm:text-[13px]">Voce pode seguir normalmente para o checkout assim mesmo.</p>
                   </div>
                 )}
               </div>
@@ -3455,31 +3572,31 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
   const pedidoMinimoAplicavel = tipoAtendimento === 'entrega' ? Number(config.pedido_minimo || 0) : 0;
   const th = useDeliveryCardapioTheme();
   const sb = th.sacola;
-  const [suggestionsTimeoutElapsed, setSuggestionsTimeoutElapsed] = useState(false);
+  const [suggestionsTimedOut, setSuggestionsTimedOut] = useState(false);
 
   useEffect(() => {
     if (!open) {
-      setSuggestionsTimeoutElapsed(false);
+      setSuggestionsTimedOut(false);
       return;
     }
     if (!showSuggestions || !suggestionsPending || suggestionsReady) {
-      setSuggestionsTimeoutElapsed(false);
+      setSuggestionsTimedOut(false);
       return;
     }
-    setSuggestionsTimeoutElapsed(false);
+    setSuggestionsTimedOut(false);
     const timeoutId = window.setTimeout(() => {
-      setSuggestionsTimeoutElapsed(true);
-    }, SUGGESTIONS_EXPOSURE_TIMEOUT_MS);
+      setSuggestionsTimedOut(true);
+    }, SUGGESTIONS_CHECKOUT_FAILSAFE_MS);
     return () => {
       window.clearTimeout(timeoutId);
     };
   }, [open, showSuggestions, suggestionsPending, suggestionsReady, suggestionRequestKey]);
 
-  const checkoutLockedBySuggestions = showSuggestions && suggestionsPending && !suggestionsReady && !suggestionsTimeoutElapsed;
+  const checkoutLockedBySuggestions = showSuggestions && suggestionsPending && !suggestionsReady && !suggestionsTimedOut;
   const footerHint = checkoutLockedBySuggestions
-    ? 'Segure um instante: carregando sugestoes para voce ver antes de avancar.'
-    : showSuggestions && suggestionsPending && !suggestionsReady && suggestionsTimeoutElapsed
-      ? 'As sugestoes ainda estao sendo buscadas, mas o checkout ja foi liberado para nao travar sua experiencia.'
+    ? 'Carregando sugestoes para voce ver antes de finalizar.'
+    : showSuggestions && suggestionsPending && !suggestionsReady && suggestionsTimedOut
+      ? 'As sugestoes demoraram. Voce pode seguir para o checkout abaixo.'
       : null;
   const handleContinuarCheckout = useCallback(() => {
     if (checkoutLockedBySuggestions) return;
@@ -3537,6 +3654,7 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
             showSuggestions={showSuggestions}
             suggestionsReady={suggestionsReady}
             suggestionsPending={suggestionsPending}
+            suggestionsTimedOut={suggestionsTimedOut}
             onAdd={onAdd}
             onAddSuggestion={onAddSuggestion}
             onRemove={onRemove}
@@ -3575,7 +3693,7 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
               disabled={sub < pedidoMinimoAplicavel || checkoutLockedBySuggestions}
               className={sb.primaryBtn}
             >
-              {checkoutLockedBySuggestions ? 'Aguarde as sugestoes' : 'Continuar para finalizar'}
+              {checkoutLockedBySuggestions ? 'Carregando sugestoes...' : 'Continuar para finalizar'}
             </button>
             <button
               type="button"

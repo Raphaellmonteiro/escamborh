@@ -29,6 +29,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
+// Proxy reverso (Railway, etc.): habilita X-Forwarded-For em req.ip e satisfaz express-rate-limit (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+app.set('trust proxy', 1);
+
 app.use(
   helmet({
     contentSecurityPolicy: false,
