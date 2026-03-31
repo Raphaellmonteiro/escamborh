@@ -1,5 +1,5 @@
 // src/middleware.ts — middlewares, multer, rate limiters
-import { randomBytes } from 'node:crypto';
+import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
@@ -120,7 +120,7 @@ const logoStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, path.join(process.cwd(), 'uploads', 'logo')),
   filename: (req: any, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
-    const suffix = randomBytes(8).toString('hex');
+    const suffix = crypto.randomBytes(8).toString('hex');
     cb(null, `logo_${req.tenantId || 'admin'}_${suffix}${ext}`);
   },
 });
@@ -583,7 +583,7 @@ function logVerboseRequestStart(req: Request) {
  * Produção + LOG_REQUEST_BODY=true: mesmo comportamento do desenvolvimento.
  */
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
-  req.requestId = randomBytes(4).toString('hex');
+  req.requestId = crypto.randomBytes(4).toString('hex');
 
   const isProd = process.env.NODE_ENV === 'production';
 

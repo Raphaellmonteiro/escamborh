@@ -14,7 +14,7 @@ import { createExpensesRouter } from '../expenses/expenses';
 import { createAdminRouter } from './admin';
 import { createAiRouter } from './ai';
 import { createAuthRouter } from './auth';
-import { createDashboardRouter } from './dashboard';
+import { createCaixaRouter, createDashboardRouter } from './dashboard';
 import { createDeliveryRouter } from './delivery';
 import { createEstoqueRouter } from './estoque';
 import { createLogsRouter, createUsuariosRouter, createAcessoFuncRouter } from './logs';
@@ -177,10 +177,8 @@ export function createApiRouter() {
   protectedRouter.use('/clientes', createClientesRouter());
   protectedRouter.use('/expenses', requirePlanFeature('finance'), requireAnyPermission('finance'), createExpensesRouter());
   protectedRouter.use('/dashboard', requirePlanFeature('dashboard'), requireAnyPermission('dashboard'), createDashboardRouter());
-  // Caixa shares the same router factory as /dashboard (see routes/dashboard.ts: hoje, abrir, fechar, historico).
-  // Mounted at /caixa so paths are /api/caixa/hoje, etc. Only requireAnyPermission('finance') — no dashboard plan gate,
-  // so finance users can open/close caixa without the dashboard feature flag.
-  protectedRouter.use('/caixa', requirePlanFeature('caixa'), requireAnyPermission('finance'), createDashboardRouter());
+  // Caixa: rotas definidas em `registerCaixaRoutes` (dashboard.ts); apenas montagem e gates distintos do dashboard.
+  protectedRouter.use('/caixa', requirePlanFeature('caixa'), requireAnyPermission('finance'), createCaixaRouter());
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
   protectedRouter.use('/ai', createAiRouter());

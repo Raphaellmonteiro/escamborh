@@ -85,6 +85,97 @@ async function getOpenCaixa(req: Request) {
   return caixa;
 }
 
+/** Rotas de caixa (abrir/fechar/hoje/histórico). Usado em `/api/caixa` e, por compatibilidade, também em `/api/dashboard`. */
+function registerCaixaRoutes(router: Router) {
+  const getCaixaHandler = async (req: Request, res: any) => {
+    const caixa = await getOpenCaixa(req);
+    if (!caixa) return res.json({ status: 'fechado' });
+
+    const pd = await q1(`SELECT COALESCE(SUM(amount_paid),0) as total FROM pagamentos WHERE (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`, [caixa.data, req.tenantId]);
+    const dd = await q1(`SELECT COALESCE(SUM(amount),0) as total FROM despesas WHERE (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`, [caixa.data, req.tenantId]);
+
+    return res.json({
+      ...caixa,
+      total_vendas: Number(pd?.total || 0),
+      total_despesas: Number(dd?.total || 0),
+    });
+  };
+
+  router.get('/caixa', getCaixaHandler);
+  router.get('/hoje', getCaixaHandler);
+
+  const openCaixaHandler = async (req: Request, res: any) => {
+    const { fundo_inicial, observacao } = req.body;
+    const dateStr = getTodayDateInTimeZone();
+
+    const ex = await q1("SELECT * FROM caixa WHERE data=? AND status='aberto' AND tenant_id=?", [dateStr, req.tenantId]);
+    if (ex) return res.status(400).json({ success: false, message: 'Ja existe um caixa aberto hoje.' });
+
+    await qRun(
+      "INSERT INTO caixa (data,fundo_inicial,observacao,status,tenant_id) VALUES (?,?,?,'aberto',?)",
+      [dateStr, fundo_inicial, observacao, req.tenantId]
+    );
+
+    return res.json({ success: true });
+  };
+
+  router.post('/abrir-caixa', openCaixaHandler);
+  router.post('/abrir', openCaixaHandler);
+
+  const closeCaixaHandler = async (req: Request, res: any) => {
+    const { valor_contado, observacao } = req.body;
+
+    const caixa = await getOpenCaixa(req);
+    if (!caixa) return res.status(400).json({ success: false, message: 'Nenhum caixa aberto encontrado.' });
+
+    const vd = await q1(
+      `SELECT COALESCE(SUM(amount_paid-change_given),0) as total
+       FROM pagamentos
+       WHERE method='Dinheiro' AND (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`,
+      [caixa.data, req.tenantId]
+    );
+    const totalVD = Number(vd?.total || 0);
+    const fundo = Number(caixa.fundo_inicial || 0);
+
+    await qRun(
+      "UPDATE caixa SET valor_contado=?,status='fechado',observacao=?,closed_at=NOW() WHERE id=? AND tenant_id=?",
+      [valor_contado, observacao || caixa.observacao, caixa.id, req.tenantId]
+    );
+
+    return res.json({
+      success: true,
+      total_vendas_dinheiro: totalVD,
+      total_esperado: fundo + totalVD,
+      diferenca: valor_contado - (fundo + totalVD),
+    });
+  };
+
+  router.post('/fechar-caixa', closeCaixaHandler);
+  router.post('/fechar', closeCaixaHandler);
+
+  router.get('/historico', async (req: Request, res) => {
+    const history = await qAll(
+      `SELECT c.*, (SELECT COALESCE(SUM(amount_paid-change_given),0) FROM pagamentos WHERE method='Dinheiro' AND (created_at AT TIME ZONE '${TZ}')::date::text=c.data AND tenant_id=c.tenant_id) as total_vendas_dinheiro
+       FROM caixa c WHERE c.tenant_id=? ORDER BY c.data DESC LIMIT 30`,
+      [req.tenantId]
+    );
+
+    res.json(history.map((h: any) => ({
+      ...h,
+      fundo_inicial: Number(h.fundo_inicial || 0),
+      valor_contado: Number(h.valor_contado || 0),
+      total_vendas_dinheiro: Number(h.total_vendas_dinheiro || 0),
+    })));
+  });
+}
+
+/** Apenas caixa: montado em `/api/caixa` (plan feature `caixa`, permissão `finance`). */
+export function createCaixaRouter() {
+  const router = Router();
+  registerCaixaRoutes(router);
+  return router;
+}
+
 export function createDashboardRouter() {
   const router = Router();
 
@@ -229,86 +320,7 @@ export function createDashboardRouter() {
     }
   });
 
-  const getCaixaHandler = async (req: Request, res: any) => {
-    const caixa = await getOpenCaixa(req);
-    if (!caixa) return res.json({ status: 'fechado' });
-
-    const pd = await q1(`SELECT COALESCE(SUM(amount_paid),0) as total FROM pagamentos WHERE (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`, [caixa.data, req.tenantId]);
-    const dd = await q1(`SELECT COALESCE(SUM(amount),0) as total FROM despesas WHERE (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`, [caixa.data, req.tenantId]);
-
-    return res.json({
-      ...caixa,
-      total_vendas: Number(pd?.total || 0),
-      total_despesas: Number(dd?.total || 0),
-    });
-  };
-
-  router.get('/caixa', getCaixaHandler);
-  router.get('/hoje', getCaixaHandler);
-
-  const openCaixaHandler = async (req: Request, res: any) => {
-    const { fundo_inicial, observacao } = req.body;
-    const dateStr = getTodayDateInTimeZone();
-
-    const ex = await q1("SELECT * FROM caixa WHERE data=? AND status='aberto' AND tenant_id=?", [dateStr, req.tenantId]);
-    if (ex) return res.status(400).json({ success: false, message: 'Ja existe um caixa aberto hoje.' });
-
-    await qRun(
-      "INSERT INTO caixa (data,fundo_inicial,observacao,status,tenant_id) VALUES (?,?,?,'aberto',?)",
-      [dateStr, fundo_inicial, observacao, req.tenantId]
-    );
-
-    return res.json({ success: true });
-  };
-
-  router.post('/abrir-caixa', openCaixaHandler);
-  router.post('/abrir', openCaixaHandler);
-
-  const closeCaixaHandler = async (req: Request, res: any) => {
-    const { valor_contado, observacao } = req.body;
-
-    const caixa = await getOpenCaixa(req);
-    if (!caixa) return res.status(400).json({ success: false, message: 'Nenhum caixa aberto encontrado.' });
-
-    const vd = await q1(
-      `SELECT COALESCE(SUM(amount_paid-change_given),0) as total
-       FROM pagamentos
-       WHERE method='Dinheiro' AND (created_at AT TIME ZONE '${TZ}')::date=? AND tenant_id=?`,
-      [caixa.data, req.tenantId]
-    );
-    const totalVD = Number(vd?.total || 0);
-    const fundo = Number(caixa.fundo_inicial || 0);
-
-    await qRun(
-      "UPDATE caixa SET valor_contado=?,status='fechado',observacao=?,closed_at=NOW() WHERE id=? AND tenant_id=?",
-      [valor_contado, observacao || caixa.observacao, caixa.id, req.tenantId]
-    );
-
-    return res.json({
-      success: true,
-      total_vendas_dinheiro: totalVD,
-      total_esperado: fundo + totalVD,
-      diferenca: valor_contado - (fundo + totalVD),
-    });
-  };
-
-  router.post('/fechar-caixa', closeCaixaHandler);
-  router.post('/fechar', closeCaixaHandler);
-
-  router.get('/historico', async (req: Request, res) => {
-    const history = await qAll(
-      `SELECT c.*, (SELECT COALESCE(SUM(amount_paid-change_given),0) FROM pagamentos WHERE method='Dinheiro' AND (created_at AT TIME ZONE '${TZ}')::date::text=c.data AND tenant_id=c.tenant_id) as total_vendas_dinheiro
-       FROM caixa c WHERE c.tenant_id=? ORDER BY c.data DESC LIMIT 30`,
-      [req.tenantId]
-    );
-
-    res.json(history.map((h: any) => ({
-      ...h,
-      fundo_inicial: Number(h.fundo_inicial || 0),
-      valor_contado: Number(h.valor_contado || 0),
-      total_vendas_dinheiro: Number(h.total_vendas_dinheiro || 0),
-    })));
-  });
+  registerCaixaRoutes(router);
 
   return router;
 }
