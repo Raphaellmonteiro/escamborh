@@ -1,4 +1,5 @@
 // src/middleware.ts — middlewares, multer, rate limiters
+import { randomBytes } from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
@@ -8,6 +9,7 @@ import path from 'path';
 import { isDatabaseConnectivityError, pool, q1 } from './db';
 import { type PlanFeature } from './config/planFeatures';
 import { getTenantFeatures } from './services/tenantPlan';
+import { sendInternalError } from './utils/internalServerError';
 
 type AuthenticatedSession =
   | {
@@ -117,8 +119,9 @@ export const upload = multer({
 const logoStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, path.join(process.cwd(), 'uploads', 'logo')),
   filename: (req: any, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `logo_${req.tenantId || 'admin'}${ext}`);
+    const ext = path.extname(file.originalname) || '.jpg';
+    const suffix = randomBytes(8).toString('hex');
+    cb(null, `logo_${req.tenantId || 'admin'}_${suffix}${ext}`);
   },
 });
 
@@ -290,9 +293,9 @@ export function requirePlanFeature(feature: PlanFeature) {
         error: 'Plano não inclui este recurso',
         feature,
       });
-    } catch (err: any) {
-      console.error('[requirePlanFeature] erro:', err?.message || err);
-      return res.status(500).json({ error: 'Erro ao validar plano do tenant' });
+    } catch (err: unknown) {
+      sendInternalError(res, 'middleware.requirePlanFeature', err, { feature });
+      return;
     }
   };
 }
@@ -560,16 +563,50 @@ function redactSensitiveQueryInUrl(url: string): string {
 }
 
 // ── Logging middleware ────────────────────────────────────────────────────────
-export function requestLogger(req: Request, _res: Response, next: NextFunction) {
-  const isProd = process.env.NODE_ENV === 'production';
-  if (isProd && req.method === 'GET') return next();
+/** Em produção, `true` força o mesmo log detalhado (IP, UA, body) do desenvolvimento. */
+const LOG_REQUEST_BODY =
+  process.env.LOG_REQUEST_BODY === 'true' || process.env.LOG_REQUEST_BODY === '1';
+
+function logVerboseRequestStart(req: Request) {
   const agente = req.headers['user-agent']?.substring(0, 35) || 'Desconhecido';
   const safeUrl = redactSensitiveQueryInUrl(req.url);
   console.log(`[${new Date().toISOString()}] IP: ${req.ip} | Agente: ${agente}... | ${req.method} ${safeUrl}`);
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-    const safe =
-      shouldRedactEntireRequestBody(req.path) ? '[REDACTED]' : redactBodyForLogs(req.body);
+    const safe = shouldRedactEntireRequestBody(req.path) ? '[REDACTED]' : redactBodyForLogs(req.body);
     console.log('Body:', typeof safe === 'string' ? safe : JSON.stringify(safe));
   }
+}
+
+/**
+ * Desenvolvimento: log imediato com IP, user-agent, rota e body (POST/PUT/PATCH), com redação.
+ * Produção (padrão): uma linha ao final com rid=, método, rota, status e duração; ip= só se status >= 400; body só se status >= 400 em POST/PUT/PATCH.
+ * Produção + LOG_REQUEST_BODY=true: mesmo comportamento do desenvolvimento.
+ */
+export function requestLogger(req: Request, res: Response, next: NextFunction) {
+  req.requestId = randomBytes(4).toString('hex');
+
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (!isProd || LOG_REQUEST_BODY) {
+    logVerboseRequestStart(req);
+    return next();
+  }
+
+  const started = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - started;
+    const safeUrl = redactSensitiveQueryInUrl(req.url);
+    const ipSuffix = res.statusCode >= 400 ? ` ip=${req.ip}` : '';
+    console.log(
+      `[${new Date().toISOString()}] rid=${req.requestId} ${req.method} ${safeUrl} ${res.statusCode} ${ms}ms${ipSuffix}`
+    );
+    if (
+      res.statusCode >= 400 &&
+      ['POST', 'PUT', 'PATCH'].includes(req.method)
+    ) {
+      const safe = shouldRedactEntireRequestBody(req.path) ? '[REDACTED]' : redactBodyForLogs(req.body);
+      console.log('Body:', typeof safe === 'string' ? safe : JSON.stringify(safe));
+    }
+  });
   next();
 }

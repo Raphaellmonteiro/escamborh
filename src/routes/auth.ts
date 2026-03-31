@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { q1, qInsert } from '../db';
 import { JWT_SECRET, loginRateLimiter, authenticateToken, publicRateLimit } from '../middleware';
 import { isAppError } from '../utils/errors';
+import { sendInternalError } from '../utils/internalServerError';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { parseBodyOrReply, replyZod400Api } from '../validation/zodHttp';
 import {
@@ -58,9 +59,8 @@ export function createAuthRouter() {
         permissoes: user.permissoes ? JSON.parse(user.permissoes) : null,
         nome:       user.nome || user.username,
       }});
-    } catch (err: any) {
-      console.error('[/api/login] erro:', err.message);
-      res.status(500).json({ success: false, message: 'Erro interno no servidor' });
+    } catch (err: unknown) {
+      sendInternalError(res, 'POST /api/login', err);
     }
   });
 
@@ -84,7 +84,8 @@ export function createAuthRouter() {
         if (e.code === 'AUTH_USER_NOT_FOUND') return res.status(401).json({ success: false, message: e.message });
         if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(403).json({ success: false, message: e.message });
       }
-      return res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'POST /api/auth/verify-admin', e);
+      return;
     }
   });
 
@@ -108,7 +109,8 @@ export function createAuthRouter() {
         if (e.code === 'AUTH_USER_NOT_FOUND') return res.status(401).json({ success: false, message: e.message });
         if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(403).json({ success: false, message: e.message });
       }
-      return res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'POST /api/auth/verify-caixa', e);
+      return;
     }
   });
 
@@ -136,7 +138,9 @@ export function createAuthRouter() {
         ]
       );
       res.json({ success: true, id });
-    } catch (err: any) { res.status(500).json({ success: false, message: err.message }); }
+    } catch (err: unknown) {
+      sendInternalError(res, 'POST /api/public/solicitar-acesso', err);
+    }
   });
 
   return router;

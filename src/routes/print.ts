@@ -11,6 +11,7 @@ import {
   filterKitchenPreparationItems,
 } from '../services/kitchenPrintService';
 import { dispatchKitchenProductionForOrder, loadKitchenItemRowsForOrder } from '../services/kitchenPrintDispatchService';
+import { sendInternalError } from '../utils/internalServerError';
 
 function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
   return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
@@ -311,7 +312,7 @@ export function createPrintRouter() {
 
       res.send(html);
     } catch (e: any) {
-      res.status(500).send(e.message);
+      sendInternalError(res, 'routes/print', e);
     }
   });
 
@@ -366,7 +367,7 @@ export function createPrintRouter() {
         })
       );
     } catch (e: any) {
-      res.status(500).send(e.message);
+      sendInternalError(res, 'routes/print', e);
     }
   });
 
@@ -419,7 +420,7 @@ export function createPrintRouter() {
         })
       );
     } catch (e: any) {
-      res.status(500).send(e.message);
+      sendInternalError(res, 'routes/print', e);
     }
   });
 

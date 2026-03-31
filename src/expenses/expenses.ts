@@ -1,6 +1,7 @@
 // src/routes/expenses.ts
 import { Router, Request, Response } from 'express';
 import { q1, qAll, qInsert, qRun } from '../db';
+import { sendInternalError } from '../utils/internalServerError';
 
 type TenantRequest = Request & {
   tenantId: number | string;
@@ -20,7 +21,7 @@ export function createExpensesRouter() {
       res.json(expenses);
     } catch (e: any) {
       console.error('GET /expenses erro:', e.message);
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/expenses', e);
     }
   });
 
@@ -57,7 +58,7 @@ export function createExpensesRouter() {
       res.json({ success: true, expense });
     } catch (e: any) {
       console.error('POST /expenses erro:', e.message);
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/expenses', e);
     }
   });
 
@@ -87,7 +88,7 @@ export function createExpensesRouter() {
       res.json({ success: true, message: 'Despesa excluída com sucesso' });
     } catch (e: any) {
       console.error('DELETE /expenses/:id erro:', e.message);
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/expenses', e);
     }
   });
 

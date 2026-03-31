@@ -1,6 +1,7 @@
 // src/routes/ai.ts - avisos deterministicos + analise com IA
 import { Router, Request } from 'express';
 import { q1, qAll, qRun } from '../db';
+import { sendInternalError } from '../utils/internalServerError';
 import { requirePlanFeature } from '../middleware';
 import { refreshDeterministicAlerts } from '../services/alertsService';
 
@@ -27,7 +28,7 @@ export function createAiRouter() {
         )
       );
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 
@@ -46,7 +47,7 @@ export function createAiRouter() {
       ]);
       res.json({ avisos: lista, total: total?.n || 0 });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 
@@ -58,7 +59,7 @@ export function createAiRouter() {
       ]);
       res.json({ ok: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 
@@ -67,7 +68,7 @@ export function createAiRouter() {
       await qRun('UPDATE ai_avisos SET lido=1 WHERE tenant_id=? AND lido=0', [req.tenantId]);
       res.json({ ok: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 
@@ -79,7 +80,7 @@ export function createAiRouter() {
       );
       res.json({ ok: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 
@@ -88,7 +89,7 @@ export function createAiRouter() {
       const result = await refreshDeterministicAlerts(req.tenantId!);
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 
@@ -208,7 +209,7 @@ export function createAiRouter() {
       ]);
       res.json(resultado);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/ai', e);
     }
   });
 

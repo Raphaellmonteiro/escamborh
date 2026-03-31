@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { buildPublicOrderItemFromPersisted, serializeOrderItemSelecoes } from '../services/ordersService';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
+import { sendInternalError } from '../utils/internalServerError';
 import {
   requireAnyPermission,
   uploadDeliveryCardapioLogo,
@@ -156,7 +157,7 @@ export function createDeliveryRouter() {
       const base = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       applyNormalizedBannerSlots(base);
       res.json({ ativo: !!row?.delivery_ativo, ...base });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.put('/config', async (req: Request, res) => {
@@ -167,7 +168,7 @@ export function createDeliveryRouter() {
       const merged = mergeDeliveryConfigClientPut(existing, rest && typeof rest === 'object' && !Array.isArray(rest) ? rest : {});
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.post(
@@ -190,7 +191,7 @@ export function createDeliveryRouter() {
         });
         res.json({ success: true, url: publicUrl });
       } catch (e: any) {
-        res.status(500).json({ success: false, error: e.message });
+        sendInternalError(res, 'routes/delivery', e);
       }
     }
   );
@@ -208,7 +209,7 @@ export function createDeliveryRouter() {
       });
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/delivery', e);
     }
   });
 
@@ -238,7 +239,7 @@ export function createDeliveryRouter() {
         });
         res.json({ success: true, url: publicUrl, index: idx });
       } catch (e: any) {
-        res.status(500).json({ success: false, error: e.message });
+        sendInternalError(res, 'routes/delivery', e);
       }
     }
   );
@@ -262,7 +263,7 @@ export function createDeliveryRouter() {
       });
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/delivery', e);
     }
   });
 
@@ -367,7 +368,7 @@ router.get('/pedidos', async (req: Request, res) => {
           };
         })
       );
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.patch('/pedidos/:id/status', async (req: Request, res) => {
@@ -420,7 +421,7 @@ router.get('/pedidos', async (req: Request, res) => {
       }
 
       res.json({ success: true, automation: kitchenPrintAutomation ? { kitchen_print: kitchenPrintAutomation } : undefined });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.patch('/pedidos/:id/pagamento', async (req: Request, res) => {
@@ -432,7 +433,7 @@ router.get('/pedidos', async (req: Request, res) => {
       await qRun('UPDATE pedidos SET pagamento_status=? WHERE id=? AND tenant_id=?', [req.body.pagamento_status, req.params.id, req.tenantId]);
       notifyTenantOrderStreams(Number(req.tenantId), 'status', { orderId: Number(req.params.id) });
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.get('/motoboys', async (req: Request, res) => {
@@ -447,7 +448,7 @@ router.get('/pedidos', async (req: Request, res) => {
         }
       }
       res.json(await qAll('SELECT * FROM delivery_motoboys WHERE tenant_id=? AND ativo=1 ORDER BY nome', [req.tenantId]));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.get('/motoboys/relatorio', async (req: Request, res) => {
@@ -475,7 +476,7 @@ router.get('/pedidos', async (req: Request, res) => {
         [dataInicio, dataFim, req.tenantId]
       );
       res.json(rows.map((r: any) => ({ ...r, valor_por_entrega: valorPorEntrega, total_a_pagar: r.total_entregas * valorPorEntrega })));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
 router.get('/dashboard', async (req: Request, res) => {
@@ -499,7 +500,7 @@ router.get('/dashboard', async (req: Request, res) => {
         ticket_medio: Number(ticketMedio?.v || 0),
         top_motoboy: topMotoboy || null
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
 router.get('/clientes', async (req: Request, res) => {
@@ -569,7 +570,7 @@ router.get('/clientes', async (req: Request, res) => {
           sem_historico: totalPedidos <= 0,
         };
       }));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.get('/clientes/resumo', async (req: Request, res) => {
@@ -640,7 +641,7 @@ router.get('/clientes', async (req: Request, res) => {
           sem_historico: totalPedidos <= 0,
         };
       }));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.patch('/clientes/:id/resumo', async (req: Request, res) => {
@@ -673,7 +674,7 @@ router.get('/clientes', async (req: Request, res) => {
       );
 
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.get('/clientes/:id/pedidos', async (req: Request, res) => {
@@ -683,7 +684,7 @@ router.get('/clientes', async (req: Request, res) => {
          FROM pedidos p WHERE p.tenant_id=? AND (p.cliente_id=? OR p.delivery_cliente_id=?) ORDER BY p.created_at DESC LIMIT 50`,
         [req.tenantId, req.params.id, req.params.id]
       ));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.post('/pedidos', async (req: Request, res) => {
@@ -790,7 +791,12 @@ router.get('/clientes', async (req: Request, res) => {
         }
       }
       if (!inserted) {
-        return res.status(500).json({ success: false, error: 'Nao foi possivel gerar numero do pedido' });
+        sendInternalError(
+          res,
+          'routes/delivery:manualOrderNumber',
+          new Error('Nao foi possivel gerar numero do pedido')
+        );
+        return;
       }
 
       if (deliveryClienteId) {
@@ -826,13 +832,13 @@ router.get('/clientes', async (req: Request, res) => {
       });
     } catch (e: any) {
       if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message });
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/delivery', e);
     }
   });
 
   router.get('/cupons', async (req: Request, res) => {
     try { res.json(await qAll('SELECT * FROM delivery_cupons WHERE tenant_id=? ORDER BY created_at DESC', [req.tenantId])); }
-    catch (e: any) { res.status(500).json({ error: e.message }); }
+    catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.post('/cupons', async (req: Request, res) => {
@@ -842,21 +848,21 @@ router.get('/clientes', async (req: Request, res) => {
       const id = await qInsert('INSERT INTO delivery_cupons (tenant_id,codigo,tipo,valor,min_pedido,limite_uso,validade) VALUES (?,?,?,?,?,?,?)',
         [req.tenantId, String(codigo).toUpperCase().trim(), tipo, valor||0, min_pedido||0, limite_uso||null, validade||null]);
       res.json({ success: true, id });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.patch('/cupons/:id', async (req: Request, res) => {
     try {
       await qRun('UPDATE delivery_cupons SET ativo=? WHERE id=? AND tenant_id=?', [req.body.ativo?1:0, req.params.id, req.tenantId]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.delete('/cupons/:id', async (req: Request, res) => {
     try {
       await qRun('DELETE FROM delivery_cupons WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
   // ── Relatório ───────────────────────────────────────────────
 // ── Relatório ─────────────────────────────────────────────────────────────
@@ -943,7 +949,7 @@ router.get('/clientes', async (req: Request, res) => {
       });
     } catch (e: any) { 
       console.error('Erro no relatorio:', e);
-      res.status(500).json({ error: e.message }); 
+      sendInternalError(res, 'routes/delivery', e); 
     }
   });
 

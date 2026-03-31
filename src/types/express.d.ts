@@ -3,6 +3,8 @@
 
 declare namespace Express {
   interface Request {
+    /** Correlation id (8 hex chars) — definido por requestLogger */
+    requestId?: string;
     tenantId?: number;
     user?: {
       id: number;

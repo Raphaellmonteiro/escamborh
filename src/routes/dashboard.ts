@@ -1,6 +1,7 @@
 // src/routes/dashboard.ts
 import { Router, Request } from 'express';
 import { q1, qAll, qRun } from '../db';
+import { sendInternalError } from '../utils/internalServerError';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -135,7 +136,7 @@ export function createDashboardRouter() {
         productSales: [],
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/dashboard', e);
     }
   });
 
@@ -185,7 +186,7 @@ export function createDashboardRouter() {
 
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/dashboard', e);
     }
   });
 
@@ -224,7 +225,7 @@ export function createDashboardRouter() {
         credit: Number(totals?.credit || 0),
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/dashboard', e);
     }
   });
 

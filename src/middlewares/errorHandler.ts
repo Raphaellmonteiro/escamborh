@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { AppError, isAppError } from '../utils/errors';
+import { INTERNAL_SERVER_MESSAGE } from '../utils/internalServerError';
 import { logError } from '../utils/logger';
 
 export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
@@ -24,7 +25,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
 
   return res.status(500).json({
     success: false,
-    error: 'Erro interno no servidor',
+    message: INTERNAL_SERVER_MESSAGE,
   });
 }
 

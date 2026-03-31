@@ -11,6 +11,7 @@ import { serializeOrderItemSelecoes } from '../services/ordersService';
 import { getTenantFeaturesBySlug } from '../services/tenantPlan';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
+import { sendInternalError } from '../utils/internalServerError';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import {
   recordDeliveryAutoAcceptOnline,
@@ -20,6 +21,7 @@ import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
+import { resolveTenantLogoPublicUrl } from '../utils/tenantLogoUpload';
 import {
   PRIMEIRA_COMPRA_PEDIDO_VALIDO_SQL,
   buildDeliveryAddressAntiFraudSignature,
@@ -798,8 +800,9 @@ export function createDeliveryPublicRouter() {
         }
 
         return res.status(403).json({ error: 'Plano não inclui este recurso', feature });
-      } catch (e: any) {
-        return res.status(500).json({ error: e.message || 'Erro ao validar plano do tenant' });
+      } catch (e: unknown) {
+        sendInternalError(res, 'delivery-public:requireSlugPlanFeature', e);
+        return;
       }
     };
   }
@@ -827,12 +830,7 @@ export function createDeliveryPublicRouter() {
       const produtos = await qAll('SELECT * FROM produtos WHERE tenant_id=? AND active=1 ORDER BY COALESCE(ordem,0) ASC, name ASC', [tenant.id]);
       const produtosComOpcoes = await buildProdutosComOpcoesBatched(tenant.id, produtos);
 
-      const logoPadrao = (() => {
-        const dir = path.join(process.cwd(), 'uploads', 'logo');
-        if (!fs.existsSync(dir)) return null;
-        const file = fs.readdirSync(dir).find((name: string) => name.startsWith(`logo_${tenant.id}.`));
-        return file ? `/uploads/logo/${file}` : null;
-      })();
+      const logoPadrao = resolveTenantLogoPublicUrl(tenant.id);
       const logoCustom = String(dcfg.cardapio_online_logo_url || '').trim();
       const logo_url = logoCustom || logoPadrao;
 
@@ -877,7 +875,7 @@ export function createDeliveryPublicRouter() {
         categorias,
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -917,7 +915,7 @@ export function createDeliveryPublicRouter() {
         }))
       );
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -982,7 +980,7 @@ export function createDeliveryPublicRouter() {
         })),
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1025,7 +1023,7 @@ export function createDeliveryPublicRouter() {
         },
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1042,7 +1040,7 @@ export function createDeliveryPublicRouter() {
       if (!resultado.valido) return res.json({ valido: false, mensagem: resultado.mensagem });
       res.json({ valido: true, cupom, desconto: resultado.desconto });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1071,7 +1069,7 @@ export function createDeliveryPublicRouter() {
         return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
       }
 
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1101,7 +1099,7 @@ export function createDeliveryPublicRouter() {
       }
       res.json({ success: true, novo: true, telefone: tel });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1134,7 +1132,7 @@ export function createDeliveryPublicRouter() {
       const token = jwt.sign({ clienteId, tenantId: tenant.id, tipo: 'delivery_cliente' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '90d' });
       res.json({ success: true, token, cliente: { id: clienteId, nome, telefone: tel, email: email ?? null, favoritos: [] } });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1144,7 +1142,7 @@ export function createDeliveryPublicRouter() {
       if (!cliente) return res.status(404).json({ error: 'Cliente nao encontrado' });
       res.json({ ...cliente, favoritos: JSON.parse(cliente.favoritos || '[]') });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1160,7 +1158,7 @@ export function createDeliveryPublicRouter() {
       ]);
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1169,7 +1167,7 @@ export function createDeliveryPublicRouter() {
       await qRun('UPDATE delivery_clientes SET favoritos=? WHERE id=? AND tenant_id=?', [JSON.stringify(req.body.favoritos || []), req.clienteId, req.tenantId]);
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1177,7 +1175,7 @@ export function createDeliveryPublicRouter() {
     try {
       res.json(await qAll('SELECT * FROM delivery_enderecos WHERE cliente_id=? AND tenant_id=? ORDER BY principal DESC, id DESC', [req.clienteId, req.tenantId]));
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1194,7 +1192,7 @@ export function createDeliveryPublicRouter() {
       );
       res.json({ success: true, id });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1203,7 +1201,7 @@ export function createDeliveryPublicRouter() {
       await qRun('DELETE FROM delivery_enderecos WHERE id=? AND cliente_id=? AND tenant_id=?', [req.params.id, req.clienteId, req.tenantId]);
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1219,7 +1217,7 @@ export function createDeliveryPublicRouter() {
       const parsed = rows.map((r: any) => ({ ...r, itens: Array.isArray(r.itens) ? r.itens : (typeof r.itens === 'string' ? JSON.parse(r.itens || '[]') : []) }));
       res.json(parsed);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1483,7 +1481,7 @@ export function createDeliveryPublicRouter() {
         }
 
         console.error('POST /public/delivery/:slug/pedido:', e.message);
-        res.status(500).json({ success: false, error: e.message });
+        sendInternalError(res, 'delivery-public', e);
       }
     });
 
@@ -1502,7 +1500,7 @@ export function createDeliveryPublicRouter() {
       notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(pedido.id) });
       res.json({ success: true, pagamento_status: 'aguardando_confirmacao' });
     } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message });
+      sendInternalError(res, 'delivery-public', e);
     }
   });
 
@@ -1614,9 +1612,8 @@ export function createDeliveryPublicRouter() {
       }
 
       return res.json(suggestions.slice(0, 3));
-    } catch (error) {
-      console.error('Erro ao buscar sugestões:', error);
-      return res.status(500).json({ error: 'Erro interno ao buscar sugestões' });
+    } catch (error: unknown) {
+      sendInternalError(res, 'delivery-public:suggestions', error);
     }
   });
 

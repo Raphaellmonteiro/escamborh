@@ -10,6 +10,7 @@ import {
   confirmQrOrder,
 } from '../services/ordersService';
 import { requireAnyPermission } from '../middleware';
+import { sendInternalError } from '../utils/internalServerError';
 
 type TenantRequest = Request & {
   tenantId: number | string;
@@ -100,9 +101,17 @@ export function createOrdersRouter() {
         userId: req.user?.id,
       });
       res.json({ success: true, status });
-    } catch (error: any) {
-      const status = error.statusCode || 500;
-      res.status(status).json({ error: error.message });
+    } catch (error: unknown) {
+      const status =
+        error && typeof error === 'object' && 'statusCode' in error && typeof (error as { statusCode?: number }).statusCode === 'number'
+          ? (error as { statusCode: number }).statusCode
+          : 500;
+      if (status >= 500) {
+        sendInternalError(res, 'routes/orders:confirmQr', error, { orderId: req.params.id });
+        return;
+      }
+      const msg = error instanceof Error ? error.message : 'Erro';
+      res.status(status).json({ error: msg });
     }
   });
 

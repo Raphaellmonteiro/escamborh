@@ -10,6 +10,7 @@ import {
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
+import { sendInternalError } from '../utils/internalServerError';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -65,7 +66,13 @@ router.get('/', async (req: Request, res) => {
         estoque_minimo: Number(r.estoque_minimo || 0),
         custo_unitario: Number(r.custo_unitario || 0)
       })));
-    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: unknown) {
+      const msg = String((e as Error)?.message ?? '');
+      if (msg.includes('código de barras')) {
+        return res.status(400).json({ error: msg });
+      }
+      sendInternalError(res, 'routes/estoque:list', e);
+    }
   });
 
   router.get('/padronizacao/produtos-pendentes', async (req: Request, res) => {
@@ -79,7 +86,7 @@ router.get('/', async (req: Request, res) => {
 
       res.json(report);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/estoque', e);
     }
   });
 
@@ -101,7 +108,7 @@ router.get('/', async (req: Request, res) => {
 
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/estoque', e);
     }
   });
 
@@ -123,7 +130,7 @@ router.get('/', async (req: Request, res) => {
 
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/estoque', e);
     }
   });
 
@@ -138,7 +145,13 @@ router.get('/', async (req: Request, res) => {
         [generatePublicId('ing'), nome.trim(), unidade.trim(), estoque_atual||0, estoque_minimo||0, custo_unitario||0, fornecedor||null, normalizedBarcode, req.tenantId]
       );
       res.json({ id, success: true });
-    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: unknown) {
+      const msg = String((e as Error)?.message ?? '');
+      if (msg.includes('código de barras')) {
+        return res.status(400).json({ error: msg });
+      }
+      sendInternalError(res, 'routes/estoque:post', e);
+    }
   });
 
   router.put('/:id', async (req: Request, res) => {
@@ -170,7 +183,13 @@ router.get('/', async (req: Request, res) => {
           [nome, unidade, estoque_minimo||0, custo_unitario||0, fornecedor||null, normalizedBarcode, req.params.id, req.tenantId]);
       }
       res.json({ success: true });
-    } catch (e: any) { res.status(e.message?.includes('código de barras') ? 400 : 500).json({ error: e.message }); }
+    } catch (e: unknown) {
+      const msg = String((e as Error)?.message ?? '');
+      if (msg.includes('código de barras')) {
+        return res.status(400).json({ error: msg });
+      }
+      sendInternalError(res, 'routes/estoque:put', e);
+    }
   });
 
   router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
@@ -216,7 +235,7 @@ router.get('/', async (req: Request, res) => {
       await qRun('INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,?,?,?,?)',
         [req.params.id, tipo, quantidadeMovimentada, motivo || null, req.tenantId]);
       res.json({ success: true, estoque_atual: novoEstoque });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.get('/movimentacoes/hoje', async (req: Request, res) => {
@@ -228,7 +247,7 @@ router.get('/', async (req: Request, res) => {
          ORDER BY m.created_at DESC`,
         [req.tenantId]
       ));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.get('/movimentacoes/periodo', async (req: Request, res) => {
@@ -241,13 +260,13 @@ router.get('/', async (req: Request, res) => {
          ORDER BY m.created_at DESC`,
         [req.tenantId, inicio, fim]
       ));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.get('/:id/historico', async (req: Request, res) => {
     try {
       res.json(await qAll('SELECT * FROM estoque_movimentacoes WHERE ingrediente_id=? AND tenant_id=? ORDER BY created_at DESC LIMIT 50', [req.params.id, req.tenantId]));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.get('/relatorio/consumo', async (req: Request, res) => {
@@ -290,7 +309,7 @@ router.get('/', async (req: Request, res) => {
         custo_total_periodo: consumo.reduce((total, item) => total + item.custo_total, 0),
         periodo: { inicio: inicioPeriodo, fim: fimPeriodo },
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.get('/ficha-tecnica/:product_id', async (req: Request, res) => {
@@ -308,7 +327,7 @@ router.get('/', async (req: Request, res) => {
         estoque_atual: Number(row.estoque_atual || 0),
         custo_unitario: row.custo_unitario == null ? null : Number(row.custo_unitario),
       })));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.post('/ficha-tecnica/:product_id', async (req: Request, res) => {
@@ -324,7 +343,7 @@ router.get('/', async (req: Request, res) => {
           [req.params.product_id, ingrediente_id, quantidade_usada, unidade||'unidade', req.tenantId]);
       }
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   router.delete('/ficha-tecnica/:product_id/:ingrediente_id', async (req: Request, res) => {
@@ -332,7 +351,7 @@ router.get('/', async (req: Request, res) => {
       await qRun('DELETE FROM produto_ingrediente WHERE product_id=? AND ingrediente_id=? AND tenant_id=?',
         [req.params.product_id, req.params.ingrediente_id, req.tenantId]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/estoque', e); }
   });
 
   return router;

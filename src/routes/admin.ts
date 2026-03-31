@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
 import { loginRateLimiter, authenticateToken, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
 import { logError } from '../utils/logger';
+import { sendInternalError } from '../utils/internalServerError';
 import { generatePublicId } from '../utils/publicIds';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
@@ -262,7 +263,7 @@ export function createAdminRouter() {
 
   admin.get('/solicitacoes', async (_req, res) => {
     try { res.json(await qAll('SELECT * FROM solicitacoes ORDER BY created_at DESC', [])); }
-    catch (e: any) { res.status(500).json({ error: e.message }); }
+    catch (e: unknown) { sendInternalError(res, 'routes/admin:solicitacoes', e); }
   });
 
   admin.post('/solicitacoes/:id/aprovar', async (req, res) => {
@@ -336,12 +337,8 @@ export function createAdminRouter() {
         trial_fim: approvalPlan.trialWindow.trialFim,
         vencimento: approvalPlan.trialWindow.vencimento,
       });
-    } catch (e: any) {
-      console.error('[admin.aprovarSolicitacao] erro ao aprovar solicitacao:', {
-        solicitacaoId: req.params.id,
-        message: e?.message || e,
-      });
-      res.status(500).json({ success: false, error: e.message });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:aprovarSolicitacao', e, { solicitacaoId: req.params.id });
     }
   });
 
@@ -349,7 +346,7 @@ export function createAdminRouter() {
     try {
       await qRun("UPDATE solicitacoes SET status='recusado' WHERE id=?", [req.params.id]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/clientes', async (_req, res) => {
@@ -360,7 +357,7 @@ export function createAdminRouter() {
         const td = c.vencimento ? new Date(c.vencimento) : c.trial_fim ? new Date(c.trial_fim) : null;
         return { ...c, dias_restantes: td ? Math.ceil((td.getTime()-now.getTime())/86400000) : null };
       }));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.put('/clientes/:id', async (req, res) => {
@@ -397,7 +394,7 @@ export function createAdminRouter() {
           [req.params.id,planoFinal,valor_plano,ant?.vencimento,vencimento]);
       invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.put('/clientes/:id/senha', async (req, res) => {
@@ -407,7 +404,9 @@ export function createAdminRouter() {
       if (senha_admin) await qRun('UPDATE clientes SET senha_admin=? WHERE id=?', [senha_admin, req.params.id]);
       if (senha_caixa) await qRun('UPDATE clientes SET senha_caixa=? WHERE id=?', [senha_caixa, req.params.id]);
       res.json({ success: true });
-    } catch { res.status(500).json({ error: 'Erro ao atualizar senhas' }); }
+    } catch {
+      sendInternalError(res, 'routes/admin:clientesSenha', new Error('Erro ao atualizar senhas'));
+    }
   });
 
   admin.delete('/clientes/:id', async (req, res) => {
@@ -422,7 +421,7 @@ export function createAdminRouter() {
       });
       invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/clientes/:id/disconnect', async (req, res) => {
@@ -431,7 +430,7 @@ export function createAdminRouter() {
       if (!c) return res.status(404).json({ error: 'Cliente não encontrado' });
       await qRun('UPDATE usuarios SET token_version=token_version+1 WHERE username=?', [c.usuario]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/clientes/:id/bloquear', async (req, res) => {
@@ -440,7 +439,7 @@ export function createAdminRouter() {
       const c = await q1('SELECT usuario FROM clientes WHERE id=?', [req.params.id]);
       if (c) await qRun('UPDATE usuarios SET ativo=0 WHERE username=?', [c.usuario]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/clientes/:id/desbloquear', async (req, res) => {
@@ -452,7 +451,7 @@ export function createAdminRouter() {
       if (c) await qRun('UPDATE usuarios SET ativo=1 WHERE username=?', [c.usuario]);
       invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/clientes/:id/estender', async (req, res) => {
@@ -465,7 +464,7 @@ export function createAdminRouter() {
       await qRun("UPDATE clientes SET vencimento=?,status='ativo' WHERE id=?", [base.toISOString(), req.params.id]);
       invalidateTenantPlanCache(req.params.id);
       res.json({ success: true, novo_vencimento: base.toISOString() });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/financeiro', async (_req, res) => {
@@ -488,7 +487,7 @@ export function createAdminRouter() {
         ticket_medio: ativos?.total ? (mrr?.total/ativos?.total) : 0,
         proximos_vencimentos: proxVenc, faturamento_mensal: fatMensal, todos_pagantes: pagantes,
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/dashboard', async (_req, res) => {
@@ -507,13 +506,12 @@ export function createAdminRouter() {
         pendentes: sqlCount(pendentes),
         expirados: sqlCount(expirados),
       });
-    } catch (e: any) {
-      logError('admin.dashboard', e, {
+    } catch (e: unknown) {
+      sendInternalError(res, 'admin.dashboard', e, {
         route: '/api/admin/dashboard',
-        code: e?.code,
-        detail: e?.detail,
+        code: (e as { code?: unknown })?.code,
+        detail: (e as { detail?: unknown })?.detail,
       });
-      res.status(500).json({ error: e?.message || 'Erro ao carregar dashboard admin' });
     }
   });
 
@@ -521,7 +519,7 @@ export function createAdminRouter() {
     try {
       const u = await qAll('SELECT id,username,nome,cargo,permissoes,ativo FROM usuarios WHERE cliente_id=? ORDER BY nome ASC', [req.params.id]);
       res.json(u.map((x: any) => ({ ...x, permissoes: x.permissoes ? JSON.parse(x.permissoes) : null })));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.put('/clientes/:id/usuarios/:uid/senha', async (req, res) => {
@@ -530,7 +528,7 @@ export function createAdminRouter() {
       if (!senha) return res.status(400).json({ error: 'Senha obrigatória' });
       await qRun('UPDATE usuarios SET password=? WHERE id=? AND cliente_id=?', [await bcrypt.hash(senha,10), req.params.uid, req.params.id]);
       res.json({ success: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.patch('/clientes/:id/usuarios/:uid/toggle', async (req, res) => {
@@ -539,7 +537,7 @@ export function createAdminRouter() {
       if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
       await qRun('UPDATE usuarios SET ativo=? WHERE id=? AND cliente_id=?', [u.ativo?0:1, req.params.uid, req.params.id]);
       res.json({ success: true, ativo: !u.ativo });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   // ─── Motor de ações administrativas críticas ─────────────────────────────
@@ -877,7 +875,7 @@ export function createAdminRouter() {
       const tenantId = req.query.tenant_id ? Number(req.query.tenant_id) : undefined;
       const tenants = await runDiagnostics(tenantId);
       res.json({ tenants });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/caixa/force-close', async (req, res) => {
@@ -901,7 +899,7 @@ export function createAdminRouter() {
       await qRun('INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
         [tenantId, 'Admin', 'admin', 'ADMIN_FORCE_CLOSE_CAIXA', `Caixa #${caixa.id} (data ${caixa.data}) fechado pelo painel admin`]);
       res.json({ success: true, caixa_id: caixa.id });
-    } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/caixa/reset', async (req, res) => {
@@ -919,14 +917,13 @@ export function createAdminRouter() {
 
       const result = await resetCaixaState(tenantId, reason);
       res.json({ success: true, ...result });
-    } catch (e: any) {
-      logError('admin.caixa.reset', e, {
+    } catch (e: unknown) {
+      sendInternalError(res, 'admin.caixa.reset', e, {
         route: '/api/admin/caixa/reset',
         tenantId: req.body?.tenant_id,
-        code: e?.code,
-        detail: e?.detail,
+        code: (e as { code?: unknown })?.code,
+        detail: (e as { detail?: unknown })?.detail,
       });
-      res.status(500).json({ success: false, error: e?.message || 'Erro ao resetar caixa' });
     }
   });
 
@@ -949,7 +946,7 @@ export function createAdminRouter() {
       await qRun('INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
         [tenantId, 'Admin', 'admin', 'ADMIN_FIX_PEDIDO_STATUS', `Pedido #${pedido.order_number || orderId} alterado de "${pedido.status}" para "${status}"`]);
       res.json({ success: true, order_id: orderId, new_status: status });
-    } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.post('/estoque/fix-links', async (_req, res) => {
@@ -975,7 +972,7 @@ export function createAdminRouter() {
         total_amount: Number(p.total_amount || 0),
         created_at: p.created_at,
       })));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/tenant/:id/pedidos/:orderId', async (req: Request, res) => {
@@ -1026,7 +1023,7 @@ export function createAdminRouter() {
           change_given: Number(r.change_given || 0),
         })),
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/tenant/:id/caixa', async (req: Request, res) => {
@@ -1049,7 +1046,7 @@ export function createAdminRouter() {
         status: caixasAbertos.length > 0 ? 'aberto' : 'fechado',
         ultimo_fechado: ultimoFechado,
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/tenant/:id/estoque', async (req: Request, res) => {
@@ -1073,7 +1070,7 @@ export function createAdminRouter() {
         abaixo_minimo: abaixoMinimo || [],
         produtos_sem_vinculo: produtosSemVinculo || [],
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   admin.get('/tenant/:id/logs', async (req: Request, res) => {
@@ -1097,8 +1094,8 @@ export function createAdminRouter() {
         [tenantId, limit]
       );
       res.json(logs);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:tenantLogs', e);
     }
   });
 
@@ -1129,7 +1126,7 @@ export function createAdminRouter() {
         em_rota: Number(emRota?.n || 0),
         motoboys: motoboys || [],
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
   // Monta /api/admin/* com proteção

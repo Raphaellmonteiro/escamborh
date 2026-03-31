@@ -9,6 +9,7 @@ import {
   resolveAuthenticatedSession,
 } from '../middleware';
 import { AppError } from '../utils/errors';
+import { sendInternalError } from '../utils/internalServerError';
 import { createExpensesRouter } from '../expenses/expenses';
 import { createAdminRouter } from './admin';
 import { createAiRouter } from './ai';
@@ -161,9 +162,8 @@ export function createApiRouter() {
         );
 
         return res.json({ success: true });
-      } catch (e: any) {
-        console.error('POST /products/suggestions/event:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Erro ao registrar evento' });
+      } catch (e: unknown) {
+        sendInternalError(res, 'POST /products/suggestions/event', e);
       }
     }
   );

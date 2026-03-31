@@ -1,6 +1,7 @@
 // src/routes/rh.ts — Módulo RH: funcionários, ponto, espelho, folha
 import { Router } from 'express';
 import { q1, qAll, qRun, qInsert } from '../db';
+import { sendInternalError } from '../utils/internalServerError';
 import {
   hourBankApplicable,
   isEvento,
@@ -148,7 +149,7 @@ export function createRhRouter() {
     try {
       res.json(await qAll('SELECT * FROM funcionarios WHERE tenant_id=? ORDER BY nome ASC', [req.tenantId]));
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -157,7 +158,7 @@ export function createRhRouter() {
       const alertas = await buildRhAlerts({ tenantId: req.tenantId });
       res.json({ alertas });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -210,7 +211,7 @@ export function createRhRouter() {
       }
       return res.status(400).json({ error: 'action inválida (schedule, start, complete).' });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -249,7 +250,7 @@ export function createRhRouter() {
       if (r.ok === false) return res.status(400).json({ error: r.error });
       res.json({ success: true, decimo: r.row });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -267,7 +268,7 @@ export function createRhRouter() {
         [req.tenantId,nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null]
       );
       res.json({ id });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.put('/:id', async (req: any, res) => {
@@ -283,14 +284,14 @@ export function createRhRouter() {
         [nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null,req.params.id,req.tenantId]
       );
       res.json({ success:true });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.patch('/:id/desativar', async (req: any, res) => {
     try {
       await qRun("UPDATE funcionarios SET status='inativo' WHERE id=? AND tenant_id=?", [req.params.id,req.tenantId]);
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/foto', uploadFotoFunc.single('foto'), checkMagicBytes, async (req: any, res) => {
@@ -299,7 +300,7 @@ export function createRhRouter() {
       const foto_url = `/uploads/funcionarios/${req.file.filename}`;
       await qRun('UPDATE funcionarios SET foto_url=? WHERE id=? AND tenant_id=?', [foto_url, req.params.id, req.tenantId]);
       res.json({ success: true, foto_url });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Pontos ────────────────────────────────────────────────────────────────
@@ -313,7 +314,7 @@ export function createRhRouter() {
         p.push(String(month).padStart(2,'0'), String(year));
       }
       res.json(await qAll(q+' ORDER BY data ASC, hora ASC', p));
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/pontos', async (req: any, res) => {
@@ -330,7 +331,7 @@ export function createRhRouter() {
       await qRun('INSERT INTO func_pontos (tenant_id,funcionario_id,data,hora,tipo,ip,user_agent) VALUES (?,?,?,?,?,?,?)',
         [req.tenantId,req.params.id,data,hora,tipo,ip,req.headers['user-agent']||'']);
       res.json({success:true,tipo,data,hora});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.get('/:id/pontos-dia', async (req: any, res) => {
@@ -338,7 +339,7 @@ export function createRhRouter() {
       const { data } = req.query;
       if (!data) return res.status(400).json({ error:'data obrigatória' });
       res.json(await qAll('SELECT * FROM func_pontos WHERE funcionario_id=? AND tenant_id=? AND data=? ORDER BY id ASC', [req.params.id,req.tenantId,data]));
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/pontos-manual', async (req: any, res) => {
@@ -348,7 +349,7 @@ export function createRhRouter() {
       await qRun('INSERT INTO func_pontos (tenant_id,funcionario_id,data,hora,tipo,ip) VALUES (?,?,?,?,?,?)',
         [req.tenantId,req.params.id,data,hora,tipo,'manual-admin']);
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Pontos admin (/pontos/:id) ────────────────────────────────────────────
@@ -363,7 +364,7 @@ export function createRhRouter() {
       });
       if (result.ok === false) return res.status(result.status).json({ error: result.error });
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.delete('/pontos/:pontId', async (req: any, res) => {
@@ -374,7 +375,7 @@ export function createRhRouter() {
       });
       if (result.ok === false) return res.status(result.status).json({ error: result.error });
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Horas extras ──────────────────────────────────────────────────────────
@@ -385,7 +386,7 @@ export function createRhRouter() {
       const p: any[] = [req.params.id, req.tenantId];
       if (month&&year) { q+=` AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`; p.push(String(month).padStart(2,'0'),String(year)); }
       res.json(await qAll(q+' ORDER BY data ASC, created_at ASC, id ASC', p));
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/horas-extras', async (req: any, res) => {
@@ -454,7 +455,7 @@ export function createRhRouter() {
         });
       }
       res.json({success:true,id,destino: destinoCheck.destino});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.patch('/horas-extras/:id', async (req: any, res) => {
@@ -529,7 +530,7 @@ export function createRhRouter() {
       });
       res.json({ success: true, destino: destinoCheck.destino });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -547,7 +548,7 @@ export function createRhRouter() {
       });
       await qRun('DELETE FROM func_horas_extras WHERE id=? AND tenant_id=?', [req.params.id,req.tenantId]);
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Banco de horas ────────────────────────────────────────────────────────
@@ -570,7 +571,7 @@ export function createRhRouter() {
       });
       res.json({ ...summary, movimentacoes, aplicavel: bOk });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -593,7 +594,7 @@ export function createRhRouter() {
       if (result.ok === false) return res.status(400).json({ error: result.error });
       res.json({ success: true, movimentacao: result.mov });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -605,7 +606,7 @@ export function createRhRouter() {
       const p: any[] = [req.params.id, req.tenantId];
       if (month&&year) { q+=` AND TO_CHAR(data::date,'MM')=? AND TO_CHAR(data::date,'YYYY')=?`; p.push(String(month).padStart(2,'0'),String(year)); }
       res.json(await qAll(q+' ORDER BY data ASC', p));
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/eventos', async (req: any, res) => {
@@ -615,21 +616,21 @@ export function createRhRouter() {
       const id = await qInsert('INSERT INTO func_eventos (tenant_id,funcionario_id,data,tipo,horas_ausentes,observacao) VALUES (?,?,?,?,?,?)',
         [req.tenantId,req.params.id,data,tipo,horas_ausentes||0,observacao||null]);
       res.json({success:true,id});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.delete('/eventos/:id', async (req: any, res) => {
     try {
       await qRun('DELETE FROM func_eventos WHERE id=? AND tenant_id=?', [req.params.id,req.tenantId]);
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Adiantamentos ─────────────────────────────────────────────────────────
   router.get('/:id/adiantamentos', async (req: any, res) => {
     try {
       res.json(await qAll('SELECT * FROM func_adiantamentos WHERE funcionario_id=? AND tenant_id=? ORDER BY data DESC', [req.params.id,req.tenantId]));
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/adiantamentos', async (req: any, res) => {
@@ -650,21 +651,21 @@ export function createRhRouter() {
       const id = await qInsert('INSERT INTO func_adiantamentos (tenant_id,funcionario_id,valor,motivo) VALUES (?,?,?,?)',
         [req.tenantId,req.params.id,valor,motivo||null]);
       res.json({success:true,id});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.patch('/adiantamentos/:id/descontar', async (req: any, res) => {
     try {
       await qRun('UPDATE func_adiantamentos SET descontado=1 WHERE id=? AND tenant_id=?', [req.params.id,req.tenantId]);
       res.json({success:true});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Ajustes salariais ─────────────────────────────────────────────────────
   router.get('/:id/ajustes', async (req: any, res) => {
     try {
       res.json(await qAll('SELECT * FROM func_ajustes_salario WHERE funcionario_id=? AND tenant_id=? ORDER BY data DESC', [req.params.id,req.tenantId]));
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.get('/:id/ferias', async (req: any, res) => {
@@ -674,7 +675,7 @@ export function createRhRouter() {
       const resumo = feriasSaldoResumo(rows);
       res.json({ ferias: rows, resumo });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -703,7 +704,7 @@ export function createRhRouter() {
         pendente,
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -713,7 +714,7 @@ export function createRhRouter() {
       const rows = await listBeneficios({ tenantId: req.tenantId, employeeId });
       res.json({ beneficios: rows });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -746,7 +747,7 @@ export function createRhRouter() {
       const rows = await listBeneficios({ tenantId: req.tenantId, employeeId });
       res.json({ success: true, beneficios: rows });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 
@@ -757,7 +758,7 @@ export function createRhRouter() {
       const id = await qInsert('INSERT INTO func_ajustes_salario (tenant_id,funcionario_id,tipo,valor,motivo) VALUES (?,?,?,?,?)',
         [req.tenantId,req.params.id,tipo,valor,motivo||null]);
       res.json({success:true,id});
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
 // ── Espelho de ponto (cálculo mensal) ─────────────────────────────────────
@@ -927,7 +928,7 @@ export function createRhRouter() {
         banco_horas_mes: movBancoMes,
         banco_horas_aplicavel: bancoOk,
       });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   // ── Folha de pagamento ────────────────────────────────────────────────────
@@ -996,7 +997,7 @@ export function createRhRouter() {
           aplicavel: hourOk,
         },
       });
-    } catch(e: any) { res.status(500).json({ error:e.message }); }
+    } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
   router.post('/:id/folha/pagamentos', async (req: any, res) => {
@@ -1018,7 +1019,7 @@ export function createRhRouter() {
       if (result.ok === false) return res.status(400).json({ error: result.error });
       res.json({ success: true, payment: result.payment });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      sendInternalError(res, 'routes/rh', e);
     }
   });
 

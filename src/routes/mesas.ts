@@ -5,6 +5,7 @@ import { pool } from '../db/pool';
 import { requireProductInventoryTargets } from '../services/stockIdentification';
 import { isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
+import { INTERNAL_SERVER_MESSAGE, sendInternalError } from '../utils/internalServerError';
 import {
   buildMesaComandaPayload as buildMesaComandaPayloadShared,
   buildMesaFinanceSnapshot as buildMesaFinanceSnapshotShared,
@@ -161,8 +162,9 @@ function handleMesasRouteError(res: any, error: unknown, context: string, meta: 
     return res.status(error.statusCode).json({ success: false, error: error.message, code: error.code });
   }
 
-  const message = error instanceof Error ? error.message : 'Erro interno no servidor';
-  return res.status(500).json({ success: false, error: message });
+  if (!res.headersSent) {
+    return res.status(500).json({ success: false, message: INTERNAL_SERVER_MESSAGE });
+  }
 }
 
 async function ajustarEstoque(
@@ -379,7 +381,7 @@ export function createMesasRouter() {
           total_valor: totals.total
         };
       }));
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   router.post('/configurar', async (req: Request, res) => {
@@ -399,7 +401,7 @@ export function createMesasRouter() {
         }
       }
       res.json({ success:true, total:quantidade });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   router.delete('/comanda/item/:itemId', async (req: Request, res) => {
@@ -489,7 +491,7 @@ export function createMesasRouter() {
         await txRun(client, "INSERT INTO comandas (mesa_id,tenant_id,status) VALUES (?,?,'aberta')", [req.params.id, req.tenantId]);
       });
       res.json({ success:true });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   router.put('/:id/fechar', async (req: Request, res) => {
@@ -499,7 +501,7 @@ export function createMesasRouter() {
         await txRun(client, "UPDATE mesas SET status='fechada', opened_at=NULL WHERE id=? AND tenant_id=?", [req.params.id, req.tenantId]);
       });
       res.json({ success:true });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   router.get('/:id/comanda', async (req: Request, res) => {
@@ -515,7 +517,7 @@ export function createMesasRouter() {
         comanda: { ...payload, itens: undefined },
         itens: payload.itens
       });
-    } catch (e: any) { res.status(500).json({ error:e.message }); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   router.put('/:id/comanda/extras', async (req: Request, res) => {
@@ -557,7 +559,7 @@ export function createMesasRouter() {
         comanda: { ...payload, itens: undefined },
         itens: payload.itens
       });
-    } catch (e: any) { res.status(500).json({ success:false, error:e.message }); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   router.get('/:id/comanda-html', async (req: Request, res) => {
@@ -623,7 +625,7 @@ export function createMesasRouter() {
           }))
         ],
       }));
-    } catch (e: any) { res.status(500).send(e.message); }
+    } catch (e: any) { sendInternalError(res, 'routes/mesas', e); }
   });
 
   /** Comanda de produção para a mesa: usa o mesmo pedido KDS/operacional quando existir (mesmo order_number do painel/KDS); senão sintetiza ref. Mesa-N. */
@@ -718,7 +720,7 @@ export function createMesasRouter() {
         })
       );
     } catch (e: any) {
-      res.status(500).send(e.message);
+      sendInternalError(res, 'routes/mesas', e);
     }
   });
 
