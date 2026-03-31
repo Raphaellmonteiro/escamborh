@@ -1,11 +1,12 @@
 import type { OnboardingStepConfig } from '../components/onboarding/onboardingTypes';
 
-/** Chave única no localStorage para o tutorial do RH */
-export const RH_ONBOARDING_STORAGE_KEY = 'flowpdv.rh.onboarding.v1';
+/** Chave no localStorage — v2: fluxo em 4 passos (abrir modal → salvar → ponto → espelho) */
+export const RH_ONBOARDING_STORAGE_KEY = 'flowpdv.rh.onboarding.v2';
 
 /** Alvos: use os mesmos valores em data-onboarding-target no JSX */
 export const RH_ONBOARDING_TARGETS = {
   novoFuncionario: 'rh-novo-funcionario',
+  modalNovoFuncionario: 'rh-modal-novo-funcionario',
   baterPonto: 'rh-bater-ponto',
   espelhoTab: 'rh-tab-espelho',
   espelhoMain: 'rh-espelho-main',
@@ -13,6 +14,7 @@ export const RH_ONBOARDING_TARGETS = {
 
 /** Identificadores emitidos por `completeAction` / `emitOnboardingAction` */
 export const RH_ONBOARDING_ACTIONS = {
+  openModalNovoFuncionario: 'rh.open.modal.novo-funcionario',
   createFuncionario: 'rh.create.funcionario',
   clickBaterPonto: 'rh.click.bater-ponto',
   viewTabEspelho: 'rh.view.tab.espelho',
@@ -20,20 +22,32 @@ export const RH_ONBOARDING_ACTIONS = {
 
 export const RH_ONBOARDING_STEPS: OnboardingStepConfig[] = [
   {
-    id: 'funcionarios',
+    id: 'abrir-cadastro',
     targetSelector: `[data-onboarding-target="${RH_ONBOARDING_TARGETS.novoFuncionario}"]`,
-    title: 'Funcionários',
-    body: 'Cadastre seu primeiro funcionário para começar o controle de ponto e a ficha completa no RH.',
+    title: 'Novo funcionário',
+    body: 'Clique em Novo Funcionário para abrir o cadastro. Você avança assim que o modal abrir.',
+    activateTab: 'lista',
+    requireAction: true,
+    actionType: 'click',
+    actionTarget: RH_ONBOARDING_ACTIONS.openModalNovoFuncionario,
+  },
+  {
+    id: 'salvar-funcionario',
+    targetSelector: `[data-onboarding-target="${RH_ONBOARDING_TARGETS.modalNovoFuncionario}"]`,
+    title: 'Cadastro',
+    body: 'Preencha os dados essenciais e salve para criar o colaborador no RH.',
     activateTab: 'lista',
     requireAction: true,
     actionType: 'create',
     actionTarget: RH_ONBOARDING_ACTIONS.createFuncionario,
+    raiseAboveModal: true,
   },
   {
     id: 'registro-ponto',
     targetSelector: `[data-onboarding-target="${RH_ONBOARDING_TARGETS.baterPonto}"]`,
     title: 'Registro de ponto',
     body: 'Abra o ponto para registrar entrada e saída e ver como o time marca presença no dia a dia.',
+    activateTab: 'lista',
     requireAction: true,
     actionType: 'click',
     actionTarget: RH_ONBOARDING_ACTIONS.clickBaterPonto,

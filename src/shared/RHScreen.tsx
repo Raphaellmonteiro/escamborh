@@ -900,7 +900,22 @@ function TabLista({
       </div>
       <div className="flex items-center justify-between">
         <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar funcionário..." className="pl-9 pr-4 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm focus:outline-none w-56"/></div>
-        <button type="button" data-onboarding-target="rh-novo-funcionario" onClick={()=>{setForm(eF);setFotoFile(null);setFotoPreview('');setSelected(null);setModal('novo');}} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"><UserPlus size={16}/>Novo Funcionário</button>
+        <button
+          type="button"
+          data-onboarding-target={RH_ONBOARDING_TARGETS.novoFuncionario}
+          onClick={() => {
+            setForm(eF);
+            setFotoFile(null);
+            setFotoPreview('');
+            setSelected(null);
+            setModal('novo');
+            emitOnboardingAction(RH_ONBOARDING_ACTIONS.openModalNovoFuncionario);
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"
+        >
+          <UserPlus size={16} />
+          Novo Funcionário
+        </button>
       </div>
 
       {loading ? <LoadSpinner/> : filtered.length===0 ? (
@@ -951,6 +966,7 @@ function TabLista({
         onClose={()=>setModal(null)}
         title={modal==='novo' ? 'Novo Funcionário' : `Editar cadastro — ${selected?.nome}`}
         wide
+        dataOnboardingTarget={modal === 'novo' ? RH_ONBOARDING_TARGETS.modalNovoFuncionario : undefined}
       >
         <div className="space-y-4">
           <div className="flex items-center gap-4">
@@ -1069,8 +1085,8 @@ function TabLista({
               </div>
             )}
           </div>
-        </div>
         <MBtns onCancel={()=>setModal(null)} onConfirm={handleSalvar} saving={saving} label="Salvar Funcionário"/>
+        </div>
       </Modal>
 
       {/* Modal Evento */}

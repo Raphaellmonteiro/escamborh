@@ -19,6 +19,8 @@ export type OnboardingStepConfig = {
    * Ex.: rh.create.funcionario, rh.click.bater-ponto, rh.view.tab.espelho
    */
   actionTarget?: string;
+  /** Empilha o overlay acima de modais (ex. z-50) para o highlight e o painel ficarem visíveis no passo */
+  raiseAboveModal?: boolean;
 };
 
 export type OnboardingPersistedV1 = {

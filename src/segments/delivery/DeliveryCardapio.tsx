@@ -940,7 +940,6 @@ function useClienteAuth(slug: string) {
 export default function DeliveryCardapio() {
   const slug = getSlug();
   const { token: cliToken, cliente, salvar: salvarToken, logout, atualizarFavoritos } = useClienteAuth(slug);
-  const previousHtmlThemeRef = useRef<{ hadFlowpdvDark: boolean; hadDark: boolean } | null>(null);
   const [nome, setNome] = useState('');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [config, setConfig] = useState<Config>({ taxa_entrega:0, pedido_minimo:0, tempo_preparo:40 });
@@ -1178,28 +1177,6 @@ export default function DeliveryCardapio() {
     [config.theme_mode]
   );
   const isLightRed = cardapioTheme.mode === 'light_red';
-  useEffect(() => {
-    const html = document.documentElement;
-    if (!previousHtmlThemeRef.current) {
-      previousHtmlThemeRef.current = {
-        hadFlowpdvDark: html.classList.contains('flowpdv-dark'),
-        hadDark: html.classList.contains('dark'),
-      };
-    }
-
-    if (isLightRed) {
-      html.classList.remove('flowpdv-dark', 'dark');
-    } else {
-      html.classList.add('flowpdv-dark', 'dark');
-    }
-
-    return () => {
-      if (!previousHtmlThemeRef.current) return;
-      html.classList.toggle('flowpdv-dark', previousHtmlThemeRef.current.hadFlowpdvDark);
-      html.classList.toggle('dark', previousHtmlThemeRef.current.hadDark);
-      previousHtmlThemeRef.current = null;
-    };
-  }, [isLightRed]);
   const resumoLocalizacao = useMemo(() => {
     const zonas = (config.zonas_entrega || []).filter((zona) => String(zona?.nome || '').trim());
     if (zonas.length > 0) {
@@ -5548,7 +5525,7 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
     <div className="flex min-h-screen flex-col bg-[#f8f8f8]">
       <header className="flex items-center gap-3 border-b border-zinc-100 bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
         <button type="button" onClick={etapa==='dados'?()=>setEtapa('tel'):onBack} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-zinc-100"><ArrowLeft size={20} className="text-zinc-700"/></button>
-        <div><p className={`text-lg font-black ${isLightRed ? 'text-[#18181b]' : 'text-white'}`}>{etapa==='tel'?(contexto==='checkout'?'Entre para continuar sua compra':'Entrar / Criar conta'):'Complete seu cadastro'}</p>
+        <div><p className="text-lg font-black text-zinc-900">{etapa==='tel'?(contexto==='checkout'?'Entre para continuar sua compra':'Entrar / Criar conta'):'Complete seu cadastro'}</p>
         {etapa==='dados'&&<p className="text-xs text-zinc-400">{contexto==='checkout'?'Preencha os dados para seguir ao checkout':'Preencha os dados para finalizar'}</p>}</div>
       </header>
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center space-y-5 px-4 py-6 sm:px-5 sm:py-8">
@@ -5577,7 +5554,7 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
             </div>
             {/* Dados pessoais */}
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-              <p className={`text-sm font-black flex items-center gap-2 ${isLightRed ? 'text-[#18181b]' : 'text-white'}`}><User size={14} className="text-cyan-600"/>Dados pessoais</p>
+              <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><User size={14} className="text-cyan-600"/>Dados pessoais</p>
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nome completo *</label><input value={nome} onChange={e=>setNome(e.target.value)} placeholder="João Silva" className={inp}/></div>
               <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">E-mail (opcional)</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="joao@email.com" type="email" className={inp}/></div>
             </div>
@@ -5593,7 +5570,7 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
               </div>
             )}
             <div className={`bg-white rounded-2xl p-4 shadow-sm space-y-3 ${tipoAtendimento !== 'entrega' ? 'hidden' : ''}`}> 
-              <p className={`text-sm font-black flex items-center gap-2 ${isLightRed ? 'text-[#18181b]' : 'text-white'}`}><MapPin size={14} className="text-cyan-600"/>Endereço de entrega *</p>
+              <p className="font-black text-zinc-900 text-sm flex items-center gap-2"><MapPin size={14} className="text-cyan-600"/>Endereço de entrega *</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="sm:col-span-2"><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Rua / Avenida *</label><input value={endLogradouro} onChange={e=>setEndLogradouro(e.target.value)} placeholder="Rua das Flores" className={inp}/></div>
                 <div><label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nº</label><input value={endNumero} onChange={e=>setEndNumero(e.target.value)} placeholder="123" className={inp}/></div>

@@ -5,13 +5,12 @@ import type { OnboardingStepConfig } from './onboardingTypes';
 const PADDING = 10;
 /**
  * Camadas: escurecimento captura clique fora do buraco; moldura e wrapper do painel
- * são pointer-events: none para o hit-test chegar ao DOM abaixo (alvo, modais z-50, etc.).
- * Botões do tutorial usam pointer-events: auto.
- * Abaixo de modais (z-50) para não cobrir fluxos críticos.
+ * são pointer-events: none para o hit-test chegar ao DOM abaixo.
+ * Padrão: abaixo de modais (z-50). Com raiseAboveModal no passo: acima do modal para máscara/painel visíveis.
  */
-const Z_DIM = 40;
-const Z_FRAME = 41;
-const Z_PANEL = 42;
+const Z_DIM_DEFAULT = 40;
+/** > z-50 do Modal para passos com raiseAboveModal */
+const Z_DIM_ABOVE_MODAL = 56;
 
 const AUTO_ADVANCE_MS = 1100;
 
@@ -26,7 +25,7 @@ function measureTarget(selector: string): Rect | null {
   return { top: r.top, left: r.left, width: r.width, height: r.height };
 }
 
-function DimAround({ rect }: { rect: Rect }) {
+function DimAround({ rect, zDim }: { rect: Rect; zDim: number }) {
   const t = rect.top - PADDING;
   const l = rect.left - PADDING;
   const r = rect.left + rect.width + PADDING;
@@ -34,10 +33,10 @@ function DimAround({ rect }: { rect: Rect }) {
   const dim = 'fixed bg-black/45 pointer-events-auto';
   return (
     <>
-      <div className={dim} style={{ zIndex: Z_DIM, top: 0, left: 0, right: 0, height: Math.max(0, t) }} aria-hidden />
-      <div className={dim} style={{ zIndex: Z_DIM, top: t, left: 0, width: Math.max(0, l), height: Math.max(0, b - t) }} aria-hidden />
-      <div className={dim} style={{ zIndex: Z_DIM, top: t, left: r, right: 0, height: Math.max(0, b - t) }} aria-hidden />
-      <div className={dim} style={{ zIndex: Z_DIM, top: b, left: 0, right: 0, bottom: 0 }} aria-hidden />
+      <div className={dim} style={{ zIndex: zDim, top: 0, left: 0, right: 0, height: Math.max(0, t) }} aria-hidden />
+      <div className={dim} style={{ zIndex: zDim, top: t, left: 0, width: Math.max(0, l), height: Math.max(0, b - t) }} aria-hidden />
+      <div className={dim} style={{ zIndex: zDim, top: t, left: r, right: 0, height: Math.max(0, b - t) }} aria-hidden />
+      <div className={dim} style={{ zIndex: zDim, top: b, left: 0, right: 0, bottom: 0 }} aria-hidden />
     </>
   );
 }
@@ -206,15 +205,20 @@ export function OnboardingOverlay({
   const highlightContinue =
     canAdvance && !!step?.requireAction && !autoAdvanceOnActionComplete && !isLast;
 
+  const zDim = step?.raiseAboveModal ? Z_DIM_ABOVE_MODAL : Z_DIM_DEFAULT;
+  const zFrame = zDim + 1;
+  const zRoot = zDim + 2;
+  const zPanelCard = zDim + 3;
+
   const node = (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: Z_PANEL }} role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-body">
+    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: zRoot }} role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-body">
       {step && hole && (
         <>
-          <DimAround rect={rect!} />
+          <DimAround rect={rect!} zDim={zDim} />
           <div
             className="fixed rounded-xl border-2 border-fp-accent pointer-events-none shadow-[0_0_0_1px_rgba(0,0,0,0.06)]"
             style={{
-              zIndex: Z_FRAME,
+              zIndex: zFrame,
               top: hole.top,
               left: hole.left,
               width: hole.width,
@@ -224,10 +228,12 @@ export function OnboardingOverlay({
           />
         </>
       )}
-      {step && !hole && <div className="fixed inset-0 z-40 bg-black/45 pointer-events-auto" aria-hidden />}
+      {step && !hole && (
+        <div className="fixed inset-0 bg-black/45 pointer-events-auto" style={{ zIndex: zDim }} aria-hidden />
+      )}
       <div
         className="pointer-events-none fixed rounded-2xl border border-fp-border bg-fp-card p-4 shadow-xl"
-        style={{ zIndex: Z_PANEL + 1, ...panelStyle }}
+        style={{ zIndex: zPanelCard, ...panelStyle }}
       >
         {/* pointer-events não é herdado: força filhos a não interceptar cliques sobre o alvo por baixo */}
         <div className="pointer-events-none [&_*]:pointer-events-none">

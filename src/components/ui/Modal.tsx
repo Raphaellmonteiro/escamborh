@@ -9,6 +9,7 @@ export function Modal({
   children,
   wide = false,
   className = '',
+  dataOnboardingTarget,
 }: {
   open: boolean;
   onClose: () => void;
@@ -16,6 +17,8 @@ export function Modal({
   children: React.ReactNode;
   wide?: boolean;
   className?: string;
+  /** Alvo opcional para highlight de onboarding (card inteiro, inclusive cabeçalho) */
+  dataOnboardingTarget?: string;
 }) {
   return (
     <AnimatePresence>
@@ -25,6 +28,7 @@ export function Modal({
             initial={{ scale: 0.93, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.93, opacity: 0 }}
+            data-onboarding-target={dataOnboardingTarget}
             className={`my-auto flex max-h-[min(92dvh,100svh)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl border border-fp-border bg-fp-card shadow-2xl sm:rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} pb-[max(0.5rem,env(safe-area-inset-bottom))] ${className}`.trim()}
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-fp-border px-4 py-3 2xl:px-6 2xl:py-4">
