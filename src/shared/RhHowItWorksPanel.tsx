@@ -23,27 +23,27 @@ type BasicCard = { title: string; text: string; icon: typeof UserPlus; iconClass
 const BASIC_CARDS: BasicCard[] = [
   {
     title: 'Cadastrar funcionário',
-    text: 'Na aba Funcionários, use Novo Funcionário. Preencha nome, cargo, contrato e dados da ficha antes de salvar.',
+    text: 'Na aba Funcionários, use Novo funcionário. Preencha nome, cargo, contrato e ficha antes de salvar — cadastro incompleto atrapalha ponto e folha.',
     icon: UserPlus,
     iconClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   },
   {
     title: 'Definir jornada',
-    text: 'Ajuste entrada, saída, carga diária e dias da semana no mesmo cadastro. Isso orienta ponto e espelho.',
+    text: 'Ajuste entrada, saída, carga e dias da semana no cadastro. Sem isso, espelho e cálculos não refletem a realidade.',
     icon: Clock,
-    iconClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+    iconClass: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
   },
   {
     title: 'Bater ponto',
-    text: 'O colaborador marca presença no quiosque com o PIN definido no cadastro. Evite PIN fraco ou compartilhado.',
+    text: 'Use o botão Bater Ponto (abre o quiosque). O colaborador informa o PIN do cadastro. Evite PIN óbvio ou compartilhado.',
     icon: Fingerprint,
-    iconClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+    iconClass: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
   },
   {
     title: 'Consultar espelho',
-    text: 'Na aba Espelho de Ponto, veja o mês por pessoa: presenças, faltas e pendências antes de fechar a folha.',
+    text: 'Na aba Espelho de Ponto, confira o mês por pessoa: presenças, faltas e pendências antes de fechar a folha.',
     icon: Calendar,
-    iconClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+    iconClass: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
   },
 ];
 
@@ -52,33 +52,33 @@ type AdvancedCard = BasicCard;
 const ADVANCED_CARDS: AdvancedCard[] = [
   {
     title: 'Acesso ao sistema',
-    text: 'Só ative se a pessoa for usar o FlowPDV (caixa, telas internas). Desligado, ela pode só bater ponto com PIN.',
+    text: 'Ative só se a pessoa for usar o FlowPDV (caixa, telas internas). Sem acesso, ela ainda pode bater ponto com PIN no quiosque.',
     icon: Shield,
     iconClass: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
   },
   {
     title: 'Login, senha e PIN',
-    text: 'Login e senha são para entrar no sistema. PIN é para o quiosque de ponto. São coisas diferentes; configure as duas quando precisar.',
+    text: 'Login e senha entram no sistema; PIN é só para o quiosque. Não confunda: quem usa as duas precisa das duas configuradas.',
     icon: KeyRound,
-    iconClass: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+    iconClass: 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300',
   },
   {
     title: 'Horas extras',
-    text: 'Registre e destine HE no Espelho (folha ou banco), conforme a política do estabelecimento. Revise antes de pagar.',
+    text: 'Registre e destine HE no Espelho (folha ou banco), conforme a regra da casa. Revise antes de pagar — erro aqui desloca valores.',
     icon: Timer,
-    iconClass: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+    iconClass: 'bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300',
   },
   {
     title: 'Banco de horas',
-    text: 'Quando aplicável, acompanhe saldo e compensações no Espelho para não fechar o mês com divergência.',
+    text: 'Quando aplicável, acompanhe saldo e movimentos no Espelho. Evite fechar o mês sem conferir o banco.',
     icon: Scale,
-    iconClass: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+    iconClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300',
   },
   {
-    title: 'Folha de pagamento',
-    text: 'A aba Folha fecha a competência com base no que foi conferido no Espelho e nos cadastros. Não pule a conferência do espelho.',
+    title: 'Folha',
+    text: 'A aba Folha fecha a competência com base no espelho e nos cadastros. Não feche sem conferir o espelho do mês.',
     icon: Wallet,
-    iconClass: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+    iconClass: 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200',
   },
 ];
 
@@ -121,17 +121,16 @@ export default function RhHowItWorksPanel() {
                 <div className="min-w-0">
                   <p className="text-lg font-black text-zinc-900 sm:text-xl dark:text-white">Como funciona o RH</p>
                   <p className="mt-1 max-w-3xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-                    Referência rápida do dia a dia: o básico para colocar o time no ponto e o avançado para acesso, extras e folha.
-                    Use o Modo guiado quando quiser um passo a passo na tela.
+                    Guia fixo para consultar quando precisar: verde = rotina diária; âmbar = acesso, extras, banco e folha. Para passo a passo na tela, use Modo guiado.
                   </p>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full border border-transparent bg-emerald-100 px-3 py-1 text-[11px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300">
-                  Uso básico em verde
+                  Básico: um tom por passo
                 </span>
                 <span className="rounded-full border border-transparent bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                  Uso avançado em âmbar
+                  Avançado: cores de alerta
                 </span>
               </div>
             </div>
@@ -206,7 +205,7 @@ export default function RhHowItWorksPanel() {
                   return (
                     <div
                       key={card.title}
-                      className={`rounded-2xl border border-amber-100 bg-white/90 p-3 shadow-sm dark:border-amber-800 dark:bg-zinc-900 dark:shadow-none ${card.title === 'Folha de pagamento' ? 'sm:col-span-2' : ''}`}
+                      className={`rounded-2xl border border-amber-100 bg-white/90 p-3 shadow-sm dark:border-amber-800 dark:bg-zinc-900 dark:shadow-none ${card.title === 'Folha' ? 'sm:col-span-2' : ''}`}
                     >
                       <div className="flex items-start gap-2.5">
                         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${card.iconClass}`}>

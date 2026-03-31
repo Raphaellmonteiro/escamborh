@@ -9,6 +9,7 @@ import { generatePublicId } from '../utils/publicIds';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import { getPlanFeatures, type PaidTenantPlan, type PlanFeature } from '../config/planFeatures';
+import { invalidateTenantPlanCache } from '../services/tenantPlan';
 import { normalizeProductProductionInput } from '../utils/preparation';
 
 const TZ = 'America/Sao_Paulo';
@@ -394,6 +395,7 @@ export function createAdminRouter() {
       if (vencimento !== ant?.vencimento || planoFinal !== ant?.plano)
         await qRun('INSERT INTO renovacoes (cliente_id,plano,valor,vencimento_anterior,novo_vencimento) VALUES (?,?,?,?,?)',
           [req.params.id,planoFinal,valor_plano,ant?.vencimento,vencimento]);
+      invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -418,6 +420,7 @@ export function createAdminRouter() {
         if (c) await txRun(client, 'DELETE FROM usuarios WHERE username=?', [c.usuario]);
         await txRun(client, 'DELETE FROM clientes WHERE id=?', [req.params.id]);
       });
+      invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -447,6 +450,7 @@ export function createAdminRouter() {
       await qRun("UPDATE clientes SET status='ativo', vencimento=? WHERE id=?", [d.toISOString(), req.params.id]);
       const c = await q1('SELECT usuario FROM clientes WHERE id=?', [req.params.id]);
       if (c) await qRun('UPDATE usuarios SET ativo=1 WHERE username=?', [c.usuario]);
+      invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
@@ -459,6 +463,7 @@ export function createAdminRouter() {
       const base = (c.vencimento && new Date(c.vencimento) > new Date()) ? new Date(c.vencimento) : new Date();
       base.setDate(base.getDate()+(dias||7));
       await qRun("UPDATE clientes SET vencimento=?,status='ativo' WHERE id=?", [base.toISOString(), req.params.id]);
+      invalidateTenantPlanCache(req.params.id);
       res.json({ success: true, novo_vencimento: base.toISOString() });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });

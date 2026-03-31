@@ -26,6 +26,12 @@ import {
   normalizeBrazilDeliveryPhoneDigits,
   signatureFromPedidoEnderecoFields,
 } from '../utils/deliveryFirstPurchaseEligibility';
+import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
+import {
+  deliveryCadastrarBodySchema,
+  deliveryIdentificarBodySchema,
+  deliveryPerfilPutBodySchema,
+} from '../validation/schemas/publicForms';
 
 const TZ = 'America/Sao_Paulo';
 type DeliveryZone = { nome: string; taxa: number };
@@ -1073,9 +1079,9 @@ export function createDeliveryPublicRouter() {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
-      const { telefone } = req.body;
-      const tel = String(telefone || '').replace(/\D/g, '');
-      if (tel.length < 10) return res.status(400).json({ error: 'Telefone invalido' });
+      const parsed = parseBodyOrReply(res, deliveryIdentificarBodySchema, req.body, replyZod400ErrorKey);
+      if (!parsed) return;
+      const tel = parsed.telefone;
       const cliente = await q1('SELECT * FROM delivery_clientes WHERE tenant_id=? AND telefone=?', [tenant.id, tel]);
       if (cliente) {
         await qRun('UPDATE delivery_clientes SET ultimo_acesso=NOW() WHERE id=?', [cliente.id]);
@@ -1103,9 +1109,9 @@ export function createDeliveryPublicRouter() {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
-      const { telefone, nome, email } = req.body;
-      const tel = String(telefone || '').replace(/\D/g, '');
-      if (!tel || !nome?.trim()) return res.status(400).json({ error: 'Telefone e nome obrigatorios' });
+      const body = parseBodyOrReply(res, deliveryCadastrarBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { telefone: tel, nome, email } = body;
       const existe = await q1('SELECT * FROM delivery_clientes WHERE tenant_id=? AND telefone=?', [tenant.id, tel]);
       if (existe) {
         const token = jwt.sign({ clienteId: existe.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '90d' });
@@ -1123,10 +1129,10 @@ export function createDeliveryPublicRouter() {
       }
       const clienteId = await qInsert(
         'INSERT INTO delivery_clientes (tenant_id,nome,telefone,email,origem_cadastro) VALUES (?,?,?,?,?)',
-        [tenant.id, nome.trim(), tel, email || null, 'delivery_online']
+        [tenant.id, nome, tel, email ?? null, 'delivery_online']
       );
       const token = jwt.sign({ clienteId, tenantId: tenant.id, tipo: 'delivery_cliente' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '90d' });
-      res.json({ success: true, token, cliente: { id: clienteId, nome: nome.trim(), telefone: tel, email: email || null, favoritos: [] } });
+      res.json({ success: true, token, cliente: { id: clienteId, nome, telefone: tel, email: email ?? null, favoritos: [] } });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1144,8 +1150,14 @@ export function createDeliveryPublicRouter() {
 
   router.put('/:slug/cliente/perfil', requireDeliveryPublicPlan, authDeliveryCliente, async (req: any, res) => {
     try {
-      const { nome, email } = req.body;
-      await qRun('UPDATE delivery_clientes SET nome=?,email=? WHERE id=? AND tenant_id=?', [nome?.trim() || '', email || null, req.clienteId, req.tenantId]);
+      const body = parseBodyOrReply(res, deliveryPerfilPutBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      await qRun('UPDATE delivery_clientes SET nome=?,email=? WHERE id=? AND tenant_id=?', [
+        body.nome,
+        body.email,
+        req.clienteId,
+        req.tenantId,
+      ]);
       res.json({ success: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

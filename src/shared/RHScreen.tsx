@@ -335,6 +335,7 @@ export default function RHScreen({ token }: { token: string }) {
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-[var(--bg-main)]">
       <div className={`max-w-7xl mx-auto min-w-0 ${adminScreenPagePaddingClass} space-y-2 sm:space-y-3 2xl:space-y-4`}>
+        <RhHowItWorksPanel />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-black text-[var(--text-main)] 2xl:text-2xl">Modulo RH</h1>
@@ -349,7 +350,6 @@ export default function RHScreen({ token }: { token: string }) {
             Modo guiado
           </button>
         </div>
-        <RhHowItWorksPanel />
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 flex-wrap min-w-0">
           <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-0.5 sm:p-1 gap-0.5 overflow-x-auto overflow-y-hidden w-full sm:w-auto min-w-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
             {TABS.map(t => (

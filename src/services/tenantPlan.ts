@@ -25,6 +25,43 @@ export type TenantPlanContext = {
   trialFim: string | null;
 };
 
+const TENANT_PLAN_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type TenantPlanCacheEntry = { expiresAt: number; context: TenantPlanContext };
+
+const tenantPlanCacheById = new Map<number, TenantPlanCacheEntry>();
+
+function normalizeCacheableTenantId(tenantId: number | string): number | null {
+  const n = typeof tenantId === 'number' ? tenantId : Number(tenantId);
+  if (!Number.isFinite(n)) return null;
+  const id = Math.trunc(n);
+  return id > 0 ? id : null;
+}
+
+/** Remove entradas do cache de plano para o tenant (ex.: após alteração no admin). */
+export function invalidateTenantPlanCache(tenantId: number | string): void {
+  const id = normalizeCacheableTenantId(tenantId);
+  if (id != null) tenantPlanCacheById.delete(id);
+}
+
+function readTenantPlanCache(id: number): TenantPlanContext | null {
+  const row = tenantPlanCacheById.get(id);
+  if (!row) return null;
+  if (row.expiresAt <= Date.now()) {
+    tenantPlanCacheById.delete(id);
+    return null;
+  }
+  const { context } = row;
+  return { ...context, features: [...context.features] };
+}
+
+function writeTenantPlanCache(id: number, context: TenantPlanContext): void {
+  tenantPlanCacheById.set(id, {
+    expiresAt: Date.now() + TENANT_PLAN_CACHE_TTL_MS,
+    context: { ...context, features: [...context.features] },
+  });
+}
+
 function isFutureDate(value?: string | null): boolean {
   if (!value) return false;
   const date = new Date(value);
@@ -77,7 +114,7 @@ function buildTenantPlanContext(row: TenantPlanRow): TenantPlanContext {
   };
 }
 
-export async function getTenantPlanContext(tenantId: number | string): Promise<TenantPlanContext> {
+async function loadTenantPlanContextFromDb(tenantId: number | string): Promise<TenantPlanContext> {
   const tenant = await q1<TenantPlanRow>(
     'SELECT id, plano, trial_inicio, trial_fim, vencimento FROM clientes WHERE id=?',
     [tenantId]
@@ -95,6 +132,22 @@ export async function getTenantPlanContext(tenantId: number | string): Promise<T
   }
 
   return buildTenantPlanContext(tenant);
+}
+
+export async function getTenantPlanContext(tenantId: number | string): Promise<TenantPlanContext> {
+  const cacheId = normalizeCacheableTenantId(tenantId);
+  if (cacheId != null) {
+    const hit = readTenantPlanCache(cacheId);
+    if (hit) return hit;
+  }
+
+  const context = await loadTenantPlanContextFromDb(tenantId);
+
+  if (cacheId != null) {
+    writeTenantPlanCache(cacheId, context);
+  }
+
+  return { ...context, features: [...context.features] };
 }
 
 export async function getTenantFeatures(tenantId: number | string): Promise<PlanFeature[]> {

@@ -7,6 +7,8 @@ import { q1, qAll, qRun, qInsert } from '../db';
 import { publicRateLimit } from '../middleware';
 import { resolveRequiresPreparation } from '../utils/preparation';
 import { notifyTenantOrderStreams, setupSseStream } from '../sse';
+import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
+import { loginBodySchema } from '../validation/schemas/publicForms';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -458,8 +460,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     if (!slug) return;
 
     try {
-      const { username, password } = req.body;
-      if (!username||!password) return res.status(400).json({ error:'Usuário e senha obrigatórios' });
+      const body = parseBodyOrReply(res, loginBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { username, password } = body;
       const tenant = await q1('SELECT id FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Estabelecimento não encontrado' });
       const user = await q1('SELECT * FROM usuarios WHERE username=? AND cliente_id=? AND ativo=1', [username, tenant.id]);

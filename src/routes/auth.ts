@@ -2,13 +2,16 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { ACTIVE_SEGMENT_OPTIONS } from '../config/segmentos';
 import { q1, qInsert } from '../db';
 import { JWT_SECRET, loginRateLimiter, authenticateToken, publicRateLimit } from '../middleware';
 import { isAppError } from '../utils/errors';
 import { validateSecurityPassword } from '../utils/securityPassword';
-
-const PUBLIC_SEGMENTS = new Set(ACTIVE_SEGMENT_OPTIONS.map((segment) => segment.value));
+import { parseBodyOrReply, replyZod400Api } from '../validation/zodHttp';
+import {
+  loginBodySchema,
+  securitySenhaBodySchema,
+  solicitarAcessoBodySchema,
+} from '../validation/schemas/publicForms';
 
 export function createAuthRouter() {
   const router = Router();
@@ -16,9 +19,9 @@ export function createAuthRouter() {
   // POST /api/login
   router.post('/login', loginRateLimiter, async (req, res) => {
     try {
-      const { username, password } = req.body;
-      if (!username || !password)
-        return res.status(400).json({ success: false, message: 'Usuário e senha são obrigatórios' });
+      const body = parseBodyOrReply(res, loginBodySchema, req.body, replyZod400Api);
+      if (!body) return;
+      const { username, password } = body;
 
       const user = await q1('SELECT * FROM usuarios WHERE username=?', [username]);
       let senhaOk = false;
@@ -64,10 +67,12 @@ export function createAuthRouter() {
   // POST /api/auth/verify-admin
   router.post('/auth/verify-admin', loginRateLimiter, authenticateToken, async (req: any, res) => {
     try {
+      const body = parseBodyOrReply(res, securitySenhaBodySchema, req.body, replyZod400Api);
+      if (!body) return;
       await validateSecurityPassword({
         tenantId: req.tenantId,
         userId: req.user?.id,
-        password: req.body?.senha,
+        password: body.senha,
         type: 'admin',
         invalidMessage: 'Senha incorreta',
         userNotFoundMessage: 'Sessão inválida',
@@ -86,10 +91,12 @@ export function createAuthRouter() {
   // POST /api/auth/verify-caixa
   router.post('/auth/verify-caixa', loginRateLimiter, authenticateToken, async (req: any, res) => {
     try {
+      const body = parseBodyOrReply(res, securitySenhaBodySchema, req.body, replyZod400Api);
+      if (!body) return;
       await validateSecurityPassword({
         tenantId: req.tenantId,
         userId: req.user?.id,
-        password: req.body?.senha,
+        password: body.senha,
         type: 'caixa',
         invalidMessage: 'Senha incorreta',
         userNotFoundMessage: 'Sessão inválida',
@@ -108,17 +115,25 @@ export function createAuthRouter() {
   // POST /api/public/solicitar-acesso
   router.post('/public/solicitar-acesso', publicRateLimit, async (req, res) => {
     try {
-      const { nome_estabelecimento, razao_social, documento_tipo, documento_numero,
-              nome_responsavel, email, whatsapp, cidade, segmento } = req.body;
-      if (!nome_estabelecimento || !documento_tipo || !documento_numero || !nome_responsavel || !email || !whatsapp || !cidade)
-        return res.status(400).json({ success: false, message: 'Todos os campos obrigatórios devem ser preenchidos.' });
+      const body = parseBodyOrReply(res, solicitarAcessoBodySchema, req.body, replyZod400Api);
+      if (!body) return;
 
-      if (segmento && !PUBLIC_SEGMENTS.has(segmento))
-        return res.status(400).json({ success: false, message: 'Segmento indisponível no momento.' });
+      const segmento = body.segmento ?? 'Restaurante/Food';
 
+      const razao = body.razao_social?.trim() || null;
       const id = await qInsert(
         'INSERT INTO solicitacoes (nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,segmento) VALUES (?,?,?,?,?,?,?,?,?)',
-        [nome_estabelecimento, razao_social||null, documento_tipo, documento_numero, nome_responsavel, email, whatsapp, cidade, segmento||'Restaurante/Food']
+        [
+          body.nome_estabelecimento,
+          razao,
+          body.documento_tipo,
+          body.documento_numero,
+          body.nome_responsavel,
+          body.email,
+          body.whatsapp,
+          body.cidade,
+          segmento,
+        ]
       );
       res.json({ success: true, id });
     } catch (err: any) { res.status(500).json({ success: false, message: err.message }); }
