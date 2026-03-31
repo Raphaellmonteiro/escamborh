@@ -5,6 +5,7 @@ import {
   Printer, Wifi, CheckCircle2, XCircle, Loader,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Modal } from '../components/ui/Modal';
 
 export default function ConfiguracoesScreen({
   token,
@@ -229,16 +230,16 @@ export default function ConfiguracoesScreen({
   const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
     <button onClick={onClick}
       className={`relative w-11 h-6 rounded-full transition-all duration-300 shrink-0 ${on ? 'bg-zinc-900' : 'bg-zinc-200'}`}>
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-300 ${on ? 'translate-x-5' : ''}`} />
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-fp-card shadow transition-transform duration-300 ${on ? 'translate-x-5' : ''}`} />
     </button>
   );
 
   const Row = ({ icon, label, sub, children }: { icon: React.ReactNode; label: string; sub?: string; children: React.ReactNode }) => (
     <div className="flex items-center gap-3 px-4 py-3.5">
-      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">{icon}</div>
+      <div className="w-8 h-8 bg-fp-secondary rounded-xl flex items-center justify-center text-fptext-muted shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-zinc-900">{label}</p>
-        {sub && <p className="text-xs text-zinc-400">{sub}</p>}
+        <p className="text-sm font-bold text-fptext-primary">{label}</p>
+        {sub && <p className="text-xs text-fptext-muted">{sub}</p>}
       </div>
       {children}
     </div>
@@ -246,13 +247,13 @@ export default function ConfiguracoesScreen({
 
   if (loadingPerfil) return (
     <div className="flex items-center justify-center h-full">
-      <div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-fp-border border-t-fptext-primary rounded-full animate-spin" />
     </div>
   );
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="h-full overflow-y-auto bg-zinc-50">
+      className="h-full overflow-y-auto bg-fp-app">
       <div className="max-w-xl mx-auto p-6 space-y-6">
 
         <AnimatePresence>
@@ -265,8 +266,8 @@ export default function ConfiguracoesScreen({
         </AnimatePresence>
 
         <div className="flex items-center gap-2.5">
-          <Settings size={20} className="text-zinc-400" />
-          <h1 className="text-xl font-black text-zinc-900">Configurações</h1>
+          <Settings size={20} className="text-fptext-muted" />
+          <h1 className="text-xl font-black text-fptext-primary">Configurações</h1>
         </div>
 
         {/* ── Aviso: senha padrão ─────────────────────────────────────────── */}
@@ -296,23 +297,23 @@ export default function ConfiguracoesScreen({
 
         {/* ── ESTABELECIMENTO ─────────────────────────────────────────── */}
         <div>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 px-1">Estabelecimento</p>
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm divide-y divide-zinc-100">
+          <p className="text-[10px] font-black text-fptext-muted uppercase tracking-widest mb-2 px-1">Estabelecimento</p>
+          <div className="bg-fp-card rounded-2xl border border-fp-border shadow-sm divide-y divide-fp-border-soft">
 
             <Row icon={<Store size={16} />} label="Nome" sub="Exibido nos recibos e no sistema">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-zinc-700 truncate max-w-[160px]">
+                <span className="text-sm font-bold text-fptext-secondary truncate max-w-[160px]">
                   {perfil.nome_estabelecimento || '—'}
                 </span>
                 <button onClick={abrirEdicao}
-                  className="text-[10px] font-bold px-2 py-1 bg-zinc-100 hover:bg-zinc-200 rounded-lg text-zinc-500 transition-all">
+                  className="text-[10px] font-bold px-2 py-1 bg-fp-secondary hover:bg-fp-hover rounded-lg text-fptext-muted transition-all">
                   Editar
                 </button>
               </div>
             </Row>
 
             <Row icon={<span className="text-base">🏪</span>} label="Segmento" sub="Tipo do seu negócio">
-              <span className="text-xs font-bold px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg">
+              <span className="text-xs font-bold px-2.5 py-1 bg-fp-secondary text-fptext-secondary rounded-lg">
                 {perfil.segmento || '—'}
               </span>
             </Row>
@@ -320,19 +321,19 @@ export default function ConfiguracoesScreen({
             {/* Logo */}
             <div className="px-4 py-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
+                <div className="w-8 h-8 bg-fp-secondary rounded-xl flex items-center justify-center text-fptext-muted shrink-0">
                   <Image size={16} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-zinc-900">Logo</p>
-                  <p className="text-xs text-zinc-400">Aparece nos recibos impressos</p>
+                  <p className="text-sm font-bold text-fptext-primary">Logo</p>
+                  <p className="text-xs text-fptext-muted">Aparece nos recibos impressos</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-20 h-20 rounded-xl border-2 border-dashed flex items-center justify-center shrink-0 overflow-hidden ${logoUrl ? 'border-zinc-200' : 'border-zinc-200 bg-zinc-50'}`}>
+                <div className={`w-20 h-20 rounded-xl border-2 border-dashed flex items-center justify-center shrink-0 overflow-hidden ${logoUrl ? 'border-fp-border' : 'border-fp-border bg-fp-app'}`}>
                   {logoUrl
                     ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
-                    : <Image size={24} className="text-zinc-300" />}
+                    : <Image size={24} className="text-fptext-muted" />}
                 </div>
                 <div className="flex flex-col gap-2 flex-1">
                   <input ref={fileRef} type="file" accept="image/*" className="hidden"
@@ -348,7 +349,7 @@ export default function ConfiguracoesScreen({
                       <Trash2 size={13} /> Remover
                     </button>
                   )}
-                  <p className="text-[10px] text-zinc-400">PNG, JPG ou SVG · máx 2MB</p>
+                  <p className="text-[10px] text-fptext-muted">PNG, JPG ou SVG · máx 2MB</p>
                 </div>
               </div>
             </div>
@@ -357,9 +358,9 @@ export default function ConfiguracoesScreen({
 
         {/* ── TAXAS ───────────────────────────────────────────────────── */}
         <div>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 px-1">Taxas de Pagamento (%)</p>
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4 space-y-4">
-            <p className="text-xs text-zinc-400">Configure as taxas cobradas pelas operadoras. Usadas no cálculo de repasse.</p>
+          <p className="text-[10px] font-black text-fptext-muted uppercase tracking-widest mb-2 px-1">Taxas de Pagamento (%)</p>
+          <div className="bg-fp-card rounded-2xl border border-fp-border shadow-sm p-4 space-y-4">
+            <p className="text-xs text-fptext-muted">Configure as taxas cobradas pelas operadoras. Usadas no cálculo de repasse.</p>
             <div className="grid grid-cols-3 gap-3">
               {([
                 { key: 'debito'  as const, label: 'Débito',  icon: <CreditCard size={13} /> },
@@ -367,7 +368,7 @@ export default function ConfiguracoesScreen({
                 { key: 'pix'     as const, label: 'Pix',     icon: <Smartphone size={13} /> },
               ]).map(({ key, label, icon }) => (
                 <div key={key}>
-                  <label className="flex items-center gap-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  <label className="flex items-center gap-1 text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-1.5">
                     {icon} {label}
                   </label>
                   <div className="relative">
@@ -375,8 +376,8 @@ export default function ConfiguracoesScreen({
                       value={taxas[key]}
                       onChange={e => setTaxas(p => ({ ...p, [key]: e.target.value }))}
                       placeholder="0"
-                      className="w-full pl-3 pr-6 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-zinc-900/10 text-center" />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-bold">%</span>
+                      className="w-full pl-3 pr-6 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm font-bold text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)] text-center" />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-fptext-muted font-bold">%</span>
                   </div>
                 </div>
               ))}
@@ -390,27 +391,27 @@ export default function ConfiguracoesScreen({
 
         {/* ── SENHAS ──────────────────────────────────────────────────── */}
         <div>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 px-1">Senhas do Sistema</p>
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm divide-y divide-zinc-100">
+          <p className="text-[10px] font-black text-fptext-muted uppercase tracking-widest mb-2 px-1">Senhas do Sistema</p>
+          <div className="bg-fp-card rounded-2xl border border-fp-border shadow-sm divide-y divide-fp-border-soft">
             <div className="px-4 py-3.5 flex items-center gap-3">
-              <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0"><Lock size={16} /></div>
+              <div className="w-8 h-8 bg-fp-secondary rounded-xl flex items-center justify-center text-fptext-muted shrink-0"><Lock size={16} /></div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-zinc-900">Senha Admin</p>
-                <p className="text-xs text-zinc-400">Protege configurações e RH</p>
+                <p className="text-sm font-bold text-fptext-primary">Senha Admin</p>
+                <p className="text-xs text-fptext-muted">Protege configurações e RH</p>
               </div>
-              <span className="text-sm font-mono font-bold text-zinc-400 tracking-widest">••••••</span>
+              <span className="text-sm font-mono font-bold text-fptext-muted tracking-widest">••••••</span>
             </div>
 
             <div className="px-4 py-3.5 flex items-center gap-3">
-              <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0"><Banknote size={16} /></div>
+              <div className="w-8 h-8 bg-fp-secondary rounded-xl flex items-center justify-center text-fptext-muted shrink-0"><Banknote size={16} /></div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-zinc-900">Senha do Caixa</p>
-                <p className="text-xs text-zinc-400">Solicitada ao abrir/fechar o caixa</p>
+                <p className="text-sm font-bold text-fptext-primary">Senha do Caixa</p>
+                <p className="text-xs text-fptext-muted">Solicitada ao abrir/fechar o caixa</p>
               </div>
-              <span className="text-sm font-mono font-bold text-zinc-400 tracking-widest">••••••</span>
+              <span className="text-sm font-mono font-bold text-fptext-muted tracking-widest">••••••</span>
             </div>
 
-            <div className="px-4 py-2.5 bg-zinc-50 border-t border-zinc-100">
+            <div className="px-4 py-2.5 bg-fp-secondary border-t border-fp-border-soft">
               <button onClick={abrirEdicao}
                 className="text-[11px] font-bold text-blue-600 hover:text-blue-700 transition-colors">
                 ✏️ Alterar nome ou senhas
@@ -421,15 +422,15 @@ export default function ConfiguracoesScreen({
 
         {/* ── IMPRESSORA TÉRMICA ─────────────────────────────────────── */}
         <div>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 px-1">Impressora Térmica</p>
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-4 space-y-4">
-            <p className="text-xs text-zinc-400">
+          <p className="text-[10px] font-black text-fptext-muted uppercase tracking-widest mb-2 px-1">Impressora Térmica</p>
+          <div className="bg-fp-card rounded-2xl border border-fp-border shadow-sm p-4 space-y-4">
+            <p className="text-xs text-fptext-muted">
               Configure a impressora para emissão de recibos e comandas. Modo <strong>Rede</strong> funciona com qualquer impressora conectada via Wi-Fi ou cabo de rede.
             </p>
 
             {/* Tipo de conexão */}
             <div>
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 block">Tipo de Conexão</label>
+              <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-2 block">Tipo de Conexão</label>
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { key: 'rede',   label: 'Rede (Wi-Fi)',  sub: 'Mais universal' },
@@ -437,9 +438,9 @@ export default function ConfiguracoesScreen({
                   { key: 'epson',  label: 'Epson ePOS',    sub: 'Wi-Fi nativo'   },
                 ] as const).map(op => (
                   <button key={op.key} onClick={() => setPrinterCfg(p => ({ ...p, tipo: op.key }))}
-                    className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${printerCfg.tipo === op.key ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-zinc-50 text-zinc-600 hover:border-zinc-400'}`}>
+                    className={`flex flex-col items-center gap-0.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${printerCfg.tipo === op.key ? 'border-fptext-primary bg-fptext-primary text-fp-card' : 'border-fp-border bg-fp-secondary text-fptext-secondary hover:border-fp-accent'}`}>
                     <span className="text-xs font-black">{op.label}</span>
-                    <span className={`text-[10px] ${printerCfg.tipo === op.key ? 'text-zinc-300' : 'text-zinc-400'}`}>{op.sub}</span>
+                    <span className={`text-[10px] ${printerCfg.tipo === op.key ? 'text-fp-card opacity-80' : 'text-fptext-muted'}`}>{op.sub}</span>
                   </button>
                 ))}
               </div>
@@ -449,16 +450,16 @@ export default function ConfiguracoesScreen({
             {printerCfg.tipo === 'rede' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">IP da Impressora</label>
+                  <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-1.5 block">IP da Impressora</label>
                   <input value={printerCfg.ip} onChange={e => setPrinterCfg(p => ({ ...p, ip: e.target.value }))}
                     placeholder="192.168.1.100"
-                    className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+                    className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm font-mono text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Porta</label>
+                  <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-1.5 block">Porta</label>
                   <input value={printerCfg.porta} onChange={e => setPrinterCfg(p => ({ ...p, porta: e.target.value }))}
                     placeholder="9100"
-                    className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+                    className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm font-mono text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
                 </div>
               </div>
             )}
@@ -485,16 +486,16 @@ export default function ConfiguracoesScreen({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">IP da Impressora</label>
+                    <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-1.5 block">IP da Impressora</label>
                     <input value={printerCfg.ip} onChange={e => setPrinterCfg(p => ({ ...p, ip: e.target.value }))}
                       placeholder="192.168.1.100"
-                      className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+                      className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm font-mono text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Porta</label>
+                    <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-1.5 block">Porta</label>
                     <input value={printerCfg.porta} onChange={e => setPrinterCfg(p => ({ ...p, porta: e.target.value }))}
                       placeholder="80"
-                      className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
+                      className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm font-mono text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
                   </div>
                 </div>
               </div>
@@ -502,11 +503,11 @@ export default function ConfiguracoesScreen({
 
             {/* Largura do papel */}
             <div>
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 block">Largura do Papel</label>
+              <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider mb-2 block">Largura do Papel</label>
               <div className="flex gap-2">
                 {(['48', '32'] as const).map(w => (
                   <button key={w} onClick={() => setPrinterCfg(p => ({ ...p, largura_papel: w }))}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${printerCfg.largura_papel === w ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-zinc-50 text-zinc-600 hover:border-zinc-400'}`}>
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${printerCfg.largura_papel === w ? 'border-fptext-primary bg-fptext-primary text-fp-card' : 'border-fp-border bg-fp-secondary text-fptext-secondary hover:border-fp-accent'}`}>
                     {w === '48' ? '80mm (48 cols)' : '58mm (32 cols)'}
                   </button>
                 ))}
@@ -528,7 +529,7 @@ export default function ConfiguracoesScreen({
                 {savingPrinter ? 'Salvando...' : 'Salvar Configuração'}
               </button>
               <button onClick={handleTestPrinter} disabled={testingPrinter || !printerCfg.ip}
-                className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-sm font-bold transition-all disabled:opacity-40">
+                className="flex items-center gap-2 px-4 py-2.5 bg-fp-secondary hover:bg-fp-hover text-fptext-primary rounded-xl text-sm font-bold transition-all disabled:opacity-40">
                 {testingPrinter ? <Loader size={14} className="animate-spin" /> : <Printer size={14} />}
                 Testar
               </button>
@@ -538,8 +539,8 @@ export default function ConfiguracoesScreen({
 
         {/* ── APARÊNCIA ───────────────────────────────────────────────── */}
         <div>
-          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2 px-1">Aparência</p>
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm">
+          <p className="text-[10px] font-black text-fptext-muted uppercase tracking-widest mb-2 px-1">Aparência</p>
+          <div className="bg-fp-card rounded-2xl border border-fp-border shadow-sm">
             <Row icon={<span className="text-base">{darkMode ? '🌙' : '☀️'}</span>} label="Tema Escuro" sub="Interface escura em todo o sistema">
               <Toggle on={darkMode} onClick={() => {
                 setDarkMode(!darkMode);
@@ -551,48 +552,41 @@ export default function ConfiguracoesScreen({
 
       </div>
 
-      {/* ── Modal Editar Perfil ────────────────────────────────────────── */}
-      {editando && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 className="text-base font-black text-zinc-900 mb-4">Editar Dados</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Nome do Estabelecimento</label>
-                <input value={formPerfil.nome} onChange={e => setFormPerfil(p => ({ ...p, nome: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Nova Senha Admin</label>
-                <p className="text-[10px] text-zinc-400 mb-1">Deixe em branco para não alterar</p>
-                <input type="password" value={formPerfil.senhaNova}
-                  onChange={e => setFormPerfil(p => ({ ...p, senhaNova: e.target.value }))}
-                  placeholder="Nova senha admin"
-                  className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Nova Senha do Caixa</label>
-                <p className="text-[10px] text-zinc-400 mb-1">Deixe em branco para não alterar</p>
-                <input type="password" value={formPerfil.senhaCaixaNova}
-                  onChange={e => setFormPerfil(p => ({ ...p, senhaCaixaNova: e.target.value }))}
-                  placeholder="Nova senha do caixa"
-                  className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10" />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => setEditando(false)}
-                className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">
-                Cancelar
-              </button>
-              <button onClick={handleSavePerfil} disabled={savingPerfil}
-                className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50">
-                {savingPerfil ? 'Salvando...' : 'Salvar'}
-              </button>
-            </div>
-          </motion.div>
+      <Modal open={editando} onClose={() => setEditando(false)} title="Editar Dados" className="sm:max-w-sm">
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Nome do Estabelecimento</label>
+            <input value={formPerfil.nome} onChange={e => setFormPerfil(p => ({ ...p, nome: e.target.value }))}
+              className="mt-1 w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Nova Senha Admin</label>
+            <p className="text-[10px] text-fptext-muted mb-1">Deixe em branco para não alterar</p>
+            <input type="password" value={formPerfil.senhaNova}
+              onChange={e => setFormPerfil(p => ({ ...p, senhaNova: e.target.value }))}
+              placeholder="Nova senha admin"
+              className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Nova Senha do Caixa</label>
+            <p className="text-[10px] text-fptext-muted mb-1">Deixe em branco para não alterar</p>
+            <input type="password" value={formPerfil.senhaCaixaNova}
+              onChange={e => setFormPerfil(p => ({ ...p, senhaCaixaNova: e.target.value }))}
+              placeholder="Nova senha do caixa"
+              className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+          </div>
         </div>
-      )}
+        <div className="flex gap-3 mt-5">
+          <button type="button" onClick={() => setEditando(false)}
+            className="flex-1 py-2.5 bg-fp-secondary hover:bg-fp-hover rounded-xl text-sm font-bold text-fptext-primary transition-all">
+            Cancelar
+          </button>
+          <button type="button" onClick={handleSavePerfil} disabled={savingPerfil}
+            className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50">
+            {savingPerfil ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </Modal>
     </motion.div>
   );
 }

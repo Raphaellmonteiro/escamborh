@@ -1,0 +1,500 @@
+/**
+ * FlowPDV — tema global (light + dark)
+ * Tokens semânticos (--fp-*) e aliases legados (--bg-card, --text-main, …) para RH e telas existentes.
+ * Ative o escuro com `flowpdv-dark` + `dark` no <html> (ver App.tsx).
+ */
+
+:root {
+  color-scheme: light;
+  /* Tokens principais */
+  --fp-bg-primary: #fafafa;
+  --fp-bg-secondary: #f4f4f5;
+  --fp-bg-card: #ffffff;
+  --fp-bg-input: #fafafa;
+  --fp-bg-hover: #f4f4f5;
+  --fp-bg-active: #e4e4e7;
+  --fp-text-primary: #18181b;
+  --fp-text-secondary: #52525b;
+  --fp-text-muted: #71717a;
+  --fp-border-default: #e4e4e7;
+  --fp-border-soft: #f4f4f4;
+  --fp-accent: #18181b;
+  --fp-ring: rgba(24, 24, 27, 0.12);
+  /* Aliases legado */
+  --bg-app: #fafafa;
+  --bg-panel: #f4f4f5;
+  --bg-main: #fafafa;
+  --bg-card: #ffffff;
+  --bg-input: #fafafa;
+  --bg-hover: #f4f4f5;
+  --bg-active: #e4e4e7;
+  --border: #e4e4e7;
+  --border-soft: #f4f4f4;
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --text-main: #18181b;
+  --accent: #18181b;
+}
+
+html.flowpdv-dark {
+  color-scheme: dark;
+  --fp-bg-primary: #070708;
+  --fp-bg-secondary: #0c0c10;
+  --fp-bg-card: #12121a;
+  --fp-bg-input: #1a1a24;
+  --fp-bg-hover: #1f1f28;
+  --fp-bg-active: #26262f;
+  --fp-text-primary: #f4f4f5;
+  --fp-text-secondary: #a1a1aa;
+  --fp-text-muted: #8b8b96;
+  --fp-border-default: #2a2a35;
+  --fp-border-soft: #1a1a22;
+  --fp-accent: #34d399;
+  --fp-ring: rgba(52, 211, 153, 0.22);
+  --bg-app: #070708;
+  --bg-panel: #0c0c10;
+  --bg-main: #070708;
+  --bg-card: #12121a;
+  --bg-input: #1a1a24;
+  --bg-hover: #1f1f28;
+  --bg-active: #26262f;
+  --border: #2a2a35;
+  --border-soft: #1a1a22;
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #8b8b96;
+  --text-main: #f4f4f5;
+  --accent: #34d399;
+}
+
+/* Layout base (--bg-app espelha o canvas; mantém legado) */
+.flowpdv-dark body,
+.flowpdv-dark #root {
+  background: var(--bg-app) !important;
+}
+
+/* Backgrounds Tailwind → tokens */
+.flowpdv-dark .bg-white {
+  background-color: var(--fp-bg-card) !important;
+}
+.flowpdv-dark .bg-zinc-50 {
+  background-color: var(--fp-bg-secondary) !important;
+}
+.flowpdv-dark .bg-zinc-100 {
+  background-color: var(--fp-bg-input) !important;
+}
+.flowpdv-dark .bg-zinc-200 {
+  background-color: var(--fp-bg-active) !important;
+}
+.flowpdv-dark .bg-zinc-800 {
+  background-color: #18181f !important;
+}
+
+/* Texto */
+.flowpdv-dark .text-zinc-900 {
+  color: var(--fp-text-primary) !important;
+}
+.flowpdv-dark .text-zinc-800 {
+  color: var(--fp-text-primary) !important;
+}
+.flowpdv-dark .text-zinc-700 {
+  color: #d4d4d8 !important;
+}
+.flowpdv-dark .text-zinc-600 {
+  color: #a1a1aa !important;
+}
+.flowpdv-dark .text-zinc-500 {
+  color: var(--fp-text-secondary) !important;
+}
+.flowpdv-dark .text-zinc-400 {
+  color: var(--fp-text-muted) !important;
+}
+.flowpdv-dark .text-zinc-300 {
+  color: #71717a !important;
+}
+
+/* Botão primário zinc-900 no dark */
+.flowpdv-dark button.bg-zinc-900,
+.flowpdv-dark a.bg-zinc-900 {
+  background-color: #2a2a32 !important;
+  color: #fafafa !important;
+}
+.flowpdv-dark .hover\:bg-zinc-800:hover {
+  background-color: #36363f !important;
+}
+
+/* Bordas */
+.flowpdv-dark .border-zinc-100 {
+  border-color: var(--fp-border-soft) !important;
+}
+.flowpdv-dark .border-zinc-200 {
+  border-color: var(--fp-border-default) !important;
+}
+.flowpdv-dark .border-zinc-300 {
+  border-color: #3f3f4c !important;
+}
+.flowpdv-dark .divide-zinc-100 > * + * {
+  border-color: var(--fp-border-soft) !important;
+}
+.flowpdv-dark .divide-zinc-200 > * + * {
+  border-color: var(--fp-border-default) !important;
+}
+
+.flowpdv-dark .hover\:bg-zinc-50:hover {
+  background-color: var(--fp-bg-hover) !important;
+}
+.flowpdv-dark .hover\:bg-zinc-100:hover {
+  background-color: var(--fp-bg-active) !important;
+}
+.flowpdv-dark .hover\:bg-zinc-200:hover {
+  background-color: #30303a !important;
+}
+
+/* Campos nativos */
+.flowpdv-dark input:not([type='range']):not([type='checkbox']):not([type='radio']):not([type='file']),
+.flowpdv-dark textarea,
+.flowpdv-dark select {
+  background-color: var(--fp-bg-input) !important;
+  border-color: var(--fp-border-default) !important;
+  color: var(--fp-text-primary) !important;
+}
+.flowpdv-dark input::placeholder,
+.flowpdv-dark textarea::placeholder {
+  color: var(--fp-text-muted) !important;
+}
+
+.flowpdv-dark .shadow-sm {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+.flowpdv-dark .shadow-lg {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+}
+.flowpdv-dark .shadow-xl {
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7) !important;
+}
+.flowpdv-dark .shadow-2xl {
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8) !important;
+}
+
+.flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) svg {
+  color: currentColor !important;
+}
+.flowpdv-dark .flowpdv-nav-item-icon-slot {
+  color: inherit !important;
+}
+
+.flowpdv-dark .bg-amber-50 {
+  background-color: #1e1800 !important;
+}
+.flowpdv-dark .border-amber-200 {
+  border-color: #3d2f00 !important;
+}
+.flowpdv-dark .text-amber-600 {
+  color: #f59e0b !important;
+}
+.flowpdv-dark .text-amber-800 {
+  color: #fbbf24 !important;
+}
+.flowpdv-dark .bg-amber-400 {
+  background-color: #d97706 !important;
+}
+.flowpdv-dark .bg-amber-100 {
+  background-color: #422006 !important;
+}
+.flowpdv-dark .border-amber-300 {
+  border-color: #b45309 !important;
+}
+.flowpdv-dark .text-amber-900 {
+  color: #fde68a !important;
+}
+
+.flowpdv-dark .bg-green-50 {
+  background-color: #001a08 !important;
+}
+.flowpdv-dark .bg-green-100 {
+  background-color: #002610 !important;
+}
+.flowpdv-dark .text-green-700 {
+  color: #34d399 !important;
+}
+.flowpdv-dark .text-green-600 {
+  color: #10b981 !important;
+}
+.flowpdv-dark .bg-green-600 {
+  background-color: #059669 !important;
+}
+.flowpdv-dark .hover\:bg-green-700:hover {
+  background-color: #047857 !important;
+}
+
+.flowpdv-dark .bg-red-50 {
+  background-color: #1a0000 !important;
+}
+.flowpdv-dark .text-red-500 {
+  color: #f87171 !important;
+}
+.flowpdv-dark .text-red-600 {
+  color: #ef4444 !important;
+}
+.flowpdv-dark .hover\:bg-red-50:hover {
+  background-color: #1a0000 !important;
+}
+.flowpdv-dark .hover\:text-red-600:hover {
+  color: #f87171 !important;
+}
+
+.flowpdv-dark .bg-blue-50 {
+  background-color: #00081a !important;
+}
+.flowpdv-dark .text-blue-700 {
+  color: #60a5fa !important;
+}
+
+.flowpdv-dark .bg-purple-100 {
+  background-color: #150024 !important;
+}
+.flowpdv-dark .text-purple-700 {
+  color: #c084fc !important;
+}
+.flowpdv-dark .bg-purple-50 {
+  background-color: #1a0a24 !important;
+}
+
+.flowpdv-dark .bg-violet-50 {
+  background-color: #1a1025 !important;
+}
+.flowpdv-dark .bg-violet-50\/50 {
+  background-color: rgba(26, 16, 37, 0.85) !important;
+}
+.flowpdv-dark .bg-violet-50\/60 {
+  background-color: rgba(26, 16, 37, 0.9) !important;
+}
+.flowpdv-dark .border-violet-200 {
+  border-color: #4c1d6e !important;
+}
+.flowpdv-dark .text-violet-700 {
+  color: #c4b5fd !important;
+}
+.flowpdv-dark .text-violet-800 {
+  color: #ddd6fe !important;
+}
+.flowpdv-dark .text-violet-900 {
+  color: #ede9fe !important;
+}
+.flowpdv-dark .text-violet-950 {
+  color: #f5f3ff !important;
+}
+.flowpdv-dark .bg-violet-100 {
+  background-color: #2d1b4e !important;
+}
+.flowpdv-dark .hover\:bg-violet-200:hover {
+  background-color: #3d2566 !important;
+}
+.flowpdv-dark .bg-violet-700 {
+  background-color: #6d28d9 !important;
+}
+.flowpdv-dark .bg-violet-800 {
+  background-color: #5b21b6 !important;
+}
+.flowpdv-dark .bg-violet-900 {
+  background-color: #4c1d95 !important;
+}
+.flowpdv-dark .hover\:bg-violet-800:hover {
+  background-color: #5b21b6 !important;
+}
+
+.flowpdv-dark .bg-teal-50 {
+  background-color: #042f2e !important;
+}
+.flowpdv-dark .bg-teal-50\/40 {
+  background-color: rgba(4, 47, 46, 0.5) !important;
+}
+.flowpdv-dark .border-teal-100 {
+  border-color: #115e59 !important;
+}
+.flowpdv-dark .border-teal-200 {
+  border-color: #0f766e !important;
+}
+.flowpdv-dark .text-teal-800 {
+  color: #5eead4 !important;
+}
+.flowpdv-dark .text-teal-900 {
+  color: #99f6e4 !important;
+}
+.flowpdv-dark .text-teal-950 {
+  color: #ccfbf1 !important;
+}
+.flowpdv-dark .bg-teal-600 {
+  background-color: #0d9488 !important;
+}
+.flowpdv-dark .bg-teal-700 {
+  background-color: #0f766e !important;
+}
+.flowpdv-dark .bg-teal-900 {
+  background-color: #134e4a !important;
+}
+
+.flowpdv-dark .bg-orange-50 {
+  background-color: #2a1500 !important;
+}
+.flowpdv-dark .bg-orange-50\/50 {
+  background-color: rgba(42, 21, 0, 0.55) !important;
+}
+.flowpdv-dark .bg-orange-50\/70 {
+  background-color: rgba(42, 21, 0, 0.75) !important;
+}
+.flowpdv-dark .border-orange-100 {
+  border-color: #7c2d12 !important;
+}
+.flowpdv-dark .border-orange-200 {
+  border-color: #9a3412 !important;
+}
+.flowpdv-dark .border-orange-300 {
+  border-color: #c2410c !important;
+}
+.flowpdv-dark .text-orange-500 {
+  color: #fb923c !important;
+}
+.flowpdv-dark .text-orange-600 {
+  color: #fdba74 !important;
+}
+.flowpdv-dark .text-orange-700 {
+  color: #fed7aa !important;
+}
+.flowpdv-dark .text-orange-800 {
+  color: #ffedd5 !important;
+}
+.flowpdv-dark .text-orange-900 {
+  color: #fff7ed !important;
+}
+.flowpdv-dark .text-orange-950 {
+  color: #fffbeb !important;
+}
+.flowpdv-dark .bg-orange-100 {
+  background-color: #431407 !important;
+}
+.flowpdv-dark .bg-orange-500 {
+  background-color: #ea580c !important;
+}
+.flowpdv-dark .hover\:bg-orange-600:hover {
+  background-color: #c2410c !important;
+}
+
+.flowpdv-dark .bg-cyan-50 {
+  background-color: #083344 !important;
+}
+.flowpdv-dark .bg-cyan-50\/70 {
+  background-color: rgba(8, 51, 68, 0.75) !important;
+}
+.flowpdv-dark .border-cyan-100 {
+  border-color: #155e75 !important;
+}
+.flowpdv-dark .border-cyan-200 {
+  border-color: #0e7490 !important;
+}
+.flowpdv-dark .text-cyan-800 {
+  color: #67e8f9 !important;
+}
+.flowpdv-dark .text-cyan-900 {
+  color: #a5f3fc !important;
+}
+.flowpdv-dark .text-cyan-950 {
+  color: #cffafe !important;
+}
+.flowpdv-dark .bg-cyan-700 {
+  background-color: #0e7490 !important;
+}
+.flowpdv-dark .hover\:bg-cyan-800:hover {
+  background-color: #155e75 !important;
+}
+
+.flowpdv-dark .bg-emerald-50 {
+  background-color: #022c1e !important;
+}
+.flowpdv-dark .bg-emerald-50\/70 {
+  background-color: rgba(2, 44, 30, 0.75) !important;
+}
+.flowpdv-dark .border-emerald-200 {
+  border-color: #047857 !important;
+}
+.flowpdv-dark .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+.flowpdv-dark .text-emerald-950 {
+  color: #d1fae5 !important;
+}
+
+.flowpdv-dark .bg-sky-50 {
+  background-color: #0c1e2e !important;
+}
+.flowpdv-dark .border-sky-200 {
+  border-color: #0369a1 !important;
+}
+.flowpdv-dark .text-sky-900 {
+  color: #bae6fd !important;
+}
+.flowpdv-dark .text-sky-950 {
+  color: #e0f2fe !important;
+}
+
+.flowpdv-dark .bg-indigo-50 {
+  background-color: #1e1b4b !important;
+}
+.flowpdv-dark .bg-indigo-50\/90 {
+  background-color: rgba(30, 27, 75, 0.92) !important;
+}
+.flowpdv-dark .border-indigo-200 {
+  border-color: #4338ca !important;
+}
+.flowpdv-dark .text-indigo-800 {
+  color: #a5b4fc !important;
+}
+.flowpdv-dark .text-indigo-900 {
+  color: #c7d2fe !important;
+}
+.flowpdv-dark .text-indigo-950 {
+  color: #e0e7ff !important;
+}
+
+.flowpdv-dark .text-rose-800 {
+  color: #fda4af !important;
+}
+.flowpdv-dark .text-rose-950 {
+  color: #ffe4e6 !important;
+}
+
+.flowpdv-dark .from-orange-50\/80 {
+  --tw-gradient-from: rgb(42 21 0 / 0.85) !important;
+}
+.flowpdv-dark .to-cyan-50\/40 {
+  --tw-gradient-to: rgb(8 51 68 / 0.45) !important;
+}
+
+.flowpdv-dark .from-zinc-900,
+.flowpdv-dark .to-zinc-900 {
+  --tw-gradient-from: #0d0d0d;
+  --tw-gradient-to: #0d0d0d;
+}
+.flowpdv-dark .from-zinc-800 {
+  --tw-gradient-from: #141414;
+}
+
+.flowpdv-dark .ring-zinc-900 {
+  --tw-ring-color: rgba(240, 240, 240, 0.3) !important;
+}
+
+.flowpdv-dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.flowpdv-dark ::-webkit-scrollbar-track {
+  background: #0a0a0c;
+}
+.flowpdv-dark ::-webkit-scrollbar-thumb {
+  background: #3f3f4c;
+  border-radius: 3px;
+}
+.flowpdv-dark ::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}

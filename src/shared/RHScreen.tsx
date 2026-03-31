@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generatePayrollPdf, generatePayrollReceiptHtml, generateFeriasReceiptHtml, generateDecimoReceiptHtml } from '../utils/payrollPdfHtml';
 import {
@@ -13,9 +13,20 @@ import {
   Trash2, AlertTriangle, CheckCircle2, DollarSign,
   TrendingUp, Download, ArrowRight, Check, RefreshCw,
   ChevronLeft, ChevronRight, Search, Camera, Upload,
-  Bell, Palmtree, Gift,
+  Bell, Palmtree, Gift, BookOpen,
 } from 'lucide-react';
 import { adminScreenPagePaddingClass } from '../components/ui/screenChrome';
+import { Modal } from '../components/ui/Modal';
+import { OnboardingOverlay } from '../components/onboarding';
+import type { OnboardingStepConfig } from '../components/onboarding/onboardingTypes';
+import { useOnboarding } from '../hooks/useOnboarding';
+import { ONBOARDING_ACTION_EVENT, emitOnboardingAction } from '../onboarding/onboardingBridge';
+import {
+  RH_ONBOARDING_ACTIONS,
+  RH_ONBOARDING_STORAGE_KEY,
+  RH_ONBOARDING_STEPS,
+  RH_ONBOARDING_TARGETS,
+} from '../onboarding/rhOnboardingConfig';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Func {
@@ -247,6 +258,35 @@ export default function RHScreen({ token }: { token: string }) {
     catch { return ''; }
   }, [token]);
 
+  const onRhOnboardingStep = useCallback((_: number, step: OnboardingStepConfig) => {
+    if (step.activateTab === 'lista') setTab('lista');
+  }, []);
+
+  const rhOnboarding = useOnboarding({
+    storageKey: RH_ONBOARDING_STORAGE_KEY,
+    steps: RH_ONBOARDING_STEPS,
+    onStepIndexChange: onRhOnboardingStep,
+  });
+
+  useEffect(() => {
+    rhOnboarding.tryAutoOpen();
+  }, [rhOnboarding.tryAutoOpen]);
+
+  useEffect(() => {
+    const fn = (e: Event) => {
+      const t = (e as CustomEvent<{ target?: string }>).detail?.target;
+      if (typeof t === 'string') rhOnboarding.completeAction(t);
+    };
+    window.addEventListener(ONBOARDING_ACTION_EVENT, fn);
+    return () => window.removeEventListener(ONBOARDING_ACTION_EVENT, fn);
+  }, [rhOnboarding.completeAction]);
+
+  type RhRootTab = 'lista' | 'espelho' | 'folha' | 'gestao';
+  const commitTab = useCallback((key: RhRootTab) => {
+    if (key === 'espelho') emitOnboardingAction(RH_ONBOARDING_ACTIONS.viewTabEspelho);
+    setTab(key);
+  }, []);
+
   const TABS = [
     { key:'lista',   label:'Funcionarios',       icon:<Users size={14}/> },
     { key:'gestao',  label:'Gestao RH',          icon:<Bell size={14}/> },
@@ -293,24 +333,41 @@ export default function RHScreen({ token }: { token: string }) {
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-[var(--bg-main)]">
       <div className={`max-w-7xl mx-auto min-w-0 ${adminScreenPagePaddingClass} space-y-2 sm:space-y-3 2xl:space-y-4`}>
-        <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-black text-[var(--text-main)] 2xl:text-2xl">Modulo RH</h1>
-          <p className="text-[11px] sm:text-xs text-[var(--text-muted)] mt-0.5 leading-snug 2xl:text-sm">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between min-w-0">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-black text-[var(--text-main)] 2xl:text-2xl">Modulo RH</h1>
+            <p className="text-[11px] sm:text-xs text-[var(--text-muted)] mt-0.5 leading-snug 2xl:text-sm">Funcionarios cuida do cadastro e da ficha completa. Gestao RH organiza prioridades. Espelho de Ponto cuida da jornada. Folha de Pagamento fecha a competencia.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => rhOnboarding.startGuided()}
+            className="flex shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-xs font-bold text-[var(--text-main)] transition-colors hover:bg-[var(--bg-main)]"
+          >
+            <BookOpen size={14} className="text-[var(--text-muted)] shrink-0" />
+            Modo guiado
+          </button>
         </div>
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 flex-wrap min-w-0">
           <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-0.5 sm:p-1 gap-0.5 overflow-x-auto overflow-y-hidden w-full sm:w-auto min-w-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
             {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key as any)}
-                className={`flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] text-xs font-bold transition-all shrink-0 rounded-lg sm:gap-2 sm:px-3 sm:text-sm lg:min-h-0 lg:py-1.5 2xl:px-3.5 2xl:py-2 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-main)]'}`}>
+              <button
+                key={t.key}
+                type="button"
+                data-onboarding-target={t.key === 'espelho' ? RH_ONBOARDING_TARGETS.espelhoTab : undefined}
+                onClick={() => commitTab(t.key as RhRootTab)}
+                className={`flex items-center gap-1.5 px-2.5 py-2 min-h-[40px] text-xs font-bold transition-all shrink-0 rounded-lg sm:gap-2 sm:px-3 sm:text-sm lg:min-h-0 lg:py-1.5 2xl:px-3.5 2xl:py-2 ${tab===t.key ? 'bg-zinc-900 text-white shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-main)]'}`}
+              >
                 {t.icon}{t.label}
               </button>
             ))}
           </div>
           {/* Botão Bater Ponto — abre quiosque em nova aba */}
           <a
+            data-onboarding-target="rh-bater-ponto"
             href={`/kiosk/ponto/${slug}`}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => emitOnboardingAction(RH_ONBOARDING_ACTIONS.clickBaterPonto)}
             className="flex items-center justify-center gap-2 px-3 py-2 min-h-[40px] text-xs font-bold sm:px-4 sm:py-2.5 sm:min-h-[44px] sm:text-sm lg:min-h-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all active:scale-95 no-underline shrink-0"
           >
             <Fingerprint size={14} />
@@ -330,7 +387,7 @@ export default function RHScreen({ token }: { token: string }) {
                 <button
                   key={shortcut.key}
                   type="button"
-                  onClick={() => setTab(shortcut.key)}
+                  onClick={() => commitTab(shortcut.key as RhRootTab)}
                   className="rounded-lg border border-[var(--border)] bg-[var(--bg-main)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--text-main)] hover:bg-zinc-100 sm:text-xs 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-sm"
                 >
                   {shortcut.label}
@@ -358,6 +415,18 @@ export default function RHScreen({ token }: { token: string }) {
           />
         )}
       </div>
+      <OnboardingOverlay
+        open={rhOnboarding.open}
+        step={rhOnboarding.currentStep}
+        stepIndex={rhOnboarding.stepIndex}
+        stepCount={rhOnboarding.stepCount}
+        onNext={rhOnboarding.next}
+        onBack={rhOnboarding.back}
+        onSkip={rhOnboarding.skip}
+        canGoBack={rhOnboarding.stepIndex > 0}
+        canAdvance={rhOnboarding.canAdvance}
+        autoAdvanceOnActionComplete
+      />
     </motion.div>
   );
 }
@@ -731,6 +800,7 @@ function TabLista({
       const r = await fetch(url, { method:modal==='novo'?'POST':'PUT', headers:jHdrs, body:JSON.stringify(body) });
       const data = await r.json();
       if(!r.ok){ alert(data.error||'Erro'); return; }
+      if (modal === 'novo') emitOnboardingAction(RH_ONBOARDING_ACTIONS.createFuncionario);
       if(fotoFile){ const fid=modal==='novo'?data.id:selected!.id; const fd=new FormData(); fd.append('foto',fotoFile); await fetch(`/api/funcionarios/${fid}/foto`,{method:'POST',headers:hdrs,body:fd}); }
       // Criar/atualizar acesso de login se marcado
       // Para novo funcionário: exige senha. Para edição: senha é opcional (mantém a atual)
@@ -830,7 +900,7 @@ function TabLista({
       </div>
       <div className="flex items-center justify-between">
         <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar funcionário..." className="pl-9 pr-4 py-2 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl text-sm focus:outline-none w-56"/></div>
-        <button onClick={()=>{setForm(eF);setFotoFile(null);setFotoPreview('');setSelected(null);setModal('novo');}} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"><UserPlus size={16}/>Novo Funcionário</button>
+        <button type="button" data-onboarding-target="rh-novo-funcionario" onClick={()=>{setForm(eF);setFotoFile(null);setFotoPreview('');setSelected(null);setModal('novo');}} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all active:scale-95"><UserPlus size={16}/>Novo Funcionário</button>
       </div>
 
       {loading ? <LoadSpinner/> : filtered.length===0 ? (
@@ -2047,7 +2117,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
         )}
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 sm:p-4 min-w-0">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 sm:p-4 min-w-0" data-onboarding-target="rh-espelho-main">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between min-w-0">
           <div className="max-w-3xl min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Espelho</p>
@@ -3752,32 +3822,6 @@ function SCard({ label, value, color, small=false, hint }: { label:string; value
 }
 function FInput({ label, value, onChange, placeholder='', type='text' }: { label:string; value:string; onChange:(v:string)=>void; placeholder?:string; type?:string }) {
   return <div><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</label><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full px-3 py-2.5 bg-[var(--bg-main)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"/></div>;
-}
-function Modal({ open, onClose, title, children, wide=false }: { open:boolean; onClose:()=>void; title:string; children:React.ReactNode; wide?:boolean }) {
-  return (
-    <AnimatePresence>
-      {open&&(
-        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-          <motion.div
-            initial={{ scale: 0.93, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.93, opacity: 0 }}
-            className={`my-auto flex max-h-[min(92dvh,100svh)] min-h-0 w-full flex-col overflow-hidden rounded-t-2xl bg-[var(--bg-card)] shadow-2xl sm:rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} pb-[max(0.5rem,env(safe-area-inset-bottom))]`}
-          >
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 2xl:px-6 2xl:py-4">
-              <h3 className="min-w-0 pr-2 text-base font-black text-[var(--text-main)] 2xl:text-lg">{title}</h3>
-              <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-2 text-[var(--text-muted)] hover:bg-zinc-100 2xl:p-1.5" aria-label="Fechar">
-                <X size={18}/>
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 2xl:px-6 2xl:py-4">
-              {children}
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
 }
 function MBtns({ onCancel, onConfirm, saving, label }: { onCancel:()=>void; onConfirm:()=>void; saving:boolean; label:string }) {
   return <div className="flex gap-3 mt-5"><button onClick={onCancel} className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold">Cancelar</button><button onClick={onConfirm} disabled={saving} className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">{saving?<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:label}</button></div>;

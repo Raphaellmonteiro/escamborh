@@ -5,11 +5,11 @@
 
 /** Título principal de tela (Pedidos, Operação, Delivery). */
 export const adminScreenTitleClass =
-  'text-base sm:text-lg md:text-xl 2xl:text-2xl font-black text-zinc-900 dark:text-zinc-100';
+  'text-base sm:text-lg md:text-xl 2xl:text-2xl font-black text-fptext-primary';
 
 /** Subtítulo sob o título (tom e espaçamento alinhados). */
 export const adminScreenSubtitleClass =
-  'text-sm text-zinc-500 dark:text-zinc-400 mt-0.5';
+  'text-sm text-fptext-muted mt-0.5';
 
 /** Linha do cabeçalho: empilha no mobile, alinha no desktop; gap menor em telas baixas/largas estreitas. */
 export const adminScreenHeaderRowClass =
@@ -21,7 +21,7 @@ export const adminScreenPagePaddingClass =
 
 /** Rótulos de filtro / campo em cards (tamanho mínimo legível). */
 export const adminFormLabelClass =
-  'text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider';
+  'text-xs font-bold text-fptext-muted uppercase tracking-wider';
 
 /** Título de modal em fundo escuro (PDV). */
 export const posModalTitleClass = 'text-base font-black text-zinc-100';
@@ -35,43 +35,43 @@ export const lightModalTitleClass = 'text-lg sm:text-xl font-black text-zinc-900
 
 /** Rótulo de seção em caps (chips / faixas de filtro). */
 export const adminSectionEyebrowClass =
-  'text-xs font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500';
+  'text-xs font-bold uppercase tracking-[0.18em] text-fptext-muted';
 
 /** Texto auxiliar discreto ao lado de ações do header (ex.: limite de carga). */
 export const adminScreenMetaHintClass =
-  'text-xs font-semibold text-zinc-500 dark:text-zinc-400';
+  'text-xs font-semibold text-fptext-muted';
 
 // ─── Superfícies operacionais (listas de pedidos, delivery, produtos, estoque) ───
 
 /** Card principal com elevação leve (pedido ativo, painel, tabela embutida). */
 export const adminOpsSurfaceCardClass =
-  'min-w-0 max-w-full rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-950/[0.04] dark:border-zinc-800 dark:bg-zinc-900';
+  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-card shadow-sm shadow-zinc-950/[0.04]';
 
 /**
  * Linha ou célula de grade sem sombra marcada (lista densa, card de produto em grade).
  * Combine com `hover:border-zinc-300` onde já existir.
  */
 export const adminOpsListRowClass =
-  'rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900';
+  'rounded-2xl border border-fp-border bg-fp-card';
 
 /** Painel interno / métricas / linha de item dentro de um card. */
 export const adminOpsInsetPanelClass =
-  'rounded-xl border border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-800/60';
+  'rounded-xl border border-fp-border bg-fp-secondary/90';
 
 /** Área tracejada compacta (coluna kanban, tabela vazia embutida). */
 export const adminOpsDashedWellClass =
-  'rounded-xl border border-dashed border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80';
+  'rounded-xl border border-dashed border-fp-border bg-fp-secondary';
 
 /** Estado vazio principal (lista sem itens na página). */
 export const adminOpsDashedEmptyClass =
-  'rounded-3xl border-2 border-dashed border-zinc-200 bg-zinc-50/90 dark:border-zinc-700 dark:bg-zinc-900/40';
+  'rounded-3xl border-2 border-dashed border-fp-border bg-fp-secondary/90';
 
 /**
  * Faixa de filtros agrupados — evita o `ring` do `Card` e alinha sombra/borda aos demais blocos operacionais.
  */
 export const adminOpsFilterCardClass =
-  'min-w-0 max-w-full rounded-2xl border border-zinc-200/90 bg-zinc-50/95 shadow-sm shadow-zinc-950/[0.04] dark:border-zinc-800 dark:bg-zinc-900/45';
+  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-secondary shadow-sm shadow-zinc-950/[0.04]';
 
 /** Blocos de formulário / resumo em fundo zinc (painéis internos em Produtos). */
 export const adminOpsMutedBlockClass =
-  'min-w-0 max-w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 sm:px-4 sm:py-2.5 2xl:py-3 dark:border-zinc-800 dark:bg-zinc-900/40';
+  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-secondary px-3 py-2 sm:px-4 sm:py-2.5 2xl:py-3';

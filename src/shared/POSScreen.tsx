@@ -1078,11 +1078,11 @@ export default function POSScreen({
         {pendingProduct && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={{ duration: 0.15 }}
-              className="my-auto flex max-h-[min(92dvh,100svh)] w-full max-w-sm min-h-0 flex-col overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+              className="my-auto flex max-h-[min(92dvh,100svh)] w-full max-w-sm min-h-0 flex-col overflow-y-auto overscroll-contain rounded-t-3xl border border-fp-border bg-fp-card p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
               <div className="text-center mb-6">
                 {pendingProduct.photo_url && <div className="w-full h-40 rounded-2xl overflow-hidden mb-4"><img src={pendingProduct.photo_url} alt={pendingProduct.name} className="w-full h-full object-cover" /></div>}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>
-                <h3 className="text-2xl font-black text-zinc-900">{pendingSelection?.product_name || pendingProduct.name}</h3>
+                <h3 className="text-2xl font-black text-fptext-primary">{pendingSelection?.product_name || pendingProduct.name}</h3>
                 <p className="text-xl font-black text-amber-500 mt-1">R$ {Number(pendingSelection?.price_at_time ?? pendingProduct.price).toFixed(2)}</p>
               </div>
               <p className="text-center text-sm text-zinc-500 mb-6 font-medium">Como será este item?</p>
@@ -1145,19 +1145,19 @@ export default function POSScreen({
         {showTipoRetirada && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-0 sm:items-center sm:p-6">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              className="max-h-[min(92dvh,100%)] w-full max-w-sm overflow-y-auto rounded-t-3xl p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-3xl sm:p-8" style={{ background: '#fff', color: '#18181b' }}>
+              className="max-h-[min(92dvh,100%)] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-fp-border bg-fp-card p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-fptext-primary shadow-2xl sm:rounded-3xl sm:p-8">
               <div className="text-4xl mb-3">🍽️</div>
               <h3 className="text-xl font-black mb-1">Como vai consumir?</h3>
-              <p className="text-sm mb-6" style={{ color: '#71717a' }}>Escolha para gerar a comanda correta</p>
+              <p className="mb-6 text-sm text-fptext-muted">Escolha para gerar a comanda correta</p>
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => finalizeOrder('local')} className="flex flex-col items-center gap-2 p-5 rounded-2xl transition-all hover:scale-105 active:scale-95" style={{ background: '#18181b', color: '#fff' }}>
-                  <span className="text-3xl">🪑</span><span className="font-black text-sm">Consumir aqui</span><span className="text-[10px] opacity-70">Pedido vai para a mesa</span>
+                <button type="button" onClick={() => finalizeOrder('local')} className="flex flex-col items-center gap-2 rounded-2xl bg-zinc-900 p-5 text-fp-card transition-all hover:scale-105 active:scale-95">
+                  <span className="text-3xl">🪑</span><span className="font-black text-sm">Consumir aqui</span><span className="text-[10px] opacity-80">Pedido vai para a mesa</span>
                 </button>
-                <button onClick={() => finalizeOrder('levar')} className="flex flex-col items-center gap-2 p-5 rounded-2xl border-2 transition-all hover:scale-105 active:scale-95" style={{ border: '2px solid #e4e4e7', background: '#f9f9f9', color: '#18181b' }}>
-                  <span className="text-3xl">🛍️</span><span className="font-black text-sm">Para levar</span><span className="text-[10px]" style={{ color: '#a1a1aa' }}>Retirada no balcão</span>
+                <button type="button" onClick={() => finalizeOrder('levar')} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-fp-border bg-fp-secondary p-5 text-fptext-primary transition-all hover:scale-105 active:scale-95">
+                  <span className="text-3xl">🛍️</span><span className="font-black text-sm">Para levar</span><span className="text-[10px] text-fptext-muted">Retirada no balcão</span>
                 </button>
               </div>
-              <button onClick={() => setShowTipoRetirada(false)} className="mt-4 text-xs font-medium" style={{ color: '#a1a1aa' }}>Cancelar</button>
+              <button type="button" onClick={() => setShowTipoRetirada(false)} className="mt-4 text-xs font-medium text-fptext-muted">Cancelar</button>
             </motion.div>
           </div>
         )}
@@ -1165,13 +1165,13 @@ export default function POSScreen({
         {showSuccess && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-4">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="max-h-[min(92dvh,100%)] w-full max-w-xs overflow-y-auto rounded-t-2xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-2xl">
+              className="max-h-[min(92dvh,100%)] w-full max-w-xs overflow-y-auto rounded-t-2xl border border-fp-border bg-fp-card p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-2xl">
 
               {/* Ícone + título */}
-              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: '#d1fae5', color: '#059669' }}>
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
                 <CheckCircle2 size={28} />
               </div>
-              <h3 className="text-lg font-black text-zinc-900">Venda Finalizada!</h3>
+              <h3 className="text-lg font-black text-fptext-primary">Venda Finalizada!</h3>
               <p className="text-xs text-zinc-400 mt-0.5">#{showSuccess.number}</p>
 
               {/* Senha */}
@@ -1231,8 +1231,7 @@ export default function POSScreen({
                       if (!d.success) alert('Impressora: ' + (d.message || 'Erro'));
                     } catch { alert('Erro ao enviar para impressora.'); }
                   }}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors"
-                  style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-bold text-emerald-800 transition-colors dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200"
                   title="Impressora térmica (cupom)"
                   type="button"
                 >
@@ -1260,12 +1259,12 @@ export default function POSScreen({
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="max-h-[min(88dvh,100%)] w-full max-w-xs overflow-y-auto rounded-t-2xl bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-2xl"
+              className="max-h-[min(88dvh,100%)] w-full max-w-xs overflow-y-auto rounded-t-2xl border border-fp-border bg-fp-card p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center shadow-2xl sm:rounded-2xl"
             >
-              <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Trash2 size={22} className="text-red-600" />
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 dark:bg-red-500/20">
+                <Trash2 size={22} className="text-red-600 dark:text-red-300" />
               </div>
-              <h3 className="text-base font-black text-zinc-900 mb-1">Limpar carrinho?</h3>
+              <h3 className="mb-1 text-base font-black text-fptext-primary">Limpar carrinho?</h3>
               <p className="text-xs text-zinc-400 mb-5">
                 {cart.length} item{cart.length !== 1 ? 's' : ''} será{cart.length !== 1 ? 'ão' : ''} removido{cart.length !== 1 ? 's' : ''}.
                 Esta ação não pode ser desfeita.

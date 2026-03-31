@@ -57,7 +57,7 @@ import { useFlowAI }         from './hooks/useFlowAI';
 
 function TabLoadingFallback() {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center px-4 py-8 text-sm text-zinc-400">
+    <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center px-4 py-8 text-sm text-fptext-muted">
       Carregando…
     </div>
   );
@@ -65,7 +65,7 @@ function TabLoadingFallback() {
 
 function PublicRouteFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm text-zinc-400">
+    <div className="flex min-h-screen items-center justify-center bg-fp-app text-sm text-fptext-muted">
       Carregando…
     </div>
   );
@@ -222,226 +222,6 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // ── CSS do tema escuro (injetado uma vez) ────────────────────────────────
-  useEffect(() => {
-    const id = 'flowpdv-dark-css';
-    if (document.getElementById(id)) return;
-    const style = document.createElement('style');
-    style.id = id;
-    style.textContent = `
-      html {
-        --bg-main:   #fafafa;
-        --bg-card:   #ffffff;
-        --text-main: #18181b;
-        --text-muted:#71717a;
-        --border:    #e4e4e7;
-      }
-      .flowpdv-dark {
-        --bg-app:      #0f0f0f;
-        --bg-panel:    #141414;
-        --bg-card:     #1a1a1a;
-        --bg-input:    #222222;
-        --bg-hover:    #252525;
-        --bg-active:   #2a2a2a;
-        --border:      #2e2e2e;
-        --border-soft: #242424;
-        --text-primary:   #f0f0f0;
-        --text-secondary: #a0a0a0;
-        --text-muted:     #a0a0a0;
-        --accent:      #ffffff;
-        --bg-main:     #141414;
-        --text-main:   #f0f0f0;
-      }
-
-      /* Layout base */
-      .flowpdv-dark body,
-      .flowpdv-dark #root { background: var(--bg-app) !important; }
-
-      /* Backgrounds */
-      .flowpdv-dark .bg-white          { background-color: var(--bg-card)  !important; }
-      .flowpdv-dark .bg-zinc-50        { background-color: var(--bg-panel) !important; }
-      .flowpdv-dark .bg-zinc-100       { background-color: var(--bg-input) !important; }
-      .flowpdv-dark .bg-zinc-200       { background-color: var(--bg-active)!important; }
-      .flowpdv-dark .bg-zinc-800       { background-color: #181818        !important; }
-      /* bg-zinc-900 handled per-element below */
-
-      /* Texto */
-      .flowpdv-dark .text-zinc-900     { color: var(--text-primary)   !important; }
-      .flowpdv-dark .text-zinc-800     { color: var(--text-primary)   !important; }
-      .flowpdv-dark .text-zinc-700     { color: #c8c8c8               !important; }
-      .flowpdv-dark .text-zinc-600     { color: #a0a0a0               !important; }
-      .flowpdv-dark .text-zinc-500     { color: var(--text-secondary) !important; }
-      .flowpdv-dark .text-zinc-400     { color: #666666               !important; }
-      .flowpdv-dark .text-zinc-300     { color: #505050               !important; }
-
-      /* Botão primário (zinc-900 bg) — no dark mode fica cinza escuro com texto branco */
-      .flowpdv-dark button.bg-zinc-900,
-      .flowpdv-dark a.bg-zinc-900 { background-color: #2e2e2e !important; color: #ffffff !important; }
-      .flowpdv-dark .hover\\:bg-zinc-800:hover { background-color: #3a3a3a !important; }
-
-      /* Bordas */
-      .flowpdv-dark .border-zinc-100   { border-color: var(--border-soft) !important; }
-      .flowpdv-dark .border-zinc-200   { border-color: var(--border)      !important; }
-      .flowpdv-dark .border-zinc-300   { border-color: #3a3a3a            !important; }
-      .flowpdv-dark .divide-zinc-100 > * + * { border-color: var(--border-soft) !important; }
-      .flowpdv-dark .divide-zinc-200 > * + * { border-color: var(--border)      !important; }
-
-      /* Hover states */
-      .flowpdv-dark .hover\\:bg-zinc-50:hover  { background-color: var(--bg-hover)  !important; }
-      .flowpdv-dark .hover\\:bg-zinc-100:hover { background-color: var(--bg-active) !important; }
-      .flowpdv-dark .hover\\:bg-zinc-200:hover { background-color: #303030          !important; }
-
-      /* Inputs */
-      .flowpdv-dark input:not([type=range]),
-      .flowpdv-dark textarea,
-      .flowpdv-dark select {
-        background-color: var(--bg-input) !important;
-        border-color:     var(--border)   !important;
-        color:            var(--text-primary) !important;
-      }
-      .flowpdv-dark input::placeholder,
-      .flowpdv-dark textarea::placeholder { color: #555 !important; }
-
-      /* Cards / panels */
-      .flowpdv-dark .shadow-sm  { box-shadow: 0 1px 3px rgba(0,0,0,.5) !important; }
-      .flowpdv-dark .shadow-lg  { box-shadow: 0 8px 32px rgba(0,0,0,.6) !important; }
-      .flowpdv-dark .shadow-xl  { box-shadow: 0 16px 48px rgba(0,0,0,.7) !important; }
-      .flowpdv-dark .shadow-2xl { box-shadow: 0 24px 64px rgba(0,0,0,.8) !important; }
-
-      /* Ícones SVG em superfície zinc-900 — herdam cor do botão (evita forçar cor em spans/emojis) */
-      .flowpdv-dark .bg-zinc-900:not(.mesa-card-shell) svg { color: currentColor !important; }
-      .flowpdv-dark .flowpdv-nav-item-icon-slot { color: inherit !important; }
-
-      /* Amber / yellow tones (keep warm) */
-      .flowpdv-dark .bg-amber-50  { background-color: #1e1800 !important; }
-      .flowpdv-dark .border-amber-200 { border-color: #3d2f00 !important; }
-      .flowpdv-dark .text-amber-600   { color: #f59e0b !important; }
-      .flowpdv-dark .text-amber-800   { color: #fbbf24 !important; }
-      .flowpdv-dark .text-amber-900   { color: #fcd34d !important; }
-      .flowpdv-dark .bg-amber-400     { background-color: #d97706 !important; }
-      .flowpdv-dark .bg-amber-100     { background-color: #422006 !important; }
-      .flowpdv-dark .border-amber-300 { border-color: #b45309 !important; }
-      .flowpdv-dark .text-amber-900   { color: #fde68a !important; }
-
-      /* Green tones */
-      .flowpdv-dark .bg-green-50  { background-color: #001a08 !important; }
-      .flowpdv-dark .bg-green-100 { background-color: #002610 !important; }
-      .flowpdv-dark .text-green-700 { color: #34d399 !important; }
-      .flowpdv-dark .text-green-600 { color: #10b981 !important; }
-      .flowpdv-dark .bg-green-600   { background-color: #059669 !important; }
-      .flowpdv-dark .hover\\:bg-green-700:hover { background-color: #047857 !important; }
-
-      /* Red tones */
-      .flowpdv-dark .bg-red-50  { background-color: #1a0000 !important; }
-      .flowpdv-dark .text-red-500 { color: #f87171 !important; }
-      .flowpdv-dark .text-red-600 { color: #ef4444 !important; }
-      .flowpdv-dark .hover\\:bg-red-50:hover { background-color: #1a0000 !important; }
-      .flowpdv-dark .hover\\:text-red-600:hover { color: #f87171 !important; }
-
-      /* Blue tones */
-      .flowpdv-dark .bg-blue-50  { background-color: #00081a !important; }
-      .flowpdv-dark .text-blue-700 { color: #60a5fa !important; }
-
-      /* Purple / fidelidade */
-      .flowpdv-dark .bg-purple-100 { background-color: #150024 !important; }
-      .flowpdv-dark .text-purple-700 { color: #c084fc !important; }
-      .flowpdv-dark .bg-purple-50 { background-color: #1a0a24 !important; }
-
-      /* RH — violet / teal / orange / cyan / sky / indigo / rose */
-      .flowpdv-dark .bg-violet-50 { background-color: #1a1025 !important; }
-      .flowpdv-dark .bg-violet-50\\/50 { background-color: rgba(26,16,37,.85) !important; }
-      .flowpdv-dark .bg-violet-50\\/60 { background-color: rgba(26,16,37,.9) !important; }
-      .flowpdv-dark .border-violet-200 { border-color: #4c1d6e !important; }
-      .flowpdv-dark .text-violet-700 { color: #c4b5fd !important; }
-      .flowpdv-dark .text-violet-800 { color: #ddd6fe !important; }
-      .flowpdv-dark .text-violet-900 { color: #ede9fe !important; }
-      .flowpdv-dark .text-violet-950 { color: #f5f3ff !important; }
-      .flowpdv-dark .bg-violet-100 { background-color: #2d1b4e !important; }
-      .flowpdv-dark .hover\\:bg-violet-200:hover { background-color: #3d2566 !important; }
-      .flowpdv-dark .bg-violet-700 { background-color: #6d28d9 !important; }
-      .flowpdv-dark .bg-violet-800 { background-color: #5b21b6 !important; }
-      .flowpdv-dark .bg-violet-900 { background-color: #4c1d95 !important; }
-      .flowpdv-dark .hover\\:bg-violet-800:hover { background-color: #5b21b6 !important; }
-
-      .flowpdv-dark .bg-teal-50 { background-color: #042f2e !important; }
-      .flowpdv-dark .bg-teal-50\\/40 { background-color: rgba(4,47,46,.5) !important; }
-      .flowpdv-dark .border-teal-100 { border-color: #115e59 !important; }
-      .flowpdv-dark .border-teal-200 { border-color: #0f766e !important; }
-      .flowpdv-dark .text-teal-800 { color: #5eead4 !important; }
-      .flowpdv-dark .text-teal-900 { color: #99f6e4 !important; }
-      .flowpdv-dark .text-teal-950 { color: #ccfbf1 !important; }
-      .flowpdv-dark .bg-teal-600 { background-color: #0d9488 !important; }
-      .flowpdv-dark .bg-teal-700 { background-color: #0f766e !important; }
-      .flowpdv-dark .bg-teal-900 { background-color: #134e4a !important; }
-
-      .flowpdv-dark .bg-orange-50 { background-color: #2a1500 !important; }
-      .flowpdv-dark .bg-orange-50\\/50 { background-color: rgba(42,21,0,.55) !important; }
-      .flowpdv-dark .bg-orange-50\\/70 { background-color: rgba(42,21,0,.75) !important; }
-      .flowpdv-dark .border-orange-100 { border-color: #7c2d12 !important; }
-      .flowpdv-dark .border-orange-200 { border-color: #9a3412 !important; }
-      .flowpdv-dark .border-orange-300 { border-color: #c2410c !important; }
-      .flowpdv-dark .text-orange-500 { color: #fb923c !important; }
-      .flowpdv-dark .text-orange-600 { color: #fdba74 !important; }
-      .flowpdv-dark .text-orange-700 { color: #fed7aa !important; }
-      .flowpdv-dark .text-orange-800 { color: #ffedd5 !important; }
-      .flowpdv-dark .text-orange-900 { color: #fff7ed !important; }
-      .flowpdv-dark .text-orange-950 { color: #fffbeb !important; }
-      .flowpdv-dark .bg-orange-100 { background-color: #431407 !important; }
-      .flowpdv-dark .bg-orange-500 { background-color: #ea580c !important; }
-      .flowpdv-dark .hover\\:bg-orange-600:hover { background-color: #c2410c !important; }
-
-      .flowpdv-dark .bg-cyan-50 { background-color: #083344 !important; }
-      .flowpdv-dark .bg-cyan-50\\/70 { background-color: rgba(8,51,68,.75) !important; }
-      .flowpdv-dark .border-cyan-100 { border-color: #155e75 !important; }
-      .flowpdv-dark .border-cyan-200 { border-color: #0e7490 !important; }
-      .flowpdv-dark .text-cyan-800 { color: #67e8f9 !important; }
-      .flowpdv-dark .text-cyan-900 { color: #a5f3fc !important; }
-      .flowpdv-dark .text-cyan-950 { color: #cffafe !important; }
-      .flowpdv-dark .bg-cyan-700 { background-color: #0e7490 !important; }
-      .flowpdv-dark .hover\\:bg-cyan-800:hover { background-color: #155e75 !important; }
-
-      .flowpdv-dark .bg-emerald-50 { background-color: #022c1e !important; }
-      .flowpdv-dark .bg-emerald-50\\/70 { background-color: rgba(2,44,30,.75) !important; }
-      .flowpdv-dark .border-emerald-200 { border-color: #047857 !important; }
-      .flowpdv-dark .text-emerald-700 { color: #6ee7b7 !important; }
-      .flowpdv-dark .text-emerald-950 { color: #d1fae5 !important; }
-
-      .flowpdv-dark .bg-sky-50 { background-color: #0c1e2e !important; }
-      .flowpdv-dark .border-sky-200 { border-color: #0369a1 !important; }
-      .flowpdv-dark .text-sky-900 { color: #bae6fd !important; }
-      .flowpdv-dark .text-sky-950 { color: #e0f2fe !important; }
-
-      .flowpdv-dark .bg-indigo-50 { background-color: #1e1b4b !important; }
-      .flowpdv-dark .bg-indigo-50\\/90 { background-color: rgba(30,27,75,.92) !important; }
-      .flowpdv-dark .border-indigo-200 { border-color: #4338ca !important; }
-      .flowpdv-dark .text-indigo-800 { color: #a5b4fc !important; }
-      .flowpdv-dark .text-indigo-900 { color: #c7d2fe !important; }
-      .flowpdv-dark .text-indigo-950 { color: #e0e7ff !important; }
-
-      .flowpdv-dark .text-rose-800 { color: #fda4af !important; }
-      .flowpdv-dark .text-rose-950 { color: #ffe4e6 !important; }
-
-      .flowpdv-dark .from-orange-50\\/80 { --tw-gradient-from: rgb(42 21 0 / 0.85) !important; }
-      .flowpdv-dark .to-cyan-50\\/40 { --tw-gradient-to: rgb(8 51 68 / 0.45) !important; }
-
-      /* Gradients — sidebar dark stripe */
-      .flowpdv-dark .from-zinc-900, .flowpdv-dark .to-zinc-900 { --tw-gradient-from: #0d0d0d; --tw-gradient-to: #0d0d0d; }
-      .flowpdv-dark .from-zinc-800  { --tw-gradient-from: #141414; }
-
-      /* Modals backdrop already dark — keep */
-      /* Ring */
-      .flowpdv-dark .ring-zinc-900 { --tw-ring-color: rgba(240,240,240,.3) !important; }
-
-      /* Scrollbar */
-      .flowpdv-dark ::-webkit-scrollbar { width: 6px; height: 6px; }
-      .flowpdv-dark ::-webkit-scrollbar-track { background: #111; }
-      .flowpdv-dark ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-      .flowpdv-dark ::-webkit-scrollbar-thumb:hover { background: #555; }
-
-      /* dark: usa Tailwind nativo; não sobrescrever bg-zinc-900 de cards/containers */
-    `;
-    document.head.appendChild(style);
-  }, []);
   const [showSolicitacao, setShowSolicitacao] = useState(false);
   const [licenseError, setLicenseError] = useState<'bloqueado' | 'trial_expirado' | null>(null);
   const [taxasPagamento, setTaxasPagamento] = useState({ debito: 0, credito: 0, pix: 0 });
@@ -852,7 +632,7 @@ const handleAuth = async (e: React.FormEvent) => {
   }
 
   return (
-    <div className="flex h-screen min-h-0 bg-zinc-50 overflow-hidden flex-col lg:flex-row">
+    <div className="flex h-screen min-h-0 bg-fp-app overflow-hidden flex-col lg:flex-row">
       {mobileNavOpen && (
         <button
           type="button"
@@ -1205,13 +985,13 @@ const handleAuth = async (e: React.FormEvent) => {
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
-                className="my-auto flex w-full max-w-sm flex-col overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl max-h-[min(92dvh,100svh)] min-h-0 sm:max-h-[min(90dvh,560px)] sm:rounded-3xl sm:p-8 pb-[max(1rem,env(safe-area-inset-bottom))]"
+                className="my-auto flex w-full max-w-sm flex-col overflow-y-auto rounded-t-3xl border border-fp-border bg-fp-card p-5 shadow-2xl max-h-[min(92dvh,100svh)] min-h-0 sm:max-h-[min(90dvh,560px)] sm:rounded-3xl sm:p-8 pb-[max(1rem,env(safe-area-inset-bottom))]"
               >
-                <div className="w-16 h-16 bg-zinc-100 text-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-fp-secondary text-fptext-primary">
                   <Lock size={32} />
                 </div>
-                <h3 className="text-2xl font-bold text-zinc-900 text-center">Área Restrita</h3>
-                <p className="text-zinc-500 text-center mt-2 mb-8">Digite a senha de acesso para continuar.</p>
+                <h3 className="text-center text-2xl font-bold text-fptext-primary">Área Restrita</h3>
+                <p className="mb-8 mt-2 text-center text-fptext-muted">Digite a senha de acesso para continuar.</p>
                 
                 <form onSubmit={handleAuth} className="space-y-4">
                   <Input 

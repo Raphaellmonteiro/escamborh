@@ -258,8 +258,8 @@ const deliverySecondaryButtonInactiveClass =
 function DeliveryBalcaoCentralShortcut({ onOpen }: { onOpen: () => void }) {
   return (
     <div className={`${adminOpsSurfaceCardClass} p-4 sm:p-5`}>
-      <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Balcão na Operação</h2>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
+      <h2 className="text-lg font-black text-fptext-primary">Balcão na Operação</h2>
+      <p className="text-sm text-fptext-muted mt-2 leading-relaxed">
         O balcão e a operação ao vivo de todos os canais ficam na <strong className="text-zinc-700 dark:text-zinc-300">Operação</strong> (menu lateral).
         Use o atalho para abrir a visão já filtrada em <strong>Balcão</strong>, sem misturar com o fluxo do delivery.
       </p>
@@ -288,7 +288,7 @@ export default function DeliveryScreen({
   const [tab, setTab] = useState<'balcao' | 'painel' | 'clientes' | 'motoboys' | 'relatorio' | 'config'>('painel');
 
   return (
-    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 overflow-y-auto bg-zinc-100 dark:bg-zinc-950">
+    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 overflow-y-auto bg-fp-secondary">
       <div className="mx-auto max-w-7xl min-w-0 space-y-4 p-3 sm:space-y-5 sm:p-4 lg:p-6">
         <ScreenHeader
           titleAs="h1"
@@ -315,7 +315,7 @@ export default function DeliveryScreen({
         />
 
         {/* Tabs — mobile: scroll horizontal, toque confortável; desktop: inline */}
-        <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 gap-0.5 w-full sm:w-fit overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-pl-1 scroll-pr-1 sm:scroll-pl-0 sm:scroll-pr-0 [-webkit-overflow-scrolling:touch]">
+        <div className="flex bg-fp-card border border-fp-border rounded-xl p-1 gap-0.5 w-full sm:w-fit overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-pl-1 scroll-pr-1 sm:scroll-pl-0 sm:scroll-pr-0 [-webkit-overflow-scrolling:touch]">
           {([
             { key:'painel',    label:'Painel',          icon:<Package size={14}/> },
             { key:'balcao',    label:'Balcão',          icon:<LayoutGrid size={14}/> },
@@ -325,7 +325,7 @@ export default function DeliveryScreen({
             { key:'config',    label:'Configurações',  icon:<Settings size={14}/> },
           ] as const).map(t => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${tab===t.key?'bg-zinc-900 dark:bg-zinc-700 text-white':'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800/80'}`}>
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${tab===t.key?'bg-zinc-900 text-white dark:bg-zinc-800':'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'}`}>
               {t.icon}{t.label}
             </button>
           ))}
@@ -552,15 +552,15 @@ function TabPainel({ token }: { token: string }) {
           ))}
         </div>
         <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end shrink-0">
-          <div className={`flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold ${sseConectado?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
+          <div className={`flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl text-xs font-bold ${sseConectado?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-zinc-100 dark:bg-zinc-800 text-fptext-muted'}`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sseConectado?'bg-emerald-500 animate-pulse':'bg-zinc-400'}`}/>
             {`Polling ${Math.floor(DELIVERY_POLLING_INTERVAL_MS / 1000)}s${sseConectado ? ' + SSE' : ''}`}
           </div>
           <button type="button" onClick={toggleSom} title={somAtivo?'Desativar som':'Ativar som'}
-            className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-xs font-bold transition-all ${somAtivo?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
+            className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-xs font-bold transition-all ${somAtivo?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-zinc-100 dark:bg-zinc-800 text-fptext-muted'}`}>
             {somAtivo ? <Bell size={18}/> : <BellOff size={18}/>}
           </button>
-          <button type="button" onClick={fetchAll} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-500 dark:text-zinc-400 active:bg-zinc-50 dark:active:bg-zinc-800">
+          <button type="button" onClick={fetchAll} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center bg-fp-card border border-fp-border rounded-xl text-fptext-muted active:bg-fp-active">
             <RefreshCw size={18}/>
           </button>
         </div>
@@ -594,7 +594,7 @@ function TabPainel({ token }: { token: string }) {
               >
                 <div className="flex shrink-0 items-center gap-2 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800 sm:px-4 lg:py-3" style={{ borderLeftWidth:3, borderLeftColor:cfg.color }}>
                   <span className="shrink-0" style={{ color:cfg.color }}>{cfg.icon}</span>
-                  <span className="font-black text-sm text-zinc-900 dark:text-zinc-100 truncate min-w-0">{cfg.label}</span>
+                  <span className="font-black text-sm text-fptext-primary truncate min-w-0">{cfg.label}</span>
                   <span className={`ml-auto shrink-0 text-xs font-black px-2.5 py-1 rounded-full tabular-nums ${cfg.toneClass}`}>{colPedidos.length}</span>
                 </div>
                 <div className="min-h-[100px] space-y-1.5 overflow-y-auto overflow-x-hidden overscroll-y-contain p-1.5 touch-pan-y max-md:max-h-[min(52vh,28rem)] max-h-[min(58vh,26rem)] md:max-h-[min(62vh,30rem)] lg:space-y-2 lg:p-2 xl:max-h-[65vh]">
@@ -651,7 +651,7 @@ function TabPainel({ token }: { token: string }) {
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{p.cliente_nome || '—'}</td>
                     <td className="px-4 py-3"><span className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wide ${cfg.toneClass}`}>{cfg.label}</span></td>
-                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 text-xs">{PAGS[p.pagamento_tipo||'']?.label || p.pagamento_tipo}</td>
+                    <td className="px-4 py-3 text-fptext-muted text-xs">{PAGS[p.pagamento_tipo||'']?.label || p.pagamento_tipo}</td>
                     <td className="px-4 py-3 font-bold text-zinc-800 dark:text-zinc-200 text-right">{fmt(p.total_amount)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 justify-end">
@@ -680,26 +680,26 @@ function TabPainel({ token }: { token: string }) {
                 key={p.id}
                 type="button"
                 onClick={() => setSelectedPedido(p)}
-                className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 dark:active:bg-zinc-800/80`}
+                className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 active:bg-fp-active/80`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-mono text-sm font-black text-zinc-900 dark:text-zinc-100">
+                    <p className="font-mono text-sm font-black text-fptext-primary">
                       #{p.order_number}
                       {deliveryPedidoTemCustomizacaoItens(p) && (
                         <span className="ml-1 text-violet-500 dark:text-violet-400" title="Personalização">●</span>
                       )}
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{p.cliente_nome || '—'}</p>
-                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{PAGS[p.pagamento_tipo || '']?.label || p.pagamento_tipo || '—'}</p>
+                    <p className="mt-2 text-xs text-fptext-muted">{PAGS[p.pagamento_tipo || '']?.label || p.pagamento_tipo || '—'}</p>
                   </div>
                   <div className="shrink-0 text-right">
                     <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${cfg.toneClass}`}>{cfg.label}</span>
-                    <p className="mt-2 text-base font-black tabular-nums text-zinc-900 dark:text-zinc-100">{fmt(p.total_amount)}</p>
+                    <p className="mt-2 text-base font-black tabular-nums text-fptext-primary">{fmt(p.total_amount)}</p>
                   </div>
                 </div>
                 <div className="mt-3 flex gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">Abrir detalhes</span>
+                  <span className="text-xs font-bold text-fptext-muted">Abrir detalhes</span>
                   <ChevronRight size={16} className="ml-auto text-zinc-400" />
                 </div>
               </button>
@@ -715,10 +715,10 @@ function TabPainel({ token }: { token: string }) {
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-6" onClick={() => setSelectedPedido(null)}>
             <motion.div onClick={e=>e.stopPropagation()}
               initial={{ scale:0.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.9, opacity:0 }}
-              className="flex max-h-[min(92dvh,100svh)] w-full max-w-lg min-h-0 flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:rounded-2xl">
-              <div className="shrink-0 border-b border-zinc-100 px-5 pb-4 pt-5 dark:border-zinc-800 sm:px-6 sm:pb-4 sm:pt-6">
+              className="flex max-h-[min(92dvh,100svh)] w-full max-w-lg min-h-0 flex-col overflow-hidden rounded-t-2xl border border-fp-border bg-fp-card shadow-2xl sm:rounded-2xl">
+              <div className="shrink-0 border-b border-fp-border-soft px-5 pb-4 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Pedido #{selectedPedido.order_number}</h3>
+                <h3 className="text-lg font-black text-fptext-primary">Pedido #{selectedPedido.order_number}</h3>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <button type="button" onClick={() => reimprimir(selectedPedido.id)}
                     className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-100 px-4 py-2.5 text-sm font-bold text-emerald-700 transition-all hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30 sm:flex-initial sm:px-3 sm:py-2 sm:text-xs">
@@ -740,7 +740,7 @@ function TabPainel({ token }: { token: string }) {
                   <div className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-4 border ${cfg.toneClass}`}>
                     <span style={{ color:cfg.color }}>{cfg.icon}</span>
                     <span className="font-black text-sm" style={{ color:cfg.color }}>{cfg.label}</span>
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400 ml-auto">{fmtHour(selectedPedido.created_at)}</span>
+                    <span className="text-xs text-fptext-muted ml-auto">{fmtHour(selectedPedido.created_at)}</span>
                   </div>
                 );
               })()}
@@ -749,7 +749,7 @@ function TabPainel({ token }: { token: string }) {
                 selectedPedido.automation_kitchen_ok ||
                 selectedPedido.automation_kitchen_failed) && (
                 <div className="mb-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 px-3 py-2 space-y-1">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Automação</p>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-fptext-muted">Automação</p>
                   <ul className="text-[11px] text-zinc-600 dark:text-zinc-300 space-y-0.5">
                     {selectedPedido.automation_auto_delivery_accept && (
                       <li>Aceite automático pelo cardápio online (Pedido Recebido).</li>
@@ -766,10 +766,10 @@ function TabPainel({ token }: { token: string }) {
 
               <div className="space-y-3 text-sm">
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-1">
-                  <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Cliente</p>
-                  <p className="font-bold text-zinc-900 dark:text-zinc-100">{selectedPedido.cliente_nome || '—'}</p>
-                  {selectedPedido.cliente_tel && <p className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1"><Phone size={12}/>{selectedPedido.cliente_tel}</p>}
-                  {selectedPedido.endereco && <p className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1"><MapPin size={12}/>{selectedPedido.endereco}</p>}
+                  <p className="text-[10px] font-black text-fptext-muted uppercase tracking-wider">Cliente</p>
+                  <p className="font-bold text-fptext-primary">{selectedPedido.cliente_nome || '—'}</p>
+                  {selectedPedido.cliente_tel && <p className="text-fptext-muted flex items-center gap-1"><Phone size={12}/>{selectedPedido.cliente_tel}</p>}
+                  {selectedPedido.endereco && <p className="text-fptext-muted flex items-center gap-1"><MapPin size={12}/>{selectedPedido.endereco}</p>}
                   {selectedPedido.endereco && (
                     <div className="flex gap-2 mt-2 flex-wrap">
                       <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedPedido.endereco)}`}
@@ -790,7 +790,7 @@ function TabPainel({ token }: { token: string }) {
 
                 {(deliveryPedidoTemItensDetalhe(selectedPedido) || selectedPedido.resumo_itens) && (
                   <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3">
-                    <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">Itens</p>
+                    <p className="text-[10px] font-black text-fptext-muted uppercase tracking-wider mb-2">Itens</p>
                     {deliveryPedidoTemItensDetalhe(selectedPedido) ? (
                       <ul className="space-y-3">
                         {selectedPedido.itens!.map((it, idx) => {
@@ -808,10 +808,10 @@ function TabPainel({ token }: { token: string }) {
                               className="border-b border-zinc-200 dark:border-zinc-700 pb-3 last:border-0 last:pb-0"
                             >
                               <div className="flex justify-between gap-2 text-sm">
-                                <span className="font-bold text-zinc-900 dark:text-zinc-100 min-w-0">
+                                <span className="font-bold text-fptext-primary min-w-0">
                                   {it.product_name} ×{it.quantity}
                                 </span>
-                                <span className="font-bold text-zinc-900 dark:text-zinc-100 tabular-nums shrink-0">
+                                <span className="font-bold text-fptext-primary tabular-nums shrink-0">
                                   {fmt(lineTotal)}
                                 </span>
                               </div>
@@ -825,7 +825,7 @@ function TabPainel({ token }: { token: string }) {
                                       </li>
                                     ))}
                                   </ul>
-                                  <p className="mt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                                  <p className="mt-1 text-[10px] leading-snug text-fptext-muted">
                                     Unit. {fmt(unit)} (congelado); à direita, total da linha.
                                   </p>
                                 </>
@@ -840,7 +840,7 @@ function TabPainel({ token }: { token: string }) {
                     {selectedPedido.observation && (
                       <div className="mt-2 space-y-0.5">
                         {selectedPedido.observation.split('\n').filter((l:string) => !l.startsWith('🛵')).map((l:string,i:number) => (
-                          <p key={i} className="text-zinc-500 dark:text-zinc-400 text-xs">{l}</p>
+                          <p key={i} className="text-fptext-muted text-xs">{l}</p>
                         ))}
                       </div>
                     )}
@@ -849,8 +849,8 @@ function TabPainel({ token }: { token: string }) {
 
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-0.5">Pagamento</p>
-                    <p className="font-bold text-zinc-900 dark:text-zinc-100">{PAGS[selectedPedido.pagamento_tipo||'']?.label || selectedPedido.pagamento_tipo}</p>
+                    <p className="text-[10px] font-black text-fptext-muted uppercase tracking-wider mb-0.5">Pagamento</p>
+                    <p className="font-bold text-fptext-primary">{PAGS[selectedPedido.pagamento_tipo||'']?.label || selectedPedido.pagamento_tipo}</p>
                     {selectedPedido.taxa_entrega > 0 && <p className="text-xs text-zinc-400">Taxa: {fmt(selectedPedido.taxa_entrega)}</p>}
                     {selectedPedido.observation && (() => {
                       const m = selectedPedido.observation.match(/Troco para R\$\s*([\d,\.]+)/i);
@@ -858,7 +858,7 @@ function TabPainel({ token }: { token: string }) {
                     })()}
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{fmt(selectedPedido.total_amount)}</p>
+                    <p className="text-2xl font-black text-fptext-primary">{fmt(selectedPedido.total_amount)}</p>
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${selectedPedido.pagamento_status==='pago'?'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300':'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300'}`}>
                       {selectedPedido.pagamento_status==='pago'?'✓ Pago':'Aguardando'}
                     </span>
@@ -940,7 +940,7 @@ function TabPainel({ token }: { token: string }) {
                           <input readOnly value={url}
                             className="flex-1 text-xs text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 font-mono"/>
                           <button onClick={() => { navigator.clipboard.writeText(url); }}
-                            className="p-2 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors flex-shrink-0" title="Copiar">
+                            className="p-2 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg text-fptext-muted transition-colors flex-shrink-0" title="Copiar">
                             <Check size={13}/>
                           </button>
                         </div>
@@ -987,7 +987,7 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0 flex-1 pr-1">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="font-black text-zinc-900 dark:text-zinc-100 text-base max-md:text-[15px] leading-tight">#{pedido.order_number}</p>
+            <p className="font-black text-fptext-primary text-base max-md:text-[15px] leading-tight">#{pedido.order_number}</p>
             {deliveryPedidoTemCustomizacaoItens(pedido) && (
               <StatusChip
                 size="sm"
@@ -1054,7 +1054,7 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
                 title={bloqueado ? 'Selecione um motoboy antes de despachar' : undefined}
                 className={`w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all ${
                   bloqueado
-                    ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 cursor-not-allowed border border-zinc-200 dark:border-zinc-700'
+                    ? 'bg-zinc-100 dark:bg-zinc-800 text-fptext-muted cursor-not-allowed border border-zinc-200 dark:border-zinc-700'
                     : 'hover:opacity-90 active:scale-[0.98]'
                 }`}
                 style={!bloqueado ? { background:cfg.color, color:'#fff' } : {}}>
@@ -1082,8 +1082,8 @@ function DCard({ label, value, color, icon }: { label:string; value:string; colo
   return (
     <div className={`${adminOpsSurfaceCardClass} min-w-0 p-2.5 transition-shadow hover:shadow-md sm:p-3.5`}>
       <div className={`mb-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:mb-2 sm:h-10 sm:w-10 ${c.bg} ${c.text}`}>{icon}</div>
-      <p className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 leading-none tabular-nums break-words">{value}</p>
-      <p className="text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 sm:mt-1.5 font-bold uppercase tracking-wide leading-tight">{label}</p>
+      <p className="text-xl sm:text-2xl font-black text-fptext-primary leading-none tabular-nums break-words">{value}</p>
+      <p className="text-[10px] sm:text-[11px] text-fptext-muted mt-1 sm:mt-1.5 font-bold uppercase tracking-wide leading-tight">{label}</p>
     </div>
   );
 }
@@ -1138,7 +1138,7 @@ function TabClientes({ token }: { token: string }) {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
           <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&fetchClientes()}
             placeholder="Buscar por nome, telefone ou observacoes..."
-            className="w-full min-h-[44px] pl-9 pr-4 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+            className="w-full min-h-[44px] pl-9 pr-4 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
         </div>
         <button onClick={fetchClientes} className="w-full min-h-[44px] px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors sm:w-auto">Buscar</button>
       </div>
@@ -1217,7 +1217,7 @@ function TabClientes({ token }: { token: string }) {
                             <StatusChip size="md" toneClassName={status.tone}>
                               {status.label}
                             </StatusChip>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{getDaysWithoutPurchaseLabel(c.dias_sem_comprar)}</p>
+                            <p className="text-[11px] text-fptext-muted mt-1">{getDaysWithoutPurchaseLabel(c.dias_sem_comprar)}</p>
                           </>
                         );
                       })()}
@@ -1247,12 +1247,12 @@ function TabClientes({ token }: { token: string }) {
                   key={c.id}
                   type="button"
                   onClick={() => { setSelected(c); fetchPedidos(c.id); }}
-                  className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 dark:active:bg-zinc-800/80`}
+                  className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 active:bg-fp-active/80`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
-                      <p className="mt-1 text-xs font-mono text-zinc-500 dark:text-zinc-400">{c.telefone || '—'}</p>
+                      <p className="mt-1 text-xs font-mono text-fptext-muted">{c.telefone || '—'}</p>
                     </div>
                     <ChevronRight size={16} className="shrink-0 text-zinc-400" />
                   </div>
@@ -1312,7 +1312,7 @@ function TabClientes({ token }: { token: string }) {
               className="max-h-[min(88dvh,100%)] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:rounded-2xl sm:pb-6">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">{selected.nome}</h3>
+                  <h3 className="text-lg font-black text-fptext-primary">{selected.nome}</h3>
                   <p className="text-sm text-zinc-400 font-mono">{selected.telefone}</p>
                 </div>
                 <button type="button" onClick={()=>setSelected(null)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" aria-label="Fechar">✕</button>
@@ -1348,7 +1348,7 @@ function TabClientes({ token }: { token: string }) {
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 text-center">
-                  <p className="text-xl font-black text-zinc-900 dark:text-zinc-100">{selected.total_pedidos||0}</p>
+                  <p className="text-xl font-black text-fptext-primary">{selected.total_pedidos||0}</p>
                   <p className="text-xs text-zinc-400 mt-0.5">Pedidos</p>
                 </div>
                 <div className="bg-emerald-50 rounded-xl p-3 text-center">
@@ -1449,17 +1449,17 @@ function TabMotoboys({ token }: { token: string }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <select value={mes} onChange={e=>setMes(Number(e.target.value))}
-          className="min-h-[44px] px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-zinc-900 dark:text-zinc-100">
+          className="min-h-[44px] px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-fptext-primary">
           {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(0,i).toLocaleString('pt-BR',{month:'long'})}</option>)}
         </select>
         <input type="number" value={ano} onChange={e=>setAno(Number(e.target.value))}
-          className="w-full min-h-[44px] px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-zinc-900 dark:text-zinc-100 sm:w-24"/>
+          className="w-full min-h-[44px] px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none text-fptext-primary sm:w-24"/>
         <button onClick={fetch_relatorio} className="w-full min-h-[44px] px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors sm:w-auto">Filtrar</button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className={`${adminOpsSurfaceCardClass} p-5`}>
-          <p className="text-3xl font-black text-zinc-900 dark:text-zinc-100">{total_entregas}</p>
+          <p className="text-3xl font-black text-fptext-primary">{total_entregas}</p>
           <p className="text-sm text-zinc-400 mt-1">Total de entregas</p>
         </div>
         <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5">
@@ -1599,7 +1599,7 @@ function TabRelatorio({ token }: { token: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Faturamento por dia */}
         <div className={`${adminOpsSurfaceCardClass} p-5`}>
-          <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Faturamento por dia</h3>
+          <h3 className="text-sm font-black text-fptext-primary mb-4">Faturamento por dia</h3>
           {porDia.length===0 ? (
             <div className={adminOpsDashedWellClass}>
               <EmptyState
@@ -1631,7 +1631,7 @@ function TabRelatorio({ token }: { token: string }) {
 
         {/* Horário de pico */}
         <div className={`${adminOpsSurfaceCardClass} p-5`}>
-          <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Horário de pico</h3>
+          <h3 className="text-sm font-black text-fptext-primary mb-4">Horário de pico</h3>
           {porHora.length===0 ? (
             <div className={adminOpsDashedWellClass}>
               <EmptyState
@@ -1661,7 +1661,7 @@ function TabRelatorio({ token }: { token: string }) {
 
         {/* Top produtos */}
         <div className={`${adminOpsSurfaceCardClass} p-5`}>
-          <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Produtos mais vendidos</h3>
+          <h3 className="text-sm font-black text-fptext-primary mb-4">Produtos mais vendidos</h3>
           {topProdutos.length===0 ? (
             <div className={adminOpsDashedWellClass}>
               <EmptyState
@@ -1675,7 +1675,7 @@ function TabRelatorio({ token }: { token: string }) {
             <div className="space-y-2">
               {topProdutos.slice(0,8).map((p:any,i:number)=>(
                 <div key={i} className="flex items-center gap-3">
-                  <span className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 text-[10px] font-black flex items-center justify-center shrink-0">{i+1}</span>
+                  <span className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-fptext-muted text-[10px] font-black flex items-center justify-center shrink-0">{i+1}</span>
                   <span className="flex-1 text-sm text-zinc-700 font-medium truncate">{p.name}</span>
                   <span className="text-xs font-bold text-zinc-500 shrink-0">{p.qtd}x</span>
                   <span className="text-xs font-black text-emerald-600 shrink-0">{fmt(p.receita)}</span>
@@ -1687,7 +1687,7 @@ function TabRelatorio({ token }: { token: string }) {
 
         {/* Formas de pagamento */}
         <div className={`${adminOpsSurfaceCardClass} p-5`}>
-          <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 mb-4">Formas de pagamento</h3>
+          <h3 className="text-sm font-black text-fptext-primary mb-4">Formas de pagamento</h3>
           {porPag.length===0 ? (
             <div className={adminOpsDashedWellClass}>
               <EmptyState
@@ -1721,11 +1721,11 @@ function TabRelatorio({ token }: { token: string }) {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-fp-card border border-fp-border rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center gap-2">
           <Tag size={16} className="text-emerald-600 shrink-0"/>
           <div>
-            <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Sugestões aceitas (complementos)</h3>
+            <h3 className="text-sm font-black text-fptext-primary">Sugestões aceitas (complementos)</h3>
             <p className="text-[11px] text-zinc-400 mt-0.5">Pares origem → sugerido no cardápio online, no mesmo período dos botões acima</p>
           </div>
         </div>
@@ -2007,10 +2007,10 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
       {/* ── LOJA (subdomínios) ───────────────────────────────────── */}
       {activeSection === 'loja' && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-6">
+        <div className="bg-fp-card border border-fp-border rounded-2xl p-6 space-y-6">
           <div>
-            <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">Configurações da loja</h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Organizado por área do negócio. Os dados continuam no mesmo JSON de sempre — apenas a visualização mudou.</p>
+            <h3 className="text-base font-black text-fptext-primary">Configurações da loja</h3>
+            <p className="text-xs text-fptext-muted mt-1">Organizado por área do negócio. Os dados continuam no mesmo JSON de sempre — apenas a visualização mudou.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -2046,7 +2046,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 <div className="flex items-start gap-2">
                   <ChefHat size={18} className="text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">Automação operacional</p>
+                    <p className="font-bold text-fptext-primary text-sm">Automação operacional</p>
                     <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
                       Impressão automática usa a impressora de cozinha (perfil cozinha). Aceite automático só vale para pedidos criados pelo cardápio online. Eventos ficam no histórico do pedido (Pedidos) e em sinais no painel.
                     </p>
@@ -2067,7 +2067,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                     <div key={row.key} className="flex items-center justify-between gap-3 border-t border-amber-200/60 dark:border-amber-500/20 pt-3 first:border-t-0 first:pt-0">
                       <div className="min-w-0">
                         <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">{row.label}</p>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">{row.hint}</p>
+                        <p className="text-[11px] text-fptext-muted mt-0.5 leading-snug">{row.hint}</p>
                       </div>
                       <button
                         type="button"
@@ -2104,7 +2104,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Valor por entrega (motoboy) R$</label>
                   <input type="number" value={cfg.valor_por_entrega||''} onChange={e=>setCfg(c=>({...c,valor_por_entrega:parseFloat(e.target.value)||0}))}
-                    placeholder="0" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+                    placeholder="0" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
                 </div>
               </div>
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4 space-y-2">
@@ -2144,7 +2144,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                       value={cfg.desconto_primeiro_cliente_tipo || 'percentual'}
                       disabled={!cfg.desconto_primeiro_cliente_ativo}
                       onChange={e=>setCfg(c=>({...c,desconto_primeiro_cliente_tipo:e.target.value as DeliveryConfig['desconto_primeiro_cliente_tipo']}))}
-                      className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-zinc-900 dark:text-zinc-100"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-fptext-primary"
                     >
                       <option value="percentual">% Percentual</option>
                       <option value="fixo">R$ Valor fixo</option>
@@ -2192,7 +2192,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                   onChange={e=>setCfg(c=>({...c,pix_payload_estatico:e.target.value}))}
                   placeholder="00020126580014BR.GOV.BCB.PIX..."
                   rows={3}
-                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100 resize-none"
+                  className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary resize-none"
                 />
                 <p className="text-[10px] text-zinc-400 mt-1">
                   Quando preenchido, o cliente vê o QR com o valor do carrinho (mesma rotina de sempre).
@@ -2208,7 +2208,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">WhatsApp do restaurante</label>
                 <input value={cfg.whatsapp||''} onChange={e=>setCfg(c=>({...c,whatsapp:e.target.value}))}
-                  placeholder="55119XXXXXXXX" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+                  placeholder="55119XXXXXXXX" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
               </div>
             </div>
           )}
@@ -2222,7 +2222,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 <select
                   value={cfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium'}
                   onChange={e => setCfg(c => ({ ...c, theme_mode: e.target.value as 'dark_premium' | 'light_red' }))}
-                  className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 text-zinc-900 dark:text-zinc-100"
+                  className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 text-fptext-primary"
                 >
                   <option value="dark_premium">Dark premium (padrão atual)</option>
                   <option value="light_red">Claro com vermelho (light red)</option>
@@ -2233,7 +2233,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
               <div>
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Logo do cardápio online</p>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-3">Opcional. Sem logo aqui, o cardápio usa a imagem de Configurações (identidade da loja).</p>
+                <p className="text-[11px] text-fptext-muted mb-3">Opcional. Sem logo aqui, o cardápio usa a imagem de Configurações (identidade da loja).</p>
                 <div className="flex flex-wrap items-start gap-4">
                   <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 flex items-center justify-center">
                     {cfg.cardapio_online_logo_url || fallbackLogoUrl ? (
@@ -2278,7 +2278,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
               <div>
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Banners do topo (4 imagens)</p>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-3">Cada quadrante do topo do cardápio. Vazio = fotos de destaque ou logo, como antes.</p>
+                <p className="text-[11px] text-fptext-muted mb-3">Cada quadrante do topo do cardápio. Vazio = fotos de destaque ou logo, como antes.</p>
                 <div className="grid grid-cols-2 gap-3 sm:max-w-md">
                   {[...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)].map((url, idx) => (
                     <div
@@ -2331,7 +2331,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
               {slug && (
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3">
-                  <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Link do cardápio</p>
+                  <p className="text-[10px] font-black text-fptext-muted uppercase tracking-wider mb-1">Link do cardápio</p>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 font-mono">{window.location.origin}/delivery/{slug}</p>
                 </div>
               )}
@@ -2344,7 +2344,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       {activeSection === 'zonas' && (
         <div className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-4">
           <div>
-            <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">Bairros e taxas fixas</h3>
+            <h3 className="text-base font-black text-fptext-primary">Bairros e taxas fixas</h3>
             <p className="text-xs text-zinc-400 mt-0.5">Modelo atual: bairro cadastrado = taxa fixa. Se nenhum bairro casar, o sistema usa a taxa padrão de {fmt(Number(cfg.taxa_entrega || 0))}. Sem km/raio nesta fase.</p>
           </div>
 
@@ -2391,7 +2391,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       {activeSection === 'cupons' && (
         <div className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-4">
           <div>
-            <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">Cupons de desconto</h3>
+            <h3 className="text-base font-black text-fptext-primary">Cupons de desconto</h3>
             <p className="text-xs text-zinc-400 mt-0.5">Clientes digitam o código no cardápio online para ganhar desconto.</p>
           </div>
 
@@ -2403,12 +2403,12 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Código</label>
                 <input value={novoCupom.codigo} onChange={e=>setNovoCupom(v=>({...v,codigo:e.target.value.toUpperCase()}))}
                   placeholder="PROMO10" maxLength={20}
-                  className="w-full px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
               </div>
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Tipo</label>
                 <select value={novoCupom.tipo} onChange={e=>setNovoCupom(v=>({...v,tipo:e.target.value as any}))}
-                  className="w-full px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100">
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary">
                   <option value="percentual">% Percentual</option>
                   <option value="fixo">R$ Valor fixo</option>
                   <option value="frete_gratis">Frete grátis</option>
@@ -2530,7 +2530,7 @@ function Field({ label, value, onChange, type='text', placeholder='' }: {
     <div>
       <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">{label}</label>
       <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-zinc-900 dark:text-zinc-100"/>
+        className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
     </div>
   );
 }
