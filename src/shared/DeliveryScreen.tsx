@@ -347,6 +347,65 @@ export default function DeliveryScreen({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// SSE autenticado: `EventSource` não envia `Authorization`; usamos `fetch` + stream com `Bearer` (sem token na URL).
+// ═══════════════════════════════════════════════════════════════════════════════
+function subscribeAuthorizedSse(
+  url: string,
+  token: string,
+  handlers: {
+    onConnected?: () => void;
+    onPing?: () => void;
+    onNovoPedido?: () => void;
+    onStatusPedido?: () => void;
+  },
+  signal: AbortSignal
+): Promise<void> {
+  return (async () => {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    if (!res.ok) throw new Error(`sse ${res.status}`);
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('sse sem body');
+    const dec = new TextDecoder();
+    let buf = '';
+    let eventName = 'message';
+    let dataLines: string[] = [];
+
+    const dispatch = () => {
+      const ev = eventName;
+      eventName = 'message';
+      if (dataLines.length === 0) return;
+      dataLines = [];
+      if (ev === 'connected') handlers.onConnected?.();
+      else if (ev === 'ping') handlers.onPing?.();
+      else if (ev === 'novo_pedido') handlers.onNovoPedido?.();
+      else if (ev === 'status_pedido') handlers.onStatusPedido?.();
+    };
+
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      for (;;) {
+        const i = buf.indexOf('\n');
+        if (i < 0) break;
+        let line = buf.slice(0, i);
+        buf = buf.slice(i + 1);
+        if (line.endsWith('\r')) line = line.slice(0, -1);
+        if (line === '') {
+          dispatch();
+          continue;
+        }
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+      }
+    }
+  })();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ABA PAINEL — com SSE + som + reimprimir
 // ═══════════════════════════════════════════════════════════════════════════════
 function TabPainel({ token }: { token: string }) {
@@ -360,7 +419,7 @@ function TabPainel({ token }: { token: string }) {
   const [sseConectado, setSseConectado] = useState(false);
   const [somAtivo, setSomAtivo]         = useState(() => localStorage.getItem('delivery_som') !== 'false');
   const [opsToast, setOpsToast]         = useState<{ msg: string; ok: boolean } | null>(null);
-  const esRef                           = useRef<EventSource | null>(null);
+  const sseAbortRef                     = useRef<AbortController | null>(null);
   const reconnRef                       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef                   = useRef(false);
   const hasLoadedPedidosRef             = useRef(false);
@@ -408,24 +467,30 @@ function TabPainel({ token }: { token: string }) {
   // ── SSE complementar: hoje serve como keep-alive/aceleração quando houver
   // eventos úteis, mas o polling continua sendo a fonte confiável do painel.
   const connectSSE = useCallback(() => {
-    if (esRef.current) esRef.current.close();
-    const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`);
-    esRef.current = es;
-    es.addEventListener('connected', () => setSseConectado(true));
-    es.addEventListener('ping', () => setSseConectado(true));
-    es.addEventListener('novo_pedido', (e) => {
-      setSseConectado(true);
-      fetchAll();
-    });
-    es.addEventListener('status_pedido', () => {
-      setSseConectado(true);
-      fetchAll();
-    });
-    es.onerror = () => {
+    sseAbortRef.current?.abort();
+    const ac = new AbortController();
+    sseAbortRef.current = ac;
+    void subscribeAuthorizedSse(
+      '/api/events',
+      token,
+      {
+        onConnected: () => setSseConectado(true),
+        onPing: () => setSseConectado(true),
+        onNovoPedido: () => {
+          setSseConectado(true);
+          fetchAll();
+        },
+        onStatusPedido: () => {
+          setSseConectado(true);
+          fetchAll();
+        },
+      },
+      ac.signal
+    ).catch(() => {
+      if (ac.signal.aborted) return;
       setSseConectado(false);
-      es.close(); esRef.current = null;
       reconnRef.current = setTimeout(connectSSE, 5000);
-    };
+    });
   }, [token, fetchAll]);
 
   useEffect(() => {
@@ -435,7 +500,8 @@ function TabPainel({ token }: { token: string }) {
     const iv = setInterval(fetchAll, DELIVERY_POLLING_INTERVAL_MS);
     return () => {
       clearInterval(iv);
-      if (esRef.current) esRef.current.close();
+      sseAbortRef.current?.abort();
+      sseAbortRef.current = null;
       if (reconnRef.current) clearTimeout(reconnRef.current);
     };
   }, [fetchAll, connectSSE, DELIVERY_POLLING_INTERVAL_MS]);

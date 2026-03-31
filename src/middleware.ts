@@ -209,6 +209,17 @@ function applyAuthenticatedSession(req: Request, session: Extract<AuthenticatedS
   req.userName = session.userName;
 }
 
+/**
+ * JWT somente em `Authorization: Bearer <token>` (não aceita token solto no header nem na query).
+ */
+export function extractBearerToken(req: Request): string | null {
+  const raw = req.headers['authorization'];
+  const authHeader = Array.isArray(raw) ? raw[0] : raw;
+  if (!authHeader || typeof authHeader !== 'string') return null;
+  const m = authHeader.match(/^\s*Bearer\s+(\S+)/i);
+  return m ? m[1] : null;
+}
+
 /** Rotas /api/admin/* (exceto login): JWT de admin não passa em resolveAuthenticatedSession; este fallback mantém o painel com um único Bearer. */
 function isProtectedPlatformAdminApiPath(reqPath: string): boolean {
   if (reqPath !== '/api/admin' && !reqPath.startsWith('/api/admin/')) return false;
@@ -216,7 +227,7 @@ function isProtectedPlatformAdminApiPath(reqPath: string): boolean {
 }
 
 function tryApplyPlatformAdminBearer(req: Request): boolean {
-  const token = req.headers['authorization']?.split(' ')[1];
+  const token = extractBearerToken(req);
   if (!token) return false;
   try {
     const decoded: any = jwt.verify(token, ADMIN_SECRET);
@@ -318,12 +329,15 @@ async function touchTenantLastAccess(tenantId: number) {
   }
 }
 
-export async function resolveAuthenticatedSession(req: Request, tokenOverride?: string): Promise<AuthenticatedSession> {
-  const authHeader = req.headers['authorization'];
-  const token = tokenOverride || (authHeader && authHeader.split(' ')[1]);
+export async function resolveAuthenticatedSession(req: Request): Promise<AuthenticatedSession> {
+  const token = extractBearerToken(req);
 
   if (!token) {
-    return { ok: false, status: 401, body: { error: 'Token não fornecido' } };
+    return {
+      ok: false,
+      status: 401,
+      body: { error: 'Token não fornecido. Envie Authorization: Bearer <token>.' },
+    };
   }
 
   let user: any;
@@ -431,7 +445,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 };
 
 export const authenticateAdmin = (req: any, res: any, next: any) => {
-  const token = req.headers['authorization']?.split(' ')[1];
+  const token = extractBearerToken(req);
   if (!token) return res.status(401).json({ error: 'Token não fornecido' });
   try {
     const decoded: any = jwt.verify(token, ADMIN_SECRET);
@@ -444,7 +458,7 @@ export const authenticateAdmin = (req: any, res: any, next: any) => {
 
 // ── authDeliveryCliente ───────────────────────────────────────────────────────
 export const authDeliveryCliente = (req: any, res: any, next: any) => {
-  const token = req.headers['authorization']?.split(' ')[1];
+  const token = extractBearerToken(req);
   if (!token) return res.status(401).json({ error: 'Token de cliente necessário' });
   try {
     const dec: any = jwt.verify(token, JWT_SECRET);
@@ -513,12 +527,45 @@ function shouldRedactEntireRequestBody(path: string): boolean {
   return false;
 }
 
+/** Evita vazar JWT e segredos em access logs quando aparecem na query (ex. tentativas antigas de SSE). */
+function redactSensitiveQueryInUrl(url: string): string {
+  const q = url.indexOf('?');
+  if (q < 0) return url;
+  const pathPart = url.slice(0, q);
+  const qs = url.slice(q + 1);
+  try {
+    const sp = new URLSearchParams(qs);
+    const keys = [...new Set(sp.keys())];
+    let changed = false;
+    for (const key of keys) {
+      const lower = key.toLowerCase();
+      if (
+        lower === 'token' ||
+        lower === 'access_token' ||
+        lower === 'id_token' ||
+        lower === 'refresh_token' ||
+        lower === 'authorization' ||
+        lower === 'auth' ||
+        lower === 'jwt' ||
+        lower.endsWith('_token')
+      ) {
+        sp.set(key, '[REDACTED]');
+        changed = true;
+      }
+    }
+    return changed ? `${pathPart}?${sp.toString()}` : url;
+  } catch {
+    return `${pathPart}?[query]`;
+  }
+}
+
 // ── Logging middleware ────────────────────────────────────────────────────────
 export function requestLogger(req: Request, _res: Response, next: NextFunction) {
   const isProd = process.env.NODE_ENV === 'production';
   if (isProd && req.method === 'GET') return next();
   const agente = req.headers['user-agent']?.substring(0, 35) || 'Desconhecido';
-  console.log(`[${new Date().toISOString()}] IP: ${req.ip} | Agente: ${agente}... | ${req.method} ${req.url}`);
+  const safeUrl = redactSensitiveQueryInUrl(req.url);
+  console.log(`[${new Date().toISOString()}] IP: ${req.ip} | Agente: ${agente}... | ${req.method} ${safeUrl}`);
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     const safe =
       shouldRedactEntireRequestBody(req.path) ? '[REDACTED]' : redactBodyForLogs(req.body);

@@ -1,6 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { q1, qAll, qInsert, qRun } from '../db';
-import { authenticateToken, publicRateLimit, requireAnyPermission, requirePlanFeature, resolveAuthenticatedSession } from '../middleware';
+import {
+  authenticateToken,
+  extractBearerToken,
+  publicRateLimit,
+  requireAnyPermission,
+  requirePlanFeature,
+  resolveAuthenticatedSession,
+} from '../middleware';
 import { AppError } from '../utils/errors';
 import { createExpensesRouter } from '../expenses/expenses';
 import { createAdminRouter } from './admin';
@@ -82,9 +89,7 @@ export function createApiRouter() {
   router.use(createAuthRouter());
   router.use(createAdminRouter());
   router.get('/events', async (req, res) => {
-    const token = (req.query.token as string) || req.headers['authorization']?.split(' ')[1];
-
-    const session = await resolveAuthenticatedSession(req, token);
+    const session = await resolveAuthenticatedSession(req);
     if (session.ok === false) {
       return res.status(session.status).end();
     }
@@ -102,11 +107,9 @@ export function createApiRouter() {
     publicRateLimit,
     async (req: Request, res: Response) => {
       try {
-        const authHeader = req.headers.authorization;
-        const token = authHeader?.split(' ')[1];
         let tenantId: number | null = null;
 
-        if (token) {
+        if (extractBearerToken(req)) {
           const session = await resolveAuthenticatedSession(req);
           if (session.ok === false) {
             return res.status(session.status).json(session.body);

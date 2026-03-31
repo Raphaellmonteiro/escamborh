@@ -31,27 +31,11 @@ function dedupeAvisosPorChave(lista: Aviso[]): Aviso[] {
   return out;
 }
 
-export interface MetricaDestaque {
-  label: string;
-  valor: string;
-  tendencia: 'up' | 'down' | 'stable';
-}
-
-export interface InsightIA {
-  resumo: string;
-  insight: string;
-  recomendacao: string;
-  tipo: 'oportunidade' | 'alerta' | 'parabens' | 'neutro';
-  metricas_destaque?: MetricaDestaque[];
-  erro?: string;
-}
-
 export function useFlowAI(token: string | null) {
   const [avisos, setAvisos]             = useState<Aviso[]>([]);
   const [historico, setHistorico]       = useState<Aviso[]>([]);
   const [historicoTotal, setHistoricoTotal] = useState(0);
   const [avisoAtivo, setAvisoAtivo]     = useState<Aviso | null>(null);
-  const [carregando, setCarregando]     = useState(false);
   const [carregandoHist, setCarregandoHist] = useState(false);
   const historicoReqId = useRef(0);
 
@@ -170,28 +154,6 @@ export function useFlowAI(token: string | null) {
     } catch {}
   }, [token]);
 
-  // ── Analisar com Claude ──────────────────────────────────────────────────
-  const analisar = useCallback(async (
-    tipo: string,
-    pergunta?: string,
-  ): Promise<InsightIA | null> => {
-    if (!token) return null;
-    setCarregando(true);
-    try {
-      const res = await fetch('/api/ai/analisar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tipo, pergunta }),
-      });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch {
-      return null;
-    } finally {
-      setCarregando(false);
-    }
-  }, [token]);
-
   const proximoAviso = useCallback(() => {
     // Fecha imediatamente
     setAvisoAtivo(null);
@@ -226,7 +188,6 @@ export function useFlowAI(token: string | null) {
     historico,
     historicoTotal,
     avisoAtivo,
-    carregando,
     carregandoHist,
     avisosNaoLidos,
     buscarAvisos,
@@ -234,7 +195,6 @@ export function useFlowAI(token: string | null) {
     marcarLido,
     marcarTodosLidos,
     gerarAvisos,
-    analisar,
     proximoAviso,
   };
 }
