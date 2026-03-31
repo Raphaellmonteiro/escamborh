@@ -27,6 +27,7 @@ import {
   RH_ONBOARDING_STEPS,
   RH_ONBOARDING_TARGETS,
 } from '../onboarding/rhOnboardingConfig';
+import RhHowItWorksPanel from './RhHowItWorksPanel';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Func {
@@ -260,6 +261,7 @@ export default function RHScreen({ token }: { token: string }) {
 
   const onRhOnboardingStep = useCallback((_: number, step: OnboardingStepConfig) => {
     if (step.activateTab === 'lista') setTab('lista');
+    if (step.activateTab === 'espelho') setTab('espelho');
   }, []);
 
   const rhOnboarding = useOnboarding({
@@ -347,6 +349,7 @@ export default function RHScreen({ token }: { token: string }) {
             Modo guiado
           </button>
         </div>
+        <RhHowItWorksPanel />
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 flex-wrap min-w-0">
           <div className="flex bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-0.5 sm:p-1 gap-0.5 overflow-x-auto overflow-y-hidden w-full sm:w-auto min-w-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
             {TABS.map(t => (
@@ -969,6 +972,10 @@ function TabLista({
         dataOnboardingTarget={modal === 'novo' ? RH_ONBOARDING_TARGETS.modalNovoFuncionario : undefined}
       >
         <div className="space-y-4">
+          <div
+            className="space-y-4"
+            data-onboarding-target={modal === 'novo' ? RH_ONBOARDING_TARGETS.modalDadosFuncionario : undefined}
+          >
           <div className="flex items-center gap-4">
             <div className="relative w-20 h-20 rounded-2xl bg-zinc-100 overflow-hidden flex items-center justify-center shrink-0 cursor-pointer" onClick={()=>fotoRef.current?.click()}>
               {fotoPreview?<img src={fotoPreview} alt="" className="w-full h-full object-cover"/>:<Camera size={24} className="text-[var(--text-muted)]"/>}
@@ -1018,9 +1025,13 @@ function TabLista({
             <FInput label="Telefone" value={form.telefone} onChange={v=>setForm({...form,telefone:v})} placeholder="(11) 99999-9999"/>
             <FInput label="CPF" value={form.cpf} onChange={v=>setForm({...form,cpf:v})} placeholder="000.000.000-00"/>
           </div>
+          </div>
 
           {/* ── Seção de Acesso ao Sistema ──────────────────────────────── */}
-          <div className="border-t border-[var(--border)] pt-4 mt-2">
+          <div
+            className="border-t border-[var(--border)] pt-4 mt-2"
+            data-onboarding-target={modal === 'novo' ? RH_ONBOARDING_TARGETS.modalAcessoSistema : undefined}
+          >
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm font-black text-[var(--text-main)]">🔐 Acesso ao Sistema</p>
@@ -1085,7 +1096,9 @@ function TabLista({
               </div>
             )}
           </div>
-        <MBtns onCancel={()=>setModal(null)} onConfirm={handleSalvar} saving={saving} label="Salvar Funcionário"/>
+        <div data-onboarding-target={modal === 'novo' ? RH_ONBOARDING_TARGETS.modalSalvarFuncionario : undefined}>
+          <MBtns onCancel={()=>setModal(null)} onConfirm={handleSalvar} saving={saving} label="Salvar Funcionário"/>
+        </div>
         </div>
       </Modal>
 
@@ -2133,7 +2146,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
         )}
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 sm:p-4 min-w-0" data-onboarding-target="rh-espelho-main">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-3 sm:p-4 min-w-0" data-onboarding-target={RH_ONBOARDING_TARGETS.espelhoMain}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between min-w-0">
           <div className="max-w-3xl min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-muted)]">Espelho</p>
