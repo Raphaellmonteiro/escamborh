@@ -4,7 +4,12 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
-import { publicRateLimit, authDeliveryCliente } from '../middleware';
+import {
+  publicRateLimit,
+  deliveryPublicPedidoCreateRateLimit,
+  deliveryPublicPedidoResumoRateLimit,
+  authDeliveryCliente,
+} from '../middleware';
 import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
 import { serializeOrderItemSelecoes } from '../services/ordersService';
@@ -1044,7 +1049,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/pedido/resumo', requireDeliveryPublicPlan, async (req, res) => {
+  router.post('/:slug/pedido/resumo', deliveryPublicPedidoResumoRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1221,7 +1226,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/pedido', requireDeliveryPublicPlan, async (req: any, res) => {
+  router.post('/:slug/pedido', deliveryPublicPedidoCreateRateLimit, requireDeliveryPublicPlan, async (req: any, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });

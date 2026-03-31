@@ -69,6 +69,24 @@ export const publicRateLimit = rateLimit({
   message: { error: 'Muitas requisições. Tente novamente em instantes.' },
 });
 
+/** POST público de resumo de checkout (delivery) — por IP; rota custosa mas sem escrita; limite entre cardápio e criação de pedido. */
+export const deliveryPublicPedidoResumoRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 45 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Tente novamente em instantes.' },
+});
+
+/** POST público de criação de pedido (delivery) — por IP; mais restrito que o cardápio (DB, estoque, notificações). */
+export const deliveryPublicPedidoCreateRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 20 : 80,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Tente novamente em instantes.' },
+});
+
 // ── Validação de magic bytes de imagem ────────────────────────────────────────
 const IMAGE_SIGNATURES = [
   { sig: [0xFF, 0xD8, 0xFF],                                                         label: 'JPEG' },
@@ -223,8 +241,23 @@ export function extractBearerToken(req: Request): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Caminho completo da rota após os mounts do Express (`baseUrl` + `req.path`).
+ * `req.path` sozinho é relativo ao sub-router (ex.: só `/clientes` em `/api/admin/clientes`), o que quebraria checagens por prefixo.
+ */
+function resolveRequestPathname(req: Request): string {
+  const base = req.baseUrl || '';
+  const pathPart = req.path || '';
+  let full = base + pathPart;
+  if (full.length > 1 && full.endsWith('/')) {
+    full = full.slice(0, -1);
+  }
+  return full;
+}
+
 /** Rotas /api/admin/* (exceto login): JWT de admin não passa em resolveAuthenticatedSession; este fallback mantém o painel com um único Bearer. */
-function isProtectedPlatformAdminApiPath(reqPath: string): boolean {
+function isProtectedPlatformAdminApiPath(req: Request): boolean {
+  const reqPath = resolveRequestPathname(req);
   if (reqPath !== '/api/admin' && !reqPath.startsWith('/api/admin/')) return false;
   return reqPath !== '/api/admin/login';
 }
@@ -440,7 +473,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     return next();
   }
 
-  if (isProtectedPlatformAdminApiPath(req.path) && tryApplyPlatformAdminBearer(req)) {
+  if (isProtectedPlatformAdminApiPath(req) && tryApplyPlatformAdminBearer(req)) {
     return next();
   }
 
