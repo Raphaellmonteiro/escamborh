@@ -128,11 +128,15 @@ async function runMigrationsWithRetry(retries = 5) {
       console.log('✅ Migrations executadas com sucesso');
       return;
     } catch (err) {
-      console.error(`❌ Tentativa ${i + 1} falhou`);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ Tentativa ${i + 1} falhou:`, msg);
+      if (err instanceof Error && err.stack) console.error(err.stack);
 
       if (i === retries - 1) {
-        console.error('❌ Falha definitiva nas migrations — seguindo sem travar o servidor');
-        return; // não mata o app
+        console.error(
+          '❌ Falha definitiva nas migrations — o servidor não será iniciado (banco inconsistente).'
+        );
+        process.exit(1);
       }
 
       await new Promise((res) => setTimeout(res, 3000));

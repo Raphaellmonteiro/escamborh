@@ -21,24 +21,33 @@ function loadDbSslCa(): string | undefined {
 
 export type NodePgSslOption = false | { rejectUnauthorized: boolean; ca?: string };
 
+function migrationOrDatabaseUrlDisablesSsl(): boolean {
+  const urls = [process.env.DATABASE_URL, process.env.DATABASE_MIGRATION_URL].filter(
+    (u): u is string => Boolean(u && String(u).trim())
+  );
+  return urls.some((u) => u.toLowerCase().includes('sslmode=disable'));
+}
+
 /**
  * Dev: SSL desligado (Postgres local).
- * Produção: verify peer (rejectUnauthorized: true); CA opcional via DB_SSL_CA.
- * sslmode=disable na URL desliga SSL mesmo em produção (ex.: túnel local para o banco).
+ * Produção: TLS ativo com `rejectUnauthorized: false` por padrão (Railway, Neon, Supabase etc. —
+ * cadeia com certificado intermediário que o Node não ancora sem CA explícita).
+ * Com `DB_SSL_CA` (PEM ou caminho), usa verificação estrita (`rejectUnauthorized: true`) + CA.
+ * `sslmode=disable` em DATABASE_URL ou DATABASE_MIGRATION_URL desliga SSL (ex.: túnel local).
  */
 export function resolveNodePgSslConfig(): NodePgSslOption {
   if (process.env.NODE_ENV !== 'production') {
     return false;
   }
 
-  const url = (process.env.DATABASE_URL || '').toLowerCase();
-  if (url.includes('sslmode=disable')) {
+  if (migrationOrDatabaseUrlDisablesSsl()) {
     return false;
   }
 
   const ca = loadDbSslCa();
-  return {
-    rejectUnauthorized: true,
-    ...(ca ? { ca } : {}),
-  };
+  if (ca) {
+    return { rejectUnauthorized: true, ca };
+  }
+
+  return { rejectUnauthorized: false };
 }
