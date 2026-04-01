@@ -73,8 +73,18 @@ function formatMoney(value: number) {
   return `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 }
 
-function formatElapsed(createdIso: string) {
-  const t = new Date(createdIso.includes('T') ? createdIso : createdIso.replace(' ', 'T')).getTime();
+function formatCreatedAtPtBr(createdIso: string | null | undefined): string {
+  const raw = String(createdIso ?? '').trim();
+  if (!raw) return '—';
+  const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR');
+}
+
+function formatElapsed(createdIso: string | null | undefined) {
+  const raw = String(createdIso ?? '').trim();
+  if (!raw) return '—';
+  const t = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T')).getTime();
   if (Number.isNaN(t)) return '—';
   const m = Math.floor((Date.now() - t) / 60000);
   if (m < 1) return 'agora';
@@ -83,8 +93,16 @@ function formatElapsed(createdIso: string) {
   return `${h}h ${m % 60} min`;
 }
 
-function getElapsedMeta(createdIso: string): { label: string; tone: string; dot: string } {
-  const t = new Date(createdIso.includes('T') ? createdIso : createdIso.replace(' ', 'T')).getTime();
+function getElapsedMeta(createdIso: string | null | undefined): { label: string; tone: string; dot: string } {
+  const raw = String(createdIso ?? '').trim();
+  if (!raw) {
+    return {
+      label: '—',
+      tone: 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
+      dot: 'bg-zinc-400',
+    };
+  }
+  const t = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T')).getTime();
   if (Number.isNaN(t)) {
     return {
       label: '—',
@@ -95,20 +113,20 @@ function getElapsedMeta(createdIso: string): { label: string; tone: string; dot:
   const m = Math.floor((Date.now() - t) / 60000);
   if (m >= 45) {
     return {
-      label: formatElapsed(createdIso),
+      label: formatElapsed(raw),
       tone: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-200 dark:border-red-500/30',
       dot: 'bg-red-500',
     };
   }
   if (m >= 25) {
     return {
-      label: formatElapsed(createdIso),
+      label: formatElapsed(raw),
       tone: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
       dot: 'bg-amber-500',
     };
   }
   return {
-    label: formatElapsed(createdIso),
+    label: formatElapsed(raw),
     tone: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
     dot: 'bg-emerald-500',
   };
@@ -1104,16 +1122,18 @@ function OrderCard({
                 )}
               </select>
             )}
-            <Button
-              type="button"
-              variant="primary"
-              disabled={busy || bloqueadoMotoboy}
-              className={`${compactMode ? '!min-h-[38px] !py-2' : '!min-h-[42px] !py-2.5'} !w-full !text-xs !font-black shadow-sm`}
-              onClick={() => void handlePrimary()}
-            >
-              <ChevronRight size={14} className={busy ? 'animate-pulse' : ''} />
-              {bloqueadoMotoboy ? 'Selecione o motoboy' : primary.label}
-            </Button>
+            {primary && (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={busy || bloqueadoMotoboy}
+                className={`${compactMode ? '!min-h-[38px] !py-2' : '!min-h-[42px] !py-2.5'} !w-full !text-xs !font-black shadow-sm`}
+                onClick={() => void handlePrimary()}
+              >
+                <ChevronRight size={14} className={busy ? 'animate-pulse' : ''} />
+                {bloqueadoMotoboy ? 'Selecione o motoboy' : primary.label}
+              </Button>
+            )}
               </>
             )}
           </div>
@@ -1227,9 +1247,7 @@ function OrderDetailModal({
             </div>
             <div>
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Criado</p>
-              <p className="font-semibold text-zinc-800 dark:text-zinc-200">
-                {new Date(order.created_at.includes('T') ? order.created_at : order.created_at.replace(' ', 'T')).toLocaleString('pt-BR')}
-              </p>
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">{formatCreatedAtPtBr(order.created_at)}</p>
             </div>
             <div>
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Tempo</p>

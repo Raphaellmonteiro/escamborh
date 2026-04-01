@@ -1,7 +1,7 @@
 // src/routes/products.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import fs from 'fs';
-import { q1, qAll, qRun, qInsert } from '../db';
+import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txInsert, txRun } from '../db';
 import { upload, uploadFotoFunc, checkMagicBytes, requireAnyPermission } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
@@ -14,7 +14,13 @@ const REPORT_TZ = 'America/Sao_Paulo';
 export function createProductsRouter() {
   const router = Router();
 
-  async function loadProdutoGruposOpcao(tenantId: number, productId: number) {
+  async function loadProdutoGruposOpcao(
+    tenantId: number,
+    productId: number,
+    opts?: { onlyActiveItens?: boolean }
+  ) {
+    const onlyActiveItens = opts?.onlyActiveItens !== false;
+    const itensActiveSql = onlyActiveItens ? ' AND ativo=1' : '';
     const grupos = await qAll(
       'SELECT * FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC',
       [productId, tenantId]
@@ -22,7 +28,7 @@ export function createProductsRouter() {
     const result: any[] = [];
     for (const g of grupos) {
       const itens = await qAll(
-        'SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=? AND ativo=1 ORDER BY ordem ASC, id ASC',
+        `SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=?${itensActiveSql} ORDER BY ordem ASC, id ASC`,
         [g.id, tenantId]
       );
       result.push({ ...g, itens });
@@ -428,7 +434,7 @@ function normalizeProductPromotionInput(
            ORDER BY ordem ASC, nome ASC`,
           [req.tenantId, productId]
         ),
-        loadProdutoGruposOpcao(req.tenantId, productId),
+        loadProdutoGruposOpcao(req.tenantId, productId, { onlyActiveItens: true }),
       ]);
 
       res.json({ variacoes_vendaveis: variacoesRows, grupos_opcao: gruposOpcao });
@@ -748,15 +754,188 @@ function normalizeProductPromotionInput(
 
   router.post('/:id/duplicar', async (req: Request, res) => {
     try {
-      const p = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      if (!p) return res.status(404).json({ error: 'Produto n\u00E3o encontrado' });
-      const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
-      const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), `${p.name} (c\u00F3pia)`, p.price, p.category, 0, p.color, null, p.marca, p.descricao, p.custo, 0, p.em_promocao ? 1 : 0, p.em_promocao ? p.preco_original ?? null : null, maxOrdem?.next||0, p.disponivel_de, p.disponivel_ate, p.requires_preparation ?? null, p.production_type ?? null, 0, req.tenantId]
-      );
-      res.json({ id, success: true });
-    } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
+      const sourceId = Number(req.params.id);
+      if (!Number.isInteger(sourceId) || sourceId <= 0) {
+        return res.status(400).json({ error: 'Produto inv\u00E1lido' });
+      }
+      const tenantId = req.tenantId;
+
+      const newId = await withTx(async (client) => {
+        const p = await txQ1<Record<string, unknown>>(
+          client,
+          'SELECT * FROM produtos WHERE id=? AND tenant_id=?',
+          [sourceId, tenantId]
+        );
+        if (!p) return null;
+
+        const maxOrdem = await txQ1<{ next: number }>(
+          client,
+          'SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?',
+          [tenantId]
+        );
+
+        const dupName = `${String(p.name ?? '')} (c\u00F3pia)`;
+        const normalizedProduction = normalizeProductProductionInput(
+          {
+            production_type: p.production_type,
+            requires_preparation: p.requires_preparation,
+          },
+          { name: dupName, category: (p.category as string) ?? null },
+          {
+            production_type: p.production_type,
+            requires_preparation: p.requires_preparation,
+          }
+        );
+
+        const emPromo = p.em_promocao === true || p.em_promocao === 1 || String(p.em_promocao) === '1' ? 1 : 0;
+        const precoOriginalClone =
+          emPromo ? (p.preco_original === null || p.preco_original === undefined ? null : Number(p.preco_original)) : null;
+
+        const newProductId = await txInsert(
+          client,
+          `INSERT INTO produtos (
+            public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,
+            disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,tenant_id
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            generatePublicId('prd'),
+            dupName,
+            p.price,
+            p.category,
+            p.active === true || p.active === 1 || String(p.active) === '1' ? 1 : 0,
+            p.color || 'zinc',
+            null,
+            p.marca ?? null,
+            p.descricao ?? null,
+            p.custo ?? 0,
+            p.destaque === true || p.destaque === 1 || String(p.destaque) === '1' ? 1 : 0,
+            emPromo,
+            precoOriginalClone,
+            maxOrdem?.next ?? 0,
+            p.disponivel_de ?? null,
+            p.disponivel_ate ?? null,
+            normalizedProduction.requiresPreparation,
+            normalizedProduction.productionType,
+            p.mais_vendido === true || p.mais_vendido === 1 || String(p.mais_vendido) === '1' ? 1 : 0,
+            tenantId,
+          ]
+        );
+
+        const grupos = await txQAll<Record<string, unknown>>(
+          client,
+          'SELECT * FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC',
+          [sourceId, tenantId]
+        );
+
+        for (const g of grupos) {
+          const newGrupoId = await txInsert(
+            client,
+            `INSERT INTO produto_grupos_opcao (produto_id,tenant_id,nome,tipo,min_selecoes,max_selecoes,obrigatorio,ordem,ativo,modo_preco)
+             VALUES (?,?,?,?,?,?,?,?,?,?)`,
+            [
+              newProductId,
+              tenantId,
+              g.nome,
+              (g.tipo as string) || 'radio',
+              Number(g.min_selecoes) || 0,
+              Number(g.max_selecoes) || 1,
+              g.obrigatorio === true || g.obrigatorio === 1 || String(g.obrigatorio) === '1' ? 1 : 0,
+              Number(g.ordem) || 0,
+              g.ativo === false || g.ativo === 0 || String(g.ativo) === '0' ? 0 : 1,
+              (g.modo_preco as string) || 'adicional',
+            ]
+          );
+
+          const itens = await txQAll<Record<string, unknown>>(
+            client,
+            'SELECT * FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC',
+            [Number(g.id), tenantId]
+          );
+
+          for (const it of itens) {
+            await txRun(
+              client,
+              `INSERT INTO produto_opcao_itens (grupo_id,tenant_id,nome,preco_adicional,ordem,ativo)
+               VALUES (?,?,?,?,?,?)`,
+              [
+                newGrupoId,
+                tenantId,
+                it.nome,
+                Number(it.preco_adicional) || 0,
+                Number(it.ordem) || 0,
+                it.ativo === false || it.ativo === 0 || String(it.ativo) === '0' ? 0 : 1,
+              ]
+            );
+          }
+        }
+
+        const variacoes = await txQAll<Record<string, unknown>>(
+          client,
+          `SELECT nome, preco, ativo, ordem, ingrediente_id
+           FROM produto_variacoes_vendaveis
+           WHERE tenant_id=? AND produto_id=?
+           ORDER BY ordem ASC, id ASC`,
+          [tenantId, sourceId]
+        );
+        for (const v of variacoes) {
+          let ingredienteId: number | null = null;
+          if (v.ingrediente_id != null && v.ingrediente_id !== '') {
+            const iid = Number(v.ingrediente_id);
+            if (Number.isInteger(iid) && iid > 0) {
+              const ing = await txQ1(client, 'SELECT id FROM ingredientes WHERE id=? AND tenant_id=?', [
+                iid,
+                tenantId,
+              ]);
+              if (ing) ingredienteId = iid;
+            }
+          }
+          await txRun(
+            client,
+            `INSERT INTO produto_variacoes_vendaveis (tenant_id, produto_id, nome, preco, codigo_barras, ativo, ordem, ingrediente_id)
+             VALUES (?,?,?,?,?,?,?,?)`,
+            [
+              tenantId,
+              newProductId,
+              v.nome,
+              Number(v.preco) || 0,
+              null,
+              v.ativo === false || v.ativo === 0 || String(v.ativo) === '0' ? 0 : 1,
+              Number(v.ordem) || 0,
+              ingredienteId,
+            ]
+          );
+        }
+
+        const ings = await txQAll<Record<string, unknown>>(
+          client,
+          'SELECT ingrediente_id, quantidade_usada, unidade FROM produto_ingrediente WHERE product_id=? AND tenant_id=?',
+          [sourceId, tenantId]
+        );
+        for (const row of ings) {
+          await txRun(
+            client,
+            `INSERT INTO produto_ingrediente (product_id,ingrediente_id,quantidade_usada,unidade,tenant_id)
+             VALUES (?,?,?,?,?)`,
+            [
+              newProductId,
+              row.ingrediente_id,
+              Number(row.quantidade_usada) || 0,
+              (row.unidade as string) || 'unidade',
+              tenantId,
+            ]
+          );
+        }
+
+        return Number(newProductId);
+      });
+
+      if (newId == null) {
+        return res.status(404).json({ error: 'Produto n\u00E3o encontrado' });
+      }
+      res.json({ id: newId, success: true });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/products:duplicar', e);
+    }
   });
 
   router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
@@ -804,7 +983,9 @@ function normalizeProductPromotionInput(
 
   router.get('/:id/opcoes', async (req: Request, res) => {
     try {
-      const result = await loadProdutoGruposOpcao(req.tenantId, Number(req.params.id));
+      const result = await loadProdutoGruposOpcao(req.tenantId, Number(req.params.id), {
+        onlyActiveItens: false,
+      });
       res.json(result);
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
   });

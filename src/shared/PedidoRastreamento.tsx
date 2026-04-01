@@ -1,10 +1,12 @@
 /**
  * PedidoRastreamento.tsx
  * Rota pública: /delivery/:slug/pedido/:id
- * O cliente vê o status em tempo real: Recebido → Em preparo → Saiu → Entregue
- * Sem login. Polling a cada 5s.
+ * O cliente vê o status em tempo real (polling 5s).
+ * A timeline segue o tipo de atendimento: entrega, retirada ou consumo no local.
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+
+type AtendimentoTimeline = 'entrega' | 'retirada' | 'consumo_local';
 
 interface PedidoData {
   id: number;
@@ -21,6 +23,11 @@ interface PedidoData {
   entregue_at?: string;
   resumo_itens?: string;
   estabelecimento: string;
+  /** `delivery` | `retirada` (cardápio online). */
+  canal?: string | null;
+  /** Com `canal=retirada`: `levar` = retirada no balcão; `local` = consumo no estabelecimento. Com entrega costuma ser `local` (legado). */
+  tipo_retirada?: string | null;
+  observation?: string | null;
 }
 
 /** Resposta de GET /public/delivery/:slug/pedido/:id (pedido vem aninhado). */
@@ -29,15 +36,17 @@ interface PedidoTrackingApiResponse {
   nome_estabelecimento?: string | null;
 }
 
-// Pipeline de status (ordem dos passos): "Criado" = enviado pelo cliente; "Pedido Recebido" = aceito pelo restaurante
-const STEPS = [
-  { key: 'Criado',              label: 'Pedido enviado',    emoji: '01', desc: 'Seu pedido foi enviado e aguarda confirmação do restaurante.' },
-  { key: 'Pedido Recebido',     label: 'Pedido recebido',   emoji: '02', desc: 'O restaurante aceitou seu pedido.' },
-  { key: 'Em Preparo',          label: 'Em preparo',        emoji: '03', desc: 'A cozinha está preparando seu pedido.' },
-  { key: 'Pronto para Entrega', label: 'Pronto',            emoji: '04', desc: 'Pedido pronto e aguardando envio.' },
-  { key: 'Saiu para Entrega',   label: 'Saiu para entrega', emoji: '05', desc: 'Seu pedido está a caminho.' },
-  { key: 'Entregue',            label: 'Entregue',          emoji: '06', desc: 'Pedido entregue.' },
-];
+type TimeField = 'created_at' | 'saiu_entrega_at' | 'entregue_at';
+
+interface StepDef {
+  id: string;
+  /** Status já normalizados (aliases aplicados). */
+  matchStatuses: string[];
+  label: string;
+  desc: string;
+  emoji: string;
+  timeField?: TimeField;
+}
 
 // Compatibiliza nomes de status com o pipeline (mesmos valores usados em Operações/Cozinha)
 const ALIAS: Record<string, string> = {
@@ -51,10 +60,72 @@ function normalizeStatus(s: string): string {
   return ALIAS[t] ?? t;
 }
 
-function getCurrentStepIndex(status: string): number {
+function resolveAtendimentoTimeline(pedido: Pick<PedidoData, 'canal' | 'tipo_retirada' | 'observation' | 'endereco'>): AtendimentoTimeline {
+  const canal = String(pedido.canal || '').trim().toLowerCase();
+  const tipo = String(pedido.tipo_retirada || '').trim().toLowerCase();
+  if (canal === 'delivery') return 'entrega';
+  if (canal === 'retirada') {
+    if (tipo === 'local') return 'consumo_local';
+    const obs = String(pedido.observation || '').trim();
+    if (/^consumo no local\.?/i.test(obs)) return 'consumo_local';
+    return 'retirada';
+  }
+  const end = String(pedido.endereco || '').trim();
+  if (end) return 'entrega';
+  return 'retirada';
+}
+
+const STEPS_ENTREGA: StepDef[] = [
+  { id: 'enviado', matchStatuses: ['Criado'], label: 'Pedido enviado', emoji: '01', desc: 'Seu pedido foi enviado e aguarda confirmação do restaurante.' },
+  { id: 'recebido', matchStatuses: ['Pedido Recebido'], label: 'Pedido recebido', emoji: '02', desc: 'O restaurante aceitou seu pedido.' },
+  { id: 'preparo', matchStatuses: ['Em Preparo'], label: 'Em preparo', emoji: '03', desc: 'A cozinha está preparando seu pedido.' },
+  { id: 'pronto', matchStatuses: ['Pronto para Entrega'], label: 'Pronto', emoji: '04', desc: 'Pedido pronto e aguardando envio para entrega.' },
+  { id: 'saiu', matchStatuses: ['Saiu para Entrega'], label: 'Saiu para entrega', emoji: '05', desc: 'Seu pedido está a caminho.', timeField: 'saiu_entrega_at' },
+  { id: 'entregue', matchStatuses: ['Entregue'], label: 'Entregue', emoji: '06', desc: 'Pedido entregue no endereço.', timeField: 'entregue_at' },
+];
+
+const STEPS_RETIRADA: StepDef[] = [
+  { id: 'enviado', matchStatuses: ['Criado'], label: 'Pedido enviado', emoji: '01', desc: 'Seu pedido foi enviado e aguarda confirmação do restaurante.' },
+  { id: 'recebido', matchStatuses: ['Pedido Recebido'], label: 'Pedido recebido', emoji: '02', desc: 'O restaurante aceitou seu pedido.' },
+  { id: 'preparo', matchStatuses: ['Em Preparo'], label: 'Em preparo', emoji: '03', desc: 'A cozinha está preparando seu pedido.' },
+  {
+    id: 'pronto_retirada',
+    matchStatuses: ['Pronto para Entrega', 'Saiu para Entrega'],
+    label: 'Pronto para retirada',
+    emoji: '04',
+    desc: 'Seu pedido está pronto para ser retirado no estabelecimento.',
+    timeField: 'saiu_entrega_at',
+  },
+  { id: 'retirado', matchStatuses: ['Entregue'], label: 'Retirado', emoji: '05', desc: 'Pedido retirado. Bom apetite!', timeField: 'entregue_at' },
+];
+
+const STEPS_CONSUMO_LOCAL: StepDef[] = [
+  { id: 'enviado', matchStatuses: ['Criado'], label: 'Pedido enviado', emoji: '01', desc: 'Seu pedido foi enviado e aguarda confirmação do restaurante.' },
+  { id: 'recebido', matchStatuses: ['Pedido Recebido'], label: 'Pedido recebido', emoji: '02', desc: 'O restaurante aceitou seu pedido.' },
+  { id: 'preparo', matchStatuses: ['Em Preparo'], label: 'Em preparo', emoji: '03', desc: 'A cozinha está preparando seu pedido.' },
+  {
+    id: 'pronto_local',
+    matchStatuses: ['Pronto para Entrega', 'Saiu para Entrega'],
+    label: 'Pronto no local',
+    emoji: '04',
+    desc: 'Pedido pronto para consumo no estabelecimento.',
+    timeField: 'saiu_entrega_at',
+  },
+  { id: 'concluido', matchStatuses: ['Entregue'], label: 'Concluído', emoji: '05', desc: 'Pedido finalizado. Obrigado!', timeField: 'entregue_at' },
+];
+
+function stepsForTimeline(mode: AtendimentoTimeline): StepDef[] {
+  if (mode === 'retirada') return STEPS_RETIRADA;
+  if (mode === 'consumo_local') return STEPS_CONSUMO_LOCAL;
+  return STEPS_ENTREGA;
+}
+
+function getCurrentStepIndex(status: string, defs: StepDef[]): number {
   const norm = normalizeStatus(status);
-  const idx  = STEPS.findIndex(s => s.key === norm);
-  return idx >= 0 ? idx : 0;
+  for (let i = defs.length - 1; i >= 0; i--) {
+    if (defs[i].matchStatuses.includes(norm)) return i;
+  }
+  return 0;
 }
 
 function fmtHora(d?: string | null): string {
@@ -77,9 +148,7 @@ interface Props {
 export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) {
   const [pedido, setPedido]     = useState<PedidoData | null>(null);
   const [error, setError]       = useState(false);
-  const [lastTick, setLastTick] = useState(0);
   const intervalRef             = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevStatusRef           = useRef<string | null>(null);
 
   const fetchPedido = async () => {
     try {
@@ -101,16 +170,12 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
       };
       setPedido(mapped);
       setError(false);
-      prevStatusRef.current = mapped.status;
     } catch { setError(true); }
   };
 
   useEffect(() => {
     fetchPedido();
-    intervalRef.current = setInterval(() => {
-      fetchPedido();
-      setLastTick(t => t + 1);
-    }, 5000);
+    intervalRef.current = setInterval(() => { fetchPedido(); }, 5000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [slug, pedidoId]);
 
@@ -124,6 +189,13 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
   const rootStyle: React.CSSProperties = embedded
     ? { ...s.root, minHeight: 0, background: '#09090b' }
     : s.root;
+
+  const timelineMode = useMemo(
+    () => (pedido ? resolveAtendimentoTimeline(pedido) : 'entrega'),
+    [pedido]
+  );
+
+  const steps = useMemo(() => stepsForTimeline(timelineMode), [timelineMode]);
 
   if (error && !pedido) return (
     <div style={rootStyle}>
@@ -147,11 +219,20 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
     </div>
   );
 
-  const stepIdx    = getCurrentStepIndex(pedido.status);
+  const stepIdx    = getCurrentStepIndex(pedido.status, steps);
   const stNorm     = String(pedido.status || '').trim().toLowerCase();
   const isCancelado = stNorm === 'cancelado';
   const isEntregue  = stNorm === 'entregue' || stNorm.startsWith('conclu');
-  const step        = STEPS[stepIdx];
+  const step        = steps[stepIdx];
+
+  const tipoAtendimentoLabel =
+    timelineMode === 'entrega'
+      ? 'Entrega no endereço'
+      : timelineMode === 'retirada'
+        ? 'Retirada no estabelecimento'
+        : 'Consumo no local';
+
+  const enderecoTitulo = timelineMode === 'entrega' ? 'Endereço de entrega' : 'Local';
 
   return (
     <div style={rootStyle}>
@@ -191,6 +272,7 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
             {pedido.cliente_nome && (
               <div style={{ fontSize: 14, color: '#a1a1aa', marginTop: 4 }}>Olá, {pedido.cliente_nome.split(' ')[0]}.</div>
             )}
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginTop: 10 }}>{tipoAtendimentoLabel}</div>
           </div>
 
           {/* Status atual em destaque */}
@@ -230,12 +312,12 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
           {/* Timeline de progresso */}
           {!isCancelado && (
             <div style={{ marginBottom: 28 }}>
-              {STEPS.map((st, i) => {
+              {steps.map((st, i) => {
                 const done    = i < stepIdx;
                 const current = i === stepIdx;
-                const future  = i > stepIdx;
+                const timeVal = st.timeField ? pedido[st.timeField] : undefined;
                 return (
-                  <div key={st.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: i < STEPS.length - 1 ? 0 : 0 }}>
+                  <div key={st.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: i < steps.length - 1 ? 0 : 0 }}>
                     {/* Coluna esquerda: bolinha + linha */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 28, flexShrink: 0 }}>
                       <div style={{
@@ -250,12 +332,12 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
                       }}>
                         {done ? 'OK' : st.emoji}
                       </div>
-                      {i < STEPS.length - 1 && (
+                      {i < steps.length - 1 && (
                         <div style={{ width: 2, flex: 1, minHeight: 24, background: done ? '#4ade80' : 'rgba(255,255,255,0.08)', margin: '3px 0' }} />
                       )}
                     </div>
                     {/* Conteúdo */}
-                    <div style={{ paddingTop: 4, paddingBottom: i < STEPS.length - 1 ? 20 : 4 }}>
+                    <div style={{ paddingTop: 4, paddingBottom: i < steps.length - 1 ? 20 : 4 }}>
                         <div style={{ fontSize: 14, fontWeight: current ? 700 : 500, color: done ? '#4ade80' : current ? '#fafafa' : '#71717a' }}>
                         {st.label}
                       </div>
@@ -264,14 +346,11 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
                           ● Em andamento
                         </div>
                       )}
-                      {i === 0 && (
+                      {st.id === 'enviado' && (
                         <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{fmtHora(pedido.created_at)}</div>
                       )}
-                      {i === 4 && pedido.saiu_entrega_at && (
-                        <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{fmtHora(pedido.saiu_entrega_at)}</div>
-                      )}
-                      {i === 5 && pedido.entregue_at && (
-                        <div style={{ fontSize: 11, color: '#67e8f9', marginTop: 2 }}>{fmtHora(pedido.entregue_at)}</div>
+                      {timeVal && st.timeField && st.id !== 'enviado' && (
+                        <div style={{ fontSize: 11, color: st.timeField === 'entregue_at' ? '#67e8f9' : '#475569', marginTop: 2 }}>{fmtHora(timeVal)}</div>
                       )}
                     </div>
                   </div>
@@ -303,9 +382,9 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
           </div>
 
           {/* Endereço */}
-          {pedido.endereco && (
+          {pedido.endereco && timelineMode === 'entrega' && (
             <div style={{ ...s.section, marginTop: 12 }}>
-              <div style={s.sectionTitle}>Endereço de entrega</div>
+              <div style={s.sectionTitle}>{enderecoTitulo}</div>
               <div style={{ color: '#a1a1aa', fontSize: 14 }}>{pedido.endereco}</div>
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pedido.endereco)}`}
@@ -342,7 +421,7 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
 
         {/* Rodapé */}
         <div style={{ textAlign:'center', color:'#a1a1aa', fontSize:11, padding:'16px 0 32px' }}>
-          Atualização automática a cada 5 segundos · Delivery online
+          Atualização automática a cada 5 segundos · Pedido online
         </div>
       </div>
     </div>

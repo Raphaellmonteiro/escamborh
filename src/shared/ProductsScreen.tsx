@@ -126,7 +126,7 @@ export default function ProductsScreen({
   deliverySlug = '',
 }: {
   products: ProductExtended[];
-  onUpdate: () => void;
+  onUpdate: () => void | Promise<void>;
   token: string;
   estabelecimentoNome?: string;
   logoUrl?: string | null;
@@ -400,8 +400,17 @@ export default function ProductsScreen({
 
   // ── duplicar ─────────────────────────────────────────────────
   const handleDuplicate = async (id: number) => {
-    await fetch(`/api/products/${id}/duplicar`, { method: 'POST', headers: hdrs });
-    onUpdate();
+    try {
+      const r = await fetch(`/api/products/${id}/duplicar`, { method: 'POST', headers: hdrs });
+      const d = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) {
+        alert(d.error || 'Nao foi possivel duplicar o produto.');
+        return;
+      }
+      await Promise.resolve(onUpdate());
+    } catch {
+      alert('Erro ao duplicar produto.');
+    }
   };
 
   // ── destaque toggle ──────────────────────────────────────────

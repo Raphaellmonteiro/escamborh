@@ -27,6 +27,10 @@ import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
+import {
+  findDeliveryZoneByBairro,
+  MENSAGEM_ENTREGA_FORA_DA_AREA,
+} from '../utils/deliveryBairroZona';
 import { resolveTenantLogoPublicUrl } from '../utils/tenantLogoUpload';
 import {
   PRIMEIRA_COMPRA_PEDIDO_VALIDO_SQL,
@@ -105,6 +109,9 @@ type CheckoutSummary = {
   subtotal_apos_desconto_pix: number;
   taxa_entrega: number;
   zona_entrega: DeliveryZone | null;
+  /** Quando há zonas cadastradas e o bairro informado não casa com nenhuma. */
+  entrega_bloqueada_por_zona?: boolean;
+  mensagem_entrega_bloqueada?: string;
   desconto_cupom: number;
   cupom_aplicado: any | null;
   cupom_invalido?: string;
@@ -157,25 +164,6 @@ function getCurrentMinutesInTimeZone() {
   const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
   const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0);
   return (hour * 60) + minute;
-}
-
-function normalizeZoneName(value?: string | null) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function findDeliveryZone(
-  zonas: DeliveryZone[],
-  bairro?: string | null
-) {
-  const normalizedBairro = normalizeZoneName(bairro);
-  if (!normalizedBairro) return null;
-
-  return zonas.find((zona) => {
-    const normalizedZone = normalizeZoneName(zona.nome);
-    return normalizedZone === normalizedBairro
-      || normalizedBairro.includes(normalizedZone)
-      || normalizedZone.includes(normalizedBairro);
-  }) || null;
 }
 
 function validateCupom(
@@ -320,33 +308,49 @@ async function resolveDeliveryFee(params: {
   bairro?: unknown;
   config: DeliveryConfig;
   canalPedido?: OrderChannel;
-}) {
+}): Promise<{
+  taxa: number;
+  zona: DeliveryZone | null;
+  bairro: string | null;
+  entrega_bloqueada_por_zona?: boolean;
+}> {
   if (params.canalPedido === 'retirada') {
     return { taxa: 0, zona: null as DeliveryZone | null, bairro: null as string | null };
   }
 
   const defaultFee = Number(params.config.taxa_entrega || 0);
-  const zonas = Array.isArray(params.config.zonas_entrega) ? params.config.zonas_entrega : [];
+  const zonas = (Array.isArray(params.config.zonas_entrega) ? params.config.zonas_entrega : []).filter((z) =>
+    String(z?.nome || '').trim()
+  );
   const bairroInformado = String(params.bairro || '').trim();
+  const bairroEndereco = String(params.endereco?.bairro || '').trim();
+  const effectiveBairro = bairroInformado || bairroEndereco;
 
-  if (bairroInformado) {
-    const zona = findDeliveryZone(zonas, bairroInformado);
+  if (zonas.length === 0) {
+    if (effectiveBairro) {
+      return { taxa: defaultFee, zona: null, bairro: effectiveBairro };
+    }
+    return { taxa: defaultFee, zona: null, bairro: null };
+  }
+
+  if (!effectiveBairro) {
+    return { taxa: 0, zona: null, bairro: null };
+  }
+
+  const zona = findDeliveryZoneByBairro(zonas, effectiveBairro);
+  if (!zona) {
     return {
-      taxa: zona ? Number(zona.taxa || 0) : defaultFee,
-      zona,
-      bairro: bairroInformado,
+      taxa: 0,
+      zona: null,
+      bairro: effectiveBairro,
+      entrega_bloqueada_por_zona: true,
     };
   }
 
-  if (zonas.length === 0 || !params.endereco) {
-    return { taxa: defaultFee, zona: null as DeliveryZone | null, bairro: null as string | null };
-  }
-
-  const zona = findDeliveryZone(zonas, params.endereco.bairro);
   return {
-    taxa: zona ? Number(zona.taxa || 0) : defaultFee,
+    taxa: Number(zona.taxa || 0),
     zona,
-    bairro: String(params.endereco.bairro || '').trim() || null,
+    bairro: effectiveBairro,
   };
 }
 
@@ -672,6 +676,10 @@ async function buildCheckoutSummary(params: {
     subtotal_apos_desconto_pix: subtotalAposPix,
     taxa_entrega: fee.taxa,
     zona_entrega: fee.zona,
+    entrega_bloqueada_por_zona: Boolean(fee.entrega_bloqueada_por_zona),
+    mensagem_entrega_bloqueada: fee.entrega_bloqueada_por_zona
+      ? MENSAGEM_ENTREGA_FORA_DA_AREA
+      : undefined,
     desconto_cupom: descontoCupom,
     cupom_aplicado: cupomAplicado,
     desconto_primeiro_cliente: primeiroCliente.desconto,
@@ -1191,6 +1199,17 @@ export function createDeliveryPublicRouter() {
       if (!logradouro?.trim()) return res.status(400).json({ error: 'Logradouro obrigatorio' });
       if (!String(numero || '').trim()) return res.status(400).json({ error: 'Numero obrigatorio' });
       if (!String(bairro || '').trim()) return res.status(400).json({ error: 'Bairro obrigatorio' });
+      const tenantCfgRow = await q1<{ delivery_config?: unknown }>(
+        'SELECT delivery_config FROM clientes WHERE id=?',
+        [req.tenantId]
+      );
+      const dcfgEnd = parseDeliveryConfig(tenantCfgRow?.delivery_config);
+      const zonasEnd = (Array.isArray(dcfgEnd.zonas_entrega) ? dcfgEnd.zonas_entrega : []).filter((z) =>
+        String(z?.nome || '').trim()
+      );
+      if (zonasEnd.length > 0 && !findDeliveryZoneByBairro(zonasEnd, bairro)) {
+        return res.status(400).json({ success: false, error: MENSAGEM_ENTREGA_FORA_DA_AREA });
+      }
       if (principal) await qRun('UPDATE delivery_enderecos SET principal=0 WHERE cliente_id=? AND tenant_id=?', [req.clienteId, req.tenantId]);
       const id = await qInsert(
         'INSERT INTO delivery_enderecos (tenant_id,cliente_id,label,logradouro,numero,complemento,bairro,referencia,principal) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -1235,7 +1254,19 @@ export function createDeliveryPublicRouter() {
       const automation = parseAutomationFromDeliveryConfigJson(dcfg as Record<string, unknown>);
       const { items, pagamento_tipo, observation, cliente_nome, cliente_tel, endereco, clienteToken, cupom_codigo, endereco_id, bairro_temporario } = req.body;
       const canalPedido: OrderChannel = String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
-      const tipoRetirada = canalPedido === 'retirada' ? 'levar' : 'local';
+      /** Delivery continua com tipo_retirada `local` (legado do PDV). Retirada: `levar` = buscar no balcão; `local` = consumo no estabelecimento. */
+      let tipoRetirada: string;
+      if (canalPedido === 'delivery') {
+        tipoRetirada = 'local';
+      } else {
+        const bodyTr = String(req.body?.tipo_retirada || '').trim().toLowerCase();
+        if (bodyTr === 'local' || bodyTr === 'levar') {
+          tipoRetirada = bodyTr;
+        } else {
+          const modo = String(req.body?.modo_recebimento || '').trim().toLowerCase();
+          tipoRetirada = modo === 'consumo_local' ? 'local' : 'levar';
+        }
+      }
       const clienteId = await resolveDeliveryCustomerId(tenant.id, clienteToken);
       const enderecoSalvo = await resolveSavedDeliveryAddress({
         tenantId: tenant.id,
@@ -1261,6 +1292,14 @@ export function createDeliveryPublicRouter() {
         canalPedido,
         enderecoElegibilidadePreview: req.body?.endereco_eligibilidade ?? null,
       });
+
+      if (canalPedido === 'delivery' && checkoutSummary.entrega_bloqueada_por_zona) {
+        return res.status(400).json({
+          success: false,
+          error: checkoutSummary.mensagem_entrega_bloqueada || MENSAGEM_ENTREGA_FORA_DA_AREA,
+          code: 'DELIVERY_BAIRRO_FORA_DA_AREA',
+        });
+      }
 
       if (cupom_codigo && !checkoutSummary.cupom_aplicado) {
         return res.status(400).json({

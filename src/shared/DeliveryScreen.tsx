@@ -2411,7 +2411,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
         <div className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-4">
           <div>
             <h3 className="text-base font-black text-fptext-primary">Bairros e taxas fixas</h3>
-            <p className="text-xs text-zinc-400 mt-0.5">Modelo atual: bairro cadastrado = taxa fixa. Se nenhum bairro casar, o sistema usa a taxa padrão de {fmt(Number(cfg.taxa_entrega || 0))}. Sem km/raio nesta fase.</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Com bairros cadastrados aqui, o cardápio só aceita entrega se o bairro do cliente casar com uma zona (comparação inteligente de nome). Fora disso, o cliente precisa escolher retirada. Se você não cadastrar nenhuma zona, continua valendo só a taxa padrão de entrega. Sem km/raio nesta fase.</p>
           </div>
 
           {/* Lista de zonas */}
@@ -2449,7 +2449,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
               <Plus size={14}/> Adicionar
             </button>
           </div>
-          {zonas.length===0&&<p className="text-xs text-zinc-400">Nenhum bairro com taxa fixa cadastrado ainda. A taxa padrão será usada em todas as entregas.</p>}
+          {zonas.length===0&&<p className="text-xs text-zinc-400">Nenhuma zona cadastrada: a taxa padrão de entrega vale para qualquer bairro informado no cardápio.</p>}
         </div>
       )}
 

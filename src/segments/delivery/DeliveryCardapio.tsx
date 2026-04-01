@@ -20,6 +20,10 @@ import { CardapioThemeShell, useDeliveryCardapioTheme } from './DeliveryCardapio
 import { ProductOptionsModal } from '../../shared/ProductOptionsModal';
 import PedidoRastreamento from '../../shared/PedidoRastreamento';
 import { normalizeCardapioOnlineBannerSlots } from '../../utils/deliveryCardapioBannerSlots';
+import {
+  findDeliveryZoneByBairro,
+  MENSAGEM_ENTREGA_FORA_DA_AREA,
+} from '../../utils/deliveryBairroZona';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
@@ -85,6 +89,8 @@ interface CheckoutResumo {
   subtotal_apos_desconto_pix: number;
   taxa_entrega: number;
   zona_entrega: { nome: string; taxa: number } | null;
+  entrega_bloqueada_por_zona?: boolean;
+  mensagem_entrega_bloqueada?: string;
   desconto_cupom: number;
   cupom_aplicado: { codigo: string; tipo: 'percentual'|'fixo'|'frete_gratis' } | null;
   cupom_invalido?: string;
@@ -718,6 +724,8 @@ function createFallbackCheckoutResumo(params: {
   cupomAplicado?: CupomAplicadoResumo;
   descontoCupom?: number;
   mensagemPrimeiroCliente?: string;
+  entregaBloqueadaPorZona?: boolean;
+  mensagemEntregaBloqueada?: string;
 }): CheckoutResumo {
   const descontoPix = params.pagamentoTipo === 'pix'
     ? params.subtotal * ((Number(params.config.desconto_pix || 0)) / 100)
@@ -733,6 +741,10 @@ function createFallbackCheckoutResumo(params: {
     subtotal_apos_desconto_pix: subtotalAposPix,
     taxa_entrega: Number(params.taxaEntrega || 0),
     zona_entrega: params.zonaEntrega || null,
+    entrega_bloqueada_por_zona: Boolean(params.entregaBloqueadaPorZona),
+    mensagem_entrega_bloqueada: params.entregaBloqueadaPorZona
+      ? (params.mensagemEntregaBloqueada || MENSAGEM_ENTREGA_FORA_DA_AREA)
+      : undefined,
     desconto_cupom: descontoCupom,
     cupom_aplicado: params.cupomAplicado || null,
     desconto_primeiro_cliente: 0,
@@ -765,6 +777,7 @@ function ResumoComercialLinhas({
   mensagemAuxiliar,
   totalLabel = 'Total final',
   tipoAtendimento,
+  temZonasEntrega,
 }: {
   resumo: CheckoutResumo;
   descontoPixPercentual?: number;
@@ -773,6 +786,8 @@ function ResumoComercialLinhas({
   mensagemAuxiliar?: string | null;
   totalLabel?: string;
   tipoAtendimento?: TipoAtendimento | null;
+  /** Quando true, taxa 0 sem zona nem bairro indica “aguardando bairro”, não “grátis”. */
+  temZonasEntrega?: boolean;
 }) {
   const rl = useDeliveryCardapioTheme().resumoLinhas;
   const taxaEntrega = Number(resumo.taxa_entrega || 0);
@@ -813,10 +828,21 @@ function ResumoComercialLinhas({
           <span className="font-semibold">Atendimento</span>
           <span className={rl.accentBold}>Retirar no local</span>
         </div>
+      ) : resumo.entrega_bloqueada_por_zona ? (
+        <div className={`${rl.line} flex-col items-stretch gap-1`}>
+          <span className="text-sm font-semibold leading-snug text-amber-800 dark:text-amber-200">
+            {resumo.mensagem_entrega_bloqueada || MENSAGEM_ENTREGA_FORA_DA_AREA}
+          </span>
+        </div>
       ) : taxaEntrega > 0 ? (
         <div className={rl.line}>
           <span>Taxa de entrega{zonaResumo ? ` · ${zonaResumo.nome}` : bairroResumo ? ` · ${bairroResumo}` : ''}</span>
           <span className={rl.lineStrong}>{fmt(taxaEntrega)}</span>
+        </div>
+      ) : temZonasEntrega && !zonaResumo && !bairroResumo ? (
+        <div className={rl.line}>
+          <span>Taxa de entrega</span>
+          <span className={`text-xs font-bold ${rl.lineStrong}`}>Após informar o bairro</span>
         </div>
       ) : (
         <div className={rl.accent}>
@@ -3550,6 +3576,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
             descontoPixPercentual={descontoPixPercentual}
             tipoAtendimento={tipoAtendimento}
             mensagemAuxiliar={mensagemResumo}
+            temZonasEntrega={(config.zonas_entrega || []).length > 0}
           />
           <p className={`text-center text-xs ${cardTh.mode === 'light_red' ? 'text-stone-600' : 'text-zinc-400'}`}>Subtotal da sacola. Taxa e total final dependem da entrega e do pagamento no checkout.</p>
         </div>
@@ -4087,20 +4114,10 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const zonas = config.zonas_entrega || [];
   const temZonas = zonas.length > 0;
 
-  // ── Detecta zona pelo bairro do endereço selecionado ─────────────────────────
-  // Compara case-insensitive e também aceita match parcial (ex: "FEITOSA" bate em "Feitosa")
+  // ── Detecta zona pelo bairro (mesma normalização que o servidor: `deliveryBairroZona`) ──
   const detectarZona = (bairro: string): { nome: string; taxa: number } | null => {
     if (!temZonas || !bairro.trim()) return null;
-    const b = bairro.trim().toLowerCase();
-    // 1. Match exato
-    const exato = zonas.find(z => z.nome.trim().toLowerCase() === b);
-    if (exato) return exato;
-    // 2. Match parcial (o bairro do endereço contém o nome da zona ou vice-versa)
-    const parcial = zonas.find(z =>
-      b.includes(z.nome.trim().toLowerCase()) ||
-      z.nome.trim().toLowerCase().includes(b)
-    );
-    return parcial || null;
+    return findDeliveryZoneByBairro(zonas, bairro);
   };
 
   // Bairro do endereço atualmente selecionado
@@ -4112,14 +4129,16 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
       })();
 
   const zonaDetectada = detectarZona(bairroAtual);
+  const entregaBloqueadaFallback =
+    tipoAtendimento === 'entrega' && temZonas && Boolean(bairroAtual.trim()) && !zonaDetectada;
 
-  // Taxa efetiva: zona detectada > taxa padrão
+  // Com zonas cadastradas só há taxa quando o bairro casa com uma zona (sem taxa “padrão” fora da lista).
   const taxaEntregaFallback = tipoAtendimento == null
     ? 0
     : tipoAtendimento === 'retirada'
     ? 0
     : temZonas
-      ? (zonaDetectada ? zonaDetectada.taxa : config.taxa_entrega || 0)
+      ? (zonaDetectada ? zonaDetectada.taxa : 0)
       : (config.taxa_entrega || 0);
   const sub = cart.reduce((a,i)=>a+i.preco_final*i.qty,0);
   const descontoCupomFallback = cupomValido
@@ -4134,6 +4153,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
     bairroEntrega: tipoAtendimento === 'entrega' ? (bairroAtual.trim() || null) : null,
     cupomAplicado: cupomValido?.cupom || null,
     descontoCupom: descontoCupomFallback,
+    entregaBloqueadaPorZona: entregaBloqueadaFallback,
   });
   const usandoResumoFallback = !resumoCheckout;
   const descontoPix = resumoAtual.desconto_pix;
@@ -4392,8 +4412,18 @@ const finalizar = async () => {
         enderecoIdFinal = sd.id;
       }
 
-      if (!await atualizarResumo(undefined, enderecoIdFinal ? { enderecoId: enderecoIdFinal } : undefined)) {
+      const resumoFinal = await atualizarResumo(
+        undefined,
+        enderecoIdFinal ? { enderecoId: enderecoIdFinal } : undefined
+      );
+      if (!resumoFinal) {
         setErro('Nao foi possivel validar o resumo final do pedido. Tente novamente.');
+        return;
+      }
+      if (tipoAtendimento === 'entrega' && resumoFinal.entrega_bloqueada_por_zona) {
+        setErro(
+          resumoFinal.mensagem_entrega_bloqueada || MENSAGEM_ENTREGA_FORA_DA_AREA
+        );
         return;
       }
 
@@ -4411,6 +4441,12 @@ const finalizar = async () => {
         endereco: tipoAtendimento === 'retirada' ? null : endStr,
         clienteToken: cliToken,
         canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
+        ...(tipoAtendimento === 'retirada'
+          ? {
+              tipo_retirada: modoRecebimento === 'consumo_local' ? 'local' : 'levar',
+              modo_recebimento: modoRecebimento,
+            }
+          : {}),
         bairro_temporario:
           tipoAtendimento === 'retirada'
             ? undefined
@@ -4466,6 +4502,16 @@ const finalizar = async () => {
       if (temZonas && endSel === 'novo' && !novoEndereco.campos.bairro.trim()) {
         setErro('Informe o bairro do endereço para calcular a taxa de entrega.');
         return false;
+      }
+      if (temZonas) {
+        const bairroChecar =
+          endSel === 'novo'
+            ? novoEndereco.campos.bairro
+            : enderecos.find((x) => x.id === endSel)?.bairro || '';
+        if (bairroChecar.trim() && !detectarZona(bairroChecar)) {
+          setErro(MENSAGEM_ENTREGA_FORA_DA_AREA);
+          return false;
+        }
       }
     }
     return true;
@@ -4706,7 +4752,7 @@ const finalizar = async () => {
                   : 'mb-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-[12px] text-cyan-200'
               }
             >
-              Nesta fase a taxa e calculada por bairro com valor fixo. Se o bairro nao casar com um cadastro, usamos a taxa padrao de {fmt(config.taxa_entrega||0)}.
+              A entrega só é feita para bairros cadastrados como zonas. A taxa é a definida para a zona que corresponder ao seu bairro.
             </div>
           )}
           {enderecos.length>0&&(
@@ -4722,21 +4768,32 @@ const finalizar = async () => {
                   {/* Mostra a taxa detectada para este endereço */}
                   {temZonas && e.bairro && (() => {
                     const z = detectarZona(e.bairro);
-                    return z ? (
+                    if (z) {
+                      return (
+                        <p
+                          className={`mt-1 text-[11px] font-bold ${
+                            z.taxa === 0
+                              ? isLightCheckout
+                                ? 'text-red-700'
+                                : 'text-cyan-300'
+                              : isLightCheckout
+                                ? 'text-zinc-500'
+                                : 'text-zinc-400'
+                          }`}
+                        >
+                          {z.taxa === 0 ? 'Entrega grátis neste bairro' : `Taxa de entrega: ${fmt(z.taxa)}`}
+                        </p>
+                      );
+                    }
+                    return (
                       <p
                         className={`mt-1 text-[11px] font-bold ${
-                          z.taxa === 0
-                            ? isLightCheckout
-                              ? 'text-red-700'
-                              : 'text-cyan-300'
-                            : isLightCheckout
-                              ? 'text-zinc-500'
-                              : 'text-zinc-400'
+                          isLightCheckout ? 'text-amber-800' : 'text-amber-200'
                         }`}
                       >
-                        {z.taxa===0 ? 'Entrega grátis neste bairro' : `Taxa de entrega: ${fmt(z.taxa)}`}
+                        {MENSAGEM_ENTREGA_FORA_DA_AREA}
                       </p>
-                    ) : null;
+                    );
                   })()}
                 </button>
               ))}
@@ -4838,17 +4895,17 @@ const finalizar = async () => {
             </div>
           )}
 
-          {/* Aviso se bairro não está nas zonas cadastradas */}
-          {temZonas && !zonaDetectada && bairroAtual && (
+          {/* Bairro fora das zonas cadastradas — entrega bloqueada */}
+          {temZonas && !zonaDetectada && bairroAtual.trim() && (
             <div
               className={
                 isLightCheckout
-                  ? 'mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900'
-                  : 'mt-3 flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200'
+                  ? 'mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900'
+                  : 'mt-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200'
               }
             >
-              <AlertCircle size={14}/>
-              <span>Bairro fora dos bairros cadastrados. Taxa padrao: {fmt(config.taxa_entrega||0)}</span>
+              <AlertCircle size={14} className="mt-0.5 shrink-0" />
+              <span>{MENSAGEM_ENTREGA_FORA_DA_AREA}</span>
             </div>
           )}
         </div>
@@ -5207,6 +5264,7 @@ const finalizar = async () => {
               zonaFallback={zonaResumo}
               bairroFallback={bairroResumo}
               tipoAtendimento={tipoAtendimento}
+              temZonasEntrega={temZonas}
               mensagemAuxiliar={
                 carregandoResumo
                   ? 'Atualizando beneficios e total...'
