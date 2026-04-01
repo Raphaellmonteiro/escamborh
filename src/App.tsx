@@ -456,6 +456,7 @@ const fetchProducts = async () => {
       const token = localStorage.getItem("token");
 
       const res = await fetch('/api/products', {
+        cache: 'no-store',
         headers: {
           Authorization: "Bearer " + token
         }

@@ -658,7 +658,14 @@ export default function ProductsScreen({
     return sortProductsForCardapioAdmin(list);
   }, [products, debouncedBusca, catFiltro, statusFiltro, destaqueFiltro]);
 
-  const { visibleItems: produtosVisiveis, hasMore: hasMoreProdutos, loadMore: loadMoreProdutos, totalCount: totalProdutos } = usePaginatedList(produtosFiltrados, { pageSize: 30 });
+  const produtosPaginacaoKey = useMemo(
+    () => produtosFiltrados.map((p) => p.id).join(','),
+    [produtosFiltrados]
+  );
+  const { visibleItems: produtosVisiveis, hasMore: hasMoreProdutos, loadMore: loadMoreProdutos, totalCount: totalProdutos } = usePaginatedList(
+    produtosFiltrados,
+    { pageSize: 30, listResetKey: produtosPaginacaoKey }
+  );
 
   /** Chips do filtro: categorias cadastradas + categorias ainda presentes só nos produtos (rótulo canônico por chave normalizada). */
   const catList = useMemo(() => {
@@ -855,7 +862,17 @@ export default function ProductsScreen({
                       />
                     </div>
                     <div className={`w-14 h-14 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${COLOR_MAP[p.color || 'zinc']?.bg || 'bg-zinc-100'}`}>
-                      {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={20} className="text-zinc-400"/>}
+                      {p.photo_url ? (
+                        <img
+                          key={`cardapio-thumb-${p.id}-${p.photo_url}`}
+                          src={p.photo_url}
+                          alt={p.name}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Package size={20} className="text-zinc-400" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex min-w-0 items-start gap-2">
@@ -929,7 +946,17 @@ export default function ProductsScreen({
                 <div key={p.id} className={`${adminOpsListRowClass} overflow-hidden hover:border-zinc-300 transition-all flex flex-col ${!p.active ? 'opacity-60' : ''}`}>
                   {/* Foto */}
                   <div className={`w-full h-40 flex items-center justify-center overflow-hidden relative ${cc.bg}`}>
-                    {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={40} className="text-zinc-300"/>}
+                    {p.photo_url ? (
+                      <img
+                        key={`cardapio-grid-${p.id}-${p.photo_url}`}
+                        src={p.photo_url}
+                        alt={p.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Package size={40} className="text-zinc-300" />
+                    )}
                     {p.destaque ? <div className="absolute top-2 left-2 bg-amber-400 text-white rounded-full p-1"><Star size={12} className="fill-white"/></div> : null}
                     {!!p.em_promocao && Number(p.preco_original || 0) > Number(p.price || 0) ? (
                       <div className="absolute top-2 left-11 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black uppercase">
