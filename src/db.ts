@@ -697,6 +697,37 @@ export async function runMigrations() {
       ALTER TABLE solicitacoes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pendente'
     `);
 
+    await client.query(`
+      ALTER TABLE produtos ADD COLUMN IF NOT EXISTS is_combo INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE IF NOT EXISTS produto_combo_grupos (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        produto_id INTEGER NOT NULL,
+        nome TEXT NOT NULL,
+        ordem INTEGER NOT NULL DEFAULT 0,
+        obrigatorio INTEGER NOT NULL DEFAULT 0,
+        qtd_min INTEGER NOT NULL DEFAULT 0,
+        qtd_max INTEGER NOT NULL DEFAULT 1,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS produto_combo_grupo_produtos (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        grupo_id INTEGER NOT NULL,
+        produto_componente_id INTEGER NOT NULL,
+        ordem INTEGER NOT NULL DEFAULT 0,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY (grupo_id) REFERENCES produto_combo_grupos(id) ON DELETE CASCADE,
+        FOREIGN KEY (produto_componente_id) REFERENCES produtos(id) ON DELETE CASCADE,
+        UNIQUE (tenant_id, grupo_id, produto_componente_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_combo_grupos_produto ON produto_combo_grupos(tenant_id, produto_id, ativo);
+      CREATE INDEX IF NOT EXISTS idx_combo_grupo_prod ON produto_combo_grupo_produtos(tenant_id, grupo_id, ativo);
+    `);
+
     await client.query(`DELETE FROM usuarios WHERE username='admin'`);
 
     console.log('Migracoes PostgreSQL concluidas.');

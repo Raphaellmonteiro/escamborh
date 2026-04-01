@@ -84,6 +84,7 @@ interface ProductExtended extends Product {
   ordem?: number;
   disponivel_de?: string;
   disponivel_ate?: string;
+  is_combo?: number;
 }
 
 function getPromotionValidationMessage(product?: Partial<ProductExtended> | null) {
@@ -184,6 +185,7 @@ export default function ProductsScreen({
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [opcoesProdutoId, setOpcoesProdutoId] = useState<number|null>(null); // produto com modal de opções aberto
+  const [comboProdutoId, setComboProdutoId] = useState<number|null>(null);
   const [productSuggestions, setProductSuggestions] = useState<ProductSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestedProductId, setSuggestedProductId] = useState<number>(0);
@@ -917,6 +919,16 @@ export default function ProductsScreen({
                       className="p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all">
                       <Copy size={15}/>
                     </button>
+                    {p.id && Number(p.is_combo) === 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setComboProdutoId(p.id!)}
+                        title="Grupos do combo"
+                        className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-violet-200 text-violet-700 hover:bg-violet-50 rounded-lg text-xs font-bold transition-all"
+                      >
+                        <Package size={12} /> Combo
+                      </button>
+                    )}
                     {p.id && <button type="button" onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais"
                       className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all">
                       <Settings2 size={12}/> Opções
@@ -1006,6 +1018,11 @@ export default function ProductsScreen({
                     <button type="button" onClick={() => handleToggleDestaque(p)} className={`p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg transition-all ${p.destaque ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500'}`}><Star size={14} className={p.destaque ? 'fill-amber-500' : ''}/></button>
                     <button type="button" onClick={() => handleToggleAtivo(p)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all">{p.active ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
                     <button type="button" onClick={() => handleDuplicate(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Copy size={14}/></button>
+                    {p.id && Number(p.is_combo) === 1 && (
+                      <button type="button" onClick={() => setComboProdutoId(p.id!)} title="Grupos do combo" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-violet-50 text-zinc-300 hover:text-violet-600 rounded-lg transition-all">
+                        <Package size={14} />
+                      </button>
+                    )}
                     {p.id && <button type="button" onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-50 text-zinc-300 hover:text-emerald-600 rounded-lg transition-all"><Settings2 size={14}/></button>}
                     <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
                     <button type="button" onClick={() => handleDeleteClick(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14}/></button>
@@ -1468,7 +1485,27 @@ export default function ProductsScreen({
                       className="w-4 h-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500"/>
                     <span className="text-sm font-medium text-zinc-700">🏆 Mais vendidos (PDF)</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+                    <input
+                      type="checkbox"
+                      checked={Number(editing.is_combo) === 1}
+                      onChange={(e) => setEditing((p) => (p ? { ...p, is_combo: e.target.checked ? 1 : 0 } : p))}
+                      className="w-4 h-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span className="text-sm font-medium text-zinc-700">Combo (monte grupos com produtos do cardápio)</span>
+                  </label>
                 </div>
+                {editing.id && Number(editing.is_combo) === 1 && (
+                  <div className="px-1">
+                    <button
+                      type="button"
+                      onClick={() => setComboProdutoId(editing.id!)}
+                      className="w-full rounded-xl border border-violet-200 bg-violet-50 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-100"
+                    >
+                      Configurar grupos do combo
+                    </button>
+                  </div>
+                )}
               </div>
 
                 <div className="flex shrink-0 gap-2 border-t border-zinc-100 bg-white px-3 pt-2.5 pb-3 sm:gap-3 sm:px-5 sm:pb-4 2xl:px-7 2xl:pt-3 2xl:pb-6">
@@ -1562,6 +1599,18 @@ export default function ProductsScreen({
             produtoNome={products.find(p=>p.id===opcoesProdutoId)?.name||''}
             token={token}
             onClose={()=>setOpcoesProdutoId(null)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {comboProdutoId && (
+          <ModalComboAdmin
+            produtoId={comboProdutoId}
+            produtoNome={products.find((p) => p.id === comboProdutoId)?.name || ''}
+            token={token}
+            catalog={products}
+            onClose={() => setComboProdutoId(null)}
+            onSaved={() => void onUpdate()}
           />
         )}
       </AnimatePresence>
@@ -1902,6 +1951,615 @@ function ModalOpcoesAdmin({ produtoId, produtoNome, token, onClose }: {
         <div className="px-4 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5 shrink-0">
           <button type="button" onClick={onClose} className="w-full py-3 min-h-[44px] bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold transition-all">
             Fechar
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+type ApiComboGrupoResponse = {
+  id: number;
+  nome: string;
+  ordem: number;
+  obrigatorio: boolean;
+  qtd_min: number;
+  qtd_max: number;
+  ativo: boolean;
+  produtos: { link_id: number; product_id: number; name: string }[];
+};
+
+type ComboGrupoDraft = {
+  key: string;
+  nome: string;
+  ordem: number;
+  obrigatorio: boolean;
+  qtd_min: number;
+  qtd_max: number;
+  maxIlimitado: boolean;
+  ativo: boolean;
+  product_ids: number[];
+};
+
+function draftKey() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `k-${Date.now()}-${Math.random()}`;
+}
+
+function apiGruposToDraft(rows: ApiComboGrupoResponse[]): ComboGrupoDraft[] {
+  return rows.map((g) => {
+    const qmax = Math.max(0, Number(g.qtd_max) || 0);
+    const maxIlimitado = qmax === 0;
+    return {
+      key: `load-${g.id}`,
+      nome: g.nome || '',
+      ordem: Number.isFinite(g.ordem) ? g.ordem : 0,
+      obrigatorio: !!g.obrigatorio,
+      qtd_min: Math.max(0, Number(g.qtd_min) || 0),
+      qtd_max: maxIlimitado ? 0 : qmax,
+      maxIlimitado,
+      ativo: g.ativo !== false,
+      product_ids: (g.produtos || []).map((p) => p.product_id),
+    };
+  });
+}
+
+function validateComboDraft(grupos: ComboGrupoDraft[]): string | null {
+  if (grupos.length === 0) return null;
+  for (let i = 0; i < grupos.length; i++) {
+    const g = grupos[i];
+    const label = `Grupo ${i + 1}`;
+    if (!g.nome.trim()) {
+      return `${label}: informe o nome do grupo.`;
+    }
+    if (g.obrigatorio && g.qtd_min < 1) {
+      return `${label} (“${g.nome.trim()}”): grupo obrigatório exige quantidade mínima ≥ 1.`;
+    }
+    if (!g.maxIlimitado) {
+      const maxv = Math.max(0, Math.floor(g.qtd_max) || 0);
+      if (maxv > 0 && g.qtd_min > maxv) {
+        return `${label} (“${g.nome.trim()}”): a mínima não pode ser maior que a máxima.`;
+      }
+    }
+  }
+  return null;
+}
+
+function ModalComboAdmin({
+  produtoId,
+  produtoNome,
+  token,
+  catalog,
+  onClose,
+  onSaved,
+}: {
+  produtoId: number;
+  produtoNome: string;
+  token: string;
+  catalog: ProductExtended[];
+  onClose: () => void;
+  onSaved?: () => void;
+}) {
+  const [grupos, setGrupos] = useState<ComboGrupoDraft[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [searchByGrupo, setSearchByGrupo] = useState<Record<string, string>>({});
+  const debouncedSearch = useDebounce(searchByGrupo, 200);
+  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+  const produtoById = useMemo(() => {
+    const m = new Map<number, ProductExtended>();
+    for (const p of catalog) {
+      if (p.id != null) m.set(p.id, p);
+    }
+    return m;
+  }, [catalog]);
+
+  const candidatosCardapio = useMemo(() => {
+    return catalog.filter((p) => p.id != null && Number(p.id) > 0 && p.id !== produtoId);
+  }, [catalog, produtoId]);
+
+  const carregar = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const r = await fetch(`/api/products/${produtoId}/combo`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setLoadError((d as { error?: string }).error || 'Não foi possível carregar o combo.');
+        setGrupos([]);
+        return;
+      }
+      if (!((d as { is_combo?: boolean }).is_combo === true)) {
+        setLoadError('Este produto não está marcado como combo. Marque “Combo” no cadastro e salve antes de configurar os grupos.');
+        setGrupos([]);
+        return;
+      }
+      const raw = (d as { grupos?: ApiComboGrupoResponse[] }).grupos;
+      setGrupos(apiGruposToDraft(Array.isArray(raw) ? raw : []));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void carregar();
+  }, [produtoId]);
+
+  const gruposOrdenados = useMemo(
+    () => [...grupos].sort((a, b) => (a.ordem !== b.ordem ? a.ordem - b.ordem : a.key.localeCompare(b.key))),
+    [grupos]
+  );
+
+  const addGrupoVazio = () => {
+    setSaveError(null);
+    const nextOrdem = grupos.length === 0 ? 0 : Math.max(...grupos.map((g) => g.ordem)) + 1;
+    setGrupos((prev) => [
+      ...prev,
+      {
+        key: draftKey(),
+        nome: '',
+        ordem: nextOrdem,
+        obrigatorio: true,
+        qtd_min: 1,
+        qtd_max: 1,
+        maxIlimitado: false,
+        ativo: true,
+        product_ids: [],
+      },
+    ]);
+  };
+
+  const removeGrupo = (key: string) => {
+    if (!confirm('Remover este grupo da definição? (Salve para aplicar no servidor.)')) return;
+    setGrupos((prev) => prev.filter((g) => g.key !== key));
+    setSaveError(null);
+  };
+
+  const moveGrupo = (key: string, dir: -1 | 1) => {
+    const idx = gruposOrdenados.findIndex((g) => g.key === key);
+    if (idx < 0) return;
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= gruposOrdenados.length) return;
+    const a = gruposOrdenados[idx];
+    const b = gruposOrdenados[swapIdx];
+    setGrupos((prev) =>
+      prev.map((g) => {
+        if (g.key === a.key) return { ...g, ordem: b.ordem };
+        if (g.key === b.key) return { ...g, ordem: a.ordem };
+        return g;
+      })
+    );
+  };
+
+  const updateGrupo = (key: string, patch: Partial<ComboGrupoDraft>) => {
+    setGrupos((prev) => prev.map((g) => (g.key === key ? { ...g, ...patch } : g)));
+    setSaveError(null);
+  };
+
+  const addProdutoAoGrupo = (grupoKey: string, productId: number) => {
+    const p = produtoById.get(productId);
+    if (!p) return;
+    if (Number(p.is_combo) === 1) return;
+    setGrupos((prev) =>
+      prev.map((g) => {
+        if (g.key !== grupoKey) return g;
+        if (g.product_ids.includes(productId)) return g;
+        return { ...g, product_ids: [...g.product_ids, productId] };
+      })
+    );
+    setSaveError(null);
+  };
+
+  const removeProdutoDoGrupo = (grupoKey: string, productId: number) => {
+    setGrupos((prev) =>
+      prev.map((g) =>
+        g.key === grupoKey ? { ...g, product_ids: g.product_ids.filter((id) => id !== productId) } : g
+      )
+    );
+    setSaveError(null);
+  };
+
+  const salvarDefinicao = async () => {
+    setSaveError(null);
+    const sorted = [...grupos].sort((a, b) => a.ordem - b.ordem || a.key.localeCompare(b.key));
+    const localErr = validateComboDraft(sorted);
+    if (localErr) {
+      setSaveError(localErr);
+      return;
+    }
+    const payload = {
+      grupos: sorted.map((g, index) => ({
+        nome: g.nome.trim(),
+        ordem: g.ordem !== undefined && g.ordem !== null ? g.ordem : index,
+        obrigatorio: g.obrigatorio,
+        qtd_min: g.qtd_min,
+        qtd_max: g.maxIlimitado ? 0 : Math.max(0, Math.floor(g.qtd_max) || 0),
+        ativo: g.ativo,
+        product_ids: g.product_ids,
+      })),
+    };
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/products/${produtoId}/combo/definicao`, {
+        method: 'PUT',
+        headers: hdrs,
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setSaveError((d as { error?: string }).error || 'Não foi possível salvar. Verifique os dados e tente de novo.');
+        return;
+      }
+      const raw = (d as { grupos?: ApiComboGrupoResponse[] }).grupos;
+      if (Array.isArray(raw)) {
+        setGrupos(apiGruposToDraft(raw));
+      } else {
+        await carregar();
+      }
+      onSaved?.();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inp =
+    'min-h-[40px] px-3 py-2 border border-zinc-200 bg-zinc-50 rounded-lg text-sm focus:outline-none focus:border-violet-400 transition-all';
+
+  const filtrarPicker = (grupoKey: string) => {
+    const q = (debouncedSearch[grupoKey] ?? '').trim().toLocaleLowerCase('pt-BR');
+    return candidatosCardapio.filter((p) => {
+      if (!q) return true;
+      return String(p.name ?? '')
+        .toLocaleLowerCase('pt-BR')
+        .includes(q);
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[125] flex items-end justify-center overflow-y-auto bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <motion.div
+        initial={{ scale: 0.93, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.93, opacity: 0 }}
+        className="flex max-h-[min(92dvh,100svh)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[92vh] sm:rounded-3xl"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 py-3 sm:px-5 sm:py-3.5 2xl:px-6">
+          <div className="min-w-0 pr-2">
+            <h3 className="text-base font-black text-zinc-900 sm:text-lg">Grupos do combo</h3>
+            <p className="mt-0.5 truncate text-xs text-zinc-500 sm:text-sm">{produtoNome}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex shrink-0 items-center justify-center rounded-xl p-2.5 min-h-[44px] min-w-[44px] text-zinc-400 hover:bg-zinc-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mx-3 mt-2 shrink-0 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] text-violet-900 sm:mx-5 sm:mt-3 sm:px-3 sm:py-2.5 sm:text-xs 2xl:mx-6">
+          <p className="font-bold">Monte etapas do combo com produtos do cardápio.</p>
+          <p className="mt-1">
+            <strong>Obrigatório</strong> exige que o cliente escolha pelo menos a quantidade mínima. <strong>Máx.</strong>{' '}
+            limita quantas unidades podem ser escolhidas nesse grupo; marque <strong>“Máx. ilimitado”</strong> para usar o
+            comportamento do servidor (sem teto).
+          </p>
+          <p className="mt-1 font-semibold text-violet-800">
+            Produtos marcados como combo não podem entrar em outro combo — eles aparecem desabilitados na lista.
+          </p>
+        </div>
+
+        {saveError && (
+          <div className="mx-3 mt-2 flex shrink-0 items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 sm:mx-5 2xl:mx-6">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <span>{saveError}</span>
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-3 sm:space-y-4 sm:px-5 sm:py-4 2xl:px-6">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-violet-700" />
+            </div>
+          ) : loadError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <AlertCircle className="text-amber-500" size={36} />
+              <p className="max-w-sm text-sm text-zinc-600">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => void carregar()}
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-bold text-white hover:bg-zinc-800"
+              >
+                Tentar de novo
+              </button>
+            </div>
+          ) : gruposOrdenados.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500">
+              <Package className="mx-auto mb-2 opacity-30" size={36} />
+              <p className="text-sm font-semibold">Nenhum grupo ainda</p>
+              <p className="mt-1 text-xs">Use “Adicionar grupo” e depois “Salvar definição”.</p>
+            </div>
+          ) : (
+            gruposOrdenados.map((g) => (
+              <div
+                key={g.key}
+                className={`overflow-hidden rounded-2xl border border-zinc-200 ${g.ativo ? '' : 'opacity-75'}`}
+              >
+                <div
+                  className={`flex flex-wrap items-center gap-2 border-b border-zinc-100 px-3 py-2.5 sm:px-4 ${g.ativo ? 'bg-zinc-50' : 'bg-zinc-100'}`}
+                >
+                  <button
+                    type="button"
+                    title={g.ativo ? 'Grupo ativo — clique para desativar' : 'Grupo inativo — clique para ativar'}
+                    onClick={() => updateGrupo(g.key, { ativo: !g.ativo })}
+                    className={`relative h-5 w-10 shrink-0 rounded-full transition-all focus:outline-none ${g.ativo ? 'bg-violet-500' : 'bg-zinc-300'}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${g.ativo ? 'left-5' : 'left-0.5'}`}
+                    />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-black text-zinc-900 text-sm">{g.nome.trim() || 'Sem nome'}</span>
+                      {g.obrigatorio ? (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                          Obrigatório
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-600">
+                          Opcional
+                        </span>
+                      )}
+                      {!g.ativo && (
+                        <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-black text-zinc-500">
+                          Inativo
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-zinc-500">
+                      Ordem {g.ordem} · mín. {g.qtd_min} · máx.{' '}
+                      {g.maxIlimitado ? 'ilimitado' : g.qtd_max || '—'}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      title="Subir"
+                      onClick={() => moveGrupo(g.key, -1)}
+                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Descer"
+                      onClick={() => moveGrupo(g.key, 1)}
+                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                    >
+                      <ChevronDown size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Remover grupo"
+                      onClick={() => removeGrupo(g.key)}
+                      className="rounded-lg p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3 bg-white px-3 py-3 sm:px-4">
+                  <input
+                    value={g.nome}
+                    onChange={(e) => updateGrupo(g.key, { nome: e.target.value })}
+                    placeholder="Nome do grupo (ex.: Bebida)"
+                    className={`${inp} w-full`}
+                  />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                        Ordem (exibição)
+                      </label>
+                      <input
+                        type="number"
+                        value={g.ordem}
+                        onChange={(e) => updateGrupo(g.key, { ordem: parseInt(e.target.value, 10) || 0 })}
+                        className={`${inp} w-full tabular-nums`}
+                      />
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 min-h-[44px]">
+                      <input
+                        type="checkbox"
+                        checked={g.obrigatorio}
+                        onChange={(e) => {
+                          const obr = e.target.checked;
+                          updateGrupo(g.key, {
+                            obrigatorio: obr,
+                            qtd_min: obr && g.qtd_min < 1 ? 1 : g.qtd_min,
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
+                      />
+                      <span className="text-sm font-bold text-zinc-800">Grupo obrigatório na montagem do combo</span>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                        Qtd. mínima
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={g.qtd_min}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10) || 0;
+                          updateGrupo(g.key, { qtd_min: Math.max(0, v) });
+                        }}
+                        className={`${inp} w-24 tabular-nums`}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                        Qtd. máxima
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        disabled={g.maxIlimitado}
+                        value={g.maxIlimitado ? '' : g.qtd_max}
+                        placeholder={g.maxIlimitado ? '∞' : ''}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10) || 0;
+                          updateGrupo(g.key, { qtd_max: Math.max(1, v) });
+                        }}
+                        className={`${inp} w-24 tabular-nums`}
+                      />
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2 pb-2">
+                      <input
+                        type="checkbox"
+                        checked={g.maxIlimitado}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          updateGrupo(g.key, {
+                            maxIlimitado: on,
+                            qtd_max: on ? 0 : Math.max(g.qtd_min, 1),
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
+                      />
+                      <span className="text-xs font-bold text-zinc-700">Máx. ilimitado</span>
+                    </label>
+                  </div>
+                  {g.obrigatorio && (
+                    <p className="text-[11px] text-violet-800">
+                      Cliente precisa escolher itens neste grupo até atingir pelo menos a <strong>quantidade mínima</strong>.
+                    </p>
+                  )}
+
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                      Produtos permitidos neste grupo
+                    </p>
+                    {g.product_ids.length === 0 ? (
+                      <p className="mb-2 text-xs text-zinc-400">Nenhum produto vinculado — busque abaixo para adicionar.</p>
+                    ) : (
+                      <ul className="mb-2 flex flex-col gap-1.5">
+                        {g.product_ids.map((pid) => {
+                          const pr = produtoById.get(pid);
+                          const inactive = pr && !isProductRowActive(pr);
+                          return (
+                            <li
+                              key={`${g.key}-${pid}`}
+                              className="flex items-center justify-between gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-2.5 py-2"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800">
+                                {pr?.name || `Produto #${pid}`}
+                                {inactive ? (
+                                  <span className="ml-1.5 text-[10px] font-bold text-amber-700">(inativo)</span>
+                                ) : null}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeProdutoDoGrupo(g.key, pid)}
+                                className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-red-600 hover:bg-red-50"
+                              >
+                                remover
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                      <input
+                        value={searchByGrupo[g.key] ?? ''}
+                        onChange={(e) =>
+                          setSearchByGrupo((prev) => ({
+                            ...prev,
+                            [g.key]: e.target.value,
+                          }))
+                        }
+                        placeholder="Buscar produto por nome…"
+                        className={`${inp} w-full pl-9`}
+                      />
+                    </div>
+                    <div className="mt-2 max-h-40 overflow-y-auto overflow-x-hidden rounded-xl border border-zinc-100">
+                      {filtrarPicker(g.key).length === 0 ? (
+                        <p className="px-3 py-3 text-center text-xs text-zinc-400">Nenhum resultado</p>
+                      ) : (
+                        filtrarPicker(g.key).map((p) => {
+                          const isCombo = Number(p.is_combo) === 1;
+                          const already = g.product_ids.includes(p.id!);
+                          const disabled = isCombo || already;
+                          return (
+                            <button
+                              key={`${g.key}-pick-${p.id}`}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => addProdutoAoGrupo(g.key, p.id!)}
+                              className={`flex w-full items-center justify-between gap-2 border-b border-zinc-50 px-3 py-2.5 text-left text-sm last:border-b-0 ${
+                                disabled
+                                  ? 'cursor-not-allowed bg-zinc-50 text-zinc-400'
+                                  : 'bg-white text-zinc-800 hover:bg-violet-50'
+                              }`}
+                            >
+                              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                              <span className="shrink-0 text-[10px] font-bold text-zinc-400">{fmtR$(Number(p.price) || 0)}</span>
+                              {isCombo ? (
+                                <span className="shrink-0 rounded bg-zinc-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-zinc-600">
+                                  combo
+                                </span>
+                              ) : already ? (
+                                <span className="shrink-0 text-[10px] font-bold text-emerald-600">no grupo</span>
+                              ) : (
+                                <Plus className="shrink-0 text-violet-600" size={16} />
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {!loadError && (
+            <div className="border-t border-zinc-100 pt-3">
+              <button
+                type="button"
+                onClick={addGrupoVazio}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-50"
+              >
+                <Plus size={16} /> Adicionar grupo
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white px-3 py-3 sm:flex-row sm:px-5 sm:py-4 2xl:px-6">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="min-h-[44px] flex-1 rounded-xl bg-zinc-100 py-2.5 text-sm font-bold text-zinc-800 transition-all hover:bg-zinc-200 disabled:opacity-50"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            disabled={saving || loading || !!loadError}
+            onClick={() => void salvarDefinicao()}
+            className="min-h-[44px] flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:bg-zinc-300"
+          >
+            {saving ? 'Salvando…' : 'Salvar definição'}
           </button>
         </div>
       </motion.div>

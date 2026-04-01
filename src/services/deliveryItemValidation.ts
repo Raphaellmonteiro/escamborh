@@ -4,6 +4,7 @@
  */
 import { q1, qAll } from '../db';
 import { AppError } from '../utils/errors';
+import { validateAuthoritativeComboSelections } from './productComboValidation';
 
 export type DeliverySelections = Record<number, Record<number, number>>;
 
@@ -42,12 +43,34 @@ export async function resolveAuthoritativeDeliveryItem(params: {
     name: string;
     price: number;
     active: number;
+    is_combo?: number;
   }>(
-    'SELECT id, name, price, active FROM produtos WHERE id=? AND tenant_id=? AND active=1',
+    'SELECT id, name, price, active, COALESCE(is_combo,0) AS is_combo FROM produtos WHERE id=? AND tenant_id=? AND active=1',
     [params.productId, params.tenantId]
   );
   if (!product) {
     throw new AppError(`Produto ${params.productId} invalido`, 400);
+  }
+
+  if (Number(product.is_combo) === 1) {
+    if (params.variationId !== null) {
+      throw new AppError(`Combo nao aceita variacao vendavel`, 400);
+    }
+    const selecoesObj =
+      params.selecoes && typeof params.selecoes === 'object' && !Array.isArray(params.selecoes)
+        ? (params.selecoes as Record<string, unknown>)
+        : {};
+    const comboRaw = selecoesObj.combo;
+    const comboValidado = await validateAuthoritativeComboSelections({
+      tenantId: params.tenantId,
+      comboProductId: params.productId,
+      rawCombo: comboRaw,
+    });
+    return {
+      priceAtTime: Number(product.price || 0),
+      name: product.name,
+      selecoes: { combo: comboValidado } as unknown as DeliverySelections,
+    };
   }
 
   if (params.variationId !== null) {

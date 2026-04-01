@@ -28,6 +28,28 @@ export interface Product {
   disponivel_ate?: string | null;
   production_type?: ProductionType | null;
   requires_preparation?: number | boolean | null;
+  /** Produto-pai do tipo combo (grupos com itens do cardápio). */
+  is_combo?: number | boolean | null;
+}
+
+/** Grupo no corpo de PUT /api/products/:id/combo/definicao (`qtd_max` 0 = ilimitado). */
+export interface ProductComboGrupoDefinicaoInput {
+  nome: string;
+  ordem?: number;
+  obrigatorio?: boolean | number;
+  qtd_min?: number;
+  qtd_max?: number;
+  min_selecoes?: number;
+  max_selecoes?: number;
+  ativo?: boolean | number;
+  /** IDs de produtos do cardápio permitidos no grupo (ordem preservada). */
+  product_ids?: number[];
+  produto_ids?: number[];
+  produtos?: unknown[];
+}
+
+export interface ProductComboDefinicaoPayload {
+  grupos: ProductComboGrupoDefinicaoInput[];
 }
 
 export interface Category {

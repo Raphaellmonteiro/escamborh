@@ -24,6 +24,7 @@ import {
   runAutomatedKitchenPrintForOrder,
 } from '../services/operationalAutomationService';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
+import { batchLoadComboGruposForCardapio } from '../services/productComboValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
@@ -782,6 +783,8 @@ async function buildProdutosComOpcoesBatched(tenantId: number, produtos: any[]):
     variacoesByProduto.get(pid)!.push({ id: v.id, nome: v.nome, preco: Number(v.preco) });
   }
 
+  const comboByProduto = await batchLoadComboGruposForCardapio(tid, produtoIds);
+
   return produtos.map((p) => {
     const id = Number(p.id);
     return {
@@ -790,8 +793,10 @@ async function buildProdutosComOpcoesBatched(tenantId: number, produtos: any[]):
       description: p.descricao || null,
       em_promocao: Number(p.em_promocao || 0),
       preco_original: p.preco_original == null ? null : Number(p.preco_original),
+      is_combo: Number(p.is_combo || 0) === 1 ? 1 : 0,
       grupos_opcao: gruposByProduto.get(id) || [],
       variacoes_vendaveis: variacoesByProduto.get(id) || [],
+      combo_grupos: comboByProduto.get(id) || [],
     };
   });
 }

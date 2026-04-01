@@ -38,6 +38,7 @@ import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService
 import { touchStoreCustomerPurchase } from './storeCustomerService';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
+import { validateAuthoritativeComboSelections } from './productComboValidation';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -435,7 +436,67 @@ function ensureFinancialConsistency(input: {
   }
 }
 
-function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrderInput {
+function extractRawComboSelections(rawItem: OrderItemInput): unknown {
+  const sel = rawItem.selecoes;
+  if (sel && typeof sel === 'object' && !Array.isArray(sel) && 'combo' in sel) {
+    return (sel as { combo?: unknown }).combo;
+  }
+  return sel;
+}
+
+async function applyAuthoritativeComboItemsToOrder(
+  tenantId: TenantId,
+  items: NormalizedOrderItem[],
+  rawItems: OrderItemInput[]
+): Promise<NormalizedOrderItem[]> {
+  if (items.length !== rawItems.length) {
+    throw new AppError('Itens do pedido inconsistentes', 400);
+  }
+  const tid = Number(tenantId);
+  const productIds = [...new Set(items.map((i) => i.product_id))];
+  if (productIds.length === 0) return items;
+
+  const rows = await qAll<{ id: number; is_combo: number; price: number }>(
+    `SELECT id, COALESCE(is_combo,0) AS is_combo, price
+     FROM produtos
+     WHERE tenant_id=? AND id IN (${productIds.map(() => '?').join(',')})`,
+    [tid, ...productIds]
+  );
+  const byId = new Map(rows.map((r) => [Number(r.id), r]));
+
+  const out: NormalizedOrderItem[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const n = items[i];
+    const raw = rawItems[i];
+    const meta = byId.get(n.product_id);
+    if (!meta) {
+      throw new AppError(`Produto ${n.product_id} não encontrado`, 404);
+    }
+    if (Number(meta.is_combo) !== 1) {
+      out.push(n);
+      continue;
+    }
+    const vid = n.variation_id != null ? Number(n.variation_id) : null;
+    if (vid !== null && Number.isInteger(vid) && vid > 0) {
+      throw new AppError('Combo não aceita variação vendável', 400);
+    }
+    const comboValidado = await validateAuthoritativeComboSelections({
+      tenantId: tid,
+      comboProductId: n.product_id,
+      rawCombo: extractRawComboSelections(raw),
+    });
+    const price_at_time = Number(meta.price || 0);
+    out.push({
+      ...n,
+      variation_id: null,
+      price_at_time,
+      selecoes_json: serializeOrderItemSelecoes({ combo: comboValidado }),
+    });
+  }
+  return out;
+}
+
+async function normalizeCreateOrderInput(data: CreateOrderInput, tenantId: TenantId): Promise<NormalizedCreateOrderInput> {
   if (!Array.isArray(data.items) || data.items.length === 0) {
     throw new AppError('Pedido precisa ter pelo menos 1 item', 400);
   }
@@ -470,8 +531,11 @@ function normalizeCreateOrderInput(data: CreateOrderInput): NormalizedCreateOrde
     clienteId = cid;
   }
 
+  const itemsBase = data.items.map(normalizeOrderItem);
+  const itemsResolved = await applyAuthoritativeComboItemsToOrder(tenantId, itemsBase, data.items);
+
   const normalizedInput = {
-    items: data.items.map(normalizeOrderItem),
+    items: itemsResolved,
     payments: data.payments.map(normalizePayment),
     observation: data.observation?.trim() || undefined,
     total_amount: totalAmount,
@@ -1044,7 +1108,7 @@ function buildOrderFilters(filters: GetOrdersFilters) {
 export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
   ensureTenantId(tenantId);
 
-  const input = normalizeCreateOrderInput(data);
+    const input = await normalizeCreateOrderInput(data, tenantId);
 
   try {
     await ensureProductsExist(input.items, tenantId);

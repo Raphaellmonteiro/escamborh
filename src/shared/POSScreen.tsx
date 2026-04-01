@@ -20,6 +20,7 @@ import {
   type GrupoOpcao,
   type VariacaoVendavel,
   type Selecoes,
+  type ComboGrupoUi,
 } from './ProductOptionsModal';
 import type { PosClienteSelecionado } from './PosClienteModal';
 import POSProductOptionsDialog from './POSProductOptionsDialog';
@@ -81,8 +82,13 @@ function normalizeGruposPDV(raw: unknown): GrupoOpcao[] {
 function buildProdutoOptionsPayload(
   product: Product,
   grupos: GrupoOpcao[],
-  variacoes: VariacaoVendavel[]
+  variacoes: VariacaoVendavel[],
+  extras?: { is_combo?: boolean; combo_grupos?: ComboGrupoUi[] }
 ): ProductOptionsProduto {
+  const isCombo =
+    extras?.is_combo === true ||
+    Number((product as any).is_combo) === 1 ||
+    String((product as any).is_combo) === '1';
   return {
     id: product.id,
     name: product.name,
@@ -94,11 +100,19 @@ function buildProdutoOptionsPayload(
     preco_original: (product as any).preco_original ?? null,
     grupos_opcao: grupos,
     variacoes_vendaveis: variacoes,
+    is_combo: isCombo ? 1 : 0,
+    combo_grupos: Array.isArray(extras?.combo_grupos) ? extras!.combo_grupos : [],
   };
 }
 
 /** Mesma normalização dos GETs `/variacoes-vendaveis` + `/opcoes` e do payload unificado `pdv-opcoes`. */
-function parsePdvOpcoesApiResponse(vars: unknown, gruposRaw: unknown): { grupos: GrupoOpcao[]; variacoes: VariacaoVendavel[] } {
+function parsePdvOpcoesApiResponse(data: {
+  variacoes_vendaveis?: unknown;
+  grupos_opcao?: unknown;
+  combo_grupos?: unknown;
+  is_combo?: unknown;
+}): { grupos: GrupoOpcao[]; variacoes: VariacaoVendavel[]; combo_grupos: ComboGrupoUi[]; is_combo: boolean } {
+  const vars = data?.variacoes_vendaveis;
   const ativas = Array.isArray(vars)
     ? vars.filter((v: { ativo?: number }) => Number(v?.ativo) === 1)
     : [];
@@ -107,10 +121,32 @@ function parsePdvOpcoesApiResponse(vars: unknown, gruposRaw: unknown): { grupos:
     nome: String(v.nome || ''),
     preco: Number(v.preco ?? 0),
   }));
-  return { grupos: normalizeGruposPDV(gruposRaw), variacoes };
+  const comboRaw = Array.isArray(data?.combo_grupos) ? data.combo_grupos : [];
+  const combo_grupos: ComboGrupoUi[] = comboRaw.map((g: any) => ({
+    id: Number(g.id),
+    nome: String(g.nome || ''),
+    ordem: Number(g.ordem ?? 0),
+    obrigatorio: !!(g.obrigatorio === true || g.obrigatorio === 1),
+    qtd_min: Math.max(0, Number(g.qtd_min ?? 0)),
+    qtd_max: Math.max(0, Number(g.qtd_max ?? 0)),
+    produtos: Array.isArray(g.produtos)
+      ? g.produtos.map((p: any) => ({
+          link_id: Number(p.link_id ?? p.id),
+          product_id: Number(p.product_id),
+          name: String(p.name || ''),
+        }))
+      : [],
+  }));
+  const is_combo = data?.is_combo === true || Number(data?.is_combo) === 1;
+  return { grupos: normalizeGruposPDV(data?.grupos_opcao), variacoes, combo_grupos, is_combo };
 }
 
-type PdvOpcoesCacheEntry = { grupos: GrupoOpcao[]; variacoes: VariacaoVendavel[] };
+type PdvOpcoesCacheEntry = {
+  grupos: GrupoOpcao[];
+  variacoes: VariacaoVendavel[];
+  combo_grupos: ComboGrupoUi[];
+  is_combo: boolean;
+};
 
 function selecoesLineKey(s: unknown): string {
   if (!s || typeof s !== 'object') return '';
@@ -380,26 +416,36 @@ export default function POSScreen({
 
     const cached = pdvOpcoesCacheRef.current.get(product.id);
     if (cached) {
-      setOpcaoModalProduto(buildProdutoOptionsPayload(product, cached.grupos, cached.variacoes));
+      setOpcaoModalProduto(
+        buildProdutoOptionsPayload(product, cached.grupos, cached.variacoes, {
+          is_combo: cached.is_combo,
+          combo_grupos: cached.combo_grupos,
+        })
+      );
       setCarregandoVariacoes(false);
       return;
     }
 
-    setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
+    setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], [], { is_combo: false, combo_grupos: [] }));
     setCarregandoVariacoes(true);
     try {
       const res = await fetch(`/api/products/${product.id}/pdv-opcoes`, { headers: { Authorization: `Bearer ${token}` } });
       if (seq !== opcaoModalLoadSeqRef.current) return;
-      let payload: PdvOpcoesCacheEntry = { grupos: [], variacoes: [] };
+      let payload: PdvOpcoesCacheEntry = { grupos: [], variacoes: [], combo_grupos: [], is_combo: false };
       if (res.ok) {
         const data = await res.json();
-        payload = parsePdvOpcoesApiResponse(data.variacoes_vendaveis, data.grupos_opcao);
+        payload = parsePdvOpcoesApiResponse(data);
         pdvOpcoesCacheRef.current.set(product.id, payload);
       }
-      setOpcaoModalProduto(buildProdutoOptionsPayload(product, payload.grupos, payload.variacoes));
+      setOpcaoModalProduto(
+        buildProdutoOptionsPayload(product, payload.grupos, payload.variacoes, {
+          is_combo: payload.is_combo,
+          combo_grupos: payload.combo_grupos,
+        })
+      );
     } catch {
       if (seq !== opcaoModalLoadSeqRef.current) return;
-      setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], []));
+      setOpcaoModalProduto(buildProdutoOptionsPayload(product, [], [], { is_combo: false, combo_grupos: [] }));
     } finally {
       if (seq === opcaoModalLoadSeqRef.current) setCarregandoVariacoes(false);
     }

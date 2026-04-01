@@ -17,7 +17,7 @@ import {
   type DeliveryCardapioTheme,
 } from './deliveryCardapioTheme';
 import { CardapioThemeShell, useDeliveryCardapioTheme } from './DeliveryCardapioThemeContext';
-import { ProductOptionsModal } from '../../shared/ProductOptionsModal';
+import { ProductOptionsModal, type ComboGrupoUi } from '../../shared/ProductOptionsModal';
 import PedidoRastreamento from '../../shared/PedidoRastreamento';
 import { normalizeCardapioOnlineBannerSlots } from '../../utils/deliveryCardapioBannerSlots';
 import {
@@ -45,6 +45,8 @@ interface Produto {
   preco_original?: number | null;
   grupos_opcao?: GrupoOpcao[];
   variacoes_vendaveis?: VariacaoVendavel[];
+  is_combo?: number | boolean;
+  combo_grupos?: ComboGrupoUi[];
 }
 interface Categoria { nome: string; itens: Produto[]; }
 
@@ -255,8 +257,8 @@ function resolveDeliveryHeroGallery(
   return imagens;
 }
 
-// Seleção de opções: mapa grupoId → {itemId: quantidade}
-type Selecoes = Record<number, Record<number, number>>;
+// Seleção de opções: mapa grupoId → {itemId: quantidade}; combos usam chave `combo`
+type Selecoes = Record<number, Record<number, number>> & { combo?: Record<number, Record<number, number>> };
 
 interface CartItem extends Produto {
   qty: number;
@@ -633,9 +635,16 @@ function hasVariacoesVendaveis(produto: Produto) {
   return !!(produto.variacoes_vendaveis && produto.variacoes_vendaveis.length > 0);
 }
 
+function produtoRequerModalDetalhes(produto: Produto): boolean {
+  if (hasVariacoesVendaveis(produto)) return true;
+  if (Number(produto.is_combo) === 1 && (produto.combo_grupos?.length ?? 0) > 0) return true;
+  return !!(produto.grupos_opcao && produto.grupos_opcao.length > 0);
+}
+
 function isPromocaoProdutoValida(produto: Produto) {
   const precoOriginal = Number(produto.preco_original || 0);
   return !hasVariacoesVendaveis(produto)
+    && !(Number(produto.is_combo) === 1 && (produto.combo_grupos?.length ?? 0) > 0)
     && Boolean(produto.em_promocao)
     && Number.isFinite(precoOriginal)
     && precoOriginal > Number(produto.price || 0);
@@ -1082,6 +1091,9 @@ function LojaInfoLinha({
 
 // Calcula o preço mínimo possível de um produto com opções
 function calcPrecoMinimo(produto: Produto): number {
+  if (Number(produto.is_combo) === 1 && (produto.combo_grupos?.length ?? 0) > 0) {
+    return Number(produto.price || 0);
+  }
   const grupos = produto.grupos_opcao || [];
   let precoBase = produto.price;
   let extraAdicional = 0;
@@ -1667,7 +1679,7 @@ export default function DeliveryCardapio() {
     const qty = cartQty(p.id);
     const isFav = cliente?.favoritos.includes(p.id) || false;
     const temVariacoes = hasVariacoesVendaveis(p);
-    const temOpcoes = p.grupos_opcao && p.grupos_opcao.length > 0;
+    const temModalDetalhes = produtoRequerModalDetalhes(p);
     const promoValida = isPromocaoProdutoValida(p);
     const percentualDesconto = getPercentualDesconto(p);
     const descricao = getProdutoDescricao(p);
@@ -1750,10 +1762,10 @@ export default function DeliveryCardapio() {
                   >
                     {p.name}
                   </p>
-                  {(isFav || (!temVariacoes && !temOpcoes)) && (
+                  {(isFav || !temModalDetalhes) && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {isFav && <span className="shrink-0 text-[10px] font-bold text-amber-300">Favorito</span>}
-                      {!temVariacoes && !temOpcoes && <span className="shrink-0 text-[10px] font-bold text-amber-200">⚡ Rapido</span>}
+                      {!temModalDetalhes && <span className="shrink-0 text-[10px] font-bold text-amber-200">⚡ Rapido</span>}
                     </div>
                   )}
                 </div>
@@ -1794,7 +1806,7 @@ export default function DeliveryCardapio() {
               </div>
               <button onClick={() => ativo && handleAddProduto(p)} disabled={!ativo} className={vt.btnAdd}>
                 <Plus size={14} />
-                {temOpcoes || temVariacoes ? 'Escolher' : 'Adicionar'}
+                {temModalDetalhes ? 'Escolher' : 'Adicionar'}
               </button>
             </div>
           </div>
@@ -1932,7 +1944,7 @@ export default function DeliveryCardapio() {
               className={`${vt.btnAdd} w-full min-w-0 justify-center whitespace-nowrap !min-h-[44px] !py-2`}
             >
               <Plus size={14} className="shrink-0" />
-              {temOpcoes || temVariacoes ? 'Escolher' : 'Adicionar'}
+              {temModalDetalhes ? 'Escolher' : 'Adicionar'}
             </button>
           </div>
         </div>
@@ -2674,7 +2686,7 @@ export default function DeliveryCardapio() {
                   const qty=cartQty(p.id);
                   const isFav=cliente?.favoritos.includes(p.id)||false;
                   const temVariacoes = hasVariacoesVendaveis(p);
-                  const temOpcoes = p.grupos_opcao && p.grupos_opcao.length > 0;
+                  const temModalDetalhes = produtoRequerModalDetalhes(p);
                   const promoValida = isPromocaoProdutoValida(p);
                   const percentualDesconto = getPercentualDesconto(p);
                   const descricao = getProdutoDescricao(p);
@@ -2803,7 +2815,7 @@ export default function DeliveryCardapio() {
                               )}
                             </div>
                             {/* Se tem variações ou opções: botão "Adicionar" abre modal */}
-                            {(temOpcoes || temVariacoes) ? (
+                            {temModalDetalhes ? (
                               <button onClick={()=>ativo&&handleAddProduto(p)} disabled={!ativo} className={gridAddBtn}>
                                 {qty>0?<><span className={`rounded-full px-2 py-0.5 text-xs font-black ${isLightRed ? 'bg-white/20' : 'bg-zinc-950/10'}`}>{qty}</span>Escolher</>:<><Plus size={14}/>Escolher</>}
                               </button>

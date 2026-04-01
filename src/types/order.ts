@@ -21,8 +21,11 @@ export interface OrderItemInput {
   /** Observação / resumo de opções e adicionais do item (cardápio envia como `obs_opcoes`). */
   observation?: string;
   obs_opcoes?: string;
-  /** Mapa grupoId → { opcaoId: quantidade } — persistido como JSON em `selecoes_json`. */
-  selecoes?: Record<number, Record<number, number>> | null;
+  /**
+   * JSON em `selecoes_json`: mapa grupo de adicionais → { opcaoId: quantidade }.
+   * Combos: chave `combo` com { grupoComboId: { productId: qtd } }.
+   */
+  selecoes?: (Record<number, Record<number, number>> & { combo?: Record<number, Record<number, number>> }) | null;
 }
 
 export interface PaymentInput {

@@ -10,6 +10,14 @@ import { generatePublicId } from '../utils/publicIds';
 import { sendInternalError } from '../utils/internalServerError';
 import { normalizeProductProductionInput } from '../utils/preparation';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
+import { isAppError } from '../utils/errors';
+import {
+  assertProdutoPermitidoComoComponenteCombo,
+  assertComponentesComboDefinicao,
+  loadComboGruposForProduto,
+  parseComboGrupoFields,
+  parseProductComboDefinicaoBody,
+} from '../services/productComboValidation';
 
 const REPORT_TZ = 'America/Sao_Paulo';
 
@@ -58,6 +66,29 @@ export function createProductsRouter() {
     return result;
   }
 
+  function mapComboGruposPublic(
+    rows: Awaited<ReturnType<typeof loadComboGruposForProduto>>,
+    forCustomer: boolean
+  ) {
+    return rows
+      .filter((g) => (forCustomer ? Number(g.ativo) === 1 : true))
+      .filter((g) => (forCustomer ? g.produtos.length > 0 : true))
+      .map((g) => ({
+        id: g.id,
+        nome: g.nome,
+        ordem: g.ordem,
+        obrigatorio: Number(g.obrigatorio) === 1,
+        qtd_min: Math.max(0, Number(g.qtd_min || 0)),
+        qtd_max: Math.max(0, Number(g.qtd_max || 0)),
+        ativo: Number(g.ativo) === 1,
+        produtos: g.produtos.map((p) => ({
+          link_id: p.id,
+          product_id: p.product_id,
+          name: p.name,
+        })),
+      }));
+  }
+
   router.use((req, res, next) => {
     const canReadOperationalProducts = req.method === 'GET'
       && (
@@ -66,6 +97,7 @@ export function createProductsRouter() {
         || /\/variacoes-vendaveis(?:\/|$)/.test(req.path)
         || /\/opcoes(?:\/|$)/.test(req.path)
         || /\/pdv-opcoes(?:\/|$)/.test(req.path)
+        || /\/combo(?:\/|$)/.test(req.path)
       );
 
     if (canReadOperationalProducts) {
@@ -455,10 +487,13 @@ function normalizeProductPromotionInput(
         return res.status(400).json({ error: 'Produto invalido' });
       }
 
-      const produto = await q1('SELECT id FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
+      const produto = await q1<{ id: number; is_combo: number }>(
+        'SELECT id, COALESCE(is_combo,0) AS is_combo FROM produtos WHERE id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
       if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' });
 
-      const [variacoesRows, gruposOpcao] = await Promise.all([
+      const [variacoesRows, gruposOpcao, comboGruposRaw] = await Promise.all([
         qAll(
           `SELECT id, produto_id, nome, preco, codigo_barras, ativo, ordem, ingrediente_id
            FROM produto_variacoes_vendaveis
@@ -469,9 +504,15 @@ function normalizeProductPromotionInput(
           [req.tenantId, productId]
         ),
         loadProdutoGruposOpcao(req.tenantId, productId, { onlyActiveItens: true }),
+        loadComboGruposForProduto(req.tenantId, productId, true),
       ]);
 
-      res.json({ variacoes_vendaveis: variacoesRows, grupos_opcao: gruposOpcao });
+      res.json({
+        variacoes_vendaveis: variacoesRows,
+        grupos_opcao: gruposOpcao,
+        combo_grupos: mapComboGruposPublic(comboGruposRaw, true),
+        is_combo: Number(produto.is_combo) === 1,
+      });
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
   });
 
@@ -675,6 +716,7 @@ function normalizeProductPromotionInput(
         requires_preparation,
         production_type,
         mais_vendido,
+        is_combo,
       } = req.body;
       const normalizedBarcode = normalizeBarcode(codigo_barras);
       const normalizedProduction = normalizeProductProductionInput(
@@ -684,9 +726,10 @@ function normalizeProductPromotionInput(
       const normalizedPromotion = normalizeProductPromotionInput({ price, em_promocao, preco_original });
       await ensureBarcodeAvailable(req.tenantId, normalizedBarcode);
       const maxOrdem = await q1('SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produtos WHERE tenant_id=?', [req.tenantId]);
+      const isComboVal = is_combo === true || is_combo === 1 || String(is_combo) === '1' ? 1 : 0;
       const id = await qInsert(
-        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, req.tenantId]
+        'INSERT INTO produtos (public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,is_combo,tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [generatePublicId('prd'), name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, maxOrdem?.next||0, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, isComboVal, req.tenantId]
       );
       res.json({ id });
     } catch (e: unknown) {
@@ -737,6 +780,7 @@ function normalizeProductPromotionInput(
         requires_preparation,
         production_type,
         mais_vendido,
+        is_combo,
       } = req.body;
       const current = await q1<{
         codigo_barras?: string | null;
@@ -770,10 +814,21 @@ function normalizeProductPromotionInput(
         { price, em_promocao, preco_original },
         current
       );
-      await qRun(
-        'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,em_promocao=?,preco_original=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=?,mais_vendido=? WHERE id=? AND tenant_id=?',
-        [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, req.params.id, req.tenantId]
-      );
+      const hasIsCombo = Object.prototype.hasOwnProperty.call(req.body, 'is_combo');
+      const isComboVal = hasIsCombo
+        ? (is_combo === true || is_combo === 1 || String(is_combo) === '1' ? 1 : 0)
+        : undefined;
+      if (isComboVal !== undefined) {
+        await qRun(
+          'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,em_promocao=?,preco_original=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=?,mais_vendido=?,is_combo=? WHERE id=? AND tenant_id=?',
+          [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, isComboVal, req.params.id, req.tenantId]
+        );
+      } else {
+        await qRun(
+          'UPDATE produtos SET name=?,price=?,category=?,active=?,color=?,codigo_barras=?,marca=?,descricao=?,custo=?,destaque=?,em_promocao=?,preco_original=?,disponivel_de=?,disponivel_ate=?,requires_preparation=?,production_type=?,mais_vendido=? WHERE id=? AND tenant_id=?',
+          [name, price, category, active?1:0, color||'zinc', normalizedBarcode, marca||null, descricao||null, custo||0, destaque?1:0, normalizedPromotion.emPromocao, normalizedPromotion.precoOriginal, disponivel_de||null, disponivel_ate||null, normalizedProduction.requiresPreparation, normalizedProduction.productionType, mais_vendido ? 1 : 0, req.params.id, req.tenantId]
+        );
+      }
       res.json({ success: true });
     } catch (e: unknown) {
       const errorMsg = String((e as Error)?.message || '');
@@ -824,13 +879,15 @@ function normalizeProductPromotionInput(
         const emPromo = p.em_promocao === true || p.em_promocao === 1 || String(p.em_promocao) === '1' ? 1 : 0;
         const precoOriginalClone =
           emPromo ? (p.preco_original === null || p.preco_original === undefined ? null : Number(p.preco_original)) : null;
+        const isComboSource =
+          p.is_combo === true || p.is_combo === 1 || String(p.is_combo) === '1' ? 1 : 0;
 
         const newProductId = await txInsert(
           client,
           `INSERT INTO produtos (
             public_id,name,price,category,active,color,codigo_barras,marca,descricao,custo,destaque,em_promocao,preco_original,ordem,
-            disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,tenant_id
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            disponivel_de,disponivel_ate,requires_preparation,production_type,mais_vendido,is_combo,tenant_id
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             generatePublicId('prd'),
             dupName,
@@ -851,6 +908,7 @@ function normalizeProductPromotionInput(
             normalizedProduction.requiresPreparation,
             normalizedProduction.productionType,
             p.mais_vendido === true || p.mais_vendido === 1 || String(p.mais_vendido) === '1' ? 1 : 0,
+            isComboSource,
             tenantId,
           ]
         );
@@ -898,6 +956,52 @@ function normalizeProductPromotionInput(
                 Number(it.preco_adicional) || 0,
                 Number(it.ordem) || 0,
                 it.ativo === false || it.ativo === 0 || String(it.ativo) === '0' ? 0 : 1,
+              ]
+            );
+          }
+        }
+
+        const comboGrupos = await txQAll<Record<string, unknown>>(
+          client,
+          'SELECT * FROM produto_combo_grupos WHERE produto_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC',
+          [sourceId, tenantId]
+        );
+        for (const cg of comboGrupos) {
+          const newGrupoId = await txInsert(
+            client,
+            `INSERT INTO produto_combo_grupos (tenant_id, produto_id, nome, ordem, obrigatorio, qtd_min, qtd_max, ativo)
+             VALUES (?,?,?,?,?,?,?,?)`,
+            [
+              tenantId,
+              newProductId,
+              cg.nome,
+              Number(cg.ordem) || 0,
+              cg.obrigatorio === true || cg.obrigatorio === 1 || String(cg.obrigatorio) === '1' ? 1 : 0,
+              Math.max(0, Number(cg.qtd_min) || 0),
+              Math.max(0, Number(cg.qtd_max) || 0),
+              cg.ativo === false || cg.ativo === 0 || String(cg.ativo) === '0' ? 0 : 1,
+            ]
+          );
+          const cLinks = await txQAll<Record<string, unknown>>(
+            client,
+            'SELECT * FROM produto_combo_grupo_produtos WHERE grupo_id=? AND tenant_id=? ORDER BY ordem ASC, id ASC',
+            [Number(cg.id), tenantId]
+          );
+          for (const cl of cLinks) {
+            const compId = Number(cl.produto_componente_id);
+            if (!Number.isInteger(compId) || compId <= 0) continue;
+            const exists = await txQ1(client, 'SELECT id FROM produtos WHERE id=? AND tenant_id=?', [compId, tenantId]);
+            if (!exists) continue;
+            await txRun(
+              client,
+              `INSERT INTO produto_combo_grupo_produtos (tenant_id, grupo_id, produto_componente_id, ordem, ativo)
+               VALUES (?,?,?,?,?)`,
+              [
+                tenantId,
+                newGrupoId,
+                compId,
+                Number(cl.ordem) || 0,
+                cl.ativo === false || cl.ativo === 0 || String(cl.ativo) === '0' ? 0 : 1,
               ]
             );
           }
@@ -1070,6 +1174,205 @@ function normalizeProductPromotionInput(
       await qRun('UPDATE produtos SET photo_url=NULL WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
+  });
+
+  router.get('/:id/combo', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+      const produto = await q1<{ is_combo: number }>(
+        'SELECT COALESCE(is_combo,0) AS is_combo FROM produtos WHERE id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
+      if (!produto) return res.status(404).json({ error: 'Produto nao encontrado' });
+      const rows = await loadComboGruposForProduto(req.tenantId, productId, false);
+      res.json({
+        is_combo: Number(produto.is_combo) === 1,
+        grupos: mapComboGruposPublic(rows, false),
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/products:combo-get', e);
+    }
+  });
+
+  /** Substitui grupos e produtos permitidos do combo em uma transacao (validacao centralizada). */
+  router.put('/:id/combo/definicao', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+      const p = await q1<{ is_combo: number }>(
+        'SELECT COALESCE(is_combo,0) AS is_combo FROM produtos WHERE id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
+      if (!p) return res.status(404).json({ error: 'Produto nao encontrado' });
+      if (Number(p.is_combo) !== 1) {
+        return res.status(400).json({ error: 'Marque o produto como combo antes de salvar a definicao.' });
+      }
+      const grupos = parseProductComboDefinicaoBody(req.body);
+      await assertComponentesComboDefinicao(req.tenantId, productId, grupos);
+
+      await withTx(async (client) => {
+        await txRun(
+          client,
+          'DELETE FROM produto_combo_grupos WHERE produto_id=? AND tenant_id=?',
+          [productId, req.tenantId]
+        );
+        for (const g of grupos) {
+          const gid = await txInsert(
+            client,
+            `INSERT INTO produto_combo_grupos (tenant_id, produto_id, nome, ordem, obrigatorio, qtd_min, qtd_max, ativo)
+             VALUES (?,?,?,?,?,?,?,?)`,
+            [req.tenantId, productId, g.nome, g.ordem, g.obrigatorio, g.qtd_min, g.qtd_max, g.ativo]
+          );
+          let ordemLink = 0;
+          for (const compId of g.product_ids) {
+            await txRun(
+              client,
+              `INSERT INTO produto_combo_grupo_produtos (tenant_id, grupo_id, produto_componente_id, ordem, ativo)
+               VALUES (?,?,?,?,1)`,
+              [req.tenantId, Number(gid), compId, ordemLink++]
+            );
+          }
+        }
+      });
+
+      const rows = await loadComboGruposForProduto(req.tenantId, productId, false);
+      res.json({
+        success: true,
+        grupos: mapComboGruposPublic(rows, false),
+      });
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ error: e.message });
+      sendInternalError(res, 'routes/products:combo-definicao-put', e);
+    }
+  });
+
+  router.post('/:id/combo/grupos', async (req: Request, res) => {
+    try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ error: 'Produto invalido' });
+      }
+      const p = await q1<{ is_combo: number }>(
+        'SELECT COALESCE(is_combo,0) AS is_combo FROM produtos WHERE id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
+      if (!p) return res.status(404).json({ error: 'Produto nao encontrado' });
+      if (Number(p.is_combo) !== 1) {
+        return res.status(400).json({ error: 'Marque o produto como combo antes de criar grupos.' });
+      }
+      const fields = parseComboGrupoFields(req.body, { defaultQtdMax: 1 });
+      const maxOrdem = await q1<{ next: number }>(
+        'SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produto_combo_grupos WHERE produto_id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
+      const ordem = fields.ordem !== undefined ? fields.ordem : Number(maxOrdem?.next ?? 0);
+      const id = await qInsert(
+        `INSERT INTO produto_combo_grupos (tenant_id, produto_id, nome, ordem, obrigatorio, qtd_min, qtd_max, ativo)
+         VALUES (?,?,?,?,?,?,?,1)`,
+        [req.tenantId, productId, fields.nome, ordem, fields.obrigatorio, fields.qtd_min, fields.qtd_max]
+      );
+      res.json({ success: true, id });
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ error: e.message });
+      sendInternalError(res, 'routes/products:combo-grupo-post', e);
+    }
+  });
+
+  router.put('/combo/grupos/:grupoId', async (req: Request, res) => {
+    try {
+      const grupoId = Number(req.params.grupoId);
+      if (!Number.isInteger(grupoId) || grupoId <= 0) {
+        return res.status(400).json({ error: 'Grupo invalido' });
+      }
+      const g = await q1(
+        'SELECT id FROM produto_combo_grupos WHERE id=? AND tenant_id=?',
+        [grupoId, req.tenantId]
+      );
+      if (!g) return res.status(404).json({ error: 'Grupo nao encontrado' });
+      const fields = parseComboGrupoFields(req.body, { defaultQtdMax: 0 });
+      const ordem = fields.ordem !== undefined ? fields.ordem : 0;
+      await qRun(
+        `UPDATE produto_combo_grupos SET nome=?, ordem=?, obrigatorio=?, qtd_min=?, qtd_max=?, ativo=?
+         WHERE id=? AND tenant_id=?`,
+        [fields.nome, ordem, fields.obrigatorio, fields.qtd_min, fields.qtd_max, fields.ativo, grupoId, req.tenantId]
+      );
+      res.json({ success: true });
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ error: e.message });
+      sendInternalError(res, 'routes/products:combo-grupo-put', e);
+    }
+  });
+
+  router.delete('/combo/grupos/:grupoId', async (req: Request, res) => {
+    try {
+      const grupoId = Number(req.params.grupoId);
+      if (!Number.isInteger(grupoId) || grupoId <= 0) {
+        return res.status(400).json({ error: 'Grupo invalido' });
+      }
+      await qRun('DELETE FROM produto_combo_grupos WHERE id=? AND tenant_id=?', [grupoId, req.tenantId]);
+      res.json({ success: true });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/products:combo-grupo-del', e);
+    }
+  });
+
+  router.post('/combo/grupos/:grupoId/produtos', async (req: Request, res) => {
+    try {
+      const grupoId = Number(req.params.grupoId);
+      if (!Number.isInteger(grupoId) || grupoId <= 0) {
+        return res.status(400).json({ error: 'Grupo invalido' });
+      }
+      const g = await q1<{ produto_id: number }>(
+        'SELECT produto_id FROM produto_combo_grupos WHERE id=? AND tenant_id=?',
+        [grupoId, req.tenantId]
+      );
+      if (!g) return res.status(404).json({ error: 'Grupo nao encontrado' });
+      const componentId = Number(req.body?.product_id);
+      if (!Number.isInteger(componentId) || componentId <= 0) {
+        return res.status(400).json({ error: 'product_id invalido' });
+      }
+      await assertProdutoPermitidoComoComponenteCombo({
+        tenantId: req.tenantId,
+        comboProductId: Number(g.produto_id),
+        componentProductId: componentId,
+      });
+      const dup = await q1(
+        'SELECT id FROM produto_combo_grupo_produtos WHERE tenant_id=? AND grupo_id=? AND produto_componente_id=?',
+        [req.tenantId, grupoId, componentId]
+      );
+      if (dup) return res.status(400).json({ error: 'Este produto ja esta no grupo.' });
+      const maxOrdem = await q1(
+        'SELECT COALESCE(MAX(ordem),0)+1 AS next FROM produto_combo_grupo_produtos WHERE grupo_id=? AND tenant_id=?',
+        [grupoId, req.tenantId]
+      );
+      const id = await qInsert(
+        `INSERT INTO produto_combo_grupo_produtos (tenant_id, grupo_id, produto_componente_id, ordem, ativo)
+         VALUES (?,?,?,?,1)`,
+        [req.tenantId, grupoId, componentId, maxOrdem?.next ?? 0]
+      );
+      res.json({ success: true, id });
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ error: e.message });
+      sendInternalError(res, 'routes/products:combo-prod-post', e);
+    }
+  });
+
+  router.delete('/combo/produtos/:linkId', async (req: Request, res) => {
+    try {
+      const linkId = Number(req.params.linkId);
+      if (!Number.isInteger(linkId) || linkId <= 0) {
+        return res.status(400).json({ error: 'Link invalido' });
+      }
+      await qRun('DELETE FROM produto_combo_grupo_produtos WHERE id=? AND tenant_id=?', [linkId, req.tenantId]);
+      res.json({ success: true });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/products:combo-prod-del', e);
+    }
   });
 
   router.get('/:id/opcoes', async (req: Request, res) => {
