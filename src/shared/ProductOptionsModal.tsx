@@ -518,7 +518,7 @@ export function ProductOptionsModal({
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
         className={`${mo.sheet} my-auto flex min-h-0 w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:pb-0 ${
           isDelivery
-            ? 'max-h-[min(86dvh,86svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
+            ? 'max-h-[min(91dvh,91svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
             : isPos
               ? 'max-h-[min(84dvh,84svh,100%)] sm:max-h-[min(66vh,66dvh,580px)] sm:!max-w-lg'
               : 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(92vh,92dvh)]'
@@ -536,7 +536,7 @@ export function ProductOptionsModal({
                   : isPos
                     ? 'relative h-[min(3.25rem,9.5svh)] max-h-14 shrink-0 overflow-hidden sm:h-14 sm:max-h-14'
                     : isDelivery
-                      ? 'relative h-[min(4.75rem,13svh)] max-h-[5.25rem] overflow-hidden sm:h-[4.75rem] sm:max-h-none md:h-[5.25rem]'
+                      ? 'relative h-[min(3.75rem,10.5svh)] max-h-[4.25rem] overflow-hidden sm:h-[4.25rem] sm:max-h-none md:h-[4.75rem]'
                       : 'relative h-40 overflow-hidden sm:h-48 md:h-52'
               }
             >
@@ -552,7 +552,7 @@ export function ProductOptionsModal({
                 : isPos
                   ? 'space-y-1.5 p-2.5 sm:p-2.5'
                   : isDelivery
-                    ? 'space-y-2 p-3 sm:p-3'
+                    ? 'space-y-1.5 p-2.5 sm:p-3'
                     : 'space-y-4 p-5'
             } ${produto.photo_url ? '' : 'pr-16'}`}
           >
@@ -565,7 +565,7 @@ export function ProductOptionsModal({
                       : isPos
                         ? 'text-[15px] font-black leading-tight tracking-tight text-white drop-shadow-sm sm:text-base'
                         : isDelivery
-                          ? 'text-base font-black leading-tight tracking-tight text-white drop-shadow-sm sm:text-lg'
+                          ? 'text-[15px] font-black leading-tight tracking-tight text-white drop-shadow-sm sm:text-lg'
                           : mo.title
                   }
                 >
@@ -615,7 +615,7 @@ export function ProductOptionsModal({
                   : isPos
                     ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !rounded-lg !px-2 !py-1 !shadow-[0_5px_16px_rgba(0,0,0,0.2)]`
                     : isDelivery
-                      ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !rounded-lg !px-2.5 !py-1.5 !shadow-[0_6px_20px_rgba(0,0,0,0.18)]`
+                      ? `${promoValida ? mo.pricePanelPromo : mo.pricePanel} !rounded-lg !px-2 !py-1 !shadow-[0_4px_14px_rgba(0,0,0,0.16)]`
                       : promoValida
                         ? mo.pricePanelPromo
                         : mo.pricePanel
@@ -626,16 +626,16 @@ export function ProductOptionsModal({
                   <p className={`font-bold uppercase ${mo.textMuted} ${compactLayout ? 'text-[9px] tracking-[0.12em]' : useTightModalLayout ? 'text-[9px] tracking-[0.12em]' : 'text-[11px] tracking-[0.18em]'}`}>
                     {useTightModalLayout ? 'Base' : 'Preco base'}
                   </p>
-                  <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : useTightModalLayout ? 'mt-0 text-base' : 'mt-1 text-xl'} ${promoValida ? 'text-zinc-400 line-through decoration-zinc-500' : mo.textPrimary}`}>{fmt(produto.price)}</p>
+                  <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : useTightModalLayout ? (isDelivery ? 'mt-0 text-[15px]' : 'mt-0 text-base') : 'mt-1 text-xl'} ${promoValida ? 'text-zinc-400 line-through decoration-zinc-500' : mo.textPrimary}`}>{fmt(produto.price)}</p>
                 </div>
                 <div className="text-right">
                   <p className={`font-bold uppercase ${mo.textMuted} ${compactLayout ? 'text-[9px] tracking-[0.12em]' : useTightModalLayout ? 'text-[9px] tracking-[0.12em]' : 'text-[11px] tracking-[0.18em]'}`}>
                     {useTightModalLayout ? 'Atual' : 'Preco atual'}
                   </p>
                   {precoUnit == null ? (
-                    <p className={`font-black ${mo.textMuted} ${compactLayout ? 'mt-0 text-base' : useTightModalLayout ? 'mt-0 text-base' : 'mt-1 text-xl'}`}>—</p>
+                    <p className={`font-black ${mo.textMuted} ${compactLayout ? 'mt-0 text-base' : useTightModalLayout ? (isDelivery ? 'mt-0 text-[15px]' : 'mt-0 text-base') : 'mt-1 text-xl'}`}>—</p>
                   ) : (
-                    <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : useTightModalLayout ? 'mt-0 text-base' : 'mt-1 text-xl'} ${promoValida ? 'text-emerald-400' : ac.precoAtual}`}>{fmt(precoUnit)}</p>
+                    <p className={`font-black tabular-nums ${compactLayout ? 'mt-0 text-base' : useTightModalLayout ? (isDelivery ? 'mt-0 text-[15px]' : 'mt-0 text-base') : 'mt-1 text-xl'} ${promoValida ? 'text-emerald-400' : ac.precoAtual}`}>{fmt(precoUnit)}</p>
                   )}
                 </div>
               </div>
@@ -643,7 +643,7 @@ export function ProductOptionsModal({
                 <p className={`mt-2 text-xs leading-relaxed ${mo.textSecondary}`}>{resumoPrecoUnitario}</p>
               )}
               {!compactLayout && isDelivery && (
-                <p className={`mt-1 line-clamp-1 text-[10px] leading-snug ${mo.textSecondary}`} title={resumoPrecoUnitario}>
+                <p className={`mt-0 line-clamp-1 text-[9px] leading-tight ${mo.textSecondary}`} title={resumoPrecoUnitario}>
                   {resumoPrecoUnitario}
                 </p>
               )}
@@ -658,7 +658,7 @@ export function ProductOptionsModal({
                 </p>
               )}
               {promoValida && isDelivery && !compactLayout && (
-                <p className="mt-0.5 truncate text-[10px] font-bold text-emerald-200/95" title={`Oferta ${percentualDesconto}%`}>
+                <p className="mt-0 truncate text-[9px] font-bold text-emerald-200/95" title={`Oferta ${percentualDesconto}%`}>
                   ✨ {percentualDesconto}% off
                 </p>
               )}
@@ -683,7 +683,9 @@ export function ProductOptionsModal({
               : isPos
                 ? '!py-0.5 sm:!py-1'
                 : useTightModalLayout
-                  ? '!py-1 sm:!py-1.5'
+                  ? isDelivery
+                    ? '!py-0.5 sm:!py-1.5'
+                    : '!py-1 sm:!py-1.5'
                   : ''
           }`}
         >
@@ -712,8 +714,8 @@ export function ProductOptionsModal({
               className={
                 compactLayout
                   ? `${mo.section} mx-2.5 mb-2.5`
-                  : useTightModalLayout
-                    ? `${mo.section} !mx-2.5 !mb-2 !rounded-[18px]`
+                    : useTightModalLayout
+                    ? `${mo.section} ${isDelivery ? '!mx-2.5 !mb-1.5' : '!mx-2.5 !mb-2'} !rounded-[18px]`
                     : mo.section
               }
             >
@@ -722,7 +724,7 @@ export function ProductOptionsModal({
                   compactLayout
                     ? `${mo.sectionHeader} !px-2.5 !py-2`
                     : useTightModalLayout
-                      ? `${mo.sectionHeader} !px-2.5 !py-2`
+                      ? `${mo.sectionHeader} !px-2.5 ${isDelivery ? '!py-1.5' : '!py-2'}`
                       : mo.sectionHeader
                 }
               >
@@ -775,14 +777,16 @@ export function ProductOptionsModal({
                           setVariacaoSel(v);
                         }
                       }}
-                      className={`flex min-h-[48px] cursor-pointer items-center transition-colors ${
+                      className={`flex cursor-pointer items-center transition-colors ${
                         compactLayout
-                          ? 'gap-2.5 px-2.5 py-2'
+                          ? 'min-h-[48px] gap-2.5 px-2.5 py-2'
                           : useTightModalLayout
                             ? isPos
-                              ? 'gap-2 px-2.5 py-2'
-                              : 'gap-2.5 px-3 py-3'
-                            : 'gap-4 px-4 py-4'
+                              ? 'min-h-[48px] gap-2 px-2.5 py-2'
+                              : isDelivery
+                                ? 'min-h-[44px] gap-2 px-2.5 py-2'
+                                : 'min-h-[48px] gap-2.5 px-3 py-3'
+                            : 'min-h-[48px] gap-4 px-4 py-4'
                       } ${
                         selecionado
                           ? ac.rowVariacaoSel
@@ -816,12 +820,12 @@ export function ProductOptionsModal({
                 <section
                   key={g.id}
                   className={`${
-                    compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? 'mx-2.5 mb-2' : 'mx-4 mb-4'
+                    compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
                   } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
                     temErro ? 'border-red-500/40 bg-red-500/10' : 'border-white/14 bg-zinc-900/85'
                   }`}
                 >
-                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
+                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
                     <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
                       <div className="min-w-0">
                         <p
@@ -888,14 +892,16 @@ export function ProductOptionsModal({
                       const podeAumentarQuantidade = maxSelecoes === null || totalSel < maxSelecoes;
                       return (
                         <div key={item.id}
-                          className={`flex min-h-[44px] cursor-pointer items-center transition-colors ${
+                          className={`flex cursor-pointer items-center transition-colors ${
                             compactLayout
-                              ? 'gap-2.5 px-2.5 py-2'
+                              ? 'min-h-[44px] gap-2.5 px-2.5 py-2'
                               : useTightModalLayout
                                 ? isPos
-                                  ? 'gap-2 px-2.5 py-2'
-                                  : 'gap-2.5 px-3 py-2.5'
-                                : 'gap-4 px-4 py-4'
+                                  ? 'min-h-[44px] gap-2 px-2.5 py-2'
+                                  : isDelivery
+                                    ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
+                                    : 'min-h-[44px] gap-2.5 px-3 py-2.5'
+                                : 'min-h-[44px] gap-4 px-4 py-4'
                           } ${
                             selecionado
                               ? ac.rowItemSel
@@ -972,20 +978,20 @@ export function ProductOptionsModal({
                 : isPos
                   ? 'mx-2.5 mt-0 rounded-lg border border-white/14 bg-zinc-900/85 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.16)]'
                   : isDelivery
-                    ? 'mx-2.5 mt-0.5 rounded-xl border border-white/14 bg-zinc-900/85 px-2.5 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.16)]'
+                    ? 'mx-2.5 mt-0 rounded-lg border border-white/14 bg-zinc-900/85 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.14)]'
                     : 'mx-4 mt-1 rounded-[28px] border border-white/14 bg-zinc-900/85 px-5 py-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
             }
           >
             <p className={`font-bold text-zinc-50 ${compactLayout ? 'mb-0.5 text-[11px]' : useTightModalLayout ? 'mb-0.5 text-[11px]' : 'mb-2 text-sm'}`}>Alguma observação?</p>
             <textarea value={obs} onChange={e => setObs(e.target.value)} rows={compactLayout ? 1 : useTightModalLayout ? 1 : 2}
               placeholder="Ex: Sem cebola, ponto bem passado..."
-              className={`w-full resize-none border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'min-h-[2.25rem] rounded-2xl px-2 py-1.5 text-xs' : isPos ? 'min-h-[2.25rem] rounded-lg px-2 py-1.5 text-xs' : isDelivery ? 'min-h-[2.5rem] rounded-xl px-2.5 py-2 text-base sm:text-xs' : 'rounded-2xl px-3 py-3 text-sm'}`} />
+              className={`w-full resize-none border text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 ${ac.textareaFocus} ${compactLayout ? 'min-h-[2.25rem] rounded-2xl px-2 py-1.5 text-xs' : isPos ? 'min-h-[2.25rem] rounded-lg px-2 py-1.5 text-xs' : isDelivery ? 'min-h-[2.25rem] rounded-lg px-2 py-1.5 text-sm sm:text-xs' : 'rounded-2xl px-3 py-3 text-sm'}`} />
           </div>
         </div>
 
-        <div className={`${mo.footer} shrink-0 ${compactLayout ? '!p-2.5' : isPos ? '!p-2.5 sm:!p-3 sm:!pb-3' : isDelivery ? '!p-3 !pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:!p-4 sm:!pb-4' : ''}`}>
+        <div className={`${mo.footer} shrink-0 ${compactLayout ? '!p-2.5' : isPos ? '!p-2.5 sm:!p-3 sm:!pb-3' : isDelivery ? '!p-2.5 !pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:!p-4 sm:!pb-4' : ''}`}>
           <div className={`rounded-[22px] border ${
-            compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : isPos ? 'mb-1 !rounded-lg !px-2 !py-1' : isDelivery ? 'mb-1.5 !rounded-lg !px-2.5 !py-1.5' : 'mb-3 px-4 py-3'
+            compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : isPos ? 'mb-1 !rounded-lg !px-2 !py-1' : isDelivery ? 'mb-1 !rounded-lg !px-2 !py-1' : 'mb-3 px-4 py-3'
           } ${
             carregandoOpcoes || gruposObrigatoriosPendentes > 0
               ? 'border-amber-500/25 bg-amber-500/12'
@@ -1029,7 +1035,7 @@ export function ProductOptionsModal({
               </button>
             </div>
             <button type="button" onClick={validarEAdicionar} disabled={addBtnDisabled}
-              className={`${mo.footerBtn} ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''} ${isPos ? '!min-h-[44px] !rounded-xl !py-2.5 text-[11px] leading-tight sm:!py-3 sm:!text-xs' : ''} ${isDelivery ? '!min-h-[50px] !rounded-xl !py-3 text-xs leading-tight sm:!py-4 sm:!text-sm' : ''}`}>
+              className={`${mo.footerBtn} ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''} ${isPos ? '!min-h-[44px] !rounded-xl !py-2.5 text-[11px] leading-tight sm:!py-3 sm:!text-xs' : ''} ${isDelivery ? '!min-h-[48px] !rounded-xl !py-2.5 text-xs leading-tight sm:!min-h-[50px] sm:!py-4 sm:!text-sm' : ''}`}>
               <span>{addBtnLabel}</span>
               <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>
             </button>
