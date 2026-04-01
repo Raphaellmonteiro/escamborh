@@ -163,7 +163,7 @@ const logoStorage = multer.diskStorage({
 });
 
 export const uploadLogo = multer({
-  storage: logoStorage,
+  storage: isCloudinaryProductUploadEnabled() ? multer.memoryStorage() : logoStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
@@ -187,7 +187,7 @@ const deliveryCardapioLogoStorage = multer.diskStorage({
 
 /** Logo exclusiva do cardápio online (delivery); arquivos em uploads/delivery/ */
 export const uploadDeliveryCardapioLogo = multer({
-  storage: deliveryCardapioLogoStorage,
+  storage: isCloudinaryProductUploadEnabled() ? multer.memoryStorage() : deliveryCardapioLogoStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
@@ -211,7 +211,7 @@ const deliveryCardapioBannerStorage = multer.diskStorage({
 
 /** Banner do topo do cardápio; campo `banner`; rota deve incluir `:index` (0–3). */
 export const uploadDeliveryCardapioBanner = multer({
-  storage: deliveryCardapioBannerStorage,
+  storage: isCloudinaryProductUploadEnabled() ? multer.memoryStorage() : deliveryCardapioBannerStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
@@ -231,7 +231,7 @@ const fotoFuncStorage = multer.diskStorage({
 });
 
 export const uploadFotoFunc = multer({
-  storage: fotoFuncStorage,
+  storage: isCloudinaryProductUploadEnabled() ? multer.memoryStorage() : fotoFuncStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)

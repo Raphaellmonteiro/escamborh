@@ -18,7 +18,7 @@ function ensureConfigured(): void {
   configured = true;
 }
 
-/** Fotos de produto vão direto ao Cloudinary (sem arquivo em /uploads). */
+/** Uploads de imagem vão ao Cloudinary (sem depender de /uploads no servidor). */
 export function isCloudinaryProductUploadEnabled(): boolean {
   if (process.env.CLOUDINARY_URL?.trim()) return true;
   const n = process.env.CLOUDINARY_CLOUD_NAME?.trim();
@@ -26,6 +26,9 @@ export function isCloudinaryProductUploadEnabled(): boolean {
   const s = process.env.CLOUDINARY_API_SECRET?.trim();
   return Boolean(n && k && s);
 }
+
+/** Alias semântico — mesmo critério de env que produtos/delivery/logo/RH. */
+export const isCloudinaryUploadEnabled = isCloudinaryProductUploadEnabled;
 
 function ourCloudName(): string | null {
   const url = process.env.CLOUDINARY_URL?.trim();
@@ -61,20 +64,17 @@ export function cloudinaryPublicIdFromSecureUrl(url: string): string | null {
   }
 }
 
-export async function uploadProductImageToCloudinary(options: {
+export async function uploadBufferedImageToCloudinary(options: {
   buffer: Buffer;
-  tenantId: number;
-  productId: number;
+  folder: string;
+  publicId: string;
 }): Promise<string> {
   ensureConfigured();
-  const folder = `flowpdv/products/t${options.tenantId}`;
-  const publicId = `p${options.productId}_${Date.now()}`;
-
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        folder,
-        public_id: publicId,
+        folder: options.folder,
+        public_id: options.publicId,
         resource_type: 'image',
         overwrite: true,
         invalidate: true,
@@ -98,8 +98,60 @@ export async function uploadProductImageToCloudinary(options: {
   });
 }
 
+export async function uploadProductImageToCloudinary(options: {
+  buffer: Buffer;
+  tenantId: number;
+  productId: number;
+}): Promise<string> {
+  return uploadBufferedImageToCloudinary({
+    buffer: options.buffer,
+    folder: `flowpdv/products/t${options.tenantId}`,
+    publicId: `p${options.productId}_${Date.now()}`,
+  });
+}
+
+export async function uploadTenantLogoToCloudinary(options: { buffer: Buffer; tenantId: number }): Promise<string> {
+  return uploadBufferedImageToCloudinary({
+    buffer: options.buffer,
+    folder: `flowpdv/tenants/t${options.tenantId}`,
+    publicId: `logo_${Date.now()}`,
+  });
+}
+
+export async function uploadDeliveryCardapioLogoToCloudinary(options: { buffer: Buffer; tenantId: number }): Promise<string> {
+  return uploadBufferedImageToCloudinary({
+    buffer: options.buffer,
+    folder: `flowpdv/delivery/t${options.tenantId}`,
+    publicId: `cardapio_logo_${Date.now()}`,
+  });
+}
+
+export async function uploadDeliveryBannerToCloudinary(options: {
+  buffer: Buffer;
+  tenantId: number;
+  bannerIndex: number;
+}): Promise<string> {
+  return uploadBufferedImageToCloudinary({
+    buffer: options.buffer,
+    folder: `flowpdv/delivery/t${options.tenantId}`,
+    publicId: `banner_${options.bannerIndex}_${Date.now()}`,
+  });
+}
+
+export async function uploadEmployeePhotoToCloudinary(options: {
+  buffer: Buffer;
+  tenantId: number;
+  employeeId: number;
+}): Promise<string> {
+  return uploadBufferedImageToCloudinary({
+    buffer: options.buffer,
+    folder: `flowpdv/rh/t${options.tenantId}`,
+    publicId: `emp_${options.employeeId}_${Date.now()}`,
+  });
+}
+
 export async function deleteCloudinaryImageByUrl(url: string | null | undefined): Promise<void> {
-  if (!url || !isCloudinaryProductUploadEnabled()) return;
+  if (!url || !isCloudinaryUploadEnabled()) return;
   const s = String(url).trim();
   if (!s) return;
   const publicId = cloudinaryPublicIdFromSecureUrl(s);

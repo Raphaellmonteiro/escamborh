@@ -35,6 +35,11 @@ import {
 } from '../utils/deliveryConfigPersist';
 import { UPLOADS_ROOT } from '../uploadsRoot';
 import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
+import {
+  isCloudinaryProductUploadEnabled,
+  uploadDeliveryBannerToCloudinary,
+  uploadDeliveryCardapioLogoToCloudinary,
+} from '../services/cloudinaryProduct';
 
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
@@ -97,6 +102,10 @@ function deliveryUploadBasename(url: string): string {
 async function unlinkDeliveryUploadIfOwned(url: string, tenantId: number) {
   const u = String(url || '').trim();
   if (!u) return;
+  if (/^https?:\/\//i.test(u) && /res\.cloudinary\.com\//i.test(u)) {
+    await deleteStoredUpload(u);
+    return;
+  }
   const pathOk =
     u.startsWith(DELIVERY_UPLOAD_URL_PREFIX) ||
     (/^https?:\/\//i.test(u) &&
@@ -209,14 +218,26 @@ export function createDeliveryRouter() {
         const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
         const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
         const newName = req.file.filename;
-        if (oldUrl && deliveryUploadBasename(oldUrl) !== newName) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
-        removeOtherDeliveryLogoVariants(tenantId, newName);
-        const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
-        const publicUrl = await finalizeLocalUploadToPersistentStorage({
-          absolutePath: req.file.path,
-          publicPath,
-          contentType: req.file.mimetype,
-        });
+        const useCloud = isCloudinaryProductUploadEnabled();
+        if (oldUrl && (useCloud || deliveryUploadBasename(oldUrl) !== newName)) {
+          await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        }
+        let publicUrl: string;
+        if (useCloud) {
+          const buf = req.file.buffer as Buffer | undefined;
+          if (!buf?.length) {
+            return res.status(400).json({ success: false, message: 'Arquivo vazio ou não recebido' });
+          }
+          publicUrl = await uploadDeliveryCardapioLogoToCloudinary({ buffer: buf, tenantId });
+        } else {
+          removeOtherDeliveryLogoVariants(tenantId, newName);
+          const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+          publicUrl = await finalizeLocalUploadToPersistentStorage({
+            absolutePath: req.file.path,
+            publicPath,
+            contentType: req.file.mimetype,
+          });
+        }
         await mergeDeliveryConfigJson(tenantId, (c) => {
           c.cardapio_online_logo_url = publicUrl;
         });
@@ -261,14 +282,26 @@ export function createDeliveryRouter() {
         const slots = bannerSlotsFromCfg(cfg);
         const oldUrl = slots[idx];
         const newName = req.file.filename;
-        if (oldUrl && deliveryUploadBasename(oldUrl) !== newName) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
-        removeOtherDeliveryBannerVariants(tenantId, idx, newName);
-        const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
-        const publicUrl = await finalizeLocalUploadToPersistentStorage({
-          absolutePath: req.file.path,
-          publicPath,
-          contentType: req.file.mimetype,
-        });
+        const useCloud = isCloudinaryProductUploadEnabled();
+        if (oldUrl && (useCloud || deliveryUploadBasename(oldUrl) !== newName)) {
+          await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        }
+        let publicUrl: string;
+        if (useCloud) {
+          const buf = req.file.buffer as Buffer | undefined;
+          if (!buf?.length) {
+            return res.status(400).json({ success: false, message: 'Arquivo vazio ou não recebido' });
+          }
+          publicUrl = await uploadDeliveryBannerToCloudinary({ buffer: buf, tenantId, bannerIndex: idx });
+        } else {
+          removeOtherDeliveryBannerVariants(tenantId, idx, newName);
+          const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+          publicUrl = await finalizeLocalUploadToPersistentStorage({
+            absolutePath: req.file.path,
+            publicPath,
+            contentType: req.file.mimetype,
+          });
+        }
         slots[idx] = publicUrl;
         await mergeDeliveryConfigJson(tenantId, (c) => {
           c.cardapio_online_banner_urls = slots;

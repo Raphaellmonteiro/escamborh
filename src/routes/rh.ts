@@ -11,6 +11,7 @@ import {
 } from '../services/employeeContract';
 import { uploadFotoFunc, checkMagicBytes } from '../middleware';
 import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
+import { isCloudinaryProductUploadEnabled, uploadEmployeePhotoToCloudinary } from '../services/cloudinaryProduct';
 import {
   calculatePayroll,
   computePayrollPaymentSummary,
@@ -298,18 +299,33 @@ export function createRhRouter() {
   router.post('/:id/foto', uploadFotoFunc.single('foto'), checkMagicBytes, async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      const employeeId = Number(req.params.id);
+      if (!Number.isInteger(employeeId) || employeeId <= 0) {
+        return res.status(400).json({ error: 'ID inválido' });
+      }
       const prev = await q1<{ foto_url: string | null }>(
         'SELECT foto_url FROM funcionarios WHERE id=? AND tenant_id=?',
-        [req.params.id, req.tenantId]
+        [employeeId, req.tenantId]
       );
       await deleteStoredUpload(prev?.foto_url ?? null);
-      const publicPath = `/uploads/funcionarios/${req.file.filename}`;
-      const foto_url = await finalizeLocalUploadToPersistentStorage({
-        absolutePath: req.file.path,
-        publicPath,
-        contentType: req.file.mimetype,
-      });
-      await qRun('UPDATE funcionarios SET foto_url=? WHERE id=? AND tenant_id=?', [foto_url, req.params.id, req.tenantId]);
+      let foto_url: string;
+      if (isCloudinaryProductUploadEnabled()) {
+        const buf = req.file.buffer as Buffer | undefined;
+        if (!buf?.length) return res.status(400).json({ error: 'Arquivo vazio ou não recebido' });
+        foto_url = await uploadEmployeePhotoToCloudinary({
+          buffer: buf,
+          tenantId: req.tenantId,
+          employeeId,
+        });
+      } else {
+        const publicPath = `/uploads/funcionarios/${req.file.filename}`;
+        foto_url = await finalizeLocalUploadToPersistentStorage({
+          absolutePath: req.file.path,
+          publicPath,
+          contentType: req.file.mimetype,
+        });
+      }
+      await qRun('UPDATE funcionarios SET foto_url=? WHERE id=? AND tenant_id=?', [foto_url, employeeId, req.tenantId]);
       res.json({ success: true, foto_url });
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
