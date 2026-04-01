@@ -13,7 +13,8 @@
     "lint": "tsc --noEmit",
     "check-product-photos": "tsx scripts/check-product-photos.ts",
     "clear-missing-product-photos": "tsx scripts/clear-missing-product-photos.ts",
-    "preview-cardapio": "tsx scripts/generate-cardapio-preview.ts"
+    "preview-cardapio": "tsx scripts/generate-cardapio-preview.ts",
+    "test:delivery-zona": "tsx scripts/test-delivery-bairro-zona.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
