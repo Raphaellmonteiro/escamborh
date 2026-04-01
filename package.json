@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "check-product-photos": "tsx scripts/check-product-photos.ts",
     "preview-cardapio": "tsx scripts/generate-cardapio-preview.ts"
   },
   "dependencies": {

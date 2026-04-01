@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { UPLOADS_ROOT } from '../uploadsRoot';
 
 export function getTenantLogoDir(): string {
-  return path.join(process.cwd(), 'uploads', 'logo');
+  return path.join(UPLOADS_ROOT, 'logo');
 }
 
 function escapeRegex(s: string): string {

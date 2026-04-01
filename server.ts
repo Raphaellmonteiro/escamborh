@@ -12,6 +12,7 @@ import multer from 'multer';
 
 // ── Banco e migrações ─────────────────────────────────────────────────────────
 import { runMigrations } from './src/db';
+import { UPLOADS_ROOT } from './src/uploadsRoot';
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
 import { requestLogger } from './src/middleware';
@@ -39,9 +40,9 @@ app.use(
 );
 
 // ── Startup ───────────────────────────────────────────────────────────────────
-if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
-if (!fs.existsSync('uploads/logo')) fs.mkdirSync('uploads/logo', { recursive: true });
-if (!fs.existsSync('uploads/funcionarios')) fs.mkdirSync('uploads/funcionarios', { recursive: true });
+if (!fs.existsSync(UPLOADS_ROOT)) fs.mkdirSync(UPLOADS_ROOT);
+fs.mkdirSync(path.join(UPLOADS_ROOT, 'logo'), { recursive: true });
+fs.mkdirSync(path.join(UPLOADS_ROOT, 'funcionarios'), { recursive: true });
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = (
@@ -73,7 +74,16 @@ app.use(
 );
 
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(UPLOADS_ROOT));
+const logMissingUpload =
+  process.env.LOG_UPLOADS_MISSING === '1' || process.env.NODE_ENV !== 'production';
+app.use('/uploads', (req, res, next) => {
+  if (res.headersSent) return next();
+  if (logMissingUpload) {
+    console.warn('[uploads] arquivo não encontrado no disco:', req.method, req.originalUrl);
+  }
+  res.status(404).end();
+});
 app.use(requestLogger);
 
 // ── Rotas públicas ────────────────────────────────────────────────────────────

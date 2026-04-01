@@ -29,6 +29,7 @@ import {
   coerceDeliveryConfigRow,
   mergeDeliveryConfigClientPut,
 } from '../utils/deliveryConfigPersist';
+import { UPLOADS_ROOT } from '../uploadsRoot';
 
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
@@ -60,6 +61,7 @@ function classifyCustomerActivity(totalValidOrders: number, daysWithoutPurchase:
 }
 
 const DELIVERY_UPLOAD_URL_PREFIX = '/uploads/delivery/';
+const DELIVERY_UPLOAD_DIR = path.join(UPLOADS_ROOT, 'delivery');
 
 function bannerSlotsFromCfg(cfg: Record<string, any>): string[] {
   return [...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)];
@@ -80,8 +82,8 @@ function unlinkDeliveryUploadIfOwned(url: string, tenantId: number) {
   const base = path.basename(u);
   const match = /^delivery_(\d+)_/.exec(base);
   if (!match || Number(match[1]) !== Number(tenantId)) return;
-  const full = path.join(process.cwd(), 'uploads', 'delivery', base);
-  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  const full = path.join(DELIVERY_UPLOAD_DIR, base);
+  const dir = DELIVERY_UPLOAD_DIR;
   if (!full.startsWith(dir)) return;
   try {
     if (fs.existsSync(full)) fs.unlinkSync(full);
@@ -89,7 +91,7 @@ function unlinkDeliveryUploadIfOwned(url: string, tenantId: number) {
 }
 
 function removeOtherDeliveryLogoVariants(tenantId: number, keepFilename: string) {
-  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  const dir = DELIVERY_UPLOAD_DIR;
   if (!fs.existsSync(dir)) return;
   const prefix = `delivery_${tenantId}_cardapio_logo`;
   for (const f of fs.readdirSync(dir)) {
@@ -102,7 +104,7 @@ function removeOtherDeliveryLogoVariants(tenantId: number, keepFilename: string)
 }
 
 function removeAllDeliveryCardapioLogoFiles(tenantId: number) {
-  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  const dir = DELIVERY_UPLOAD_DIR;
   if (!fs.existsSync(dir)) return;
   const prefix = `delivery_${tenantId}_cardapio_logo`;
   for (const f of fs.readdirSync(dir)) {
@@ -115,7 +117,7 @@ function removeAllDeliveryCardapioLogoFiles(tenantId: number) {
 }
 
 function removeOtherDeliveryBannerVariants(tenantId: number, index: number, keepFilename: string) {
-  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  const dir = DELIVERY_UPLOAD_DIR;
   if (!fs.existsSync(dir)) return;
   const prefix = `delivery_${tenantId}_banner_${index}.`;
   for (const f of fs.readdirSync(dir)) {
@@ -128,7 +130,7 @@ function removeOtherDeliveryBannerVariants(tenantId: number, index: number, keep
 }
 
 function removeAllDeliveryBannerFilesForSlot(tenantId: number, index: number) {
-  const dir = path.join(process.cwd(), 'uploads', 'delivery');
+  const dir = DELIVERY_UPLOAD_DIR;
   if (!fs.existsSync(dir)) return;
   const prefix = `delivery_${tenantId}_banner_${index}.`;
   for (const f of fs.readdirSync(dir)) {

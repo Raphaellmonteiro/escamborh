@@ -10,6 +10,7 @@ import { isDatabaseConnectivityError, pool, q1 } from './db';
 import { type PlanFeature } from './config/planFeatures';
 import { getTenantFeatures } from './services/tenantPlan';
 import { sendInternalError } from './utils/internalServerError';
+import { UPLOADS_ROOT } from './uploadsRoot';
 
 type AuthenticatedSession =
   | {
@@ -119,9 +120,8 @@ export function checkMagicBytes(req: any, res: any, next: any) {
 }
 
 // ── Multer — fotos de produto ─────────────────────────────────────────────────
-const uploadsRoot = path.join(process.cwd(), 'uploads');
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsRoot),
+  destination: (_req, _file, cb) => cb(null, UPLOADS_ROOT),
   filename: (_req, file, cb) => cb(null, `produto-${Date.now()}${path.extname(file.originalname)}`),
 });
 
@@ -136,7 +136,7 @@ export const upload = multer({
 
 // ── Multer — logo do tenant ───────────────────────────────────────────────────
 const logoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, path.join(process.cwd(), 'uploads', 'logo')),
+  destination: (_req, _file, cb) => cb(null, path.join(UPLOADS_ROOT, 'logo')),
   filename: (req: any, file, cb) => {
     const ext = path.extname(file.originalname) || '.jpg';
     const suffix = crypto.randomBytes(8).toString('hex');
@@ -154,7 +154,7 @@ export const uploadLogo = multer({
   },
 });
 
-const deliveryCardapioDir = path.join(process.cwd(), 'uploads', 'delivery');
+const deliveryCardapioDir = path.join(UPLOADS_ROOT, 'delivery');
 
 const deliveryCardapioLogoStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -205,7 +205,7 @@ export const uploadDeliveryCardapioBanner = multer({
 // ── Multer — foto de funcionário ──────────────────────────────────────────────
 const fotoFuncStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    const dir = 'uploads/funcionarios';
+    const dir = path.join(UPLOADS_ROOT, 'funcionarios');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
