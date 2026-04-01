@@ -3,6 +3,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Minus, AlertCircle, Loader2 } from 'lucide-react';
 import { useDeliveryCardapioTheme } from '../segments/delivery/DeliveryCardapioThemeContext';
+import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 
 export interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
 export interface GrupoOpcao {
@@ -364,6 +365,7 @@ export function ProductOptionsModal({
   const descricaoProduto = getProdutoDescricao(produto);
   const promoValida = isPromocaoProdutoValida(produto);
   const percentualDesconto = getPercentualDesconto(produto);
+  const headerFoto = normalizeProductPhotoPublicUrl(produto.photo_url);
 
   useLayoutEffect(() => {
     setDescExpanded(false);
@@ -528,7 +530,7 @@ export function ProductOptionsModal({
           <button type="button" onClick={onClose} className={mo.closeBtn}>
             <X size={18} />
           </button>
-          {produto.photo_url ? (
+          {headerFoto ? (
             <div
               className={
                 compactLayout
@@ -540,7 +542,7 @@ export function ProductOptionsModal({
                       : 'relative h-40 overflow-hidden sm:h-48 md:h-52'
               }
             >
-              <img src={produto.photo_url} alt={produto.name} className="h-full w-full object-cover brightness-[1.03] contrast-[1.02]" />
+              <img src={headerFoto} alt={produto.name} className="h-full w-full object-cover brightness-[1.03] contrast-[1.02]" />
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/55 to-black/10" />
             </div>
           ) : null}
@@ -554,7 +556,7 @@ export function ProductOptionsModal({
                   : isDelivery
                     ? 'space-y-1.5 p-2.5 sm:p-3'
                     : 'space-y-4 p-5'
-            } ${produto.photo_url ? '' : 'pr-16'}`}
+            } ${headerFoto ? '' : 'pr-16'}`}
           >
             <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? (isPos ? 'gap-1.5' : 'gap-2') : 'gap-3'}`}>
               <div className="min-w-0">

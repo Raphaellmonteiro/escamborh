@@ -9,6 +9,7 @@ import { resolveRequiresPreparation } from '../utils/preparation';
 import { notifyTenantOrderStreams, setupSseStream } from '../sse';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
 import { loginBodySchema } from '../validation/schemas/publicForms';
+import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -710,7 +711,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado' });
       const prods = await qAll('SELECT id,name,price,category,photo_url,color FROM produtos WHERE tenant_id=? AND active=1 ORDER BY category ASC, name ASC', [tenant.id]);
       const byCat: Record<string,any[]> = {};
-      for (const p of prods) { const c=p.category||'Geral'; if (!byCat[c]) byCat[c]=[]; byCat[c].push(p); }
+      for (const p of prods) {
+        const c = p.category || 'Geral';
+        if (!byCat[c]) byCat[c] = [];
+        byCat[c].push({ ...p, photo_url: normalizeProductPhotoPublicUrl(p.photo_url) });
+      }
       res.json({ estabelecimento:tenant.nome_estabelecimento, categorias:Object.entries(byCat).map(([nome,itens])=>({nome,itens})) });
     } catch (error) {
       handlePublicRouteError(res, 'GET /public/cardapio/:slug', slug, error);

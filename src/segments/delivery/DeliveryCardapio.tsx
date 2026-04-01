@@ -24,6 +24,7 @@ import {
   findDeliveryZoneByBairro,
   MENSAGEM_ENTREGA_FORA_DA_AREA,
 } from '../../utils/deliveryBairroZona';
+import { normalizeProductPhotoPublicUrl } from '../../utils/productPhotoUrl';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
@@ -149,7 +150,9 @@ function resolveDeliveryHeroGallery(
 ): HeroGalleryItem[] {
   const slots = cfg.coverSlots;
   if (Array.isArray(slots) && slots.length === 4) {
-    const productPool = produtosDestaque.filter((p) => p.photo_url).map((p) => p.photo_url as string);
+    const productPool = produtosDestaque
+      .map((p) => normalizeProductPhotoPublicUrl(p.photo_url))
+      .filter((src): src is string => Boolean(src));
     let prodIdx = 0;
     const nextProductSrc = () => {
       if (!productPool.length) return '';
@@ -206,11 +209,15 @@ function resolveDeliveryHeroGallery(
   }
 
   const imagens: HeroGalleryItem[] = produtosDestaque
-    .filter((produto) => produto.photo_url)
+    .map((produto) => {
+      const src = normalizeProductPhotoPublicUrl(produto.photo_url);
+      return src ? { produto, src } : null;
+    })
+    .filter((x): x is { produto: Produto; src: string } => x != null)
     .slice(0, 4)
-    .map((produto, index) => ({
+    .map(({ produto, src }, index) => ({
       key: `produto-${produto.id}-${index}`,
-      src: produto.photo_url as string,
+      src,
       alt: produto.name,
       tipo: 'destaque' as const,
     }));
@@ -627,7 +634,7 @@ function scoreSuggestionForUpsell(item: SuggestionItem, index: number, cart: Car
   score += Number(item.prioridade || 0) * 12;
   score += Math.min(18, Number(item.total_eventos || 0) * 2);
   score += Number(item.source_product_id || 0) > 0 ? 18 : 0;
-  score += item.photo_url ? 3 : 0;
+  score += normalizeProductPhotoPublicUrl(item.photo_url) ? 3 : 0;
   score += variationCount === 0 ? 2 : 1;
 
   if (sourceItem) {
@@ -1150,7 +1157,7 @@ export default function DeliveryCardapio() {
       .sort((a, b) => {
         const score = (produto: Produto) => {
           let total = 0;
-          if (produto.photo_url) total += 4;
+          if (normalizeProductPhotoPublicUrl(produto.photo_url)) total += 4;
           if (Number(produto.destaque || 0) > 0) total += 5 + Number(produto.destaque || 0);
           if (isPromocaoProdutoValida(produto)) total += 4;
           if (isProdutoCombo(produto)) total += 1;
@@ -1515,6 +1522,7 @@ export default function DeliveryCardapio() {
     const temPrecoVariavel = precoMinimo > p.price || temVariacoes;
     const destaqueVisual = Number(p.destaque || 0) > 0;
     const vt = cardapioTheme.vitrine;
+    const fotoSrc = normalizeProductPhotoPublicUrl(p.photo_url);
     const badgeTone = options?.sectionBadge?.tone === 'rose'
       ? 'border-rose-500/30 bg-rose-500/15 text-rose-100'
       : options?.sectionBadge?.tone === 'amber'
@@ -1537,8 +1545,8 @@ export default function DeliveryCardapio() {
             tabIndex={0}
             aria-label={`Abrir detalhes de ${p.name}`}
           >
-            {p.photo_url ? (
-              <img src={p.photo_url} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+            {fotoSrc ? (
+              <img src={fotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
             ) : (
               <div className={vt.noPhoto}>
                 <Package size={30} className={cardapioTheme.mode === 'light_red' ? 'text-zinc-400' : 'text-zinc-600'} />
@@ -1656,8 +1664,8 @@ export default function DeliveryCardapio() {
           tabIndex={0}
           aria-label={`Abrir detalhes de ${p.name}`}
         >
-          {p.photo_url ? (
-            <img src={p.photo_url} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+          {fotoSrc ? (
+            <img src={fotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
           ) : (
             <div className={`flex h-full w-full items-center justify-center ${cardapioTheme.mode === 'light_red' ? 'bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100' : 'bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950'}`}>
               <Package size={24} className={cardapioTheme.mode === 'light_red' ? 'text-zinc-400' : 'text-zinc-600'} />
@@ -2520,6 +2528,7 @@ export default function DeliveryCardapio() {
                     : calcPrecoMinimo(p);
                   const temPrecoVariavel = precoMinimo > p.price || temVariacoes;
                   const destaqueVisual = Number(p.destaque || 0) > 0;
+                  const gridFotoSrc = normalizeProductPhotoPublicUrl(p.photo_url);
                   const gridCardRing = isLightRed ? 'ring-black/[0.03]' : 'ring-white/[0.04]';
                   const gridCardBody = isLightRed
                     ? qty > 0
@@ -2550,8 +2559,8 @@ export default function DeliveryCardapio() {
                           tabIndex={0}
                           aria-label={`Abrir detalhes de ${p.name}`}
                         >
-                          {p.photo_url ? (
-                            <img src={p.photo_url} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/>
+                          {gridFotoSrc ? (
+                            <img src={gridFotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/>
                           ) : (
                             <div className={`flex h-full w-full flex-col items-center justify-center gap-2 ${isLightRed ? 'bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100' : 'bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950'}`}>
                               <Package size={30} className="text-zinc-600"/>
@@ -2714,7 +2723,9 @@ export default function DeliveryCardapio() {
                 ) : (
                   <>
                     <div className="mt-5 space-y-2">
-                      {cart.slice(0, 4).map((item) => (
+                      {cart.slice(0, 4).map((item) => {
+                        const lineFoto = normalizeProductPhotoPublicUrl(item.photo_url);
+                        return (
                         <div
                           key={item.cart_key}
                           className={
@@ -2723,8 +2734,8 @@ export default function DeliveryCardapio() {
                               : 'flex items-center gap-3 rounded-2xl border border-white/14 bg-zinc-950/90 p-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)]'
                           }
                         >
-                          {item.photo_url ? (
-                            <img src={item.photo_url} alt={item.name} className="h-14 w-14 rounded-xl object-cover" />
+                          {lineFoto ? (
+                            <img src={lineFoto} alt={item.name} className="h-14 w-14 rounded-xl object-cover" />
                           ) : (
                             <div className={`flex h-14 w-14 items-center justify-center rounded-xl ${isLightRed ? 'bg-stone-300/90 text-stone-600' : 'bg-zinc-800 text-zinc-500'}`}>
                               <Package size={18} />
@@ -2736,7 +2747,8 @@ export default function DeliveryCardapio() {
                             <p className={`mt-1 text-sm font-black tabular-nums ${isLightRed ? 'text-red-700' : 'text-cyan-200 drop-shadow-[0_0_14px_rgba(34,211,238,0.22)]'}`}>{fmt(item.preco_final * item.qty)}</p>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       {cart.length > 4 && (
                         <p className={`px-1 text-xs font-medium ${isLightRed ? 'text-stone-400' : 'text-zinc-100/90'}`}>+{cart.length - 4} item(ns) na sacola</p>
                       )}
@@ -3143,6 +3155,7 @@ function SacolaUpsellCard({
   onAdd: (item: SuggestionItem) => void;
 }) {
   const featured = card.featured;
+  const upsellFoto = normalizeProductPhotoPublicUrl(card.item.photo_url);
   return (
     <div
       className={
@@ -3156,9 +3169,9 @@ function SacolaUpsellCard({
       }
     >
       <div className="shrink-0 space-y-2 sm:space-y-2.5">
-        {card.item.photo_url ? (
+        {upsellFoto ? (
           <img
-            src={card.item.photo_url}
+            src={upsellFoto}
             alt={card.item.name}
             className={
               featured
@@ -3434,7 +3447,9 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                   Continuar comprando
                 </button>
               </div>
-            ) : cart.map(item=>(
+            ) : cart.map((item) => {
+              const rowFoto = normalizeProductPhotoPublicUrl(item.photo_url);
+              return (
               <div
                 key={item.cart_key}
                 className={
@@ -3443,7 +3458,11 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                     : 'flex items-start gap-4 rounded-[30px] border border-white/10 bg-zinc-900 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)]'
                 }
               >
-                {item.photo_url?<img src={item.photo_url} alt={item.name} className="h-20 w-20 rounded-2xl object-cover shrink-0"/>:<div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl ${isLightRed ? 'bg-stone-300/80 text-stone-600' : 'bg-zinc-800 text-zinc-500'}`}><Package size={20}/></div>}
+                {rowFoto ? (
+                  <img src={rowFoto} alt={item.name} className="h-20 w-20 rounded-2xl object-cover shrink-0"/>
+                ) : (
+                  <div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl ${isLightRed ? 'bg-stone-300/80 text-stone-600' : 'bg-zinc-800 text-zinc-500'}`}><Package size={20}/></div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className={`text-base font-bold ${isLightRed ? 'text-stone-900' : 'text-white'}`}>{item.name}</p>
                   {item.obs_opcoes && <p className={`mt-1 text-[11px] ${isLightRed ? 'text-stone-600' : 'text-zinc-300'}`}>{item.obs_opcoes}</p>}
@@ -3459,7 +3478,8 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 <button onClick={()=>onAdd({...item,qty:1})} className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors sm:h-10 sm:w-10 ${isLightRed ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-cyan-400 text-zinc-950 hover:bg-cyan-300'}`}><Plus size={13}/></button>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {showSuggestions && (
               <div

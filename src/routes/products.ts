@@ -8,8 +8,18 @@ import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
 import { sendInternalError } from '../utils/internalServerError';
 import { normalizeProductProductionInput } from '../utils/preparation';
+import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
+import { resolveProductUploadDiskPath } from '../utils/productPhotoFs';
 
 const REPORT_TZ = 'America/Sao_Paulo';
+
+function withNormalizedProductPhoto<T extends { photo_url?: unknown }>(row: T): T {
+  return { ...row, photo_url: normalizeProductPhotoPublicUrl(row.photo_url) };
+}
+
+function withNormalizedProductPhotos<T extends { photo_url?: unknown }>(rows: T[]): T[] {
+  return rows.map(withNormalizedProductPhoto);
+}
 
 /** Ordem na listagem admin / cardápio: ativos primeiro; depois ordem manual e nome. */
 const ORDER_CARDAPIO_LISTAGEM =
@@ -134,25 +144,37 @@ function normalizeProductPromotionInput(
         const term = `%${q}%`;
         const activeFilter = active !== undefined ? ' AND active=?' : '';
         const activeParam = active !== undefined ? [Number(active)] : [];
-        return res.json(await qAll(
-          `SELECT * FROM produtos WHERE tenant_id=? AND (name ILIKE ? OR codigo_barras ILIKE ? OR marca ILIKE ? OR descricao ILIKE ?) ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM} LIMIT 200`,
-          [req.tenantId, term, term, term, term, ...activeParam]
-        ));
+        return res.json(
+          withNormalizedProductPhotos(
+            await qAll(
+              `SELECT * FROM produtos WHERE tenant_id=? AND (name ILIKE ? OR codigo_barras ILIKE ? OR marca ILIKE ? OR descricao ILIKE ?) ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM} LIMIT 200`,
+              [req.tenantId, term, term, term, term, ...activeParam]
+            )
+          )
+        );
       }
       const activeFilter = active !== undefined ? ' AND active=?' : '';
       const activeParam = active !== undefined ? [Number(active)] : [];
       if (limit) {
         const lim = Math.min(Number(limit) || 50, 500);
         const off = Number(offset) || 0;
-        return res.json(await qAll(
-          `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM} LIMIT ? OFFSET ?`,
-          [req.tenantId, ...activeParam, lim, off]
-        ));
+        return res.json(
+          withNormalizedProductPhotos(
+            await qAll(
+              `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM} LIMIT ? OFFSET ?`,
+              [req.tenantId, ...activeParam, lim, off]
+            )
+          )
+        );
       }
-      res.json(await qAll(
-        `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM}`,
-        [req.tenantId, ...activeParam]
-      ));
+      res.json(
+        withNormalizedProductPhotos(
+          await qAll(
+            `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM}`,
+            [req.tenantId, ...activeParam]
+          )
+        )
+      );
     } catch (e: unknown) {
       const msg = String((e as Error)?.message ?? '');
       if (msg.includes('c\u00F3digo de barras')) {
@@ -176,7 +198,7 @@ function normalizeProductPromotionInput(
       [req.tenantId, barcode]
     );
     if (!product) return res.status(404).json({ found: false });
-    res.json({ found: true, product });
+    res.json({ found: true, product: withNormalizedProductPhoto(product) });
   });
 
   router.post('/suggestions', async (req: Request, res) => {
@@ -279,7 +301,7 @@ function normalizeProductPromotionInput(
         }
       }
 
-      res.json(suggestions.slice(0, 3));
+      res.json(withNormalizedProductPhotos(suggestions.slice(0, 3)));
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
   });
 
@@ -347,7 +369,7 @@ function normalizeProductPromotionInput(
         [req.tenantId, productId]
       );
 
-      res.json(rows);
+      res.json(withNormalizedProductPhotos(rows));
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
   });
 
@@ -986,9 +1008,10 @@ function normalizeProductPromotionInput(
         'SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?',
         [productId, req.tenantId]
       );
-      if (produto?.photo_url) {
+      const photoDisk = resolveProductUploadDiskPath(produto?.photo_url ?? null);
+      if (photoDisk) {
         try {
-          fs.unlinkSync(`.${produto.photo_url}`);
+          fs.unlinkSync(photoDisk);
         } catch {
           /* ignore */
         }
@@ -1019,7 +1042,8 @@ function normalizeProductPromotionInput(
       if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
       const photoUrl = `/uploads/${req.file.filename}`;
       const old = await q1('SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      if (old?.photo_url) { try { fs.unlinkSync(`.${old.photo_url}`); } catch {} }
+      const oldDisk = resolveProductUploadDiskPath(old?.photo_url ?? null);
+      if (oldDisk) { try { fs.unlinkSync(oldDisk); } catch {} }
       await qRun('UPDATE produtos SET photo_url=? WHERE id=? AND tenant_id=?', [photoUrl, req.params.id, req.tenantId]);
       res.json({ success: true, photo_url: photoUrl });
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
@@ -1028,7 +1052,8 @@ function normalizeProductPromotionInput(
   router.delete('/:id/photo', async (req: Request, res) => {
     try {
       const p = await q1('SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      if (p?.photo_url) { try { fs.unlinkSync(`.${p.photo_url}`); } catch {} }
+      const prevDisk = resolveProductUploadDiskPath(p?.photo_url ?? null);
+      if (prevDisk) { try { fs.unlinkSync(prevDisk); } catch {} }
       await qRun('UPDATE produtos SET photo_url=NULL WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }

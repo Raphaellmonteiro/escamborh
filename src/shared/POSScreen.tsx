@@ -10,6 +10,7 @@ import type { TipoItem } from '../config/segmentos';
 import { normalizeBarcode } from '../utils/barcode';
 import { openPrintPreview } from '../utils/print';
 import { resolveRequiresPreparation } from '../utils/preparation';
+import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 import { useDebounce } from '../hooks/useDebounce';
 import { BREAKPOINT_MD_PX } from '../hooks/useBreakpoint';
 import { usePOSKeyboard } from '../hooks/usePOSKeyboard';
@@ -86,7 +87,7 @@ function buildProdutoOptionsPayload(
     name: product.name,
     price: product.price,
     category: product.category,
-    photo_url: product.photo_url || undefined,
+    photo_url: normalizeProductPhotoPublicUrl(product.photo_url) ?? undefined,
     descricao: (product as any).descricao || undefined,
     em_promocao: (product as any).em_promocao,
     preco_original: (product as any).preco_original ?? null,
@@ -146,6 +147,7 @@ const ProductCard = React.memo(function ProductCard({
   const isDestaque = !!(product as any).destaque || !!(product as any).mais_vendido;
   const isRecomend = !!(product as any).recomendado;
   const emoji = (categoryEmojis as any)?.[product.category] ?? emojiDefault ?? '🍽️';
+  const thumbSrc = normalizeProductPhotoPublicUrl(product.photo_url);
 
   const handleClick = () => {
     if (!disabled) onClick(product);
@@ -163,9 +165,9 @@ const ProductCard = React.memo(function ProductCard({
       <div
         className="relative w-full overflow-hidden shrink-0 pb-[38%] min-[480px]:pb-[40%] md:pb-[42%] xl:pb-[44%] [@media(max-height:640px)]:pb-[34%]"
       >
-        {product.photo_url ? (
+        {thumbSrc ? (
           <img
-            src={product.photo_url}
+            src={thumbSrc}
             alt={product.name}
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
@@ -175,7 +177,7 @@ const ProductCard = React.memo(function ProductCard({
             <span className="text-lg min-[480px]:text-xl md:text-2xl opacity-50">{emoji}</span>
           </div>
         )}
-        {product.photo_url && (
+        {thumbSrc && (
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         )}
         <div className="absolute bottom-1 left-1 md:bottom-1.5 md:left-1.5 flex flex-wrap gap-0.5 md:gap-1 max-w-[calc(100%-0.5rem)]">
@@ -1080,7 +1082,11 @@ export default function POSScreen({
             <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }} transition={{ duration: 0.15 }}
               className="my-auto flex max-h-[min(92dvh,100svh)] w-full max-w-sm min-h-0 flex-col overflow-y-auto overscroll-contain rounded-t-3xl border border-fp-border bg-fp-card p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-8 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
               <div className="text-center mb-6">
-                {pendingProduct.photo_url && <div className="w-full h-40 rounded-2xl overflow-hidden mb-4"><img src={pendingProduct.photo_url} alt={pendingProduct.name} className="w-full h-full object-cover" /></div>}
+                {normalizeProductPhotoPublicUrl(pendingProduct.photo_url) && (
+                  <div className="w-full h-40 rounded-2xl overflow-hidden mb-4">
+                    <img src={normalizeProductPhotoPublicUrl(pendingProduct.photo_url)!} alt={pendingProduct.name} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>
                 <h3 className="text-2xl font-black text-fptext-primary">{pendingSelection?.product_name || pendingProduct.name}</h3>
                 <p className="text-xl font-black text-amber-500 mt-1">R$ {Number(pendingSelection?.price_at_time ?? pendingProduct.price).toFixed(2)}</p>

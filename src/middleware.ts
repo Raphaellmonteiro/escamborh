@@ -119,8 +119,9 @@ export function checkMagicBytes(req: any, res: any, next: any) {
 }
 
 // ── Multer — fotos de produto ─────────────────────────────────────────────────
+const uploadsRoot = path.join(process.cwd(), 'uploads');
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, 'uploads/'),
+  destination: (_req, _file, cb) => cb(null, uploadsRoot),
   filename: (_req, file, cb) => cb(null, `produto-${Date.now()}${path.extname(file.originalname)}`),
 });
 

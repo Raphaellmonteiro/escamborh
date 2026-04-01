@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { normalizeProductPhotoPublicUrl } from '../../utils/productPhotoUrl';
 
 /* ─────────────────────────────── tipos ──────────────────────────────── */
 interface Produto  { id: number; name: string; price: number; category: string; photo_url?: string; }
@@ -372,10 +373,11 @@ function AbaCardapio({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {produtosFiltrados.map(p => {
               const qty = qtyInCart(p.id);
+              const foto = normalizeProductPhotoPublicUrl(p.photo_url);
               return (
                 <div key={p.id} style={S.prodCard}>
-                  {p.photo_url ? (
-                    <img src={p.photo_url} alt={p.name} style={S.prodImg} />
+                  {foto ? (
+                    <img src={foto} alt={p.name} style={S.prodImg} />
                   ) : (
                     <div style={{ ...S.prodImg, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
                       🍽️

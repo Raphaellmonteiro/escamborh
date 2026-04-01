@@ -32,6 +32,7 @@ import {
   MENSAGEM_ENTREGA_FORA_DA_AREA,
 } from '../utils/deliveryBairroZona';
 import { resolveTenantLogoPublicUrl } from '../utils/tenantLogoUpload';
+import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 import {
   PRIMEIRA_COMPRA_PEDIDO_VALIDO_SQL,
   buildDeliveryAddressAntiFraudSignature,
@@ -785,6 +786,7 @@ async function buildProdutosComOpcoesBatched(tenantId: number, produtos: any[]):
     const id = Number(p.id);
     return {
       ...p,
+      photo_url: normalizeProductPhotoPublicUrl(p.photo_url),
       description: p.descricao || null,
       em_promocao: Number(p.em_promocao || 0),
       preco_original: p.preco_original == null ? null : Number(p.preco_original),
@@ -1703,7 +1705,12 @@ export function createDeliveryPublicRouter() {
         }
       }
 
-      return res.json(suggestions.slice(0, 3));
+      return res.json(
+        suggestions.slice(0, 3).map((row: { photo_url?: unknown }) => ({
+          ...row,
+          photo_url: normalizeProductPhotoPublicUrl(row.photo_url),
+        }))
+      );
     } catch (error: unknown) {
       sendInternalError(res, 'delivery-public:suggestions', error);
     }
