@@ -8,7 +8,7 @@ import {
   CreditCard, CheckCircle2, Search, Package, User, LogOut,
   History, ArrowLeft, Trash2, Home, ChevronRight, Clock,
   Bike, Heart, X, Pencil, AlertCircle, ClipboardList, ShoppingBag,
-  Tag, MessageCircle, Instagram, Info, Menu, Utensils, Copy,
+  Tag, MessageCircle, Instagram, Info, Menu, Utensils, Copy, Loader2,
 } from 'lucide-react';
 import {
   buildDeliveryCardapioTheme,
@@ -25,6 +25,8 @@ import {
   MENSAGEM_ENTREGA_FORA_DA_AREA,
 } from '../../utils/deliveryBairroZona';
 import { normalizeProductPhotoPublicUrl } from '../../utils/productPhotoUrl';
+import { FlowProductImage } from '../../shared/FlowProductImage';
+import { fetchViaCep } from '../../utils/viacep';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
@@ -278,22 +280,46 @@ interface Endereco { id: number; label: string; logradouro: string; numero?: str
 
 /** Campos de endereço alinhados ao modelo `delivery_enderecos` (checkout + Meus endereços). */
 type DeliveryEnderecoCampos = {
+  cep: string;
   logradouro: string;
   numero: string;
   complemento: string;
   bairro: string;
+  cidade: string;
+  uf: string;
   referencia: string;
 };
 
 function emptyDeliveryEnderecoCampos(): DeliveryEnderecoCampos {
-  return { logradouro: '', numero: '', complemento: '', bairro: '', referencia: '' };
+  return {
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    uf: '',
+    referencia: '',
+  };
+}
+
+function onlyCepDigits(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 8);
+}
+
+function formatCepInputDisplay(digits: string): string {
+  const d = onlyCepDigits(digits);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
 }
 
 function formatEnderecoResumoTexto(campos: DeliveryEnderecoCampos): string {
+  const cityUf = [campos.cidade.trim(), campos.uf.trim()].filter(Boolean).join(' - ');
   const parts = [
     [campos.logradouro.trim(), campos.numero.trim()].filter(Boolean).join(', '),
     campos.complemento.trim() || '',
     campos.bairro.trim() || '',
+    cityUf || '',
     campos.referencia.trim() ? `Ref: ${campos.referencia.trim()}` : '',
   ].filter(Boolean);
   return parts.join(' • ');
@@ -301,10 +327,12 @@ function formatEnderecoResumoTexto(campos: DeliveryEnderecoCampos): string {
 
 /** Alinhado ao backend `formatSavedDeliveryAddress` (texto gravado no pedido). */
 function formatEnderecoPedidoLinha(campos: DeliveryEnderecoCampos): string {
+  const cityUf = [campos.cidade.trim(), campos.uf.trim()].filter(Boolean).join(' - ');
   return [
     [campos.logradouro.trim(), campos.numero.trim()].filter(Boolean).join(', '),
     campos.complemento.trim() ? `Compl: ${campos.complemento.trim()}` : '',
     campos.bairro.trim() ? `Bairro: ${campos.bairro.trim()}` : '',
+    cityUf ? `Cidade: ${cityUf}` : '',
     campos.referencia.trim() ? `Ref: ${campos.referencia.trim()}` : '',
   ].filter(Boolean).join(' - ');
 }
@@ -354,16 +382,122 @@ function DeliveryEnderecoCamposInputs({
   inpClass,
   temZonas,
   labelClassName,
+  cepSurface = 'light',
 }: {
   value: DeliveryEnderecoCampos;
   onChange: (next: DeliveryEnderecoCampos) => void;
   inpClass: string;
   temZonas: boolean;
   labelClassName: string;
+  /** Tom das mensagens de loading/erro do CEP (checkout claro vs escuro). */
+  cepSurface?: 'light' | 'dark';
 }) {
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const patch = (partial: Partial<DeliveryEnderecoCampos>) => onChange({ ...value, ...partial });
+
+  const cepDigits = onlyCepDigits(value.cep || '');
+  const debouncedCep = useDebounce(cepDigits, 300);
+  const [cepLookupLoading, setCepLookupLoading] = useState(false);
+  const [cepLookupError, setCepLookupError] = useState('');
+  const lastSuccessCepRef = useRef<string | null>(null);
+  const viaCepGenRef = useRef(0);
+
+  const cepStatusError =
+    cepSurface === 'dark' ? 'text-sm font-medium text-red-300' : 'text-sm font-medium text-red-600';
+  const cepStatusMuted =
+    cepSurface === 'dark' ? 'text-sm font-medium text-zinc-400' : 'text-sm font-medium text-zinc-500';
+
+  useEffect(() => {
+    if (debouncedCep.length !== 8) {
+      setCepLookupLoading(false);
+      setCepLookupError('');
+      lastSuccessCepRef.current = null;
+      return;
+    }
+
+    if (debouncedCep === lastSuccessCepRef.current) {
+      setCepLookupLoading(false);
+      setCepLookupError('');
+      return;
+    }
+
+    const gen = ++viaCepGenRef.current;
+    setCepLookupLoading(true);
+    setCepLookupError('');
+
+    const ac = new AbortController();
+
+    void (async () => {
+      try {
+        const res = await fetchViaCep(debouncedCep, ac.signal);
+        if (viaCepGenRef.current !== gen) return;
+        if (!res.ok) {
+          setCepLookupError('CEP não encontrado');
+          lastSuccessCepRef.current = null;
+          return;
+        }
+        lastSuccessCepRef.current = debouncedCep;
+        const v = valueRef.current;
+        onChangeRef.current({
+          ...v,
+          cep: debouncedCep,
+          logradouro: res.data.logradouro ? res.data.logradouro : v.logradouro,
+          bairro: res.data.bairro ? res.data.bairro : v.bairro,
+          cidade: res.data.localidade || v.cidade,
+          uf: res.data.uf || v.uf,
+        });
+      } catch (e: unknown) {
+        if (viaCepGenRef.current !== gen) return;
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        setCepLookupError('CEP não encontrado');
+        lastSuccessCepRef.current = null;
+      } finally {
+        if (viaCepGenRef.current === gen) {
+          setCepLookupLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      ac.abort();
+    };
+  }, [debouncedCep]);
+
   return (
     <div className="space-y-2">
+      <div>
+        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+          <label className={`block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>CEP</label>
+          {cepLookupLoading && (
+            <span className={`inline-flex items-center gap-1.5 ${cepStatusMuted}`} aria-live="polite">
+              <Loader2 size={14} className="animate-spin shrink-0" aria-hidden />
+              Buscando endereço…
+            </span>
+          )}
+        </div>
+        <input
+          inputMode="numeric"
+          autoComplete="postal-code"
+          value={formatCepInputDisplay(value.cep || '')}
+          onChange={(e) => {
+            const d = onlyCepDigits(e.target.value);
+            patch({ cep: d });
+            if (cepLookupError) setCepLookupError('');
+          }}
+          placeholder="00000-000"
+          className={inpClass}
+          maxLength={9}
+        />
+        {cepLookupError ? (
+          <p className={`mt-1.5 ${cepStatusError}`} role="status">
+            {cepLookupError}
+          </p>
+        ) : null}
+      </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="sm:col-span-2">
           <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Rua / Avenida *</label>
@@ -403,6 +537,27 @@ function DeliveryEnderecoCamposInputs({
           placeholder={temZonas ? 'Informe o bairro para calcular a taxa' : 'Centro'}
           className={inpClass}
         />
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div>
+          <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Cidade</label>
+          <input
+            value={value.cidade}
+            onChange={(e) => patch({ cidade: e.target.value })}
+            placeholder="Preenchido pelo CEP"
+            className={inpClass}
+          />
+        </div>
+        <div>
+          <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>UF</label>
+          <input
+            value={value.uf}
+            onChange={(e) => patch({ uf: e.target.value.toUpperCase().slice(0, 2) })}
+            placeholder="SP"
+            className={inpClass}
+            maxLength={2}
+          />
+        </div>
       </div>
       <div>
         <label className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${labelClassName}`}>Referência</label>
@@ -1546,7 +1701,7 @@ export default function DeliveryCardapio() {
             aria-label={`Abrir detalhes de ${p.name}`}
           >
             {fotoSrc ? (
-              <img src={fotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              <FlowProductImage src={fotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
             ) : (
               <div className={vt.noPhoto}>
                 <Package size={30} className={cardapioTheme.mode === 'light_red' ? 'text-zinc-400' : 'text-zinc-600'} />
@@ -1665,7 +1820,7 @@ export default function DeliveryCardapio() {
           aria-label={`Abrir detalhes de ${p.name}`}
         >
           {fotoSrc ? (
-            <img src={fotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+            <FlowProductImage src={fotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
           ) : (
             <div className={`flex h-full w-full items-center justify-center ${cardapioTheme.mode === 'light_red' ? 'bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100' : 'bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950'}`}>
               <Package size={24} className={cardapioTheme.mode === 'light_red' ? 'text-zinc-400' : 'text-zinc-600'} />
@@ -2560,7 +2715,7 @@ export default function DeliveryCardapio() {
                           aria-label={`Abrir detalhes de ${p.name}`}
                         >
                           {gridFotoSrc ? (
-                            <img src={gridFotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/>
+                            <FlowProductImage src={gridFotoSrc} alt={p.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"/>
                           ) : (
                             <div className={`flex h-full w-full flex-col items-center justify-center gap-2 ${isLightRed ? 'bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-100' : 'bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950'}`}>
                               <Package size={30} className="text-zinc-600"/>
@@ -2735,7 +2890,7 @@ export default function DeliveryCardapio() {
                           }
                         >
                           {lineFoto ? (
-                            <img src={lineFoto} alt={item.name} className="h-14 w-14 rounded-xl object-cover" />
+                            <FlowProductImage src={lineFoto} alt={item.name} className="h-14 w-14 rounded-xl object-cover" />
                           ) : (
                             <div className={`flex h-14 w-14 items-center justify-center rounded-xl ${isLightRed ? 'bg-stone-300/90 text-stone-600' : 'bg-zinc-800 text-zinc-500'}`}>
                               <Package size={18} />
@@ -3170,7 +3325,7 @@ function SacolaUpsellCard({
     >
       <div className="shrink-0 space-y-2 sm:space-y-2.5">
         {upsellFoto ? (
-          <img
+          <FlowProductImage
             src={upsellFoto}
             alt={card.item.name}
             className={
@@ -3459,7 +3614,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 }
               >
                 {rowFoto ? (
-                  <img src={rowFoto} alt={item.name} className="h-20 w-20 rounded-2xl object-cover shrink-0"/>
+                  <FlowProductImage src={rowFoto} alt={item.name} className="h-20 w-20 rounded-2xl object-cover shrink-0"/>
                 ) : (
                   <div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl ${isLightRed ? 'bg-stone-300/80 text-stone-600' : 'bg-zinc-800 text-zinc-500'}`}><Package size={20}/></div>
                 )}

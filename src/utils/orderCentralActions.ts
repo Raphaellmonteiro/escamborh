@@ -1,17 +1,17 @@
 import type { Order } from '../types';
 import { getDeliveryNextStatus } from './deliveryStatusNext';
 import { getNonDeliveryNextStatus } from './orderNonDeliveryNextStatus';
-import { isOrderCanceledLike, mapOrderToCentralColumn, type CentralColumnId } from './orderCentralBoard';
+import {
+  getCentralOrderKind,
+  isOrderCanceledLike,
+  isPaymentPendingOrder,
+  mapOrderToCentralColumn,
+  type CentralColumnId,
+} from './orderCentralBoard';
 import { fetchPrintableHtml, openPrintPreview } from './print';
 
 function isDeliveryOrder(order: Order): boolean {
   return String(order.canal || '').trim().toLowerCase() === 'delivery';
-}
-
-function getPaymentStatus(order: Order): string {
-  return String((order as { pagamento_status?: string | null }).pagamento_status || '')
-    .trim()
-    .toLowerCase();
 }
 
 function getCustomerPhone(order: Order): string {
@@ -174,9 +174,10 @@ export async function executeCentralPrimaryAction(input: {
 }
 
 export function canCentralConfirmPayment(order: Order): boolean {
-  if (!isDeliveryOrder(order)) return false;
   if (isOrderCanceledLike(order)) return false;
-  return getPaymentStatus(order) !== 'pago';
+  const kind = getCentralOrderKind(order);
+  if (kind !== 'delivery' && kind !== 'retirada') return false;
+  return isPaymentPendingOrder(order);
 }
 
 export function canCentralPrintProof(order: Order): boolean {
@@ -236,26 +237,43 @@ export function getCentralNotifyCustomerUrl(order: Order): string | null {
 export async function executeCentralConfirmPayment(input: {
   token: string;
   order: Order;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; orderPatch?: Partial<Order> }> {
   const { token, order } = input;
   if (!canCentralConfirmPayment(order)) {
     return { ok: false, error: 'Pagamento já está confirmado ou não pode ser alterado aqui.' };
   }
 
   try {
-    const res = await fetch(`/api/delivery/pedidos/${order.id}/pagamento`, {
+    const res = await fetch(`/api/orders/${order.id}/confirm-payment`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ pagamento_status: 'pago' }),
     });
-    const data = await res.json().catch(() => null);
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      payment_status?: string;
+      pagamento_status?: string;
+      paid_at?: string | null;
+      amount_paid?: number;
+      payment_total_paid?: number;
+    } | null;
     if (!res.ok) {
       return { ok: false, error: data?.error || 'Não foi possível confirmar o pagamento.' };
     }
-    return { ok: true };
+    return {
+      ok: true,
+      orderPatch: {
+        pagamento_status: 'pago',
+        payment_status: 'paid',
+        paid_at: data?.paid_at ?? null,
+        amount_paid: data?.amount_paid ?? null,
+        payment_total_paid: data?.payment_total_paid ?? Number(order.total_amount || 0),
+        pagamento_confirmado_at: data?.paid_at ?? null,
+        pagamento_confirmado_valor: data?.amount_paid ?? null,
+      },
+    };
   } catch {
     return { ok: false, error: 'Erro de conexão ao confirmar o pagamento.' };
   }

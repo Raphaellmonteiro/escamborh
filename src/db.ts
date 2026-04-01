@@ -387,6 +387,7 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+      ALTER TABLE clientes ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS minutos_pago_folha INTEGER NULL;
       ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS destino_pendente INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS tipo_contrato TEXT DEFAULT 'fixo';
@@ -527,6 +528,8 @@ export async function runMigrations() {
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_id INTEGER;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS delivery_endereco_id INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pagamento_confirmado_at TIMESTAMPTZ;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pagamento_confirmado_valor REAL;
     `);
 
     await client.query(`

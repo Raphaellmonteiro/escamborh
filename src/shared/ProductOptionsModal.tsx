@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { X, Plus, Minus, AlertCircle, Loader2 } from 'lucide-react';
 import { useDeliveryCardapioTheme } from '../segments/delivery/DeliveryCardapioThemeContext';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
+import { FlowProductImage } from './FlowProductImage';
 
 export interface OpcaoItem { id: number; nome: string; preco_adicional: number; }
 export interface GrupoOpcao {
@@ -542,7 +543,11 @@ export function ProductOptionsModal({
                       : 'relative h-40 overflow-hidden sm:h-48 md:h-52'
               }
             >
-              <img src={headerFoto} alt={produto.name} className="h-full w-full object-cover brightness-[1.03] contrast-[1.02]" />
+              <FlowProductImage
+                src={headerFoto}
+                alt={produto.name}
+                className="h-full w-full object-cover brightness-[1.03] contrast-[1.02]"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/55 to-black/10" />
             </div>
           ) : null}

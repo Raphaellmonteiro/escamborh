@@ -1,15 +1,14 @@
 // src/routes/products.ts
 import { Router, Request, Response, NextFunction } from 'express';
-import fs from 'fs';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txInsert, txRun } from '../db';
-import { upload, uploadFotoFunc, checkMagicBytes, requireAnyPermission } from '../middleware';
+import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
+import { upload, checkMagicBytes, requireAnyPermission } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
 import { sendInternalError } from '../utils/internalServerError';
 import { normalizeProductProductionInput } from '../utils/preparation';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
-import { resolveProductUploadDiskPath } from '../utils/productPhotoFs';
 
 const REPORT_TZ = 'America/Sao_Paulo';
 
@@ -1008,14 +1007,7 @@ function normalizeProductPromotionInput(
         'SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?',
         [productId, req.tenantId]
       );
-      const photoDisk = resolveProductUploadDiskPath(produto?.photo_url ?? null);
-      if (photoDisk) {
-        try {
-          fs.unlinkSync(photoDisk);
-        } catch {
-          /* ignore */
-        }
-      }
+      await deleteStoredUpload(produto?.photo_url ?? null);
       const grupos = await qAll('SELECT id FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=?', [
         productId,
         req.tenantId,
@@ -1040,10 +1032,14 @@ function normalizeProductPromotionInput(
   router.post('/:id/photo', upload.single('photo'), checkMagicBytes, async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
-      const photoUrl = `/uploads/${req.file.filename}`;
       const old = await q1('SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      const oldDisk = resolveProductUploadDiskPath(old?.photo_url ?? null);
-      if (oldDisk) { try { fs.unlinkSync(oldDisk); } catch {} }
+      await deleteStoredUpload(old?.photo_url ?? null);
+      const publicPath = `/uploads/${req.file.filename}`;
+      const photoUrl = await finalizeLocalUploadToPersistentStorage({
+        absolutePath: req.file.path,
+        publicPath,
+        contentType: req.file.mimetype,
+      });
       await qRun('UPDATE produtos SET photo_url=? WHERE id=? AND tenant_id=?', [photoUrl, req.params.id, req.tenantId]);
       res.json({ success: true, photo_url: photoUrl });
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }
@@ -1052,8 +1048,7 @@ function normalizeProductPromotionInput(
   router.delete('/:id/photo', async (req: Request, res) => {
     try {
       const p = await q1('SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      const prevDisk = resolveProductUploadDiskPath(p?.photo_url ?? null);
-      if (prevDisk) { try { fs.unlinkSync(prevDisk); } catch {} }
+      await deleteStoredUpload(p?.photo_url ?? null);
       await qRun('UPDATE produtos SET photo_url=NULL WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/products', e); }

@@ -846,7 +846,7 @@ export function createDeliveryPublicRouter() {
       const produtos = await qAll('SELECT * FROM produtos WHERE tenant_id=? AND active=1 ORDER BY COALESCE(ordem,0) ASC, name ASC', [tenant.id]);
       const produtosComOpcoes = await buildProdutosComOpcoesBatched(tenant.id, produtos);
 
-      const logoPadrao = resolveTenantLogoPublicUrl(tenant.id);
+      const logoPadrao = await resolveTenantLogoPublicUrl(tenant.id);
       const logoCustom = String(dcfg.cardapio_online_logo_url || '').trim();
       const logo_url = logoCustom || logoPadrao;
 

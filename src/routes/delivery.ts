@@ -2,7 +2,11 @@
 import { Router, Request } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { buildPublicOrderItemFromPersisted, serializeOrderItemSelecoes } from '../services/ordersService';
+import {
+  buildPublicOrderItemFromPersisted,
+  confirmOrderPayment,
+  serializeOrderItemSelecoes,
+} from '../services/ordersService';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txRun, txInsert } from '../db';
 import { sendInternalError } from '../utils/internalServerError';
 import {
@@ -30,6 +34,7 @@ import {
   mergeDeliveryConfigClientPut,
 } from '../utils/deliveryConfigPersist';
 import { UPLOADS_ROOT } from '../uploadsRoot';
+import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
 
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
@@ -76,18 +81,37 @@ async function mergeDeliveryConfigJson(tenantId: number, patch: (c: Record<strin
   return cfg;
 }
 
-function unlinkDeliveryUploadIfOwned(url: string, tenantId: number) {
+function deliveryUploadBasename(url: string): string {
   const u = String(url || '').trim();
-  if (!u.startsWith(DELIVERY_UPLOAD_URL_PREFIX)) return;
-  const base = path.basename(u);
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) {
+    try {
+      return path.basename(new URL(u).pathname) || '';
+    } catch {
+      return '';
+    }
+  }
+  return path.basename(u.split('?')[0]) || '';
+}
+
+async function unlinkDeliveryUploadIfOwned(url: string, tenantId: number) {
+  const u = String(url || '').trim();
+  if (!u) return;
+  const pathOk =
+    u.startsWith(DELIVERY_UPLOAD_URL_PREFIX) ||
+    (/^https?:\/\//i.test(u) &&
+      (() => {
+        try {
+          return new URL(u).pathname.replace(/\/+/g, '/').includes('/uploads/delivery/');
+        } catch {
+          return false;
+        }
+      })());
+  if (!pathOk) return;
+  const base = deliveryUploadBasename(u);
   const match = /^delivery_(\d+)_/.exec(base);
   if (!match || Number(match[1]) !== Number(tenantId)) return;
-  const full = path.join(DELIVERY_UPLOAD_DIR, base);
-  const dir = DELIVERY_UPLOAD_DIR;
-  if (!full.startsWith(dir)) return;
-  try {
-    if (fs.existsSync(full)) fs.unlinkSync(full);
-  } catch {}
+  await deleteStoredUpload(u);
 }
 
 function removeOtherDeliveryLogoVariants(tenantId: number, keepFilename: string) {
@@ -185,9 +209,14 @@ export function createDeliveryRouter() {
         const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
         const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
         const newName = req.file.filename;
-        if (oldUrl && path.basename(oldUrl) !== newName) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        if (oldUrl && deliveryUploadBasename(oldUrl) !== newName) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
         removeOtherDeliveryLogoVariants(tenantId, newName);
-        const publicUrl = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+        const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+        const publicUrl = await finalizeLocalUploadToPersistentStorage({
+          absolutePath: req.file.path,
+          publicPath,
+          contentType: req.file.mimetype,
+        });
         await mergeDeliveryConfigJson(tenantId, (c) => {
           c.cardapio_online_logo_url = publicUrl;
         });
@@ -204,7 +233,7 @@ export function createDeliveryRouter() {
       const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
       const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const oldUrl = String(prev.cardapio_online_logo_url || '').trim();
-      if (oldUrl) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+      if (oldUrl) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
       removeAllDeliveryCardapioLogoFiles(tenantId);
       await mergeDeliveryConfigJson(tenantId, (c) => {
         delete c.cardapio_online_logo_url;
@@ -232,9 +261,14 @@ export function createDeliveryRouter() {
         const slots = bannerSlotsFromCfg(cfg);
         const oldUrl = slots[idx];
         const newName = req.file.filename;
-        if (oldUrl && path.basename(oldUrl) !== newName) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        if (oldUrl && deliveryUploadBasename(oldUrl) !== newName) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
         removeOtherDeliveryBannerVariants(tenantId, idx, newName);
-        const publicUrl = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+        const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
+        const publicUrl = await finalizeLocalUploadToPersistentStorage({
+          absolutePath: req.file.path,
+          publicPath,
+          contentType: req.file.mimetype,
+        });
         slots[idx] = publicUrl;
         await mergeDeliveryConfigJson(tenantId, (c) => {
           c.cardapio_online_banner_urls = slots;
@@ -257,7 +291,7 @@ export function createDeliveryRouter() {
       const cfg = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const slots = bannerSlotsFromCfg(cfg);
       const oldUrl = slots[idx];
-      if (oldUrl) unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+      if (oldUrl) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
       removeAllDeliveryBannerFilesForSlot(tenantId, idx);
       slots[idx] = '';
       await mergeDeliveryConfigJson(tenantId, (c) => {
@@ -432,10 +466,20 @@ router.get('/pedidos', async (req: Request, res) => {
       if (!order) return res.status(404).json({ error: 'Pedido nao encontrado' });
       if (isCanceledOrder(order)) return res.status(400).json({ error: 'Pedido cancelado nao pode ter pagamento alterado aqui' });
 
+      const ps = String(req.body?.pagamento_status || '').trim().toLowerCase();
+      if (ps === 'pago') {
+        const userId = (req as Request & { user?: { id?: number } }).user?.id;
+        await confirmOrderPayment({ orderId: req.params.id, tenantId: req.tenantId, userId });
+        return res.json({ success: true });
+      }
+
       await qRun('UPDATE pedidos SET pagamento_status=? WHERE id=? AND tenant_id=?', [req.body.pagamento_status, req.params.id, req.tenantId]);
       notifyTenantOrderStreams(Number(req.tenantId), 'status', { orderId: Number(req.params.id) });
       res.json({ success: true });
-    } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ error: e.message });
+      sendInternalError(res, 'routes/delivery', e);
+    }
   });
 
   router.get('/motoboys', async (req: Request, res) => {

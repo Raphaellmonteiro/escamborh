@@ -13,6 +13,7 @@ import {
 import { gerarCupomHtml } from '../utils/printTemplates';
 import type {
   CancelOrderInput,
+  ConfirmOrderPaymentInput,
   CreateOrderInput,
   DeleteOrderInput,
   GetOrderHistoryInput,
@@ -23,6 +24,8 @@ import type {
   RefundOrderInput,
   UpdateOrderStatusInput,
 } from '../types/order';
+import type { Order } from '../types';
+import { isOrderFullyPaid } from '../utils/orderCentralBoard';
 import { AppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 import { getProfilePaperWidthMm } from '../utils/printProfiles';
@@ -196,6 +199,8 @@ type OrderRow = {
   subtotal?: number | null;
   pagamento_tipo?: string | null;
   pagamento_status?: string | null;
+  pagamento_confirmado_at?: string | null;
+  pagamento_confirmado_valor?: number | string | null;
   observation?: string | null;
   receipt_text?: string | null;
   created_at: string;
@@ -1700,19 +1705,37 @@ export async function getOrders(filters: GetOrdersFilters) {
         0
       );
       const auto = automationByOrder.get(Number(order.id));
+      const payAgg = paymentsByOrder.get(Number(order.id));
 
-      return {
+      const base = {
         ...order,
         estoque_reposto: Boolean(Number(order.estoque_reposto || 0)),
         subtotal: Number(order.subtotal || 0) > 0 ? Number(order.subtotal) : derivedSubtotal,
-        payment_total_received: paymentsByOrder.get(Number(order.id))?.totalReceived || 0,
-        payment_total_change: paymentsByOrder.get(Number(order.id))?.totalChange || 0,
-        payment_total_paid: paymentsByOrder.get(Number(order.id))?.totalPaid || 0,
-        payment_count: paymentsByOrder.get(Number(order.id))?.count || 0,
+        payment_total_received: payAgg?.totalReceived || 0,
+        payment_total_change: payAgg?.totalChange || 0,
+        payment_total_paid: payAgg?.totalPaid || 0,
+        payment_count: payAgg?.count || 0,
         items: orderItems,
         automation_auto_delivery_accept: auto?.autoDeliveryAccept ?? false,
         automation_kitchen_failed: auto?.kitchenFailed ?? false,
         automation_kitchen_ok: auto?.kitchenOk ?? false,
+      };
+
+      const settled = isOrderFullyPaid(base as unknown as Order);
+
+      return {
+        ...base,
+        payment_status: settled ? ('paid' as const) : ('pending' as const),
+        payment_method: order.pagamento_tipo ?? null,
+        paid_at: order.pagamento_confirmado_at ?? null,
+        amount_paid: settled
+          ? Number(
+              order.pagamento_confirmado_valor ??
+                payAgg?.totalPaid ??
+                order.total_amount ??
+                0
+            )
+          : null,
       };
     });
   } catch (error) {
@@ -1776,6 +1799,149 @@ export async function confirmQrOrder(input: { orderId: number | string; tenantId
     return novoStatus;
   } catch (error) {
     logError('ordersService.confirmQrOrder', error, { orderId, tenantId: input.tenantId });
+    throw error;
+  }
+}
+
+function paymentMethodLabelFromPedidoTipo(pagamentoTipo: string | null | undefined): string {
+  const t = String(pagamentoTipo || '').trim().toLowerCase();
+  if (t === 'dinheiro') return 'Dinheiro';
+  if (t === 'pix') return 'PIX';
+  if (t === 'cartao' || t === 'cartão') return 'Cartão';
+  return String(pagamentoTipo || '').trim() || 'Pagamento';
+}
+
+export type ConfirmOrderPaymentResult = {
+  payment_status: 'paid';
+  pagamento_status: 'pago';
+  paid_at: string | null;
+  amount_paid: number;
+  payment_total_paid: number;
+};
+
+/**
+ * Confirma pagamento na retirada/entrega (ou completa registro financeiro): `pagamento_status = pago`,
+ * grava `pagamento_confirmado_*` e insere linha em `pagamentos` quando o caixa ainda não refletia o total.
+ */
+export async function confirmOrderPayment(input: ConfirmOrderPaymentInput): Promise<ConfirmOrderPaymentResult> {
+  ensureTenantId(input.tenantId);
+  const orderId = parseOrderId(input.orderId);
+
+  try {
+    const result = await withTx(async (client) => {
+      const order = await txQ1<OrderRow>(
+        client,
+        `SELECT * FROM pedidos WHERE id=? AND tenant_id=? FOR UPDATE`,
+        [orderId, input.tenantId]
+      );
+
+      if (!order) {
+        throw new AppError('Pedido não encontrado', 404);
+      }
+
+      if (order.cancelado_at) {
+        throw new AppError('Pedido cancelado não pode ter pagamento confirmado', 400);
+      }
+
+      const total = Number(order.total_amount || 0);
+      const paymentRows = await txQAll<PaymentRow>(
+        client,
+        `SELECT amount_paid, change_given FROM pagamentos WHERE order_id=? AND tenant_id=?`,
+        [orderId, input.tenantId]
+      );
+
+      const paidCents = paymentRows.reduce(
+        (sum, p) => sum + toMoneyCents(Number(p.amount_paid || 0) - Number(p.change_given || 0)),
+        0
+      );
+      const totalCents = toMoneyCents(total);
+      const shortfallCents = totalCents - paidCents;
+
+      if (String(order.pagamento_status || '').trim().toLowerCase() === 'pago' && shortfallCents <= MONEY_TOLERANCE_CENTS) {
+        const snap = await txQ1<{ pagamento_confirmado_at: string | null; pagamento_confirmado_valor: number | string | null }>(
+          client,
+          `SELECT pagamento_confirmado_at, pagamento_confirmado_valor FROM pedidos WHERE id=? AND tenant_id=?`,
+          [orderId, input.tenantId]
+        );
+        return {
+          skipNotify: true as const,
+          paid_at: snap?.pagamento_confirmado_at || null,
+          amount_paid: Number(snap?.pagamento_confirmado_valor ?? total),
+          payment_total_paid: centsToMoney(paidCents),
+        };
+      }
+
+      if (shortfallCents > MONEY_TOLERANCE_CENTS) {
+        const method = paymentMethodLabelFromPedidoTipo(order.pagamento_tipo);
+        const amountToInsert = centsToMoney(shortfallCents);
+        await txRun(
+          client,
+          `INSERT INTO pagamentos (order_id, method, amount_paid, change_given, tenant_id) VALUES (?,?,?,?,?)`,
+          [orderId, method, amountToInsert, 0, input.tenantId]
+        );
+      }
+
+      await txRun(
+        client,
+        `UPDATE pedidos
+         SET pagamento_status='pago',
+             pagamento_confirmado_at=NOW(),
+             pagamento_confirmado_valor=?
+         WHERE id=? AND tenant_id=?`,
+        [total, orderId, input.tenantId]
+      );
+
+      const snap = await txQ1<{ pagamento_confirmado_at: string | null; pagamento_confirmado_valor: number | string | null }>(
+        client,
+        `SELECT pagamento_confirmado_at, pagamento_confirmado_valor FROM pedidos WHERE id=? AND tenant_id=?`,
+        [orderId, input.tenantId]
+      );
+
+      const paidRowsAfter = await txQAll<PaymentRow>(
+        client,
+        `SELECT amount_paid, change_given FROM pagamentos WHERE order_id=? AND tenant_id=?`,
+        [orderId, input.tenantId]
+      );
+      const totalPaidAfterCents = paidRowsAfter.reduce(
+        (sum, p) => sum + toMoneyCents(Number(p.amount_paid || 0) - Number(p.change_given || 0)),
+        0
+      );
+
+      await createOrderEvent(client, {
+        pedidoId: orderId,
+        tenantId: input.tenantId,
+        tipo: 'PAGAMENTO_CONFIRMADO',
+        valor: total,
+        payload: {
+          origem: 'ordersService.confirmOrderPayment',
+          amount_paid: total,
+          metodo_resumo: order.pagamento_tipo || null,
+        },
+        usuarioId: input.userId,
+      });
+
+      return {
+        skipNotify: false as const,
+        paid_at: snap?.pagamento_confirmado_at || null,
+        amount_paid: total,
+        payment_total_paid: centsToMoney(totalPaidAfterCents),
+      };
+    });
+
+    if (!result.skipNotify) {
+      notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    }
+
+    const { skipNotify: _sn, ...rest } = result;
+    return {
+      payment_status: 'paid',
+      pagamento_status: 'pago',
+      paid_at: rest.paid_at,
+      amount_paid: rest.amount_paid,
+      payment_total_paid: rest.payment_total_paid,
+    };
+  } catch (error) {
+    logError('ordersService.confirmOrderPayment', error, { orderId, tenantId: input.tenantId });
     throw error;
   }
 }

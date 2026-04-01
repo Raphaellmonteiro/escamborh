@@ -68,6 +68,17 @@ export interface Order {
   total_amount: number;
   pagamento_tipo?: string | null;
   pagamento_status?: string | null;
+  /** Momento em que o operador confirmou pagamento (retirada/entrega/Pix manual). */
+  pagamento_confirmado_at?: string | null;
+  /** Valor registrado na confirmação (geralmente o total do pedido). */
+  pagamento_confirmado_valor?: number | null;
+  /** Derivado para API: pending | paid (não confundir com status do pedido). */
+  payment_status?: 'pending' | 'paid';
+  /** Alias de `pagamento_tipo` para clientes da API. */
+  payment_method?: string | null;
+  paid_at?: string | null;
+  /** Valor considerado quitado quando `payment_status === 'paid'`. */
+  amount_paid?: number | null;
   payment_total_received?: number;
   payment_total_change?: number;
   payment_total_paid?: number;

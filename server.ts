@@ -13,6 +13,7 @@ import multer from 'multer';
 // ── Banco e migrações ─────────────────────────────────────────────────────────
 import { runMigrations } from './src/db';
 import { UPLOADS_ROOT } from './src/uploadsRoot';
+import { isS3ObjectStorageEnabled } from './src/services/uploadPersistence';
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
 import { requestLogger } from './src/middleware';
@@ -40,9 +41,15 @@ app.use(
 );
 
 // ── Startup ───────────────────────────────────────────────────────────────────
-if (!fs.existsSync(UPLOADS_ROOT)) fs.mkdirSync(UPLOADS_ROOT);
+if (!fs.existsSync(UPLOADS_ROOT)) fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
 fs.mkdirSync(path.join(UPLOADS_ROOT, 'logo'), { recursive: true });
 fs.mkdirSync(path.join(UPLOADS_ROOT, 'funcionarios'), { recursive: true });
+fs.mkdirSync(path.join(UPLOADS_ROOT, 'delivery'), { recursive: true });
+
+const uploadsViaVolume = Boolean(process.env.FLOWPDV_UPLOADS_DIR?.trim());
+console.log(
+  `[uploads] UPLOADS_ROOT=${UPLOADS_ROOT} volume_env=${uploadsViaVolume} s3=${isS3ObjectStorageEnabled()}`
+);
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = (

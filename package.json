@@ -12,10 +12,12 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "check-product-photos": "tsx scripts/check-product-photos.ts",
+    "clear-missing-product-photos": "tsx scripts/clear-missing-product-photos.ts",
     "preview-cardapio": "tsx scripts/generate-cardapio-preview.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
+    "@aws-sdk/client-s3": "^3.750.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.6",

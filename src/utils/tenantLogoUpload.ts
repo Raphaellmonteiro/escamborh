@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { q1 } from '../db';
 import { UPLOADS_ROOT } from '../uploadsRoot';
 
 export function getTenantLogoDir(): string {
@@ -26,9 +27,18 @@ export function listTenantLogoFiles(tenantId: number | string): string[] {
   return fs.readdirSync(dir).filter((f) => isTenantLogoBasename(tenantId, f));
 }
 
-/** URL pública `/uploads/logo/...` do logo atual (mais recente se houver mais de um). */
-export function resolveTenantLogoPublicUrl(tenantId: number | string | undefined | null): string | null {
+/**
+ * URL pública do logo: coluna `clientes.logo_url` (S3 ou `/uploads/logo/...`) ou, se vazia,
+ * o arquivo mais recente em disco (legado).
+ */
+export async function resolveTenantLogoPublicUrl(
+  tenantId: number | string | undefined | null
+): Promise<string | null> {
   if (tenantId === undefined || tenantId === null) return null;
+  const row = await q1<{ logo_url: string | null }>('SELECT logo_url FROM clientes WHERE id=?', [tenantId]);
+  const fromDb = String(row?.logo_url || '').trim();
+  if (fromDb) return fromDb;
+
   const files = listTenantLogoFiles(tenantId);
   if (files.length === 0) return null;
   const dir = getTenantLogoDir();

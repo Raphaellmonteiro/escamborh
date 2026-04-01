@@ -5,6 +5,7 @@ import { pool, q1, qAll, qRun } from '../db';
 import { uploadLogo, checkMagicBytes } from '../middleware';
 import { getTenantPlanContext } from '../services/tenantPlan';
 import { sendInternalError } from '../utils/internalServerError';
+import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
 import {
   resolveTenantLogoPublicUrl,
   unlinkAllTenantLogos,
@@ -23,7 +24,7 @@ export function createSettingsRouter() {
       const permissoes = (req as any).userPermissoes || (usuario?.permissoes ? JSON.parse(usuario.permissoes) : null);
       const nomeUsuario= (req as any).userName       || usuario?.nome       || '';
       const senhaPadrao = (cliente?.senha_admin === '123321') || (cliente?.senha_caixa === '123321');
-      const logo_url = resolveTenantLogoPublicUrl(req.tenantId);
+      const logo_url = await resolveTenantLogoPublicUrl(req.tenantId);
       res.json({
         nome_estabelecimento: cliente?.nome_estabelecimento || 'FlowPDV',
         logo_url,
@@ -92,23 +93,43 @@ export function createSettingsRouter() {
     } catch (e: unknown) { sendInternalError(res, 'routes/settings', e); }
   });
 
-  router.get('/logo', (req: Request, res) => {
-    res.json({ logo_url: resolveTenantLogoPublicUrl(req.tenantId) });
+  router.get('/logo', async (req: Request, res) => {
+    try {
+      res.json({ logo_url: await resolveTenantLogoPublicUrl(req.tenantId) });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/settings', e);
+    }
   });
 
-  router.post('/logo', uploadLogo.single('logo'), checkMagicBytes, (req: any, res) => {
+  router.post('/logo', uploadLogo.single('logo'), checkMagicBytes, async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+      const prev = await resolveTenantLogoPublicUrl(req.tenantId);
+      await deleteStoredUpload(prev);
       unlinkTenantLogosExcept(req.tenantId, req.file.filename);
-      res.json({ success: true, logo_url: `/uploads/logo/${req.file.filename}` });
-    } catch (e: unknown) { sendInternalError(res, 'routes/settings', e); }
+      const publicPath = `/uploads/logo/${req.file.filename}`;
+      const logo_url = await finalizeLocalUploadToPersistentStorage({
+        absolutePath: req.file.path,
+        publicPath,
+        contentType: req.file.mimetype,
+      });
+      await qRun('UPDATE clientes SET logo_url=? WHERE id=?', [logo_url, req.tenantId]);
+      res.json({ success: true, logo_url });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/settings', e);
+    }
   });
 
-  router.delete('/logo', (req: Request, res) => {
+  router.delete('/logo', async (req: Request, res) => {
     try {
+      const prev = await resolveTenantLogoPublicUrl(req.tenantId!);
+      await deleteStoredUpload(prev);
       unlinkAllTenantLogos(req.tenantId!);
+      await qRun('UPDATE clientes SET logo_url=NULL WHERE id=?', [req.tenantId]);
       res.json({ success: true });
-    } catch (e: unknown) { sendInternalError(res, 'routes/settings', e); }
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/settings', e);
+    }
   });
 
   router.get('/watermark', async (req: Request, res) => {

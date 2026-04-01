@@ -77,6 +77,12 @@ export interface UpdateOrderStatusInput {
   tenantId: number | string;
 }
 
+export interface ConfirmOrderPaymentInput {
+  orderId: number | string;
+  tenantId: number | string;
+  userId?: number;
+}
+
 export interface GetOrdersFilters {
   tenantId: number | string;
   status?: string;

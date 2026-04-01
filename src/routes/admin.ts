@@ -11,6 +11,7 @@ import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import { getPlanFeatures, type PaidTenantPlan, type PlanFeature } from '../config/planFeatures';
 import { invalidateTenantPlanCache } from '../services/tenantPlan';
+import { confirmOrderPayment } from '../services/ordersService';
 import { normalizeProductProductionInput } from '../utils/preparation';
 
 const TZ = 'America/Sao_Paulo';
@@ -764,11 +765,7 @@ export function createAdminRouter() {
       if (pedido.pagamento_tipo !== 'pix') throw new Error('Pedido não é pagamento PIX');
       if (pedido.pagamento_status === 'pago') throw new Error('Pedido já está pago');
 
-      await qRun(
-        "UPDATE pedidos SET pagamento_status='pago' WHERE id=? AND tenant_id=?",
-        [orderId, tenantId]
-      );
-      notifyTenantOrderStreams(tenantId, 'status', { orderId });
+      await confirmOrderPayment({ orderId, tenantId });
 
       await logAdminAction(
         tenantId,

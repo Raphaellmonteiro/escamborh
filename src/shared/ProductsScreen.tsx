@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { Fragment, useState, useEffect, useMemo } from 'react';
 import { useDebounce } from '../hooks/useDebounce';
 import { usePaginatedList } from '../hooks/usePaginatedList';
 import {
@@ -17,6 +17,7 @@ import type { ProductionType } from '../utils/preparation';
 import { resolveProductionType, resolveRequiresPreparation } from '../utils/preparation';
 import { buildCardapioPdfHtml, type CardapioPdfMode, type CardapioPdfProduct } from '../utils/cardapioPdfHtml';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
+import { FlowProductImage } from './FlowProductImage';
 
 // ─── helpers ─────────────────────────────────────────────────────
 const fmtR$ = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
@@ -865,13 +866,9 @@ export default function ProductsScreen({
                     </div>
                     <div className={`w-14 h-14 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${COLOR_MAP[p.color || 'zinc']?.bg || 'bg-zinc-100'}`}>
                       {thumbUrl ? (
-                        <img
-                          key={`cardapio-thumb-${p.id}-${thumbUrl}`}
-                          src={thumbUrl}
-                          alt={p.name}
-                          loading="lazy"
-                          className="w-full h-full object-cover"
-                        />
+                        <Fragment key={`cardapio-thumb-${p.id}-${thumbUrl}`}>
+                          <FlowProductImage src={thumbUrl} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                        </Fragment>
                       ) : (
                         <Package size={20} className="text-zinc-400" />
                       )}
@@ -950,13 +947,9 @@ export default function ProductsScreen({
                   {/* Foto */}
                   <div className={`w-full h-40 flex items-center justify-center overflow-hidden relative ${cc.bg}`}>
                     {thumbUrl ? (
-                      <img
-                        key={`cardapio-grid-${p.id}-${thumbUrl}`}
-                        src={thumbUrl}
-                        alt={p.name}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
+                      <Fragment key={`cardapio-grid-${p.id}-${thumbUrl}`}>
+                        <FlowProductImage src={thumbUrl} alt={p.name} loading="lazy" className="w-full h-full object-cover" />
+                      </Fragment>
                     ) : (
                       <Package size={40} className="text-zinc-300" />
                     )}
@@ -1232,7 +1225,11 @@ export default function ProductsScreen({
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">Foto do Produto</label>
                   {pendingPhoto || normalizeProductPhotoPublicUrl(editing.photo_url) ? (
                     <div className="relative w-full h-40 rounded-xl overflow-hidden border border-zinc-200">
-                      <img src={pendingPhoto ? URL.createObjectURL(pendingPhoto) : (normalizeProductPhotoPublicUrl(editing.photo_url) ?? '')} alt="" className="w-full h-full object-cover"/>
+                      <FlowProductImage
+                        src={pendingPhoto ? URL.createObjectURL(pendingPhoto) : (normalizeProductPhotoPublicUrl(editing.photo_url) ?? '')}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
                       <button type="button"
                         onClick={() => { if (pendingPhoto) setPendingPhoto(null); else if (editing.id) handlePhotoRemove(editing.id); }}
                         className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg">

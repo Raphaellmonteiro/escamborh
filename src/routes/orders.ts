@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import {
   cancelOrder,
+  confirmOrderPayment,
   createOrder,
   deleteOrder,
   getOrderHistory,
@@ -75,6 +76,18 @@ export function createOrdersRouter() {
       });
 
       res.json(orders);
+    })
+  );
+
+  router.patch(
+    '/:id/confirm-payment',
+    asyncHandler(async (req, res) => {
+      const result = await confirmOrderPayment({
+        orderId: req.params.id,
+        tenantId: req.tenantId,
+        userId: req.user?.id,
+      });
+      res.json({ success: true, ...result });
     })
   );
 

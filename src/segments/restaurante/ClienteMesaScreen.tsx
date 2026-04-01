@@ -10,6 +10,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { normalizeProductPhotoPublicUrl } from '../../utils/productPhotoUrl';
+import { FlowProductImage } from '../../shared/FlowProductImage';
 
 /* ─────────────────────────────── tipos ──────────────────────────────── */
 interface Produto  { id: number; name: string; price: number; category: string; photo_url?: string; }
@@ -377,7 +378,7 @@ function AbaCardapio({
               return (
                 <div key={p.id} style={S.prodCard}>
                   {foto ? (
-                    <img src={foto} alt={p.name} style={S.prodImg} />
+                    <FlowProductImage src={foto} alt={p.name} style={S.prodImg} />
                   ) : (
                     <div style={{ ...S.prodImg, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
                       🍽️

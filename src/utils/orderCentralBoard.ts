@@ -86,8 +86,10 @@ function getPaymentStatusKey(order: Order): string {
     .toLowerCase();
 }
 
-function usesDeliveryPaymentConfirmation(order: Order): boolean {
-  return getCentralOrderKind(order) === 'delivery';
+/** Delivery e retirada via app/cardápio: liquidação segue `pagamento_status`, separado do status operacional do pedido. */
+function usesRemoteChannelPaymentConfirmation(order: Order): boolean {
+  const k = getCentralOrderKind(order);
+  return k === 'delivery' || k === 'retirada';
 }
 
 function getOrderRecordedPaidAmount(order: Order): number {
@@ -113,7 +115,7 @@ function getRecordedPaymentCoverageTarget(order: Order): number {
 }
 
 export function isOrderFullyPaid(order: Order): boolean {
-  if (usesDeliveryPaymentConfirmation(order)) {
+  if (usesRemoteChannelPaymentConfirmation(order)) {
     return getPaymentStatusKey(order) === 'pago';
   }
   if (getPaymentStatusKey(order) === 'pago') return true;
@@ -123,7 +125,7 @@ export function isOrderFullyPaid(order: Order): boolean {
 
 export function isPaymentPendingOrder(order: Order): boolean {
   const status = getPaymentStatusKey(order);
-  if (usesDeliveryPaymentConfirmation(order)) {
+  if (usesRemoteChannelPaymentConfirmation(order)) {
     return Boolean(status) && status !== 'pago';
   }
   if (isOrderFullyPaid(order)) return false;

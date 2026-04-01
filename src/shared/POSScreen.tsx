@@ -23,6 +23,7 @@ import {
 } from './ProductOptionsModal';
 import type { PosClienteSelecionado } from './PosClienteModal';
 import POSProductOptionsDialog from './POSProductOptionsDialog';
+import { FlowProductImage } from './FlowProductImage';
 
 const MesaPickerModal = lazy(() => import('../segments/bar/MesaPickerModal'));
 const PosClienteModal = lazy(() => import('./PosClienteModal'));
@@ -166,7 +167,7 @@ const ProductCard = React.memo(function ProductCard({
         className="relative w-full overflow-hidden shrink-0 pb-[38%] min-[480px]:pb-[40%] md:pb-[42%] xl:pb-[44%] [@media(max-height:640px)]:pb-[34%]"
       >
         {thumbSrc ? (
-          <img
+          <FlowProductImage
             src={thumbSrc}
             alt={product.name}
             loading="lazy"
@@ -1084,7 +1085,11 @@ export default function POSScreen({
               <div className="text-center mb-6">
                 {normalizeProductPhotoPublicUrl(pendingProduct.photo_url) && (
                   <div className="w-full h-40 rounded-2xl overflow-hidden mb-4">
-                    <img src={normalizeProductPhotoPublicUrl(pendingProduct.photo_url)!} alt={pendingProduct.name} className="w-full h-full object-cover" />
+                    <FlowProductImage
+                      src={normalizeProductPhotoPublicUrl(pendingProduct.photo_url)!}
+                      alt={pendingProduct.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 )}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>

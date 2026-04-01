@@ -10,6 +10,7 @@ import {
   usesAutoDecimoTerceiro,
 } from '../services/employeeContract';
 import { uploadFotoFunc, checkMagicBytes } from '../middleware';
+import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
 import {
   calculatePayroll,
   computePayrollPaymentSummary,
@@ -297,7 +298,17 @@ export function createRhRouter() {
   router.post('/:id/foto', uploadFotoFunc.single('foto'), checkMagicBytes, async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-      const foto_url = `/uploads/funcionarios/${req.file.filename}`;
+      const prev = await q1<{ foto_url: string | null }>(
+        'SELECT foto_url FROM funcionarios WHERE id=? AND tenant_id=?',
+        [req.params.id, req.tenantId]
+      );
+      await deleteStoredUpload(prev?.foto_url ?? null);
+      const publicPath = `/uploads/funcionarios/${req.file.filename}`;
+      const foto_url = await finalizeLocalUploadToPersistentStorage({
+        absolutePath: req.file.path,
+        publicPath,
+        contentType: req.file.mimetype,
+      });
       await qRun('UPDATE funcionarios SET foto_url=? WHERE id=? AND tenant_id=?', [foto_url, req.params.id, req.tenantId]);
       res.json({ success: true, foto_url });
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }

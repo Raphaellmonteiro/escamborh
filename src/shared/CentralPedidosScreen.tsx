@@ -171,6 +171,15 @@ function getMesaReference(order: Order) {
   return mesaMatch ? mesaMatch[1] : null;
 }
 
+function paymentMetodoUpper(tipo: string): string {
+  const k = String(tipo || '').trim().toLowerCase();
+  if (k === 'dinheiro') return 'DINHEIRO';
+  if (k === 'pix') return 'PIX';
+  if (k === 'cartao' || k === 'cartão') return 'CARTÃO';
+  const u = String(tipo || '').trim().toUpperCase();
+  return u || 'PAGAMENTO';
+}
+
 function getPagamentoLine(order: Order) {
   const tipo = order.pagamento_tipo;
   const status = order.pagamento_status;
@@ -179,15 +188,20 @@ function getPagamentoLine(order: Order) {
   const totalPaid = Number(order.payment_total_paid || 0);
   const totalAmount = Number(order.total_amount || 0);
   if (isOrderFullyPaid(order)) {
-    if (totalPaid > 0) return t ? `${t} · pago (${formatMoney(totalPaid)})` : `Pago (${formatMoney(totalPaid)})`;
-    return t ? `${t} · pago` : 'Pago';
+    if (t) {
+      if (totalPaid > 0) return `${paymentMetodoUpper(t)} — PAGO (${formatMoney(totalPaid)})`;
+      return `${paymentMetodoUpper(t)} — PAGO`;
+    }
+    if (totalPaid > 0) return `PAGO (${formatMoney(totalPaid)})`;
+    return 'PAGO';
   }
   if (totalPaid > 0 && totalAmount > 0) {
-    return `${t || 'Pagamento'} · ${formatMoney(totalPaid)} de ${formatMoney(totalAmount)}`;
+    return `${t ? paymentMetodoUpper(t) : 'PAGAMENTO'} — ${formatMoney(totalPaid)} / ${formatMoney(totalAmount)}`;
   }
+  if (t) return `${paymentMetodoUpper(t)} — PENDENTE`;
   if (!t && !s) return null;
-  if (t && s) return `${t} · ${s}`;
-  return t || s;
+  if (s) return `${s.toUpperCase()}`;
+  return null;
 }
 
 function getPaymentBadgeMeta(order: Order): { label: string; className: string } | null {
@@ -199,29 +213,36 @@ function getPaymentBadgeMeta(order: Order): { label: string; className: string }
   if (!tipo && !status && !fullyPaid) return null;
   if (fullyPaid) {
     return {
-      label:
-        totalPaid > 0
-          ? `${tipo ? `${tipo} · ` : ''}${formatMoney(totalPaid)} pago`
-          : tipo
-            ? `${tipo} pago`
-            : 'Pago',
+      label: tipo
+        ? totalPaid > 0
+          ? `${paymentMetodoUpper(tipo)} — PAGO · ${formatMoney(totalPaid)}`
+          : `${paymentMetodoUpper(tipo)} — PAGO`
+        : totalPaid > 0
+          ? `PAGO · ${formatMoney(totalPaid)}`
+          : 'PAGO',
       className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
     };
   }
   if (totalPaid > 0 && totalPaid + 0.01 < totalAmount) {
     return {
-      label: `Parcial · ${formatMoney(totalPaid)} / ${formatMoney(totalAmount)}`,
+      label: `PARCIAL · ${formatMoney(totalPaid)} / ${formatMoney(totalAmount)}`,
+      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+    };
+  }
+  if (tipo) {
+    return {
+      label: `${paymentMetodoUpper(tipo)} — PENDENTE`,
       className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
     };
   }
   if (status) {
     return {
-      label: tipo ? `${tipo} · ${status}` : status,
+      label: status.toUpperCase(),
       className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
     };
   }
   return {
-    label: tipo,
+    label: 'PAGAMENTO',
     className: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-500/30',
   };
 }
@@ -1035,9 +1056,12 @@ function OrderCard({
                     aria-label="Confirmar pagamento"
                     onClick={() => void handleQuickPayment()}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] px-3 gap-2 lg:min-h-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200`}
                   >
                     <BadgeCheck size={15} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
+                    {!compactMode && (
+                      <span className="text-[11px] font-black uppercase tracking-wide">Confirmar pagamento</span>
+                    )}
                   </button>
                 )}
                 {canPrintCupom && (
@@ -1174,7 +1198,8 @@ function OrderDetailModal({
       alert(result.error || 'Não foi possível confirmar o pagamento.');
       return;
     }
-    onOrderPatch({ pagamento_status: 'pago' } as Partial<Order>);
+    if (result.orderPatch) onOrderPatch(result.orderPatch);
+    else onOrderPatch({ pagamento_status: 'pago' } as Partial<Order>);
     onRefresh();
   };
 
