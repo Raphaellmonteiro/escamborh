@@ -13,6 +13,111 @@ import {
 import { dispatchKitchenProductionForOrder, loadKitchenItemRowsForOrder } from '../services/kitchenPrintDispatchService';
 import { sendInternalError } from '../utils/internalServerError';
 
+type PrintTotalRow = { label: string; valor: number; destaque?: boolean };
+
+type DeliveryCheckoutSnapshot = {
+  subtotal?: unknown;
+  desconto_pix?: unknown;
+  subtotal_apos_desconto_pix?: unknown;
+  taxa_entrega?: unknown;
+  desconto_cupom?: unknown;
+  cupom_aplicado?: { codigo?: unknown; tipo?: unknown } | null;
+  desconto_primeiro_cliente?: unknown;
+  total?: unknown;
+};
+
+function toMoneyNumber(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseDeliveryCheckoutSnapshot(raw: unknown): DeliveryCheckoutSnapshot | null {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as DeliveryCheckoutSnapshot;
+  if (typeof raw !== 'string') return null;
+  try {
+    const o = JSON.parse(raw) as unknown;
+    return o && typeof o === 'object' && !Array.isArray(o) ? (o as DeliveryCheckoutSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+const MONEY_EPS = 0.02;
+
+/**
+ * Monta linhas de totais do recibo delivery (mesmas classes HTML do template atual).
+ * Dados: `delivery_checkout_snapshot` (checkout online); sem snapshot, só detalha se der para inferir desconto.
+ */
+function buildDeliveryReceiptTotals(input: {
+  pedido: {
+    total_amount?: unknown;
+    taxa_entrega?: unknown;
+    delivery_checkout_snapshot?: unknown;
+  };
+  itemsSum: number;
+}): { totais: PrintTotalRow[]; taxaEntregaOpcoes: number | undefined } {
+  const totalPedido = Math.max(0, toMoneyNumber(input.pedido.total_amount));
+  const taxaColuna = Math.max(0, toMoneyNumber(input.pedido.taxa_entrega));
+  const snapshot = parseDeliveryCheckoutSnapshot(input.pedido.delivery_checkout_snapshot);
+
+  const itemsSum = Math.max(0, input.itemsSum);
+  const subtotalItens = snapshot ? Math.max(0, toMoneyNumber(snapshot.subtotal)) : itemsSum;
+  const descontoPix = snapshot ? Math.max(0, toMoneyNumber(snapshot.desconto_pix)) : 0;
+  const taxa = snapshot ? Math.max(0, toMoneyNumber(snapshot.taxa_entrega)) : taxaColuna;
+
+  const descontoCupomTotal = snapshot ? Math.max(0, toMoneyNumber(snapshot.desconto_cupom)) : 0;
+  const cupomTipo = String(snapshot?.cupom_aplicado?.tipo || '').trim().toLowerCase();
+  const cupomFreteGratis = cupomTipo === 'frete_gratis';
+  const descontoCupomValor = cupomFreteGratis ? 0 : descontoCupomTotal;
+  const descontoFreteGratis = cupomFreteGratis && descontoCupomTotal > MONEY_EPS ? descontoCupomTotal : 0;
+  const descontoPrimeiro = snapshot ? Math.max(0, toMoneyNumber(snapshot.desconto_primeiro_cliente)) : 0;
+
+  const temDetalheSnapshot =
+    descontoPix > MONEY_EPS ||
+    descontoCupomValor > MONEY_EPS ||
+    descontoFreteGratis > MONEY_EPS ||
+    descontoPrimeiro > MONEY_EPS;
+
+  if (!snapshot) {
+    const diff = subtotalItens + taxa - totalPedido;
+    if (Math.abs(diff) <= MONEY_EPS) {
+      return {
+        totais: [{ label: 'Total', valor: totalPedido, destaque: true }],
+        taxaEntregaOpcoes: taxa > MONEY_EPS ? taxa : undefined,
+      };
+    }
+    const totais: PrintTotalRow[] = [
+      { label: 'Subtotal dos itens', valor: subtotalItens },
+      ...(taxa > MONEY_EPS ? [{ label: 'Taxa de entrega', valor: taxa }] : []),
+      ...(diff > MONEY_EPS ? [{ label: 'Descontos (detalhe indisponivel)', valor: diff }] : []),
+      { label: 'Total', valor: totalPedido, destaque: true },
+    ];
+    return { totais, taxaEntregaOpcoes: undefined };
+  }
+
+  if (!temDetalheSnapshot) {
+    return {
+      totais: [{ label: 'Total', valor: totalPedido, destaque: true }],
+      taxaEntregaOpcoes: taxa > MONEY_EPS ? taxa : undefined,
+    };
+  }
+
+  const totais: PrintTotalRow[] = [
+    { label: 'Subtotal dos itens', valor: subtotalItens },
+    ...(descontoPix > MONEY_EPS ? [{ label: 'Desconto PIX', valor: descontoPix }] : []),
+    ...(descontoPrimeiro > MONEY_EPS ? [{ label: 'Desconto de primeira compra', valor: descontoPrimeiro }] : []),
+    ...(descontoCupomValor > MONEY_EPS ? [{ label: 'Desconto de cupom', valor: descontoCupomValor }] : []),
+    ...(descontoFreteGratis > MONEY_EPS
+      ? [{ label: 'Desconto na entrega / frete grátis', valor: descontoFreteGratis }]
+      : []),
+    ...(taxa > MONEY_EPS ? [{ label: 'Taxa de entrega', valor: taxa }] : []),
+    { label: 'Total', valor: totalPedido, destaque: true },
+  ];
+
+  return { totais, taxaEntregaOpcoes: undefined };
+}
+
 function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string | null } | null) {
   return Boolean(order?.cancelado_at) || String(order?.status || '').trim().toLowerCase() === 'cancelado';
 }
@@ -246,6 +351,13 @@ export function createPrintRouter() {
       });
       const isDelivery = pedido.canal === 'delivery';
       const isMesa = pedido.canal === 'mesa' || /^\[Fechado\]\s*Mesa\s+\d+/i.test(String(pedido.observation || ''));
+      const itemsSum = itens.reduce(
+        (acc: number, item: any) => acc + Number(item.price_at_time || 0) * Number(item.quantity || 0),
+        0
+      );
+      const deliveryReceipt = isDelivery
+        ? buildDeliveryReceiptTotals({ pedido, itemsSum })
+        : null;
       const mesaSnapshot = isMesa
         ? buildMesaFinanceSnapshot(
             pedido,
@@ -286,7 +398,9 @@ export function createPrintRouter() {
         })),
         totais: isMesa
           ? buildMesaReceiptTotals(mesaSnapshot!)
-          : [{ label: 'Total', valor: pedido.total_amount, destaque: true }],
+          : deliveryReceipt
+            ? deliveryReceipt.totais
+            : [{ label: 'Total', valor: pedido.total_amount, destaque: true }],
         pagamentos: pagamentos.length > 0
           ? pagamentos.map((payment: any) => ({
               metodo: payment.method,
@@ -304,7 +418,10 @@ export function createPrintRouter() {
               endereco: pedido.endereco || undefined,
               pagamento_status:
                 pedido.pagamento_status || (pedido.pagamento_tipo === 'pix' || pedido.pagamento_tipo === 'cartao' ? 'pendente' : undefined),
-              taxa_entrega: pedido.taxa_entrega || undefined,
+              taxa_entrega:
+                deliveryReceipt?.taxaEntregaOpcoes !== undefined
+                  ? deliveryReceipt.taxaEntregaOpcoes
+                  : pedido.taxa_entrega || undefined,
               motoboy_nome: motoboy?.nome || undefined,
             }
           : {}),
