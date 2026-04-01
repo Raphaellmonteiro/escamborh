@@ -11,6 +11,18 @@ import { normalizeProductProductionInput } from '../utils/preparation';
 
 const REPORT_TZ = 'America/Sao_Paulo';
 
+/** Ordem na listagem admin / cardápio: ativos primeiro; depois ordem manual e nome. */
+const ORDER_CARDAPIO_LISTAGEM =
+  'ORDER BY CASE WHEN COALESCE(active,0)=1 THEN 0 ELSE 1 END ASC, COALESCE(ordem,0) ASC, name ASC';
+
+async function produtoTemItensEmPedidos(tenantId: number, productId: number): Promise<boolean> {
+  const row = await q1<{ one: number }>(
+    'SELECT 1 AS one FROM itens_pedido WHERE tenant_id=? AND product_id=? LIMIT 1',
+    [tenantId, productId]
+  );
+  return Boolean(row);
+}
+
 export function createProductsRouter() {
   const router = Router();
 
@@ -123,7 +135,7 @@ function normalizeProductPromotionInput(
         const activeFilter = active !== undefined ? ' AND active=?' : '';
         const activeParam = active !== undefined ? [Number(active)] : [];
         return res.json(await qAll(
-          `SELECT * FROM produtos WHERE tenant_id=? AND (name ILIKE ? OR codigo_barras ILIKE ? OR marca ILIKE ? OR descricao ILIKE ?) ${activeFilter} ORDER BY COALESCE(ordem,0) ASC, name ASC LIMIT 200`,
+          `SELECT * FROM produtos WHERE tenant_id=? AND (name ILIKE ? OR codigo_barras ILIKE ? OR marca ILIKE ? OR descricao ILIKE ?) ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM} LIMIT 200`,
           [req.tenantId, term, term, term, term, ...activeParam]
         ));
       }
@@ -133,12 +145,12 @@ function normalizeProductPromotionInput(
         const lim = Math.min(Number(limit) || 50, 500);
         const off = Number(offset) || 0;
         return res.json(await qAll(
-          `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ORDER BY COALESCE(ordem,0) ASC, name ASC LIMIT ? OFFSET ?`,
+          `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM} LIMIT ? OFFSET ?`,
           [req.tenantId, ...activeParam, lim, off]
         ));
       }
       res.json(await qAll(
-        `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ORDER BY COALESCE(ordem,0) ASC, name ASC`,
+        `SELECT * FROM produtos WHERE tenant_id=? ${activeFilter} ${ORDER_CARDAPIO_LISTAGEM}`,
         [req.tenantId, ...activeParam]
       ));
     } catch (e: unknown) {
@@ -940,6 +952,11 @@ function normalizeProductPromotionInput(
 
   router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const productId = Number(req.params.id);
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ success: false, message: 'ID de produto inv\u00E1lido.' });
+      }
+
       await validateSecurityPassword({
         tenantId: req.tenantId,
         userId: req.user?.id,
@@ -947,16 +964,52 @@ function normalizeProductPromotionInput(
         type: 'admin',
       });
 
-      const produto = await q1('SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      if (produto?.photo_url) { try { fs.unlinkSync(`.${produto.photo_url}`); } catch {} }
-      const grupos = await qAll('SELECT id FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=?', [req.params.id, req.tenantId]);
+      const existe = await q1<{ id: number }>(
+        'SELECT id FROM produtos WHERE id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
+      if (!existe) {
+        return res.status(404).json({ success: false, message: 'Produto n\u00E3o encontrado.' });
+      }
+
+      const temHistoricoVenda = await produtoTemItensEmPedidos(req.tenantId, productId);
+      if (temHistoricoVenda) {
+        return res.status(400).json({
+          success: false,
+          code: 'PRODUCT_HAS_SALES_HISTORY',
+          message:
+            'Este produto j\u00E1 possui hist\u00F3rico de vendas em pedidos e n\u00E3o pode ser exclu\u00EDdo. Os pedidos antigos e relat\u00F3rios continuam v\u00E1lidos. Para ocult\u00E1-lo de novas vendas e do card\u00E1pio online, inative o produto em vez de excluir.',
+        });
+      }
+
+      const produto = await q1<{ photo_url?: string | null }>(
+        'SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?',
+        [productId, req.tenantId]
+      );
+      if (produto?.photo_url) {
+        try {
+          fs.unlinkSync(`.${produto.photo_url}`);
+        } catch {
+          /* ignore */
+        }
+      }
+      const grupos = await qAll('SELECT id FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=?', [
+        productId,
+        req.tenantId,
+      ]);
       for (const g of grupos) await qRun('DELETE FROM produto_opcao_itens WHERE grupo_id=? AND tenant_id=?', [g.id, req.tenantId]);
-      await qRun('DELETE FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=?', [req.params.id, req.tenantId]);
-      await qRun('DELETE FROM produtos WHERE id=? AND tenant_id=?', [req.params.id, req.tenantId]);
+      await qRun('DELETE FROM produto_grupos_opcao WHERE produto_id=? AND tenant_id=?', [productId, req.tenantId]);
+      await qRun('DELETE FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
       res.json({ success: true });
     } catch (e: any) {
-      if (e.code === '23503')
-        return res.status(400).json({ success: false, message: 'Produto com vendas registradas. Desative-o ao inv\u00E9s de excluir.' });
+      if (e.code === '23503') {
+        return res.status(400).json({
+          success: false,
+          code: 'PRODUCT_HAS_SALES_HISTORY',
+          message:
+            'Este produto n\u00E3o pode ser exclu\u00EDdo porque ainda h\u00E1 refer\u00EAncias em vendas ou pedidos. Inative o produto para retir\u00E1-lo do card\u00E1pio sem perder o hist\u00F3rico.',
+        });
+      }
       next(e);
     }
   });

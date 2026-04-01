@@ -23,6 +23,44 @@ const fmtR$ = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace
 const fmtQtdEstoque = (q: number, unidade: string) =>
   `${Number(q || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}${unidade ? ` ${unidade}` : ''}`;
 
+/** Compara categorias do cardápio ignorando maiúsculas, espaços e NFC (evita falha do filtro vs. nome cadastrado). */
+function normalizeCardapioCategoryKey(value: string | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .normalize('NFC')
+    .toLocaleLowerCase('pt-BR');
+}
+
+function isProductRowActive(p: Pick<ProductExtended, 'active'>): boolean {
+  const a = p.active as unknown;
+  return a === true || a === 1 || a === '1';
+}
+
+/** Cardápio (admin): ativos primeiro; dentro de cada bloco mantém ordem manual (ordem, id). */
+function sortProductsForCardapioAdmin(list: ProductExtended[]): ProductExtended[] {
+  return [...list].sort((a, b) => {
+    const aa = isProductRowActive(a) ? 0 : 1;
+    const ba = isProductRowActive(b) ? 0 : 1;
+    if (aa !== ba) return aa - ba;
+    const oa = a.ordem ?? 0;
+    const ob = b.ordem ?? 0;
+    if (oa !== ob) return oa - ob;
+    return (a.id ?? 0) - (b.id ?? 0);
+  });
+}
+
+/** Apenas ativos ou apenas inativos, ordenados por ordem manual (para setas / Pos.). */
+function getGroupSortedByOrdem(list: ProductExtended[], activeGroup: boolean): ProductExtended[] {
+  return list
+    .filter((p) => isProductRowActive(p) === activeGroup)
+    .sort((a, b) => {
+      const oa = a.ordem ?? 0;
+      const ob = b.ordem ?? 0;
+      if (oa !== ob) return oa - ob;
+      return (a.id ?? 0) - (b.id ?? 0);
+    });
+}
+
 const COLOR_MAP: Record<string, { bg: string }> = {
   zinc:   { bg: 'bg-zinc-100' },
   red:    { bg: 'bg-red-100' },
@@ -181,6 +219,8 @@ export default function ProductsScreen({
   const [destaqueFiltro, setDestaqueFiltro]   = useState(false);
   const [viewMode, setViewMode]               = useState<ViewMode>('list');
   const [cardapioPdfIncluirData, setCardapioPdfIncluirData] = useState(true);
+  /** Rascunho do campo "Pos." por produto (ordem global no cardápio). */
+  const [posInputById, setPosInputById] = useState<Record<number, string>>({});
 
   const hdrs  = { Authorization: `Bearer ${token}` };
   const jHdrs = { ...hdrs, 'Content-Type': 'application/json' };
@@ -431,21 +471,83 @@ export default function ProductsScreen({
     onUpdate();
   };
 
-  // ── reordenar ────────────────────────────────────────────────
+  // ── reordenar (só dentro do grupo ativo ou inativo; inativos ficam por último na listagem) ──
+  const activeProductsSorted = useMemo(() => getGroupSortedByOrdem(products, true), [products]);
+  const inactiveProductsSorted = useMemo(() => getGroupSortedByOrdem(products, false), [products]);
+
+  const groupIndexForProduct = (p: ProductExtended) => {
+    const list = isProductRowActive(p) ? activeProductsSorted : inactiveProductsSorted;
+    const idx = list.findIndex((x) => x.id === p.id);
+    return { idx, len: list.length };
+  };
+
+  const globalPosition1Based = (p: ProductExtended) => {
+    const { idx } = groupIndexForProduct(p);
+    return idx < 0 ? 1 : idx + 1;
+  };
+
+  const persistOrdemForGroup = async (sortedGroup: ProductExtended[]) => {
+    const items = sortedGroup.map((prod, i) => ({ id: prod.id, ordem: i }));
+    const r = await fetch('/api/products/reorder', {
+      method: 'PUT',
+      headers: jHdrs,
+      body: JSON.stringify({ items }),
+    });
+    if (!r.ok) {
+      const d = (await r.json().catch(() => ({}))) as { error?: string };
+      throw new Error(d.error || 'Falha ao salvar ordem');
+    }
+    await Promise.resolve(onUpdate());
+  };
+
   const handleReorder = async (p: ProductExtended, dir: 'up' | 'down') => {
-    const sorted = [...products].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-    const idx = sorted.findIndex(x => x.id === p.id);
+    const group = isProductRowActive(p);
+    const sorted = getGroupSortedByOrdem(products, group);
+    const idx = sorted.findIndex((x) => x.id === p.id);
     const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= sorted.length) return;
-    const swapped = sorted[swapIdx];
-    await fetch('/api/products/reorder', {
-      method: 'PUT', headers: jHdrs,
-      body: JSON.stringify({ items: [
-        { id: p.id,        ordem: swapIdx },
-        { id: swapped.id,  ordem: idx },
-      ]})
+    const next = [...sorted];
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    try {
+      await persistOrdemForGroup(next);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao reordenar produtos.');
+    }
+  };
+
+  const handleSetGlobalPosition = async (p: ProductExtended, newPos1Based: number) => {
+    const group = isProductRowActive(p);
+    const sorted = getGroupSortedByOrdem(products, group);
+    const n = sorted.length;
+    if (n === 0) return;
+    const cur = sorted.findIndex((x) => x.id === p.id);
+    if (cur < 0) return;
+    const target = Math.max(0, Math.min(Math.floor(newPos1Based) - 1, n - 1));
+    if (target === cur) return;
+    const next = [...sorted];
+    const [item] = next.splice(cur, 1);
+    next.splice(target, 0, item);
+    try {
+      await persistOrdemForGroup(next);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erro ao atualizar a posicao no cardapio.');
+    }
+  };
+
+  const commitGlobalPositionInput = (p: ProductExtended) => {
+    const draft = posInputById[p.id];
+    setPosInputById((prev) => {
+      const copy = { ...prev };
+      delete copy[p.id];
+      return copy;
     });
-    onUpdate();
+    if (draft === undefined) return;
+    const digits = draft.replace(/\D/g, '');
+    if (!digits) return;
+    const parsed = parseInt(digits, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) return;
+    if (parsed === globalPosition1Based(p)) return;
+    void handleSetGlobalPosition(p, parsed);
   };
 
   // ── excluir ──────────────────────────────────────────────────
@@ -479,16 +581,43 @@ export default function ProductsScreen({
         headers: jHdrs,
         body: JSON.stringify({ senha: authPassword }),
       });
-      const d = await r.json();
-      if (r.ok) { onUpdate(); setShowAuthModal(false); }
-      else {
+      const d = (await r.json().catch(() => ({}))) as {
+        message?: string;
+        error?: string;
+        code?: string;
+        success?: boolean;
+      };
+      if (r.ok) {
+        onUpdate();
         setShowAuthModal(false);
-        if (d.message?.includes('vendas registradas')) {
-          if (window.confirm('Produto com vendas não pode ser excluído.\n\nDeseja marcá-lo como INATIVO?')) {
-            const prod = products.find(p => p.id === productToDelete);
-            if (prod) { await fetch(`/api/products/${productToDelete}`, { method: 'PUT', headers: jHdrs, body: JSON.stringify({ ...prod, active: false }) }); onUpdate(); }
+      } else {
+        setShowAuthModal(false);
+        const blockedSales =
+          d.code === 'PRODUCT_HAS_SALES_HISTORY' ||
+          (typeof d.message === 'string' &&
+            (d.message.includes('histórico') ||
+              d.message.includes('historico') ||
+              d.message.includes('vendas registradas')));
+        if (blockedSales && d.message) {
+          alert(d.message);
+          if (
+            window.confirm(
+              'Deseja marcar este produto como INATIVO agora? Ele some de novas vendas e do cardápio online, mas permanece nos pedidos e relatórios antigos.'
+            )
+          ) {
+            const prod = products.find((x) => x.id === productToDelete);
+            if (prod) {
+              await fetch(`/api/products/${productToDelete}`, {
+                method: 'PUT',
+                headers: jHdrs,
+                body: JSON.stringify({ ...prod, active: false }),
+              });
+              onUpdate();
+            }
           }
-        } else { alert(d.message || d.error || 'Erro ao excluir.'); }
+        } else {
+          alert(d.message || d.error || 'Erro ao excluir.');
+        }
       }
     } catch { alert('Erro de conexão.'); }
     finally { setProductToDelete(null); setDeleteStep('password'); }
@@ -519,16 +648,32 @@ export default function ProductsScreen({
       const q = debouncedBusca.toLowerCase();
       list = list.filter(p => p.name.toLowerCase().includes(q) || (p.descricao || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
     }
-    if (catFiltro !== 'todas')    list = list.filter(p => p.category === catFiltro);
-    if (statusFiltro === 'ativo') list = list.filter(p => p.active);
-    if (statusFiltro === 'inativo') list = list.filter(p => !p.active);
+    if (catFiltro !== 'todas') {
+      const fk = normalizeCardapioCategoryKey(catFiltro);
+      list = list.filter((p) => normalizeCardapioCategoryKey(p.category) === fk);
+    }
+    if (statusFiltro === 'ativo') list = list.filter((p) => isProductRowActive(p));
+    if (statusFiltro === 'inativo') list = list.filter((p) => !isProductRowActive(p));
     if (destaqueFiltro)           list = list.filter(p => p.destaque);
-    return list.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+    return sortProductsForCardapioAdmin(list);
   }, [products, debouncedBusca, catFiltro, statusFiltro, destaqueFiltro]);
 
   const { visibleItems: produtosVisiveis, hasMore: hasMoreProdutos, loadMore: loadMoreProdutos, totalCount: totalProdutos } = usePaginatedList(produtosFiltrados, { pageSize: 30 });
 
-  const catList = useMemo(() => [...new Set(products.map(p => p.category))].sort(), [products]);
+  /** Chips do filtro: categorias cadastradas + categorias ainda presentes só nos produtos (rótulo canônico por chave normalizada). */
+  const catList = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const c of categories) {
+      const k = normalizeCardapioCategoryKey(c.nome);
+      if (k) byKey.set(k, c.nome);
+    }
+    for (const p of products) {
+      const raw = String(p.category ?? '').trim();
+      const k = normalizeCardapioCategoryKey(raw);
+      if (k && !byKey.has(k)) byKey.set(k, raw);
+    }
+    return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  }, [categories, products]);
   const availableSuggestionProducts = useMemo(
     () => products.filter((p) => p.id !== editing?.id),
     [products, editing?.id]
@@ -575,7 +720,7 @@ export default function ProductsScreen({
           title="Cardápio"
           subtitle={
             <p className="text-xs sm:text-sm text-zinc-400 mt-0.5 leading-snug">
-              {products.filter(p => p.active).length} ativos · {products.filter(p => !p.active).length} inativos
+              {products.filter((p) => isProductRowActive(p)).length} ativos · {products.filter((p) => !isProductRowActive(p)).length} inativos
               {products.filter(p => p.destaque).length > 0 && ` · ${products.filter(p => p.destaque).length} em destaque`}
             </p>
           }
@@ -635,9 +780,22 @@ export default function ProductsScreen({
           </div>
           <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 touch-pan-x overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-pl-1 scroll-pr-1">
             <button type="button" onClick={() => setCatFiltro('todas')} className={`px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${catFiltro==='todas'?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}>Todas</button>
-            {catList.map(c => (
-              <button type="button" key={c} onClick={() => setCatFiltro(c)} className={`px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 max-w-[12rem] truncate ${catFiltro===c?'bg-zinc-900 text-white':'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`} title={c}>{c}</button>
-            ))}
+            {catList.map((c) => {
+              const active =
+                catFiltro !== 'todas' &&
+                normalizeCardapioCategoryKey(catFiltro) === normalizeCardapioCategoryKey(c);
+              return (
+                <button
+                  type="button"
+                  key={normalizeCardapioCategoryKey(c) || c}
+                  onClick={() => setCatFiltro(c)}
+                  className={`px-3 py-2.5 min-h-[40px] lg:min-h-0 lg:py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 max-w-[12rem] truncate ${active ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'}`}
+                  title={c}
+                >
+                  {c}
+                </button>
+              );
+            })}
           </div>
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 sm:gap-2">
             <div className="flex gap-1.5 overflow-x-auto overflow-y-hidden flex-1 min-w-0 touch-pan-x pb-0.5 -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible">
@@ -668,14 +826,33 @@ export default function ProductsScreen({
         ) : viewMode === 'list' ? (
           /* ── LISTA ── */
           <div className="space-y-2">
-            {produtosVisiveis.map((p, idx) => {
+            {produtosVisiveis.map((p) => {
               const mg = margem(p);
+              const { idx: gIdx, len: gLen } = groupIndexForProduct(p);
+              const grupoLabel = isProductRowActive(p) ? 'ativos' : 'inativos';
               return (
                 <div key={p.id} className={`${adminOpsListRowClass} flex flex-col gap-2 p-3 hover:border-zinc-300 transition-all lg:flex-row lg:items-center lg:gap-3 2xl:gap-4 2xl:p-4 ${!p.active ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="flex flex-col gap-0.5 flex-shrink-0">
-                      <button type="button" onClick={() => handleReorder(p, 'up')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === 0}><ChevronUp size={13}/></button>
-                      <button type="button" onClick={() => handleReorder(p, 'down')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all" disabled={idx === totalProdutos - 1}><ChevronDown size={13}/></button>
+                      <button type="button" onClick={() => handleReorder(p, 'up')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all disabled:opacity-30" disabled={gIdx <= 0} title={`Subir entre produtos ${grupoLabel}`}><ChevronUp size={13}/></button>
+                      <button type="button" onClick={() => handleReorder(p, 'down')} className="p-1 hover:bg-zinc-100 rounded min-h-[32px] min-w-[32px] flex items-center justify-center text-zinc-300 hover:text-zinc-600 transition-all disabled:opacity-30" disabled={gIdx < 0 || gIdx >= gLen - 1} title={`Descer entre produtos ${grupoLabel}`}><ChevronDown size={13}/></button>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-11 sm:w-12" title={`Posicao entre ${grupoLabel} (1 = primeiro do grupo). Enter ou clique fora para aplicar.`}>
+                      <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-tight leading-none">Pos.</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        aria-label={`Posicao no cardapio: ${p.name}`}
+                        className="w-full h-7 px-0.5 text-center text-xs font-black tabular-nums border border-zinc-200 rounded-lg bg-white text-zinc-800 focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-200"
+                        value={posInputById[p.id] ?? String(globalPosition1Based(p))}
+                        onChange={(e) => setPosInputById((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        onFocus={(e) => e.target.select()}
+                        onBlur={() => commitGlobalPositionInput(p)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                        }}
+                      />
                     </div>
                     <div className={`w-14 h-14 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${COLOR_MAP[p.color || 'zinc']?.bg || 'bg-zinc-100'}`}>
                       {p.photo_url ? <img src={p.photo_url} alt={p.name} loading="lazy" className="w-full h-full object-cover"/> : <Package size={20} className="text-zinc-400"/>}
@@ -747,6 +924,7 @@ export default function ProductsScreen({
             {produtosVisiveis.map(p => {
               const mg = margem(p);
               const cc = COLOR_MAP[p.color || 'zinc'] || COLOR_MAP.zinc;
+              const grupoPos = isProductRowActive(p) ? 'ativos' : 'inativos';
               return (
                 <div key={p.id} className={`${adminOpsListRowClass} overflow-hidden hover:border-zinc-300 transition-all flex flex-col ${!p.active ? 'opacity-60' : ''}`}>
                   {/* Foto */}
@@ -784,7 +962,24 @@ export default function ProductsScreen({
                     </div>
                   </div>
                   {/* Ações */}
-                  <div className="border-t border-zinc-100 px-2 sm:px-3 py-2 flex flex-wrap gap-1 justify-end sm:flex-nowrap">
+                  <div className="border-t border-zinc-100 px-2 sm:px-3 py-2 flex flex-wrap gap-1 items-center justify-end sm:flex-nowrap">
+                    <div className="flex items-center gap-1 mr-auto sm:mr-0 pr-1" title={`Posicao entre produtos ${grupoPos} (1 = primeiro do grupo)`}>
+                      <span className="text-[9px] font-bold text-zinc-400 uppercase">Pos.</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        aria-label={`Posicao entre ${grupoPos}: ${p.name}`}
+                        className="w-9 h-8 px-0.5 text-center text-[11px] font-black tabular-nums border border-zinc-200 rounded-lg bg-white text-zinc-800 focus:outline-none focus:border-zinc-400"
+                        value={posInputById[p.id] ?? String(globalPosition1Based(p))}
+                        onChange={(e) => setPosInputById((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        onFocus={(e) => e.target.select()}
+                        onBlur={() => commitGlobalPositionInput(p)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                        }}
+                      />
+                    </div>
                     <button type="button" onClick={() => handleToggleDestaque(p)} className={`p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg transition-all ${p.destaque ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500'}`}><Star size={14} className={p.destaque ? 'fill-amber-500' : ''}/></button>
                     <button type="button" onClick={() => handleToggleAtivo(p)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all">{p.active ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
                     <button type="button" onClick={() => handleDuplicate(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Copy size={14}/></button>
