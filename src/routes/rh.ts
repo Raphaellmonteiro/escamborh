@@ -10,8 +10,13 @@ import {
   usesAutoDecimoTerceiro,
 } from '../services/employeeContract';
 import { uploadFotoFunc, checkMagicBytes } from '../middleware';
-import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
-import { isCloudinaryProductUploadEnabled, uploadEmployeePhotoToCloudinary } from '../services/cloudinaryProduct';
+import { deleteStoredUpload } from '../services/uploadPersistence';
+import { uploadEmployeePhotoToCloudinary } from '../services/cloudinaryProduct';
+import {
+  forbidClientSuppliedLocalUploadImageUrls,
+  isClientSuppliedLocalUploadImageUrl,
+  persistMulterImageFile,
+} from '../services/imageUploadPolicy';
 import {
   calculatePayroll,
   computePayrollPaymentSummary,
@@ -265,6 +270,12 @@ export function createRhRouter() {
       if (!allowedTipoContrato.includes(tipoContrato)) {
         return res.status(400).json({ error: 'tipo_contrato inválido' });
       }
+      if (forbidClientSuppliedLocalUploadImageUrls() && isClientSuppliedLocalUploadImageUrl(foto_url)) {
+        return res.status(400).json({
+          error:
+            'foto_url não pode apontar para /uploads. Cadastre sem foto e use POST /rh/:id/foto para enviar a imagem.',
+        });
+      }
       const id = await qInsert(
         'INSERT INTO funcionarios (tenant_id,nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,tipo_contrato,foto_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         [req.tenantId,nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null]
@@ -280,6 +291,12 @@ export function createRhRouter() {
       const allowedTipoContrato = ['fixo', 'diarista', 'evento'];
       if (!allowedTipoContrato.includes(tipoContrato)) {
         return res.status(400).json({ error: 'tipo_contrato inválido' });
+      }
+      if (forbidClientSuppliedLocalUploadImageUrls() && isClientSuppliedLocalUploadImageUrl(foto_url)) {
+        return res.status(400).json({
+          error:
+            'foto_url não pode apontar para /uploads. Remova o campo ou use POST /rh/:id/foto para enviar a imagem.',
+        });
       }
       await qRun(
         'UPDATE funcionarios SET nome=?,cargo=?,salario_base=?,horario_entrada=?,horario_saida=?,carga_horaria=?,dias_semana=?,tolerancia_minutos=?,dias_trabalho_mes=?,data_admissao=?,telefone=?,cpf=?,pin=?,tipo_contrato=?,foto_url=? WHERE id=? AND tenant_id=?',
@@ -309,21 +326,23 @@ export function createRhRouter() {
       );
       await deleteStoredUpload(prev?.foto_url ?? null);
       let foto_url: string;
-      if (isCloudinaryProductUploadEnabled()) {
-        const buf = req.file.buffer as Buffer | undefined;
-        if (!buf?.length) return res.status(400).json({ error: 'Arquivo vazio ou não recebido' });
-        foto_url = await uploadEmployeePhotoToCloudinary({
-          buffer: buf,
-          tenantId: req.tenantId,
-          employeeId,
+      try {
+        foto_url = await persistMulterImageFile({
+          file: req.file,
+          uploadToCloudinary: () =>
+            uploadEmployeePhotoToCloudinary({
+              buffer: req.file.buffer as Buffer,
+              tenantId: req.tenantId,
+              employeeId,
+            }),
+          localPublicPath: `/uploads/funcionarios/${req.file.filename}`,
         });
-      } else {
-        const publicPath = `/uploads/funcionarios/${req.file.filename}`;
-        foto_url = await finalizeLocalUploadToPersistentStorage({
-          absolutePath: req.file.path,
-          publicPath,
-          contentType: req.file.mimetype,
-        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg === 'EMPTY_IMAGE_BUFFER') {
+          return res.status(400).json({ error: 'Arquivo vazio ou não recebido' });
+        }
+        throw e;
       }
       await qRun('UPDATE funcionarios SET foto_url=? WHERE id=? AND tenant_id=?', [foto_url, employeeId, req.tenantId]);
       res.json({ success: true, foto_url });

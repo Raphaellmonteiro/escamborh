@@ -34,7 +34,12 @@ import {
   mergeDeliveryConfigClientPut,
 } from '../utils/deliveryConfigPersist';
 import { UPLOADS_ROOT } from '../uploadsRoot';
-import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
+import { deleteStoredUpload } from '../services/uploadPersistence';
+import {
+  forbidClientSuppliedLocalUploadImageUrls,
+  isClientSuppliedLocalUploadImageUrl,
+  persistMulterImageFile,
+} from '../services/imageUploadPolicy';
 import {
   isCloudinaryProductUploadEnabled,
   uploadDeliveryBannerToCloudinary,
@@ -201,6 +206,24 @@ export function createDeliveryRouter() {
       const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
       const existing = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const merged = mergeDeliveryConfigClientPut(existing, rest && typeof rest === 'object' && !Array.isArray(rest) ? rest : {});
+      if (forbidClientSuppliedLocalUploadImageUrls()) {
+        if (isClientSuppliedLocalUploadImageUrl(merged.cardapio_online_logo_url)) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'cardapio_online_logo_url não pode apontar para /uploads. Use o upload em Cardápio visual ou uma URL HTTPS externa.',
+          });
+        }
+        const bannerSlots = [...normalizeCardapioOnlineBannerSlots(merged.cardapio_online_banner_urls)];
+        for (let i = 0; i < bannerSlots.length; i++) {
+          if (isClientSuppliedLocalUploadImageUrl(bannerSlots[i])) {
+            return res.status(400).json({
+              success: false,
+              message: `Banner ${i}: não use caminho /uploads. Use o upload em Cardápio visual ou URL HTTPS externa.`,
+            });
+          }
+        }
+      }
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
@@ -222,21 +245,23 @@ export function createDeliveryRouter() {
         if (oldUrl && (useCloud || deliveryUploadBasename(oldUrl) !== newName)) {
           await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
         }
+        if (!useCloud) {
+          removeOtherDeliveryLogoVariants(tenantId, newName);
+        }
         let publicUrl: string;
-        if (useCloud) {
-          const buf = req.file.buffer as Buffer | undefined;
-          if (!buf?.length) {
+        try {
+          publicUrl = await persistMulterImageFile({
+            file: req.file,
+            uploadToCloudinary: () =>
+              uploadDeliveryCardapioLogoToCloudinary({ buffer: req.file.buffer as Buffer, tenantId }),
+            localPublicPath: `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`,
+          });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : '';
+          if (msg === 'EMPTY_IMAGE_BUFFER') {
             return res.status(400).json({ success: false, message: 'Arquivo vazio ou não recebido' });
           }
-          publicUrl = await uploadDeliveryCardapioLogoToCloudinary({ buffer: buf, tenantId });
-        } else {
-          removeOtherDeliveryLogoVariants(tenantId, newName);
-          const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
-          publicUrl = await finalizeLocalUploadToPersistentStorage({
-            absolutePath: req.file.path,
-            publicPath,
-            contentType: req.file.mimetype,
-          });
+          throw e;
         }
         await mergeDeliveryConfigJson(tenantId, (c) => {
           c.cardapio_online_logo_url = publicUrl;
@@ -286,21 +311,27 @@ export function createDeliveryRouter() {
         if (oldUrl && (useCloud || deliveryUploadBasename(oldUrl) !== newName)) {
           await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
         }
+        if (!useCloud) {
+          removeOtherDeliveryBannerVariants(tenantId, idx, newName);
+        }
         let publicUrl: string;
-        if (useCloud) {
-          const buf = req.file.buffer as Buffer | undefined;
-          if (!buf?.length) {
+        try {
+          publicUrl = await persistMulterImageFile({
+            file: req.file,
+            uploadToCloudinary: () =>
+              uploadDeliveryBannerToCloudinary({
+                buffer: req.file.buffer as Buffer,
+                tenantId,
+                bannerIndex: idx,
+              }),
+            localPublicPath: `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`,
+          });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : '';
+          if (msg === 'EMPTY_IMAGE_BUFFER') {
             return res.status(400).json({ success: false, message: 'Arquivo vazio ou não recebido' });
           }
-          publicUrl = await uploadDeliveryBannerToCloudinary({ buffer: buf, tenantId, bannerIndex: idx });
-        } else {
-          removeOtherDeliveryBannerVariants(tenantId, idx, newName);
-          const publicPath = `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`;
-          publicUrl = await finalizeLocalUploadToPersistentStorage({
-            absolutePath: req.file.path,
-            publicPath,
-            contentType: req.file.mimetype,
-          });
+          throw e;
         }
         slots[idx] = publicUrl;
         await mergeDeliveryConfigJson(tenantId, (c) => {

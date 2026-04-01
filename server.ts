@@ -15,6 +15,7 @@ import { runMigrations } from './src/db';
 import { UPLOADS_ROOT } from './src/uploadsRoot';
 import { isS3ObjectStorageEnabled } from './src/services/uploadPersistence';
 import { isCloudinaryProductUploadEnabled } from './src/services/cloudinaryProduct';
+import { assertProductionImageStorageConfigured } from './src/services/imageUploadPolicy';
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
 import { requestLogger } from './src/middleware';
@@ -42,6 +43,8 @@ app.use(
 );
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+assertProductionImageStorageConfigured();
+
 if (!fs.existsSync(UPLOADS_ROOT)) fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
 fs.mkdirSync(path.join(UPLOADS_ROOT, 'logo'), { recursive: true });
 fs.mkdirSync(path.join(UPLOADS_ROOT, 'funcionarios'), { recursive: true });

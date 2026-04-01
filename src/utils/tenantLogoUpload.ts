@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { q1 } from '../db';
+import { shouldResolveTenantLogoFromDiskFallback } from '../services/imageUploadPolicy';
 import { UPLOADS_ROOT } from '../uploadsRoot';
 
 export function getTenantLogoDir(): string {
@@ -28,8 +29,8 @@ export function listTenantLogoFiles(tenantId: number | string): string[] {
 }
 
 /**
- * URL pública do logo: coluna `clientes.logo_url` (S3 ou `/uploads/logo/...`) ou, se vazia,
- * o arquivo mais recente em disco (legado).
+ * URL pública do logo: coluna `clientes.logo_url` (Cloudinary, S3 ou `/uploads/logo/...`).
+ * Se vazia, em dev ou com escape hatch de volume, ainda pode inferir o arquivo mais recente em disco (legado).
  */
 export async function resolveTenantLogoPublicUrl(
   tenantId: number | string | undefined | null
@@ -38,6 +39,8 @@ export async function resolveTenantLogoPublicUrl(
   const row = await q1<{ logo_url: string | null }>('SELECT logo_url FROM clientes WHERE id=?', [tenantId]);
   const fromDb = String(row?.logo_url || '').trim();
   if (fromDb) return fromDb;
+
+  if (!shouldResolveTenantLogoFromDiskFallback()) return null;
 
   const files = listTenantLogoFiles(tenantId);
   if (files.length === 0) return null;

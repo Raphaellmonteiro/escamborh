@@ -1,8 +1,9 @@
 // src/routes/products.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txInsert, txRun } from '../db';
-import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
-import { isCloudinaryProductUploadEnabled, uploadProductImageToCloudinary } from '../services/cloudinaryProduct';
+import { deleteStoredUpload } from '../services/uploadPersistence';
+import { uploadProductImageToCloudinary } from '../services/cloudinaryProduct';
+import { persistMulterImageFile } from '../services/imageUploadPolicy';
 import { upload, checkMagicBytes, requireAnyPermission } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
@@ -1144,23 +1145,23 @@ function normalizeProductPromotionInput(
       const old = await q1('SELECT photo_url FROM produtos WHERE id=? AND tenant_id=?', [productId, req.tenantId]);
       await deleteStoredUpload(old?.photo_url ?? null);
       let photoUrl: string;
-      if (isCloudinaryProductUploadEnabled()) {
-        const buf = req.file.buffer as Buffer | undefined;
-        if (!buf?.length) {
+      try {
+        photoUrl = await persistMulterImageFile({
+          file: req.file,
+          uploadToCloudinary: () =>
+            uploadProductImageToCloudinary({
+              buffer: req.file.buffer as Buffer,
+              tenantId: req.tenantId,
+              productId,
+            }),
+          localPublicPath: `/uploads/${req.file.filename}`,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg === 'EMPTY_IMAGE_BUFFER') {
           return res.status(400).json({ success: false, message: 'Arquivo vazio ou n\u00E3o recebido' });
         }
-        photoUrl = await uploadProductImageToCloudinary({
-          buffer: buf,
-          tenantId: req.tenantId,
-          productId,
-        });
-      } else {
-        const publicPath = `/uploads/${req.file.filename}`;
-        photoUrl = await finalizeLocalUploadToPersistentStorage({
-          absolutePath: req.file.path,
-          publicPath,
-          contentType: req.file.mimetype,
-        });
+        throw e;
       }
       await qRun('UPDATE produtos SET photo_url=? WHERE id=? AND tenant_id=?', [photoUrl, productId, req.tenantId]);
       res.json({ success: true, photo_url: photoUrl });

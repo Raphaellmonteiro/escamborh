@@ -5,8 +5,9 @@ import { pool, q1, qAll, qRun } from '../db';
 import { uploadLogo, checkMagicBytes } from '../middleware';
 import { getTenantPlanContext } from '../services/tenantPlan';
 import { sendInternalError } from '../utils/internalServerError';
-import { deleteStoredUpload, finalizeLocalUploadToPersistentStorage } from '../services/uploadPersistence';
+import { deleteStoredUpload } from '../services/uploadPersistence';
 import { isCloudinaryProductUploadEnabled, uploadTenantLogoToCloudinary } from '../services/cloudinaryProduct';
+import { persistMulterImageFile } from '../services/imageUploadPolicy';
 import {
   resolveTenantLogoPublicUrl,
   unlinkAllTenantLogos,
@@ -107,22 +108,23 @@ export function createSettingsRouter() {
       if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
       const prev = await resolveTenantLogoPublicUrl(req.tenantId);
       await deleteStoredUpload(prev);
-      const useCloud = isCloudinaryProductUploadEnabled();
+      if (!isCloudinaryProductUploadEnabled()) {
+        unlinkTenantLogosExcept(req.tenantId, req.file.filename);
+      }
       let logo_url: string;
-      if (useCloud) {
-        const buf = req.file.buffer as Buffer | undefined;
-        if (!buf?.length) {
+      try {
+        logo_url = await persistMulterImageFile({
+          file: req.file,
+          uploadToCloudinary: () =>
+            uploadTenantLogoToCloudinary({ buffer: req.file.buffer as Buffer, tenantId: req.tenantId }),
+          localPublicPath: `/uploads/logo/${req.file.filename}`,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg === 'EMPTY_IMAGE_BUFFER') {
           return res.status(400).json({ success: false, message: 'Arquivo vazio ou não recebido' });
         }
-        logo_url = await uploadTenantLogoToCloudinary({ buffer: buf, tenantId: req.tenantId });
-      } else {
-        unlinkTenantLogosExcept(req.tenantId, req.file.filename);
-        const publicPath = `/uploads/logo/${req.file.filename}`;
-        logo_url = await finalizeLocalUploadToPersistentStorage({
-          absolutePath: req.file.path,
-          publicPath,
-          contentType: req.file.mimetype,
-        });
+        throw e;
       }
       await qRun('UPDATE clientes SET logo_url=? WHERE id=?', [logo_url, req.tenantId]);
       res.json({ success: true, logo_url });
