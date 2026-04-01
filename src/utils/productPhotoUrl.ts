@@ -3,6 +3,7 @@
  * URLs sem barra inicial (ex.: `uploads/x.jpg`) quebram em rotas aninhadas como `/delivery/:slug`
  * porque o browser resolve em relação ao path atual.
  * URLs absolutas antigas para `/uploads/...` em outro host são reduzidas ao path.
+ * URLs HTTPS externas (ex.: Cloudinary) são devolvidas como estão.
  */
 export function normalizeProductPhotoPublicUrl(raw: unknown): string | null {
   if (raw == null) return null;

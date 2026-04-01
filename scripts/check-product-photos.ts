@@ -1,5 +1,6 @@
 /**
  * Lista produtos cujo photo_url no banco não corresponde a arquivo existente em disco.
+ * URLs remotas (ex.: Cloudinary, S3 público) não têm arquivo local — aparecem como "remoto".
  * Uso: npx tsx scripts/check-product-photos.ts
  * Requer DATABASE_URL (ou DATABASE_MIGRATION_URL). Caminhos usam UPLOADS_ROOT (cwd/uploads).
  */
@@ -24,6 +25,7 @@ async function main() {
     );
 
     const emptyNorm: { id: number; tenant_id: number; name: string; raw: string }[] = [];
+    const remoteUrls: { id: number; tenant_id: number; name: string; raw: string }[] = [];
     const noDiskPath: { id: number; tenant_id: number; name: string; raw: string }[] = [];
     const missingFile: { id: number; tenant_id: number; name: string; raw: string; disk: string }[] = [];
 
@@ -36,7 +38,11 @@ async function main() {
       }
       const disk = resolveProductUploadDiskPath(raw);
       if (!disk) {
-        noDiskPath.push({ id: row.id, tenant_id: row.tenant_id, name: row.name, raw });
+        if (/^https?:\/\//i.test(norm)) {
+          remoteUrls.push({ id: row.id, tenant_id: row.tenant_id, name: row.name, raw });
+        } else {
+          noDiskPath.push({ id: row.id, tenant_id: row.tenant_id, name: row.name, raw });
+        }
         continue;
       }
       if (!fs.existsSync(disk)) {
@@ -46,8 +52,9 @@ async function main() {
 
     console.log(`Total com photo_url preenchido: ${rows.length}`);
     console.log(`URL inválida / não normalizável: ${emptyNorm.length}`);
-    console.log(`Path fora de uploads/ (rejeitado): ${noDiskPath.length}`);
-    console.log(`Arquivo ausente no disco: ${missingFile.length}`);
+    console.log(`URL remota (sem arquivo local esperado): ${remoteUrls.length}`);
+    console.log(`Path local fora de uploads/ ou inválido: ${noDiskPath.length}`);
+    console.log(`Arquivo ausente no disco (/uploads/...): ${missingFile.length}`);
     if (emptyNorm.length) {
       console.log('\n--- Inválidas / não normalizáveis (amostra até 20) ---');
       emptyNorm.slice(0, 20).forEach((r) => console.log(`tenant=${r.tenant_id} id=${r.id} name=${r.name} raw=${JSON.stringify(r.raw)}`));

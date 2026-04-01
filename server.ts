@@ -14,6 +14,7 @@ import multer from 'multer';
 import { runMigrations } from './src/db';
 import { UPLOADS_ROOT } from './src/uploadsRoot';
 import { isS3ObjectStorageEnabled } from './src/services/uploadPersistence';
+import { isCloudinaryProductUploadEnabled } from './src/services/cloudinaryProduct';
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
 import { requestLogger } from './src/middleware';
@@ -48,7 +49,7 @@ fs.mkdirSync(path.join(UPLOADS_ROOT, 'delivery'), { recursive: true });
 
 const uploadsViaVolume = Boolean(process.env.FLOWPDV_UPLOADS_DIR?.trim());
 console.log(
-  `[uploads] UPLOADS_ROOT=${UPLOADS_ROOT} volume_env=${uploadsViaVolume} s3=${isS3ObjectStorageEnabled()}`
+  `[uploads] UPLOADS_ROOT=${UPLOADS_ROOT} volume_env=${uploadsViaVolume} s3=${isS3ObjectStorageEnabled()} cloudinary_products=${isCloudinaryProductUploadEnabled()}`
 );
 
 // ── CORS ──────────────────────────────────────────────────────────────────────

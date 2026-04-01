@@ -11,6 +11,7 @@ import { type PlanFeature } from './config/planFeatures';
 import { getTenantFeatures } from './services/tenantPlan';
 import { sendInternalError } from './utils/internalServerError';
 import { UPLOADS_ROOT } from './uploadsRoot';
+import { isCloudinaryProductUploadEnabled } from './services/cloudinaryProduct';
 
 type AuthenticatedSession =
   | {
@@ -109,24 +110,41 @@ function isValidImageBytes(filePath: string): boolean {
   } catch { return false; }
 }
 
+function isValidImageBuffer(buf: Buffer): boolean {
+  if (!buf || buf.length < 3) return false;
+  const head = buf.subarray(0, 12);
+  return IMAGE_SIGNATURES.some(({ sig, mask }) =>
+    sig.every((byte, i) => (mask && !mask[i]) || head[i] === byte)
+  );
+}
+
 export function checkMagicBytes(req: any, res: any, next: any) {
   const file = req.file;
   if (!file) return next();
-  if (!isValidImageBytes(file.path)) {
-    fs.unlink(file.path, () => {});
-    return res.status(400).json({ success: false, message: 'Arquivo rejeitado: conteúdo não é uma imagem válida.' });
+  if (file.buffer) {
+    if (!isValidImageBuffer(file.buffer)) {
+      return res.status(400).json({ success: false, message: 'Arquivo rejeitado: conteúdo não é uma imagem válida.' });
+    }
+    return next();
+  }
+  if (file.path) {
+    if (!isValidImageBytes(file.path)) {
+      fs.unlink(file.path, () => {});
+      return res.status(400).json({ success: false, message: 'Arquivo rejeitado: conteúdo não é uma imagem válida.' });
+    }
+    return next();
   }
   next();
 }
 
 // ── Multer — fotos de produto ─────────────────────────────────────────────────
-const storage = multer.diskStorage({
+const productDiskStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_ROOT),
   filename: (_req, file, cb) => cb(null, `produto-${Date.now()}${path.extname(file.originalname)}`),
 });
 
 export const upload = multer({
-  storage,
+  storage: isCloudinaryProductUploadEnabled() ? multer.memoryStorage() : productDiskStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];

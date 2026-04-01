@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { resolveProductUploadDiskPath } from '../utils/productPhotoFs';
+import { deleteCloudinaryImageByUrl } from './cloudinaryProduct';
 
 let s3Client: S3Client | null = null;
 
@@ -115,6 +116,11 @@ export async function deleteStoredUpload(url: string | null | undefined): Promis
         /* ignore */
       }
     }
+    return;
+  }
+
+  if (/^https?:\/\//i.test(norm) && /res\.cloudinary\.com\//i.test(norm)) {
+    await deleteCloudinaryImageByUrl(norm);
     return;
   }
 
