@@ -14,6 +14,10 @@ type POSProductOptionsDialogProps = {
   onAdicionar: (item: ProductOptionsCartItem) => void;
   /** Enquanto a API de variações/opções do PDV carrega; bloqueia confirmar até os dados chegarem. */
   carregandoOpcoes?: boolean;
+  resolveComboComponente?: (productId: number) => ProductOptionsProduto | null;
+  loadComboComponenteOpcoes?: (
+    productId: number
+  ) => Promise<Pick<ProductOptionsProduto, 'grupos_opcao' | 'variacoes_vendaveis'> | null>;
 };
 
 const posProductOptionsTheme = buildDeliveryCardapioTheme('dark_premium');
@@ -23,6 +27,8 @@ export default function POSProductOptionsDialog({
   onClose,
   onAdicionar,
   carregandoOpcoes = false,
+  resolveComboComponente,
+  loadComboComponenteOpcoes,
 }: POSProductOptionsDialogProps) {
   return (
     <CardapioThemeShell theme={posProductOptionsTheme}>
@@ -35,6 +41,8 @@ export default function POSProductOptionsDialog({
             carregandoOpcoes={carregandoOpcoes}
             onClose={onClose}
             onAdicionar={onAdicionar}
+            resolveComboComponente={resolveComboComponente}
+            loadComboComponenteOpcoes={loadComboComponenteOpcoes}
           />
         </Fragment>
       </AnimatePresence>

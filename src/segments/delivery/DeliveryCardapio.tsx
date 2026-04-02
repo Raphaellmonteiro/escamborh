@@ -17,7 +17,12 @@ import {
   type DeliveryCardapioTheme,
 } from './deliveryCardapioTheme';
 import { CardapioThemeShell, useDeliveryCardapioTheme } from './DeliveryCardapioThemeContext';
-import { ProductOptionsModal, type ComboGrupoUi } from '../../shared/ProductOptionsModal';
+import {
+  ProductOptionsModal,
+  type ComboGrupoUi,
+  type ProductOptionsProduto,
+  type Selecoes,
+} from '../../shared/ProductOptionsModal';
 import PedidoRastreamento from '../../shared/PedidoRastreamento';
 import { normalizeCardapioOnlineBannerSlots } from '../../utils/deliveryCardapioBannerSlots';
 import {
@@ -256,9 +261,6 @@ function resolveDeliveryHeroGallery(
 
   return imagens;
 }
-
-// Seleção de opções: mapa grupoId → {itemId: quantidade}; combos usam chave `combo`
-type Selecoes = Record<number, Record<number, number>> & { combo?: Record<number, Record<number, number>> };
 
 interface CartItem extends Produto {
   qty: number;
@@ -1235,6 +1237,19 @@ export default function DeliveryCardapio() {
       }))
     ),
     [categorias]
+  );
+  const produtoCatalogoPorId = useMemo(() => {
+    const m = new Map<number, ProductOptionsProduto>();
+    for (const c of categorias) {
+      for (const p of c.itens) {
+        m.set(p.id, p as ProductOptionsProduto);
+      }
+    }
+    return m;
+  }, [categorias]);
+  const resolveComboComponenteDelivery = useCallback(
+    (productId: number) => produtoCatalogoPorId.get(productId) ?? null,
+    [produtoCatalogoPorId]
   );
   const totalPromocoesValidas = useMemo(
     () => categorias.flatMap(cat => cat.itens).filter(isPromocaoProdutoValida).length,
@@ -3290,6 +3305,7 @@ export default function DeliveryCardapio() {
               produto={produtoModal}
               onClose={()=>setProdutoModal(null)}
               onAdicionar={(item)=>{ addCartItem(item); setProdutoModal(null); }}
+              resolveComboComponente={resolveComboComponenteDelivery}
             />
           </Fragment>
         )}

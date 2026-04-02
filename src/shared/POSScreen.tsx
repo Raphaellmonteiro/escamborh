@@ -410,6 +410,40 @@ export default function POSScreen({
     setOpcaoModalBaseProduct(null);
   }, []);
 
+  const resolveComboComponentePOS = useCallback(
+    (productId: number) => {
+      const base = (Array.isArray(products) ? products : []).find((p) => p.id === productId);
+      if (!base) return null;
+      const cached = pdvOpcoesCacheRef.current.get(productId);
+      return buildProdutoOptionsPayload(
+        base,
+        cached?.grupos ?? [],
+        cached?.variacoes ?? [],
+        { is_combo: false, combo_grupos: [] }
+      );
+    },
+    [products]
+  );
+
+  const loadComboComponenteOpcoesPOS = useCallback(
+    async (productId: number) => {
+      const res = await fetch(`/api/products/${productId}/pdv-opcoes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const p = parsePdvOpcoesApiResponse(data);
+      pdvOpcoesCacheRef.current.set(productId, {
+        grupos: p.grupos,
+        variacoes: p.variacoes,
+        combo_grupos: p.combo_grupos,
+        is_combo: p.is_combo,
+      });
+      return { grupos_opcao: p.grupos, variacoes_vendaveis: p.variacoes };
+    },
+    [token]
+  );
+
   const openProductCustomizeFlow = useCallback(async (product: Product) => {
     const seq = ++opcaoModalLoadSeqRef.current;
     setOpcaoModalBaseProduct(product);
@@ -1166,6 +1200,8 @@ export default function POSScreen({
           carregandoOpcoes={carregandoVariacoes}
           onClose={closeOpcaoModal}
           onAdicionar={applyModalItemToPedido}
+          resolveComboComponente={resolveComboComponentePOS}
+          loadComboComponenteOpcoes={loadComboComponenteOpcoesPOS}
         />
       )}
 

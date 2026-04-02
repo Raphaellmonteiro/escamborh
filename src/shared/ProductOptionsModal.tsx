@@ -1,7 +1,7 @@
 // Modal de opções / variações — compartilhado entre cardápio online (delivery) e PDV / balcão.
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Plus, Minus, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Plus, Minus, AlertCircle, Loader2, ChevronLeft } from 'lucide-react';
 import { useDeliveryCardapioTheme } from '../segments/delivery/DeliveryCardapioThemeContext';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 import { FlowProductImage } from './FlowProductImage';
@@ -51,9 +51,20 @@ export interface ProductOptionsProduto {
   /** Grupos com produtos do cardápio (vem do cardápio público ou `pdv-opcoes`). */
   combo_grupos?: ComboGrupoUi[];
 }
-/** Opções por grupo numérico; combos usam a chave string `combo` (mapa grupo → produto → qtd). */
+/**
+ * Instância de um componente dentro do combo (alinhado ao backend: `ComboPedidoInstancia`).
+ * Cada unidade escolhida no grupo vira uma linha com `instancia_id` estável.
+ */
+export type ComboInstanciaCliente = {
+  produto_id: number;
+  instancia_id: string;
+  selecoes?: Record<number, Record<number, number>>;
+  observacao?: string | null;
+};
+
+/** Opções por grupo numérico; combos usam `combo`: grupoId → lista de instâncias. */
 export type Selecoes = Record<number, Record<number, number>> & {
-  combo?: Record<number, Record<number, number>>;
+  combo?: Record<number, ComboInstanciaCliente[]>;
 };
 
 export interface ProductOptionsCartItem extends ProductOptionsProduto {
@@ -107,22 +118,128 @@ function gerarCartKey(prodId: number, selecoes: Selecoes): string {
   return `${prodId}_${partes}`;
 }
 
-function gerarCartKeyCombo(prodId: number, escolhas: Record<number, Record<number, number>>): string {
-  const partes = Object.keys(escolhas)
+function gerarCartKeyComboInstancias(
+  prodId: number,
+  comboPayload: Record<number, ComboInstanciaCliente[]>,
+  obsHint: string
+): string {
+  const gIds = Object.keys(comboPayload)
     .map((k) => Number(k))
     .filter((id) => Number.isInteger(id) && id > 0)
-    .sort((a, b) => a - b)
-    .map((gId) => {
-      const inner = escolhas[gId] || {};
-      const innerPart = Object.keys(inner)
-        .map((k) => Number(k))
-        .filter((id) => Number.isInteger(id) && id > 0)
-        .sort((a, b) => a - b)
-        .map((pid) => `${pid}x${inner[pid]}`)
-        .join(',');
-      return `${gId}:{${innerPart}}`;
-    });
-  return `${prodId}_combo_${partes.join('|')}`;
+    .sort((a, b) => a - b);
+  const parts = gIds.map((gid) => {
+    const arr = comboPayload[gid] || [];
+    const inner = arr
+      .map((inst) => {
+        const sel = inst.selecoes || {};
+        const selKey = Object.keys(sel)
+          .map(Number)
+          .filter((n) => Number.isInteger(n) && n > 0)
+          .sort((a, b) => a - b)
+          .map((g) => {
+            const m = sel[g] || {};
+            const itemPart = Object.keys(m)
+              .map(Number)
+              .filter((iid) => Number.isInteger(iid) && iid > 0)
+              .sort((a, b) => a - b)
+              .map((iid) => `${iid}x${m[iid]}`)
+              .join(',');
+            return `${g}:{${itemPart}}`;
+          })
+          .join('|');
+        return `${inst.produto_id}@${inst.instancia_id}{${selKey}}`;
+      })
+      .join(';;');
+    return `${gid}:[${inner}]`;
+  });
+  const base = `${prodId}_combo_${parts.join('|')}`;
+  return obsHint ? `${base}_${obsHint.substring(0, 20)}` : base;
+}
+
+function buildComboInstanciasFromSel(
+  grupos: ComboGrupoUi[],
+  comboSel: Record<number, Record<number, number>>,
+  resolver?: (productId: number) => ProductOptionsProduto | null
+): Record<number, ComboInstanciaCliente[]> {
+  const out: Record<number, ComboInstanciaCliente[]> = {};
+  for (const g of grupos) {
+    const sel = comboSel[g.id] || {};
+    const arr: ComboInstanciaCliente[] = [];
+    let seq = 0;
+    for (const ref of g.produtos) {
+      const q = Math.floor(Number(sel[ref.product_id] || 0));
+      if (!q) continue;
+      const comp = resolver?.(ref.product_id);
+      const gruposComp = comp?.grupos_opcao || [];
+      for (let i = 0; i < q; i++) {
+        const inicial = gruposComp.length ? gerarSelecaoInicial(gruposComp) : {};
+        const row: ComboInstanciaCliente = {
+          produto_id: ref.product_id,
+          instancia_id: `g${g.id}-p${ref.product_id}-n${seq}`,
+        };
+        if (Object.keys(inicial).length) row.selecoes = inicial;
+        arr.push(row);
+        seq += 1;
+      }
+    }
+    if (arr.length) out[g.id] = arr;
+  }
+  return out;
+}
+
+function sumAdicionaisInstanciasCombo(
+  payload: Record<number, ComboInstanciaCliente[]>,
+  gruposUi: ComboGrupoUi[],
+  resolver?: (id: number) => ProductOptionsProduto | null
+): number {
+  let sum = 0;
+  for (const g of gruposUi) {
+    const arr = payload[g.id];
+    if (!arr) continue;
+    for (const inst of arr) {
+      const comp = resolver?.(inst.produto_id);
+      const gruposOpc = comp?.grupos_opcao || [];
+      sum += calcPrecoUnitario(gruposOpc, inst.selecoes || {}, 0);
+    }
+  }
+  return sum;
+}
+
+function descreverComboInstanciasObs(
+  gruposUi: ComboGrupoUi[],
+  payload: Record<number, ComboInstanciaCliente[]>,
+  resolver?: (id: number) => ProductOptionsProduto | null
+): string {
+  const partes: string[] = [];
+  for (const g of gruposUi) {
+    const arr = payload[g.id];
+    if (!arr?.length) continue;
+    const perPid = new Map<number, number>();
+    for (const inst of arr) {
+      const ref = g.produtos.find((p) => p.product_id === inst.produto_id);
+      const nome = ref?.name || `Produto ${inst.produto_id}`;
+      const n = (perPid.get(inst.produto_id) || 0) + 1;
+      perPid.set(inst.produto_id, n);
+      const comp = resolver?.(inst.produto_id);
+      const gruposOpc = comp?.grupos_opcao || [];
+      const desc = descreverSelecoes(gruposOpc, inst.selecoes || {});
+      const suffix = desc ? ` — ${desc}` : '';
+      partes.push(`${g.nome}: ${nome} #${n}${suffix}`);
+    }
+  }
+  return partes.join(' | ');
+}
+
+function comboInstanciaLabelNoGrupo(g: ComboGrupoUi, arr: ComboInstanciaCliente[] | undefined, index: number): string {
+  if (!arr || !arr[index]) return 'Item';
+  const inst = arr[index];
+  const ref = g.produtos.find((p) => p.product_id === inst.produto_id);
+  const nome = ref?.name || `Produto ${inst.produto_id}`;
+  let n = 0;
+  for (let i = 0; i <= index; i++) {
+    if (arr[i]?.produto_id === inst.produto_id) n += 1;
+  }
+  return `${nome} #${n}`;
 }
 
 function getComboMinGrupo(g: ComboGrupoUi) {
@@ -168,20 +285,6 @@ function getComboGrupoRegraTexto(g: ComboGrupoUi) {
   if (min > 0) return `Escolha no minimo ${min} itens neste grupo.`;
   if (max !== null) return `Escolha ate ${max} itens neste grupo.`;
   return g.obrigatorio ? 'Este grupo e obrigatorio.' : 'Opcional — monte como preferir.';
-}
-
-function descreverComboSelecoes(grupos: ComboGrupoUi[], escolhas: Record<number, Record<number, number>>): string {
-  const partes: string[] = [];
-  for (const g of grupos) {
-    const sel = escolhas[g.id] || {};
-    const names: string[] = [];
-    for (const p of g.produtos) {
-      const q = sel[p.product_id] || 0;
-      if (q > 0) names.push(q > 1 ? `${p.name} x${q}` : p.name);
-    }
-    if (names.length) partes.push(`${g.nome}: ${names.join(', ')}`);
-  }
-  return partes.join(' | ');
 }
 
 function calcPrecoUnitario(grupos: GrupoOpcao[], selecoes: Selecoes, precoBase: number): number {
@@ -426,6 +529,8 @@ export function ProductOptionsModal({
   addDestination = 'sacola',
   visualVariant = 'delivery',
   carregandoOpcoes = false,
+  resolveComboComponente,
+  loadComboComponenteOpcoes,
 }: {
   produto: ProductOptionsProduto;
   onClose: () => void;
@@ -434,6 +539,12 @@ export function ProductOptionsModal({
   visualVariant?: ProductOptionsVisualVariant;
   /** PDV: opções/variações ainda vindo da API; não permitir confirmar até atualizar. */
   carregandoOpcoes?: boolean;
+  /** Cardápio / PDV: produto completo (com `grupos_opcao`) para cada componente do combo. */
+  resolveComboComponente?: (productId: number) => ProductOptionsProduto | null;
+  /** PDV: carregar opções do componente sob demanda (cache do pai pode não incluir o item). */
+  loadComboComponenteOpcoes?: (
+    productId: number
+  ) => Promise<Pick<ProductOptionsProduto, 'grupos_opcao' | 'variacoes_vendaveis'> | null>;
 }) {
   const mTh = useDeliveryCardapioTheme();
   const compactLayout = useCompactOptionsModalLayout();
@@ -465,6 +576,16 @@ export function ProductOptionsModal({
   const [variacaoSel, setVariacaoSel] = useState<VariacaoVendavel | null>(null);
   const [selecoes, setSelecoes] = useState<Selecoes>(() => gerarSelecaoInicial(hasVariacoesVendaveis(produto) ? [] : gruposOpcaoProduto));
   const [comboSel, setComboSel] = useState<Record<number, Record<number, number>>>({});
+  const [comboFlowStep, setComboFlowStep] = useState<'montar' | 'revisar'>('montar');
+  const [comboInstanciasPorGrupo, setComboInstanciasPorGrupo] = useState<
+    Record<number, ComboInstanciaCliente[]>
+  >({});
+  const [comboPersonalizar, setComboPersonalizar] = useState<null | { grupoId: number; instIndex: number }>(
+    null
+  );
+  const [personalizarSelecoes, setPersonalizarSelecoes] = useState<Selecoes>({});
+  const [personalizarCarregando, setPersonalizarCarregando] = useState(false);
+  const [personalizarCompExtra, setPersonalizarCompExtra] = useState<ProductOptionsProduto | null>(null);
   const [obs, setObs] = useState('');
   const [qty, setQty] = useState(1);
   const [erros, setErros] = useState<Record<number, string>>({});
@@ -480,6 +601,12 @@ export function ProductOptionsModal({
   useLayoutEffect(() => {
     setDescExpanded(false);
     setComboSel({});
+    setComboFlowStep('montar');
+    setComboInstanciasPorGrupo({});
+    setComboPersonalizar(null);
+    setPersonalizarCompExtra(null);
+    setPersonalizarSelecoes({});
+    setPersonalizarCarregando(false);
   }, [produto.id]);
 
   useLayoutEffect(() => {
@@ -493,6 +620,12 @@ export function ProductOptionsModal({
       setVariacaoSel(null);
       setSelecoes(gerarSelecaoInicial(modoVar ? [] : go));
       setComboSel({});
+      setComboFlowStep('montar');
+      setComboInstanciasPorGrupo({});
+      setComboPersonalizar(null);
+      setPersonalizarCompExtra(null);
+      setPersonalizarSelecoes({});
+      setPersonalizarCarregando(false);
       setErros({});
     }
     prevCarregandoOpcoes.current = !!carregandoOpcoes;
@@ -515,25 +648,36 @@ export function ProductOptionsModal({
   }, [isDelivery, isPos, compactLayout, descricaoProduto, descExpanded, produto.id]);
 
   const precoUnitOpcoes = calcPrecoUnitario(grupos, selecoes, produto.price);
+  const adicionaisComboInstancias =
+    modoCombo && comboFlowStep === 'revisar'
+      ? sumAdicionaisInstanciasCombo(comboInstanciasPorGrupo, comboGruposUi, resolveComboComponente)
+      : 0;
   const precoUnit = modoSomenteVariacoes
     ? (variacaoSel ? Number(variacaoSel.preco) : null)
     : modoCombo
-      ? Number(produto.price || 0)
+      ? Number(produto.price || 0) + adicionaisComboInstancias
       : precoUnitOpcoes;
   const precoTotal = (precoUnit ?? 0) * qty;
   const temGrupoPrecoFinal = grupos.some((grupo) => (grupo.modo_preco || 'adicional') === 'final');
-  const gruposComboPendentes = modoCombo
-    ? comboGruposUi.filter((g) => !isComboGrupoCompleto(g, comboSel[g.id] || {})).length
-    : 0;
+  const gruposComboPendentes =
+    modoCombo && comboFlowStep === 'montar'
+      ? comboGruposUi.filter((g) => !isComboGrupoCompleto(g, comboSel[g.id] || {})).length
+      : 0;
   const gruposObrigatoriosPendentes = modoSomenteVariacoes
     ? (variacaoSel ? 0 : 1)
     : modoCombo
-      ? gruposComboPendentes
+      ? comboFlowStep === 'montar'
+        ? gruposComboPendentes
+        : 0
       : grupos.filter((grupo) => !isGrupoCompleto(grupo, selecoes[grupo.id] || {})).length;
   const resumoPrecoUnitario = modoSomenteVariacoes
     ? `Cada opcao abaixo tem preco proprio. Selecione uma antes de adicionar à ${addWord}.`
     : modoCombo
-      ? 'Preco fixo do combo. Monte os grupos abaixo.'
+      ? comboFlowStep === 'revisar'
+        ? adicionaisComboInstancias > 0
+          ? `Preco fixo do combo + ${fmt(adicionaisComboInstancias)} em adicionais das unidades.`
+          : 'Preco fixo do combo. Adicionais por item aparecem ao personalizar.'
+        : 'Preco fixo do combo. Monte os grupos abaixo.'
     : temGrupoPrecoFinal
       ? 'Algumas escolhas definem o preco final do item antes dos adicionais extras.'
       : precoUnitOpcoes > produto.price
@@ -592,41 +736,212 @@ export function ProductOptionsModal({
     });
   };
 
-  const validarEAdicionar = () => {
-    if (carregandoOpcoes) return;
-    if (modoCombo) {
-      const novosErros: Record<number, string> = {};
-      for (const g of comboGruposUi) {
-        const sel: Record<number, number> = { ...(comboSel[g.id] || {}) };
-        const total = getTotalComboGrupo(sel);
-        const min = getComboMinGrupo(g);
-        const max = getComboMaxGrupo(g);
-        if (g.obrigatorio && total < min) {
-          novosErros[g.id] =
-            min === 1
-              ? `Escolha pelo menos 1 item em "${g.nome}".`
-              : `Faltam itens em "${g.nome}": selecione no minimo ${min} (voce marcou ${total}).`;
+  const personalizarCtx = comboPersonalizar;
+  const personalizarInst =
+    personalizarCtx && comboInstanciasPorGrupo[personalizarCtx.grupoId]
+      ? comboInstanciasPorGrupo[personalizarCtx.grupoId][personalizarCtx.instIndex]
+      : undefined;
+
+  const personalizarResolverBase =
+    personalizarInst && resolveComboComponente
+      ? resolveComboComponente(personalizarInst.produto_id)
+      : null;
+
+  const personalizarGrupos: GrupoOpcao[] =
+    (personalizarResolverBase?.grupos_opcao?.length
+      ? personalizarResolverBase.grupos_opcao
+      : personalizarCompExtra?.grupos_opcao) || [];
+
+  const personalizarSohVariacoes =
+    !personalizarGrupos.length && (personalizarResolverBase?.variacoes_vendaveis?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!personalizarCtx || !personalizarInst) return;
+    const base = resolveComboComponente?.(personalizarInst.produto_id);
+    const hasGrupos = (base?.grupos_opcao?.length ?? 0) > 0;
+    const hasVar = (base?.variacoes_vendaveis?.length ?? 0) > 0;
+    if (hasGrupos || hasVar || !loadComboComponenteOpcoes) {
+      setPersonalizarCarregando(false);
+      return;
+    }
+    let cancel = false;
+    setPersonalizarCarregando(true);
+    setPersonalizarCompExtra(null);
+    loadComboComponenteOpcoes(personalizarInst.produto_id)
+      .then((extra) => {
+        if (cancel) return;
+        setPersonalizarCarregando(false);
+        if (!extra) return;
+        const g = extra.grupos_opcao || [];
+        const v = extra.variacoes_vendaveis || [];
+        if (!g.length && !v.length) return;
+        setPersonalizarCompExtra({
+          id: personalizarInst.produto_id,
+          name: base?.name || `#${personalizarInst.produto_id}`,
+          price: Number(base?.price || 0),
+          category: base?.category || '',
+          photo_url: base?.photo_url,
+          grupos_opcao: g,
+          variacoes_vendaveis: v,
+        } as ProductOptionsProduto);
+        if (g.length) {
+          setPersonalizarSelecoes((prev) => ({
+            ...gerarSelecaoInicial(g),
+            ...prev,
+          }));
         }
-        if (!g.obrigatorio && total > 0 && total < min) {
-          novosErros[g.id] = `No grupo "${g.nome}", ou voce deixa vazio ou completa no minimo ${min} itens (agora ${total}).`;
-        }
-        if (max !== null && total > max) {
-          novosErros[g.id] = `No grupo "${g.nome}" o limite e ${max} itens.`;
+      })
+      .catch(() => {
+        if (!cancel) setPersonalizarCarregando(false);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [
+    personalizarCtx?.grupoId,
+    personalizarCtx?.instIndex,
+    personalizarInst?.produto_id,
+    personalizarInst?.instancia_id,
+    loadComboComponenteOpcoes,
+    resolveComboComponente,
+  ]);
+
+  const toggleRadioPersonalizar = (grupoId: number, itemId: number) => {
+    setPersonalizarSelecoes((prev) => ({ ...prev, [grupoId]: { [itemId]: 1 } }));
+    setErros((prev) => {
+      const n = { ...prev };
+      delete n[grupoId];
+      return n;
+    });
+  };
+
+  const toggleCheckPersonalizar = (grupoId: number, itemId: number, grupo: GrupoOpcao) => {
+    setPersonalizarSelecoes((prev) => {
+      const cur: Record<number, number> = { ...(prev[grupoId] || {}) };
+      if (cur[itemId]) delete cur[itemId];
+      else {
+        const total = Object.values(cur).reduce((a, v) => a + (v as number), 0);
+        const maxSelecoes = getMaxSelecoesGrupo(grupo);
+        if (maxSelecoes !== null && total >= maxSelecoes) return prev;
+        cur[itemId] = 1;
+      }
+      return { ...prev, [grupoId]: cur };
+    });
+    setErros((prev) => {
+      const n = { ...prev };
+      delete n[grupoId];
+      return n;
+    });
+  };
+
+  const setQtdItemPersonalizar = (grupoId: number, itemId: number, delta: number, grupo: GrupoOpcao) => {
+    setPersonalizarSelecoes((prev) => {
+      const cur: Record<number, number> = { ...(prev[grupoId] || {}) };
+      const novaQtd = Math.max(0, (cur[itemId] || 0) + delta);
+      const totalSemEste = Object.entries(cur)
+        .filter(([id]) => Number(id) !== itemId)
+        .reduce((a, [, v]) => a + (v as number), 0);
+      const maxSelecoes = getMaxSelecoesGrupo(grupo);
+      if (delta > 0 && maxSelecoes !== null && totalSemEste + novaQtd > maxSelecoes) return prev;
+      if (novaQtd === 0) delete cur[itemId];
+      else cur[itemId] = novaQtd;
+      return { ...prev, [grupoId]: cur };
+    });
+  };
+
+  const salvarPersonalizarCombo = () => {
+    if (!personalizarCtx || personalizarInst == null) return;
+    const { grupoId, instIndex } = personalizarCtx;
+    setComboInstanciasPorGrupo((prev) => {
+      const gArr = [...(prev[grupoId] || [])];
+      if (!gArr[instIndex]) return prev;
+      const nextSel = { ...personalizarSelecoes };
+      const cleaned: Record<number, Record<number, number>> = {};
+      for (const [gk, gm] of Object.entries(nextSel)) {
+        const numG = Number(gk);
+        if (!Number.isInteger(numG) || numG <= 0 || gk === 'combo') continue;
+        if (gm && typeof gm === 'object' && !Array.isArray(gm)) {
+          const inner: Record<number, number> = {};
+          for (const [ik, q] of Object.entries(gm as Record<string, number>)) {
+            const numI = Number(ik);
+            if (!Number.isInteger(numI) || numI <= 0) continue;
+            if (Number(q) > 0) inner[numI] = Math.floor(Number(q));
+          }
+          if (Object.keys(inner).length) cleaned[numG] = inner;
         }
       }
-      if (Object.keys(novosErros).length) {
-        setErros(novosErros);
+      const nextInst: ComboInstanciaCliente = {
+        ...gArr[instIndex],
+        selecoes: Object.keys(cleaned).length ? cleaned : undefined,
+      };
+      gArr[instIndex] = nextInst;
+      return { ...prev, [grupoId]: gArr };
+    });
+    setComboPersonalizar(null);
+    setPersonalizarCompExtra(null);
+    setErros({});
+  };
+
+  const fecharPersonalizarCombo = () => {
+    setComboPersonalizar(null);
+    setPersonalizarCompExtra(null);
+    setPersonalizarCarregando(false);
+    setErros({});
+  };
+
+  const voltarRevisaoParaMontar = () => {
+    setComboFlowStep('montar');
+    setComboInstanciasPorGrupo({});
+    setComboPersonalizar(null);
+    setPersonalizarCompExtra(null);
+    setErros({});
+  };
+
+  const validarEAdicionar = () => {
+    if (carregandoOpcoes || personalizarCarregando) return;
+    if (modoCombo) {
+      if (comboFlowStep === 'montar') {
+        const novosErros: Record<number, string> = {};
+        for (const g of comboGruposUi) {
+          const sel: Record<number, number> = { ...(comboSel[g.id] || {}) };
+          const total = getTotalComboGrupo(sel);
+          const min = getComboMinGrupo(g);
+          const max = getComboMaxGrupo(g);
+          if (g.obrigatorio && total < min) {
+            novosErros[g.id] =
+              min === 1
+                ? `Escolha pelo menos 1 item em "${g.nome}".`
+                : `Faltam itens em "${g.nome}": selecione no minimo ${min} (voce marcou ${total}).`;
+          }
+          if (!g.obrigatorio && total > 0 && total < min) {
+            novosErros[g.id] = `No grupo "${g.nome}", ou voce deixa vazio ou completa no minimo ${min} itens (agora ${total}).`;
+          }
+          if (max !== null && total > max) {
+            novosErros[g.id] = `No grupo "${g.nome}" o limite e ${max} itens.`;
+          }
+        }
+        if (Object.keys(novosErros).length) {
+          setErros(novosErros);
+          return;
+        }
+        const built = buildComboInstanciasFromSel(comboGruposUi, comboSel, resolveComboComponente);
+        setComboInstanciasPorGrupo(built);
+        setComboFlowStep('revisar');
+        setErros({});
         return;
       }
-      const obsCombo = descreverComboSelecoes(comboGruposUi, comboSel);
+
+      const comboPayload = comboInstanciasPorGrupo;
+      const obsCombo = descreverComboInstanciasObs(comboGruposUi, comboPayload, resolveComboComponente);
       const obsTxt = obs.trim();
+      const adic = sumAdicionaisInstanciasCombo(comboPayload, comboGruposUi, resolveComboComponente);
       onAdicionar({
         ...produto,
         qty,
-        selecoes: { combo: comboSel },
-        preco_final: Number(produto.price || 0),
+        selecoes: { combo: comboPayload },
+        preco_final: Number(produto.price || 0) + adic,
         obs_opcoes: [obsCombo, obsTxt].filter(Boolean).join(' | ') || undefined,
-        cart_key: gerarCartKeyCombo(produto.id, comboSel) + (obsTxt ? `_${obsTxt.substring(0, 20)}` : ''),
+        cart_key: gerarCartKeyComboInstancias(produto.id, comboPayload, obsTxt),
       });
       return;
     }
@@ -670,30 +985,251 @@ export function ProductOptionsModal({
 
   const readyTitle = carregandoOpcoes
     ? 'Carregando opcoes...'
-    : gruposObrigatoriosPendentes > 0
-      ? (modoSomenteVariacoes
-        ? 'Escolha uma opcao abaixo.'
-        : modoCombo
-          ? `Faltam ${gruposObrigatoriosPendentes} grupo${gruposObrigatoriosPendentes > 1 ? 's' : ''} obrigatorio${gruposObrigatoriosPendentes > 1 ? 's' : ''} do combo.`
-          : `Faltam ${gruposObrigatoriosPendentes} grupo${gruposObrigatoriosPendentes > 1 ? 's' : ''} obrigatorio${gruposObrigatoriosPendentes > 1 ? 's' : ''}.`)
-      : (destSacola ? 'Pedido pronto para ir para a sacola.' : 'Pronto para adicionar ao pedido atual.');
+    : comboPersonalizar
+      ? 'Ajuste os adicionais desta unidade do combo.'
+      : gruposObrigatoriosPendentes > 0
+        ? (modoSomenteVariacoes
+          ? 'Escolha uma opcao abaixo.'
+          : modoCombo
+            ? `Faltam ${gruposObrigatoriosPendentes} grupo${gruposObrigatoriosPendentes > 1 ? 's' : ''} obrigatorio${gruposObrigatoriosPendentes > 1 ? 's' : ''} do combo.`
+            : `Faltam ${gruposObrigatoriosPendentes} grupo${gruposObrigatoriosPendentes > 1 ? 's' : ''} obrigatorio${gruposObrigatoriosPendentes > 1 ? 's' : ''}.`)
+        : modoCombo && comboFlowStep === 'revisar'
+          ? (destSacola ? 'Revise cada item e adicione à sacola.' : 'Revise cada item antes de enviar ao pedido.')
+          : (destSacola ? 'Pedido pronto para ir para a sacola.' : 'Pronto para adicionar ao pedido atual.');
   const readyHint = carregandoOpcoes
     ? 'Aguarde um instante.'
-    : gruposObrigatoriosPendentes > 0
-      ? (modoSomenteVariacoes
-        ? `Toque na variacao desejada antes de adicionar à ${addWord}.`
-        : modoCombo
-          ? 'Ajuste as quantidades de cada grupo conforme o minimo e o maximo.'
-          : 'Complete as escolhas obrigatorias para continuar.')
-      : (destSacola ? 'Revise a quantidade e confirme para adicionar.' : 'Revise a quantidade e confirme para enviar ao pedido.');
+    : comboPersonalizar
+      ? 'Toque em Salvar para voltar à lista do combo.'
+      : gruposObrigatoriosPendentes > 0
+        ? (modoSomenteVariacoes
+          ? `Toque na variacao desejada antes de adicionar à ${addWord}.`
+          : modoCombo
+            ? 'Ajuste as quantidades de cada grupo conforme o minimo e o maximo.'
+            : 'Complete as escolhas obrigatorias para continuar.')
+        : modoCombo && comboFlowStep === 'revisar'
+          ? 'Opcional: personalize cada unidade com o botao ao lado.'
+          : (destSacola ? 'Revise a quantidade e confirme para adicionar.' : 'Revise a quantidade e confirme para enviar ao pedido.');
 
   const addBtnLabel = carregandoOpcoes
     ? 'Carregando...'
+    : personalizarCarregando
+      ? 'Carregando adicionais...'
     : gruposObrigatoriosPendentes > 0
-      ? (modoSomenteVariacoes ? 'Escolher opcao' : modoCombo ? 'Revisar combo' : 'Revisar adicionais')
-      : (destSacola ? `Adicionar a sacola${qty > 1 ? ` (${qty}x)` : ''}` : `Adicionar ao pedido${qty > 1 ? ` (${qty}x)` : ''}`);
+      ? (modoSomenteVariacoes ? 'Escolher opcao' : modoCombo ? 'Revisar itens do combo' : 'Revisar adicionais')
+      : modoCombo && comboFlowStep === 'montar'
+        ? 'Revisar itens do combo'
+        : (destSacola ? `Adicionar a sacola${qty > 1 ? ` (${qty}x)` : ''}` : `Adicionar ao pedido${qty > 1 ? ` (${qty}x)` : ''}`);
 
-  const addBtnDisabled = carregandoOpcoes || gruposObrigatoriosPendentes > 0 || precoUnit == null;
+  const addBtnDisabled =
+    carregandoOpcoes ||
+    personalizarCarregando ||
+    !!comboPersonalizar ||
+    gruposObrigatoriosPendentes > 0 ||
+    precoUnit == null;
+
+  const confirmarPersonalizarCombo = () => {
+    const novosErros: Record<number, string> = {};
+    for (const g of personalizarGrupos) {
+      if (!g.obrigatorio) continue;
+      const sel: Record<number, number> = personalizarSelecoes[g.id] || {};
+      const total = Object.values(sel).reduce((a, v) => a + (v as number), 0);
+      if (total < g.min_selecoes) {
+        novosErros[g.id] =
+          g.tipo === 'radio'
+            ? 'Selecione uma opcao'
+            : `Selecione no minimo ${g.min_selecoes} item(ns)`;
+      }
+    }
+    if (Object.keys(novosErros).length) {
+      setErros(novosErros);
+      return;
+    }
+    salvarPersonalizarCombo();
+  };
+
+  const renderGruposOpcoesBlock = (opts: {
+    gruposLista: GrupoOpcao[];
+    selecoesAtual: Selecoes;
+    toggleRadioFn: (grupoId: number, itemId: number) => void;
+    toggleCheckFn: (grupoId: number, itemId: number, grupo: GrupoOpcao) => void;
+    setQtdItemFn: (grupoId: number, itemId: number, delta: number, grupo: GrupoOpcao) => void;
+  }) => {
+    const { gruposLista, selecoesAtual, toggleRadioFn, toggleCheckFn, setQtdItemFn } = opts;
+    return gruposLista.map((g) => {
+      const sel: Record<number, number> = selecoesAtual[g.id] || {};
+      const totalSel = getTotalSelecionadoGrupo(sel);
+      const temErro = !!erros[g.id];
+      const completo = isGrupoCompleto(g, sel);
+      const maxSelecoes = getMaxSelecoesGrupo(g);
+      return (
+        <section
+          key={g.id}
+          className={`${
+            compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
+          } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
+            temErro ? 'border-red-500/40 bg-red-500/10' : 'border-white/14 bg-zinc-900/85'
+          }`}
+        >
+          <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
+            <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
+              <div className="min-w-0">
+                <p
+                  className={
+                    compactLayout
+                      ? 'line-clamp-2 text-[13px] font-black leading-tight tracking-tight text-white'
+                      : useTightModalLayout
+                        ? isPos
+                          ? 'line-clamp-2 text-[13px] font-black leading-tight tracking-tight text-white'
+                          : 'line-clamp-2 text-sm font-black leading-tight tracking-tight text-white'
+                        : 'line-clamp-3 text-base font-black tracking-tight text-white'
+                  }
+                  title={g.nome}
+                >
+                  {g.nome}
+                </p>
+                <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : useTightModalLayout ? (isPos ? 'mt-0 line-clamp-1 text-[10px] leading-snug' : 'mt-0 line-clamp-2 text-[11px] leading-snug') : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
+              </div>
+              <span className={`shrink-0 rounded-full font-bold uppercase tracking-[0.16em] ${
+                compactLayout ? 'px-1.5 py-0.5 text-[8px]' : useTightModalLayout ? (isPos ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[9px]') : 'px-3 py-1 text-[10px]'
+              } ${
+                completo
+                  ? ac.badgeGrupoCompleto
+                  : g.obrigatorio
+                    ? 'border border-amber-500/30 bg-amber-500/15 text-amber-100'
+                    : 'border border-white/14 bg-white/10 text-zinc-100'
+              }`}>
+                {completo ? 'Pronto' : g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
+              </span>
+            </div>
+            <div className={`flex flex-wrap ${compactLayout ? 'mt-1.5 gap-1' : useTightModalLayout ? 'mt-1.5 gap-1' : 'mt-3 gap-2'}`}>
+              {!useTightModalLayout && (
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                  g.obrigatorio
+                    ? 'border-amber-500/30 bg-amber-500/15 text-amber-100'
+                    : 'border-white/14 bg-white/10 text-zinc-100'
+                }`}>
+                  {g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
+                </span>
+              )}
+              <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-1.5 py-px text-[9px]' : useTightModalLayout ? 'px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
+                {getResumoSelecaoGrupo(g, totalSel)}
+              </span>
+              {(g.modo_preco || 'adicional') === 'final' && (
+                <span className={`rounded-full border font-semibold ${ac.badgePrecoFinal} ${compactLayout ? 'max-w-[min(100%,11rem)] truncate px-1.5 py-px text-[9px]' : useTightModalLayout ? 'max-w-[min(100%,10rem)] truncate px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
+                  {useTightModalLayout ? 'Preco na escolha' : 'Preco definido pela escolha'}
+                </span>
+              )}
+            </div>
+          </div>
+          {temErro && (
+            <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-2.5 py-1' : useTightModalLayout ? 'px-2.5 py-1.5' : 'px-4 py-2'}`}>
+              <AlertCircle size={11} className="shrink-0 text-red-400" />
+              <p className={`${compactLayout ? 'text-[11px]' : 'text-xs'} font-semibold text-red-100`}>{erros[g.id]}</p>
+            </div>
+          )}
+
+          <div className="divide-y divide-white/5 bg-zinc-950/70">
+            {g.itens.map((item) => {
+              const qtdItem = sel[item.id] || 0;
+              const selecionado = qtdItem > 0;
+              const limiteAtingido = maxSelecoes !== null && totalSel >= maxSelecoes;
+              const bloqueado = !selecionado && (g.tipo === 'checkbox' || g.tipo === 'quantidade') && limiteAtingido;
+              const podeAumentarQuantidade = maxSelecoes === null || totalSel < maxSelecoes;
+              return (
+                <div
+                  key={item.id}
+                  className={`flex cursor-pointer items-center transition-colors ${
+                    compactLayout
+                      ? 'min-h-[44px] gap-2.5 px-2.5 py-2'
+                      : useTightModalLayout
+                        ? isPos
+                          ? 'min-h-[44px] gap-2 px-2.5 py-2'
+                          : isDelivery
+                            ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
+                            : 'min-h-[44px] gap-2.5 px-3 py-2.5'
+                        : 'min-h-[44px] gap-4 px-4 py-4'
+                  } ${
+                    selecionado
+                      ? ac.rowItemSel
+                      : bloqueado
+                        ? 'opacity-70'
+                        : 'hover:bg-white/[0.06]'
+                  }`}
+                  onClick={() => {
+                    if (g.tipo === 'radio') toggleRadioFn(g.id, item.id);
+                    else if (g.tipo === 'checkbox') toggleCheckFn(g.id, item.id, g);
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className={`${compactLayout ? 'text-[13px]' : useTightModalLayout ? 'text-sm' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
+                      {item.nome}
+                    </p>
+                    <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : useTightModalLayout ? 'mt-0 text-[11px]' : 'mt-1 text-xs'} font-bold ${
+                      (g.modo_preco || 'adicional') === 'final' || item.preco_adicional > 0
+                        ? ac.precoItemDestaque
+                        : 'text-zinc-300'
+                    }`}>
+                      {getPrecoItemLabel(g, item)}
+                    </p>
+                    {bloqueado && <p className="mt-1 text-[11px] text-amber-200">Limite do grupo atingido.</p>}
+                  </div>
+
+                  {g.tipo === 'radio' && (
+                    <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                      selecionado
+                        ? ac.radioGrupoOn
+                        : 'border-zinc-500'
+                    }`}>
+                      {selecionado && <div className={`h-2 w-2 rounded-full ${ac.radioGrupoDot}`} />}
+                    </div>
+                  )}
+                  {g.tipo === 'checkbox' && (
+                    <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
+                      selecionado
+                        ? ac.checkboxOn
+                        : 'border-zinc-500'
+                    }`}>
+                      {selecionado && <span className={`text-[10px] font-black leading-none ${ac.checkboxMark}`}>✓</span>}
+                    </div>
+                  )}
+                  {g.tipo === 'quantidade' && (
+                    <div
+                      className="flex shrink-0 items-center gap-2 rounded-full border border-white/12 bg-zinc-900 p-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQtdItemFn(g.id, item.id, -1, g);
+                        }}
+                        disabled={qtdItem === 0}
+                        className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${useTightModalLayout ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}
+                      >
+                        <Minus size={11} />
+                      </button>
+                      <span className={`w-6 text-center font-black text-white ${useTightModalLayout ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQtdItemFn(g.id, item.id, +1, g);
+                        }}
+                        disabled={!podeAumentarQuantidade}
+                        className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${useTightModalLayout ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}
+                      >
+                        <Plus size={11} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      );
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-[70] flex min-h-0 items-end justify-center overflow-x-hidden overflow-y-auto p-0 sm:items-center sm:p-4">
@@ -904,130 +1440,258 @@ export function ProductOptionsModal({
               </div>
             </div>
           ) : modoCombo ? (
-            comboGruposUi.map((g) => {
-              const sel: Record<number, number> = comboSel[g.id] || {};
-              const totalSel = getTotalComboGrupo(sel);
-              const temErro = !!erros[g.id];
-              const completo = isComboGrupoCompleto(g, sel);
-              const maxV = getComboMaxGrupo(g);
-              return (
-                <section
-                  key={g.id}
-                  className={`${
-                    compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
-                  } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
-                    temErro ? 'border-red-500/40 bg-red-500/10' : 'border-emerald-500/25 bg-zinc-900/85'
-                  }`}
-                >
-                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
-                    <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
-                      <div className="min-w-0">
-                        <p
-                          className={
-                            compactLayout
-                              ? 'text-sm font-black leading-tight tracking-tight text-white'
-                              : useTightModalLayout
-                                ? 'text-sm font-black leading-tight tracking-tight text-white'
-                                : 'text-base font-black tracking-tight text-white'
-                          }
-                        >
-                          {g.nome}
-                        </p>
-                        <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : useTightModalLayout ? (isPos ? 'mt-0 line-clamp-1 text-[10px] leading-snug' : 'mt-0 line-clamp-2 text-[11px] leading-snug') : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>
-                          {getComboGrupoRegraTexto(g)}
-                        </p>
-                      </div>
-                      <span className={`shrink-0 rounded-full font-bold uppercase tracking-[0.16em] ${
-                        compactLayout ? 'px-1.5 py-0.5 text-[8px]' : useTightModalLayout ? (isPos ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[9px]') : 'px-3 py-1 text-[10px]'
-                      } ${
-                        completo
-                          ? ac.badgeGrupoCompleto
-                          : g.obrigatorio
-                            ? 'border border-amber-500/30 bg-amber-500/15 text-amber-100'
-                            : 'border border-white/14 bg-white/10 text-zinc-100'
-                      }`}>
-                        {completo ? 'Pronto' : g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
-                      </span>
+            <>
+              {comboPersonalizar ? (
+                <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : 'mx-2.5 mb-2 space-y-2'}>
+                  <button
+                    type="button"
+                    onClick={fecharPersonalizarCombo}
+                    className="mb-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 hover:text-white"
+                  >
+                    <ChevronLeft size={14} aria-hidden />
+                    Voltar à revisão
+                  </button>
+                  {personalizarCarregando ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-2">
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-300" aria-hidden />
+                      <p className="text-xs font-semibold text-emerald-50">Carregando adicionais do item…</p>
                     </div>
-                    <div className={`flex flex-wrap ${compactLayout ? 'mt-1.5 gap-1' : useTightModalLayout ? 'mt-1.5 gap-1' : 'mt-3 gap-2'}`}>
-                      <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-1.5 py-px text-[9px]' : useTightModalLayout ? 'px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
-                        {getComboProgressoLabel(g, totalSel)}
-                      </span>
-                    </div>
-                  </div>
-                  {temErro && (
-                    <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-2.5 py-1' : useTightModalLayout ? 'px-2.5 py-1.5' : 'px-4 py-2'}`}>
-                      <AlertCircle size={11} className="shrink-0 text-red-400" />
-                      <p className={`${compactLayout ? 'text-[11px]' : 'text-xs'} font-semibold text-red-100`}>{erros[g.id]}</p>
-                    </div>
-                  )}
-                  <div className="divide-y divide-white/5 bg-zinc-950/70">
-                    {g.produtos.map((item) => {
-                      const qtdItem = sel[item.product_id] || 0;
-                      const selecionado = qtdItem > 0;
-                      const limiteAtingido = maxV !== null && totalSel >= maxV;
-                      const podeAumentar = maxV === null || totalSel < maxV;
-                      return (
-                        <div
-                          key={item.link_id}
-                          className={`flex items-center transition-colors ${
-                            compactLayout
-                              ? 'min-h-[44px] gap-2.5 px-2.5 py-2'
-                              : useTightModalLayout
-                                ? isPos
-                                  ? 'min-h-[44px] gap-2 px-2.5 py-2'
-                                  : isDelivery
-                                    ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
-                                    : 'min-h-[44px] gap-2.5 px-3 py-2.5'
-                                : 'min-h-[44px] gap-4 px-4 py-4'
-                          } ${selecionado ? ac.rowItemSel : limiteAtingido && !selecionado ? 'opacity-70' : 'hover:bg-white/[0.06]'}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className={`${compactLayout ? 'text-[13px]' : useTightModalLayout ? 'text-sm' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
-                              {item.name}
-                            </p>
-                            <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : useTightModalLayout ? 'mt-0 text-[11px]' : 'mt-1 text-xs'} font-bold text-zinc-400`}>
-                              Do cardapio
-                            </p>
-                            {limiteAtingido && !selecionado && (
-                              <p className="mt-0.5 text-[10px] font-semibold text-amber-200/95">Limite do grupo atingido.</p>
-                            )}
-                          </div>
-                          <div
-                            className="flex shrink-0 items-center gap-2 rounded-full border border-white/12 bg-zinc-900 p-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setQtdComboItem(g.id, item.product_id, -1, g);
-                              }}
-                              disabled={qtdItem === 0}
-                              className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${useTightModalLayout ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}
-                            >
-                              <Minus size={11} />
-                            </button>
-                            <span className={`w-6 text-center font-black text-white ${useTightModalLayout ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setQtdComboItem(g.id, item.product_id, 1, g);
-                              }}
-                              disabled={!podeAumentar}
-                              className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${useTightModalLayout ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}
-                            >
-                              <Plus size={11} />
-                            </button>
-                          </div>
+                  ) : null}
+                  {personalizarCtx && personalizarInst ? (
+                    <p className="text-sm font-black tracking-tight text-white">
+                      {(() => {
+                        const gMeta = comboGruposUi.find((x) => x.id === personalizarCtx.grupoId);
+                        return gMeta
+                          ? comboInstanciaLabelNoGrupo(
+                              gMeta,
+                              comboInstanciasPorGrupo[personalizarCtx.grupoId],
+                              personalizarCtx.instIndex
+                            )
+                          : 'Item do combo';
+                      })()}
+                    </p>
+                  ) : null}
+                  {!personalizarCarregando && personalizarSohVariacoes ? (
+                    <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] font-semibold text-amber-100">
+                      Este componente usa variacao vendavel. Personalizacao por ingredientes nao esta disponivel neste fluxo.
+                    </p>
+                  ) : null}
+                  {!personalizarCarregando && !personalizarSohVariacoes && !personalizarGrupos.length ? (
+                    <p className="rounded-xl border border-white/14 bg-zinc-900/80 px-2.5 py-2 text-[11px] text-zinc-300">
+                      Sem adicionais configurados para este item.
+                    </p>
+                  ) : null}
+                  {renderGruposOpcoesBlock({
+                    gruposLista: personalizarGrupos,
+                    selecoesAtual: personalizarSelecoes,
+                    toggleRadioFn: toggleRadioPersonalizar,
+                    toggleCheckFn: toggleCheckPersonalizar,
+                    setQtdItemFn: setQtdItemPersonalizar,
+                  })}
+                </div>
+              ) : comboFlowStep === 'revisar' ? (
+                <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : 'mx-2.5 mb-2 space-y-2'}>
+                  <button
+                    type="button"
+                    onClick={voltarRevisaoParaMontar}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/14 bg-zinc-900/90 py-2 text-[11px] font-black uppercase tracking-wide text-zinc-200 hover:bg-zinc-800"
+                  >
+                    <ChevronLeft size={14} aria-hidden />
+                    Voltar para escolher quantidades
+                  </button>
+                  {comboGruposUi.map((g) => {
+                    const arr = comboInstanciasPorGrupo[g.id];
+                    if (!arr?.length) return null;
+                    return (
+                      <section
+                        key={g.id}
+                        className={`${
+                          compactLayout ? 'mb-2' : useTightModalLayout ? (isDelivery ? 'mb-1.5' : 'mb-2') : 'mb-4'
+                        } overflow-hidden rounded-[18px] border border-emerald-500/25 bg-zinc-900/85 shadow-[0_12px_36px_rgba(0,0,0,0.2)]`}
+                      >
+                        <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : 'px-2.5 py-1.5'}`}>
+                          <p className="text-sm font-black tracking-tight text-white">{g.nome}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-zinc-400">
+                            Toque em Personalizar para alterar adicionais desta unidade.
+                          </p>
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })
+                        <div className="divide-y divide-white/5 bg-zinc-950/70">
+                          {arr.map((inst, idx) => {
+                            const comp = resolveComboComponente?.(inst.produto_id);
+                            const gOpc = comp?.grupos_opcao || [];
+                            const desc = descreverSelecoes(gOpc, inst.selecoes || {});
+                            const adicLinha = calcPrecoUnitario(gOpc, inst.selecoes || {}, 0);
+                            const label = comboInstanciaLabelNoGrupo(g, arr, idx);
+                            return (
+                              <div
+                                key={inst.instancia_id}
+                                className={`flex flex-col gap-2 ${compactLayout ? 'px-2.5 py-2' : 'px-2.5 py-2'} sm:flex-row sm:items-center sm:justify-between`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className={`${compactLayout ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>{label}</p>
+                                  {desc ? (
+                                    <p className={`mt-0.5 ${compactLayout ? 'text-[10px]' : 'text-[11px]'} leading-snug text-zinc-400`}>{desc}</p>
+                                  ) : (
+                                    <p className={`mt-0.5 ${compactLayout ? 'text-[10px]' : 'text-[11px]'} text-zinc-500`}>
+                                      Padrao / sem extras nesta unidade
+                                    </p>
+                                  )}
+                                  {adicLinha > 0 ? (
+                                    <p className="mt-0.5 text-[11px] font-bold tabular-nums text-emerald-200">+{fmt(adicLinha)}</p>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPersonalizarCompExtra(null);
+                                    setComboPersonalizar({ grupoId: g.id, instIndex: idx });
+                                    const gruposOpc = comp?.grupos_opcao || [];
+                                    setPersonalizarSelecoes(
+                                      inst.selecoes && Object.keys(inst.selecoes).length
+                                        ? ({ ...inst.selecoes } as Selecoes)
+                                        : ({ ...gerarSelecaoInicial(gruposOpc) } as Selecoes)
+                                    );
+                                    setErros({});
+                                  }}
+                                  className="shrink-0 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-center text-[10px] font-black uppercase tracking-wide text-emerald-100 transition-colors hover:bg-emerald-500/25"
+                                >
+                                  Personalizar
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                comboGruposUi.map((g) => {
+                  const sel: Record<number, number> = comboSel[g.id] || {};
+                  const totalSel = getTotalComboGrupo(sel);
+                  const temErro = !!erros[g.id];
+                  const completo = isComboGrupoCompleto(g, sel);
+                  const maxV = getComboMaxGrupo(g);
+                  return (
+                    <section
+                      key={g.id}
+                      className={`${
+                        compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
+                      } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
+                        temErro ? 'border-red-500/40 bg-red-500/10' : 'border-emerald-500/25 bg-zinc-900/85'
+                      }`}
+                    >
+                      <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
+                        <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
+                          <div className="min-w-0">
+                            <p
+                              className={
+                                compactLayout
+                                  ? 'text-sm font-black leading-tight tracking-tight text-white'
+                                  : useTightModalLayout
+                                    ? 'text-sm font-black leading-tight tracking-tight text-white'
+                                    : 'text-base font-black tracking-tight text-white'
+                              }
+                            >
+                              {g.nome}
+                            </p>
+                            <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : useTightModalLayout ? (isPos ? 'mt-0 line-clamp-1 text-[10px] leading-snug' : 'mt-0 line-clamp-2 text-[11px] leading-snug') : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>
+                              {getComboGrupoRegraTexto(g)}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 rounded-full font-bold uppercase tracking-[0.16em] ${
+                            compactLayout ? 'px-1.5 py-0.5 text-[8px]' : useTightModalLayout ? (isPos ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[9px]') : 'px-3 py-1 text-[10px]'
+                          } ${
+                            completo
+                              ? ac.badgeGrupoCompleto
+                              : g.obrigatorio
+                                ? 'border border-amber-500/30 bg-amber-500/15 text-amber-100'
+                                : 'border border-white/14 bg-white/10 text-zinc-100'
+                          }`}>
+                            {completo ? 'Pronto' : g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
+                          </span>
+                        </div>
+                        <div className={`flex flex-wrap ${compactLayout ? 'mt-1.5 gap-1' : useTightModalLayout ? 'mt-1.5 gap-1' : 'mt-3 gap-2'}`}>
+                          <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-1.5 py-px text-[9px]' : useTightModalLayout ? 'px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
+                            {getComboProgressoLabel(g, totalSel)}
+                          </span>
+                        </div>
+                      </div>
+                      {temErro && (
+                        <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-2.5 py-1' : useTightModalLayout ? 'px-2.5 py-1.5' : 'px-4 py-2'}`}>
+                          <AlertCircle size={11} className="shrink-0 text-red-400" />
+                          <p className={`${compactLayout ? 'text-[11px]' : 'text-xs'} font-semibold text-red-100`}>{erros[g.id]}</p>
+                        </div>
+                      )}
+                      <div className="divide-y divide-white/5 bg-zinc-950/70">
+                        {g.produtos.map((item) => {
+                          const qtdItem = sel[item.product_id] || 0;
+                          const selecionado = qtdItem > 0;
+                          const limiteAtingido = maxV !== null && totalSel >= maxV;
+                          const podeAumentar = maxV === null || totalSel < maxV;
+                          return (
+                            <div
+                              key={item.link_id}
+                              className={`flex items-center transition-colors ${
+                                compactLayout
+                                  ? 'min-h-[44px] gap-2.5 px-2.5 py-2'
+                                  : useTightModalLayout
+                                    ? isPos
+                                      ? 'min-h-[44px] gap-2 px-2.5 py-2'
+                                      : isDelivery
+                                        ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
+                                        : 'min-h-[44px] gap-2.5 px-3 py-2.5'
+                                    : 'min-h-[44px] gap-4 px-4 py-4'
+                              } ${selecionado ? ac.rowItemSel : limiteAtingido && !selecionado ? 'opacity-70' : 'hover:bg-white/[0.06]'}`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className={`${compactLayout ? 'text-[13px]' : useTightModalLayout ? 'text-sm' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
+                                  {item.name}
+                                </p>
+                                <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : useTightModalLayout ? 'mt-0 text-[11px]' : 'mt-1 text-xs'} font-bold text-zinc-400`}>
+                                  Do cardapio
+                                </p>
+                                {limiteAtingido && !selecionado && (
+                                  <p className="mt-0.5 text-[10px] font-semibold text-amber-200/95">Limite do grupo atingido.</p>
+                                )}
+                              </div>
+                              <div
+                                className="flex shrink-0 items-center gap-2 rounded-full border border-white/12 bg-zinc-900 p-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQtdComboItem(g.id, item.product_id, -1, g);
+                                  }}
+                                  disabled={qtdItem === 0}
+                                  className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${useTightModalLayout ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}
+                                >
+                                  <Minus size={11} />
+                                </button>
+                                <span className={`w-6 text-center font-black text-white ${useTightModalLayout ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQtdComboItem(g.id, item.product_id, 1, g);
+                                  }}
+                                  disabled={!podeAumentar}
+                                  className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${useTightModalLayout ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}
+                                >
+                                  <Plus size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })
+              )}
+            </>
           ) : modoSomenteVariacoes ? (
             <section
               className={
@@ -1129,164 +1793,12 @@ export function ProductOptionsModal({
               </div>
             </section>
           ) : (
-            grupos.map(g => {
-              const sel: Record<number, number> = selecoes[g.id] || {};
-              const totalSel = getTotalSelecionadoGrupo(sel);
-              const temErro = !!erros[g.id];
-              const completo = isGrupoCompleto(g, sel);
-              const maxSelecoes = getMaxSelecoesGrupo(g);
-              return (
-                <section
-                  key={g.id}
-                  className={`${
-                    compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
-                  } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
-                    temErro ? 'border-red-500/40 bg-red-500/10' : 'border-white/14 bg-zinc-900/85'
-                  }`}
-                >
-                  <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
-                    <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
-                      <div className="min-w-0">
-                        <p
-                          className={
-                            compactLayout
-                              ? 'line-clamp-2 text-[13px] font-black leading-tight tracking-tight text-white'
-                              : useTightModalLayout
-                                ? isPos
-                                  ? 'line-clamp-2 text-[13px] font-black leading-tight tracking-tight text-white'
-                                  : 'line-clamp-2 text-sm font-black leading-tight tracking-tight text-white'
-                                : 'line-clamp-3 text-base font-black tracking-tight text-white'
-                          }
-                          title={g.nome}
-                        >
-                          {g.nome}
-                        </p>
-                        <p className={`${compactLayout ? 'mt-0 line-clamp-1 text-[11px] leading-snug' : useTightModalLayout ? (isPos ? 'mt-0 line-clamp-1 text-[10px] leading-snug' : 'mt-0 line-clamp-2 text-[11px] leading-snug') : 'mt-1 text-sm leading-snug'} ${temErro ? 'text-red-200' : 'text-zinc-200'}`}>{getGrupoRegraTexto(g)}</p>
-                      </div>
-                      <span className={`shrink-0 rounded-full font-bold uppercase tracking-[0.16em] ${
-                        compactLayout ? 'px-1.5 py-0.5 text-[8px]' : useTightModalLayout ? (isPos ? 'px-1.5 py-0.5 text-[8px]' : 'px-2 py-0.5 text-[9px]') : 'px-3 py-1 text-[10px]'
-                      } ${
-                        completo
-                          ? ac.badgeGrupoCompleto
-                          : g.obrigatorio
-                            ? 'border border-amber-500/30 bg-amber-500/15 text-amber-100'
-                            : 'border border-white/14 bg-white/10 text-zinc-100'
-                      }`}>
-                        {completo ? 'Pronto' : g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
-                      </span>
-                    </div>
-                    <div className={`flex flex-wrap ${compactLayout ? 'mt-1.5 gap-1' : useTightModalLayout ? 'mt-1.5 gap-1' : 'mt-3 gap-2'}`}>
-                      {!useTightModalLayout && (
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                          g.obrigatorio
-                            ? 'border-amber-500/30 bg-amber-500/15 text-amber-100'
-                            : 'border-white/14 bg-white/10 text-zinc-100'
-                        }`}>
-                          {g.obrigatorio ? 'Obrigatorio' : 'Opcional'}
-                        </span>
-                      )}
-                      <span className={`rounded-full border border-white/14 bg-white/10 font-semibold text-zinc-100 ${compactLayout ? 'px-1.5 py-px text-[9px]' : useTightModalLayout ? 'px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
-                        {getResumoSelecaoGrupo(g, totalSel)}
-                      </span>
-                      {(g.modo_preco || 'adicional') === 'final' && (
-                        <span className={`rounded-full border font-semibold ${ac.badgePrecoFinal} ${compactLayout ? 'max-w-[min(100%,11rem)] truncate px-1.5 py-px text-[9px]' : useTightModalLayout ? 'max-w-[min(100%,10rem)] truncate px-1.5 py-px text-[9px]' : 'px-2.5 py-1 text-[11px]'}`}>
-                          {useTightModalLayout ? 'Preco na escolha' : 'Preco definido pela escolha'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {temErro && (
-                    <div className={`flex items-center gap-1.5 border-b border-red-500/25 bg-red-500/10 ${compactLayout ? 'px-2.5 py-1' : useTightModalLayout ? 'px-2.5 py-1.5' : 'px-4 py-2'}`}>
-                      <AlertCircle size={11} className="shrink-0 text-red-400" />
-                      <p className={`${compactLayout ? 'text-[11px]' : 'text-xs'} font-semibold text-red-100`}>{erros[g.id]}</p>
-                    </div>
-                  )}
-
-                  <div className="divide-y divide-white/5 bg-zinc-950/70">
-                    {g.itens.map(item => {
-                      const qtdItem = sel[item.id] || 0;
-                      const selecionado = qtdItem > 0;
-                      const limiteAtingido = maxSelecoes !== null && totalSel >= maxSelecoes;
-                      const bloqueado = !selecionado && (g.tipo === 'checkbox' || g.tipo === 'quantidade') && limiteAtingido;
-                      const podeAumentarQuantidade = maxSelecoes === null || totalSel < maxSelecoes;
-                      return (
-                        <div key={item.id}
-                          className={`flex cursor-pointer items-center transition-colors ${
-                            compactLayout
-                              ? 'min-h-[44px] gap-2.5 px-2.5 py-2'
-                              : useTightModalLayout
-                                ? isPos
-                                  ? 'min-h-[44px] gap-2 px-2.5 py-2'
-                                  : isDelivery
-                                    ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
-                                    : 'min-h-[44px] gap-2.5 px-3 py-2.5'
-                                : 'min-h-[44px] gap-4 px-4 py-4'
-                          } ${
-                            selecionado
-                              ? ac.rowItemSel
-                              : bloqueado
-                                ? 'opacity-70'
-                                : 'hover:bg-white/[0.06]'
-                          }`}
-                          onClick={() => {
-                            if (g.tipo === 'radio') toggleRadio(g.id, item.id);
-                            else if (g.tipo === 'checkbox') toggleCheck(g.id, item.id, g);
-                          }}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={`${compactLayout ? 'text-[13px]' : useTightModalLayout ? 'text-sm' : 'text-sm'} font-semibold leading-snug ${selecionado ? 'text-white' : 'text-zinc-100'}`}>
-                              {item.nome}
-                            </p>
-                            <p className={`${compactLayout ? 'mt-0.5 text-[11px]' : useTightModalLayout ? 'mt-0 text-[11px]' : 'mt-1 text-xs'} font-bold ${
-                              (g.modo_preco || 'adicional') === 'final' || item.preco_adicional > 0
-                                ? ac.precoItemDestaque
-                                : 'text-zinc-300'
-                            }`}>
-                              {getPrecoItemLabel(g, item)}
-                            </p>
-                            {bloqueado && <p className="mt-1 text-[11px] text-amber-200">Limite do grupo atingido.</p>}
-                          </div>
-
-                          {g.tipo === 'radio' && (
-                            <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-                              selecionado
-                                ? ac.radioGrupoOn
-                                : 'border-zinc-500'
-                            }`}>
-                              {selecionado && <div className={`h-2 w-2 rounded-full ${ac.radioGrupoDot}`} />}
-                            </div>
-                          )}
-                          {g.tipo === 'checkbox' && (
-                            <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
-                              selecionado
-                                ? ac.checkboxOn
-                                : 'border-zinc-500'
-                            }`}>
-                              {selecionado && <span className={`text-[10px] font-black leading-none ${ac.checkboxMark}`}>✓</span>}
-                            </div>
-                          )}
-                          {g.tipo === 'quantidade' && (
-                            <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/12 bg-zinc-900 p-1"
-                              onClick={e => e.stopPropagation()}>
-                              <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, -1, g); }}
-                                disabled={qtdItem === 0}
-                                className={`flex items-center justify-center rounded-full bg-white/10 text-zinc-100 transition-all hover:bg-white/14 hover:text-rose-300 disabled:cursor-not-allowed disabled:text-zinc-600 ${useTightModalLayout ? 'h-8 w-8' : 'h-10 w-10 sm:h-8 sm:w-8'}`}>
-                                <Minus size={11} />
-                              </button>
-                              <span className={`w-6 text-center font-black text-white ${useTightModalLayout ? 'text-xs' : 'text-sm'}`}>{qtdItem}</span>
-                              <button type="button" onClick={e => { e.stopPropagation(); setQtdItem(g.id, item.id, +1, g); }}
-                                disabled={!podeAumentarQuantidade}
-                                className={`flex items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 ${useTightModalLayout ? `h-8 w-8 ${ac.qtdStepPlusSm}` : `h-10 w-10 sm:h-8 sm:w-8 ${ac.qtdStepPlusSm}`}`}>
-                                <Plus size={11} />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
+            renderGruposOpcoesBlock({
+              gruposLista: grupos,
+              selecoesAtual: selecoes,
+              toggleRadioFn: toggleRadio,
+              toggleCheckFn: toggleCheck,
+              setQtdItemFn: setQtdItem,
             })
           )}
 
@@ -1344,20 +1856,46 @@ export function ProductOptionsModal({
             </div>
           </div>
           <div className={`flex items-center ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-1.5' : 'gap-3'}`}>
-            <div className={`${mo.qtyBar} ${compactLayout ? '!gap-0.5 !p-0.5' : useTightModalLayout ? '!gap-0.5 !p-0.5' : ''}`}>
-              <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))} className={`${mo.qtyBtn} ${useTightModalLayout ? '!h-8 !w-8 min-h-[40px] min-w-[40px]' : ''}`}>
-                <Minus size={12} />
-              </button>
-              <span className={`w-5 text-center font-black ${mo.textPrimary} ${useTightModalLayout ? 'text-xs' : 'text-base'}`}>{qty}</span>
-              <button type="button" onClick={() => setQty(q => q + 1)} className={`${mo.qtyBtnPlus} ${useTightModalLayout ? '!h-8 !w-8 min-h-[40px] min-w-[40px]' : ''}`}>
-                <Plus size={12} />
-              </button>
-            </div>
-            <button type="button" onClick={validarEAdicionar} disabled={addBtnDisabled}
-              className={`${mo.footerBtn} ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''} ${isPos ? '!min-h-[44px] !rounded-xl !py-2.5 text-[11px] leading-tight sm:!py-3 sm:!text-xs' : ''} ${isDelivery ? '!min-h-[48px] !rounded-xl !py-2.5 text-xs leading-tight sm:!min-h-[50px] sm:!py-4 sm:!text-sm' : ''}`}>
-              <span>{addBtnLabel}</span>
-              <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>
-            </button>
+            {comboPersonalizar ? (
+              <>
+                <button
+                  type="button"
+                  onClick={fecharPersonalizarCombo}
+                  className={`${mo.footerBtn} flex-1 !bg-zinc-800 !text-zinc-100 ring-1 ring-white/15 hover:!bg-zinc-700 ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px]' : ''} ${isDelivery ? '!min-h-[48px] !py-2.5 text-xs sm:!text-sm' : ''}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarPersonalizarCombo}
+                  disabled={personalizarCarregando}
+                  className={`${mo.footerBtn} min-w-0 flex-[1.4] ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px]' : ''} ${isPos ? '!min-h-[44px] !py-2.5 text-[11px] sm:!text-xs' : ''} ${isDelivery ? '!min-h-[48px] !py-2.5 text-xs sm:!text-sm' : ''}`}
+                >
+                  Salvar personalização
+                </button>
+              </>
+            ) : (
+              <>
+                <div className={`${mo.qtyBar} ${compactLayout ? '!gap-0.5 !p-0.5' : useTightModalLayout ? '!gap-0.5 !p-0.5' : ''}`}>
+                  <button type="button" onClick={() => setQty((q) => Math.max(1, q - 1))} className={`${mo.qtyBtn} ${useTightModalLayout ? '!h-8 !w-8 min-h-[40px] min-w-[40px]' : ''}`}>
+                    <Minus size={12} />
+                  </button>
+                  <span className={`w-5 text-center font-black ${mo.textPrimary} ${useTightModalLayout ? 'text-xs' : 'text-base'}`}>{qty}</span>
+                  <button type="button" onClick={() => setQty((q) => q + 1)} className={`${mo.qtyBtnPlus} ${useTightModalLayout ? '!h-8 !w-8 min-h-[40px] min-w-[40px]' : ''}`}>
+                    <Plus size={12} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={validarEAdicionar}
+                  disabled={addBtnDisabled}
+                  className={`${mo.footerBtn} ${compactLayout ? '!min-h-[44px] !rounded-xl !py-2 text-[11px] leading-tight sm:!text-xs' : ''} ${isPos ? '!min-h-[44px] !rounded-xl !py-2.5 text-[11px] leading-tight sm:!py-3 sm:!text-xs' : ''} ${isDelivery ? '!min-h-[48px] !rounded-xl !py-2.5 text-xs leading-tight sm:!min-h-[50px] sm:!py-4 sm:!text-sm' : ''}`}
+                >
+                  <span>{addBtnLabel}</span>
+                  <span className="tabular-nums">{precoUnit != null ? fmt(precoTotal) : '—'}</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </motion.div>

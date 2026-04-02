@@ -6,6 +6,7 @@ import {
   X, Barcode, Search, LayoutGrid, LayoutList, Copy,
   ChevronUp, ChevronDown, Star, Clock, Eye, EyeOff,
   Download, Filter, Pencil, Settings2, ChevronRight, Minus, Award,
+  CheckCircle2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Product, Category } from '../types';
@@ -2205,7 +2206,7 @@ function ModalComboAdmin({
   };
 
   const inp =
-    'min-h-[40px] px-3 py-2 border border-zinc-200 bg-zinc-50 rounded-lg text-sm focus:outline-none focus:border-violet-400 transition-all';
+    'min-h-[40px] px-3 py-2 border border-zinc-200 bg-zinc-50 rounded-lg text-sm text-zinc-900 focus:outline-none focus:border-violet-400 transition-all [.admin-dark_&]:border-zinc-700 [.admin-dark_&]:bg-zinc-950 [.admin-dark_&]:text-zinc-100 [.admin-dark_&]:placeholder:text-zinc-500 [.admin-dark_&]:focus:border-emerald-500/80';
 
   const filtrarPicker = (grupoKey: string) => {
     const q = (debouncedSearch[grupoKey] ?? '').trim().toLocaleLowerCase('pt-BR');
@@ -2223,36 +2224,36 @@ function ModalComboAdmin({
         initial={{ scale: 0.93, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.93, opacity: 0 }}
-        className="flex max-h-[min(92dvh,100svh)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[92vh] sm:rounded-3xl"
+        className="product-form-modal flex max-h-[min(92dvh,100svh)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-zinc-200 bg-zinc-50 text-zinc-900 shadow-2xl sm:max-h-[92vh] sm:rounded-3xl [.admin-dark_&]:border-zinc-800 [.admin-dark_&]:text-zinc-100"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 py-3 sm:px-5 sm:py-3.5 2xl:px-6">
+        <div className="product-form-modal-header flex shrink-0 items-center justify-between border-b border-zinc-100 px-3 py-3 sm:px-5 sm:py-3.5 2xl:px-6 [.admin-dark_&]:border-zinc-800">
           <div className="min-w-0 pr-2">
-            <h3 className="text-base font-black text-zinc-900 sm:text-lg">Grupos do combo</h3>
-            <p className="mt-0.5 truncate text-xs text-zinc-500 sm:text-sm">{produtoNome}</p>
+            <h3 className="text-base font-black text-zinc-900 sm:text-lg [.admin-dark_&]:text-zinc-50">Grupos do combo</h3>
+            <p className="mt-0.5 truncate text-xs text-zinc-500 sm:text-sm [.admin-dark_&]:text-zinc-400">{produtoNome}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex shrink-0 items-center justify-center rounded-xl p-2.5 min-h-[44px] min-w-[44px] text-zinc-400 hover:bg-zinc-100"
+            className="product-form-modal-close flex shrink-0 items-center justify-center rounded-xl p-2.5 min-h-[44px] min-w-[44px] text-zinc-400 hover:bg-zinc-100 [.admin-dark_&]:hover:bg-zinc-800 [.admin-dark_&]:hover:text-zinc-200"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="mx-3 mt-2 shrink-0 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] text-violet-900 sm:mx-5 sm:mt-3 sm:px-3 sm:py-2.5 sm:text-xs 2xl:mx-6">
+        <div className="mx-3 mt-2 shrink-0 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] text-violet-900 sm:mx-5 sm:mt-3 sm:px-3 sm:py-2.5 sm:text-xs 2xl:mx-6 [.admin-dark_&]:border-violet-500/30 [.admin-dark_&]:bg-violet-500/10 [.admin-dark_&]:text-violet-100">
           <p className="font-bold">Monte etapas do combo com produtos do cardápio.</p>
           <p className="mt-1">
             <strong>Obrigatório</strong> exige que o cliente escolha pelo menos a quantidade mínima. <strong>Máx.</strong>{' '}
             limita quantas unidades podem ser escolhidas nesse grupo; marque <strong>“Máx. ilimitado”</strong> para usar o
             comportamento do servidor (sem teto).
           </p>
-          <p className="mt-1 font-semibold text-violet-800">
+          <p className="mt-1 font-semibold text-violet-800 [.admin-dark_&]:text-violet-200">
             Produtos marcados como combo não podem entrar em outro combo — eles aparecem desabilitados na lista.
           </p>
         </div>
 
         {saveError && (
-          <div className="mx-3 mt-2 flex shrink-0 items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 sm:mx-5 2xl:mx-6">
+          <div className="mx-3 mt-2 flex shrink-0 items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 sm:mx-5 2xl:mx-6 [.admin-dark_&]:border-red-500/35 [.admin-dark_&]:bg-red-500/10 [.admin-dark_&]:text-red-200">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>{saveError}</span>
           </div>
@@ -2261,12 +2262,12 @@ function ModalComboAdmin({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-3 sm:space-y-4 sm:px-5 sm:py-4 2xl:px-6">
           {loading ? (
             <div className="flex justify-center py-12">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-violet-700" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-violet-700 [.admin-dark_&]:border-zinc-700 [.admin-dark_&]:border-t-emerald-400" />
             </div>
           ) : loadError ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
               <AlertCircle className="text-amber-500" size={36} />
-              <p className="max-w-sm text-sm text-zinc-600">{loadError}</p>
+              <p className="max-w-sm text-sm text-zinc-600 [.admin-dark_&]:text-zinc-400">{loadError}</p>
               <button
                 type="button"
                 onClick={() => void carregar()}
@@ -2276,8 +2277,8 @@ function ModalComboAdmin({
               </button>
             </div>
           ) : gruposOrdenados.length === 0 ? (
-            <div className="py-8 text-center text-zinc-500">
-              <Package className="mx-auto mb-2 opacity-30" size={36} />
+            <div className="py-8 text-center text-zinc-500 [.admin-dark_&]:text-zinc-400">
+              <Package className="mx-auto mb-2 opacity-30 [.admin-dark_&]:opacity-40" size={36} />
               <p className="text-sm font-semibold">Nenhum grupo ainda</p>
               <p className="mt-1 text-xs">Use “Adicionar grupo” e depois “Salvar definição”.</p>
             </div>
@@ -2285,40 +2286,40 @@ function ModalComboAdmin({
             gruposOrdenados.map((g) => (
               <div
                 key={g.key}
-                className={`overflow-hidden rounded-2xl border border-zinc-200 ${g.ativo ? '' : 'opacity-75'}`}
+                className={`overflow-hidden rounded-2xl border border-zinc-200 [.admin-dark_&]:border-zinc-700 ${g.ativo ? '' : 'opacity-75'}`}
               >
                 <div
-                  className={`flex flex-wrap items-center gap-2 border-b border-zinc-100 px-3 py-2.5 sm:px-4 ${g.ativo ? 'bg-zinc-50' : 'bg-zinc-100'}`}
+                  className={`flex flex-wrap items-center gap-2 border-b border-zinc-100 px-3 py-2.5 sm:px-4 [.admin-dark_&]:border-zinc-800 ${g.ativo ? 'bg-zinc-50 [.admin-dark_&]:bg-zinc-900/90' : 'bg-zinc-200/60 [.admin-dark_&]:bg-zinc-900/50'}`}
                 >
                   <button
                     type="button"
                     title={g.ativo ? 'Grupo ativo — clique para desativar' : 'Grupo inativo — clique para ativar'}
                     onClick={() => updateGrupo(g.key, { ativo: !g.ativo })}
-                    className={`relative h-5 w-10 shrink-0 rounded-full transition-all focus:outline-none ${g.ativo ? 'bg-violet-500' : 'bg-zinc-300'}`}
+                    className={`relative h-5 w-10 shrink-0 rounded-full transition-all focus:outline-none ${g.ativo ? 'bg-violet-500' : 'bg-zinc-400 [.admin-dark_&]:bg-zinc-600'}`}
                   >
                     <span
-                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${g.ativo ? 'left-5' : 'left-0.5'}`}
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-zinc-200 shadow transition-all [.admin-dark_&]:bg-zinc-300 ${g.ativo ? 'left-5' : 'left-0.5'}`}
                     />
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-black text-zinc-900 text-sm">{g.nome.trim() || 'Sem nome'}</span>
+                      <span className="font-black text-zinc-900 text-sm [.admin-dark_&]:text-zinc-50">{g.nome.trim() || 'Sem nome'}</span>
                       {g.obrigatorio ? (
-                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 [.admin-dark_&]:bg-red-500/20 [.admin-dark_&]:text-red-200">
                           Obrigatório
                         </span>
                       ) : (
-                        <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-600">
+                        <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-600 [.admin-dark_&]:bg-zinc-700 [.admin-dark_&]:text-zinc-300">
                           Opcional
                         </span>
                       )}
                       {!g.ativo && (
-                        <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-black text-zinc-500">
+                        <span className="rounded-full bg-zinc-300/80 px-2 py-0.5 text-[10px] font-black text-zinc-600 [.admin-dark_&]:bg-zinc-700 [.admin-dark_&]:text-zinc-400">
                           Inativo
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-zinc-500">
+                    <p className="text-[10px] text-zinc-500 [.admin-dark_&]:text-zinc-400">
                       Ordem {g.ordem} · mín. {g.qtd_min} · máx.{' '}
                       {g.maxIlimitado ? 'ilimitado' : g.qtd_max || '—'}
                     </p>
@@ -2328,7 +2329,7 @@ function ModalComboAdmin({
                       type="button"
                       title="Subir"
                       onClick={() => moveGrupo(g.key, -1)}
-                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 [.admin-dark_&]:hover:bg-zinc-800 [.admin-dark_&]:hover:text-zinc-200"
                     >
                       <ChevronUp size={16} />
                     </button>
@@ -2336,7 +2337,7 @@ function ModalComboAdmin({
                       type="button"
                       title="Descer"
                       onClick={() => moveGrupo(g.key, 1)}
-                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 [.admin-dark_&]:hover:bg-zinc-800 [.admin-dark_&]:hover:text-zinc-200"
                     >
                       <ChevronDown size={16} />
                     </button>
@@ -2344,14 +2345,14 @@ function ModalComboAdmin({
                       type="button"
                       title="Remover grupo"
                       onClick={() => removeGrupo(g.key)}
-                      className="rounded-lg p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded-lg p-2 text-zinc-400 hover:bg-red-50 hover:text-red-600 [.admin-dark_&]:hover:bg-red-500/15 [.admin-dark_&]:hover:text-red-300"
                     >
                       <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-3 bg-white px-3 py-3 sm:px-4">
+                <div className="space-y-3 bg-zinc-50/40 px-3 py-3 sm:px-4 [.admin-dark_&]:bg-zinc-950/50">
                   <input
                     value={g.nome}
                     onChange={(e) => updateGrupo(g.key, { nome: e.target.value })}
@@ -2370,7 +2371,7 @@ function ModalComboAdmin({
                         className={`${inp} w-full tabular-nums`}
                       />
                     </div>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-3 py-2 min-h-[44px]">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-200/35 px-3 py-2 min-h-[44px] [.admin-dark_&]:border-zinc-700 [.admin-dark_&]:bg-zinc-900/70">
                       <input
                         type="checkbox"
                         checked={g.obrigatorio}
@@ -2381,9 +2382,9 @@ function ModalComboAdmin({
                             qtd_min: obr && g.qtd_min < 1 ? 1 : g.qtd_min,
                           });
                         }}
-                        className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
+                        className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500 [.admin-dark_&]:border-zinc-600 [.admin-dark_&]:bg-zinc-950"
                       />
-                      <span className="text-sm font-bold text-zinc-800">Grupo obrigatório na montagem do combo</span>
+                      <span className="text-sm font-bold text-zinc-800 [.admin-dark_&]:text-zinc-200">Grupo obrigatório na montagem do combo</span>
                     </label>
                   </div>
                   <div className="flex flex-wrap items-end gap-3">
@@ -2416,7 +2417,7 @@ function ModalComboAdmin({
                           const v = parseInt(e.target.value, 10) || 0;
                           updateGrupo(g.key, { qtd_max: Math.max(1, v) });
                         }}
-                        className={`${inp} w-24 tabular-nums`}
+                        className={`${inp} w-24 tabular-nums disabled:cursor-not-allowed disabled:opacity-50`}
                       />
                     </div>
                     <label className="flex cursor-pointer items-center gap-2 pb-2">
@@ -2430,54 +2431,83 @@ function ModalComboAdmin({
                             qtd_max: on ? 0 : Math.max(g.qtd_min, 1),
                           });
                         }}
-                        className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
+                        className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500 [.admin-dark_&]:border-zinc-600 [.admin-dark_&]:bg-zinc-950"
                       />
-                      <span className="text-xs font-bold text-zinc-700">Máx. ilimitado</span>
+                      <span className="text-xs font-bold text-zinc-700 [.admin-dark_&]:text-zinc-300">Máx. ilimitado</span>
                     </label>
                   </div>
                   {g.obrigatorio && (
-                    <p className="text-[11px] text-violet-800">
+                    <p className="text-[11px] text-violet-800 [.admin-dark_&]:text-violet-200">
                       Cliente precisa escolher itens neste grupo até atingir pelo menos a <strong>quantidade mínima</strong>.
                     </p>
                   )}
 
                   <div>
-                    <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                    <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-zinc-500 [.admin-dark_&]:text-zinc-400">
                       Produtos permitidos neste grupo
                     </p>
                     {g.product_ids.length === 0 ? (
-                      <p className="mb-2 text-xs text-zinc-400">Nenhum produto vinculado — busque abaixo para adicionar.</p>
+                      <p className="mb-3 text-xs text-zinc-400 [.admin-dark_&]:text-zinc-500">
+                        Nenhum produto ainda — use a busca abaixo para incluir itens do cardápio.
+                      </p>
                     ) : (
-                      <ul className="mb-2 flex flex-col gap-1.5">
-                        {g.product_ids.map((pid) => {
-                          const pr = produtoById.get(pid);
-                          const inactive = pr && !isProductRowActive(pr);
-                          return (
-                            <li
-                              key={`${g.key}-${pid}`}
-                              className="flex items-center justify-between gap-2 rounded-xl border border-zinc-100 bg-zinc-50/80 px-2.5 py-2"
-                            >
-                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800">
-                                {pr?.name || `Produto #${pid}`}
-                                {inactive ? (
-                                  <span className="ml-1.5 text-[10px] font-bold text-amber-700">(inativo)</span>
-                                ) : null}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => removeProdutoDoGrupo(g.key, pid)}
-                                className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-red-600 hover:bg-red-50"
+                      <div className="mb-3">
+                        <p className="mb-1.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-emerald-700 [.admin-dark_&]:text-emerald-400">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                          Já no grupo
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[9px] font-black tabular-nums text-emerald-800 [.admin-dark_&]:bg-emerald-500/20 [.admin-dark_&]:text-emerald-200">
+                            {g.product_ids.length}
+                          </span>
+                        </p>
+                        <ul className="flex flex-col gap-2">
+                          {g.product_ids.map((pid) => {
+                            const pr = produtoById.get(pid);
+                            const inactive = pr && !isProductRowActive(pr);
+                            return (
+                              <li
+                                key={`${g.key}-${pid}`}
+                                className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200/80 border-l-[3px] border-l-emerald-500 bg-emerald-50/40 pl-2.5 pr-2 py-2.5 [.admin-dark_&]:border-emerald-500/25 [.admin-dark_&]:border-l-emerald-400 [.admin-dark_&]:bg-emerald-500/[0.08]"
                               >
-                                remover
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                                <div className="flex min-w-0 flex-1 items-start gap-2">
+                                  <CheckCircle2
+                                    className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 [.admin-dark_&]:text-emerald-400"
+                                    strokeWidth={2.25}
+                                    aria-hidden
+                                  />
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-sm font-semibold text-zinc-800 [.admin-dark_&]:text-zinc-100">
+                                      {pr?.name || `Produto #${pid}`}
+                                    </span>
+                                    <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 [.admin-dark_&]:text-emerald-400">
+                                      <span>Incluído</span>
+                                      {inactive ? (
+                                        <span className="font-semibold normal-case tracking-normal text-amber-700 [.admin-dark_&]:text-amber-300">
+                                          · inativo no cardápio
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeProdutoDoGrupo(g.key, pid)}
+                                  className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 [.admin-dark_&]:text-red-400 [.admin-dark_&]:hover:bg-red-500/15"
+                                >
+                                  remover
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
                     )}
+                    <label htmlFor={`combo-grupo-busca-${g.key}`} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-500 [.admin-dark_&]:text-zinc-400">
+                      Buscar no cardápio
+                    </label>
                     <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 [.admin-dark_&]:text-zinc-500" aria-hidden />
                       <input
+                        id={`combo-grupo-busca-${g.key}`}
                         value={searchByGrupo[g.key] ?? ''}
                         onChange={(e) =>
                           setSearchByGrupo((prev) => ({
@@ -2485,44 +2515,86 @@ function ModalComboAdmin({
                             [g.key]: e.target.value,
                           }))
                         }
-                        placeholder="Buscar produto por nome…"
-                        className={`${inp} w-full pl-9`}
+                        placeholder="Digite o nome do produto…"
+                        autoComplete="off"
+                        className={`${inp} min-h-[44px] w-full rounded-xl pl-10 pr-3`}
                       />
                     </div>
-                    <div className="mt-2 max-h-40 overflow-y-auto overflow-x-hidden rounded-xl border border-zinc-100">
+                    <p className="mt-1.5 text-[11px] leading-snug text-zinc-500 [.admin-dark_&]:text-zinc-500">
+                      Toque na linha para adicionar. Itens <span className="font-semibold text-zinc-600 [.admin-dark_&]:text-zinc-400">já no grupo</span> ou{' '}
+                      <span className="font-semibold text-zinc-600 [.admin-dark_&]:text-zinc-400">marcados como combo</span> ficam bloqueados.
+                    </p>
+                    <p className="mb-1 mt-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500 [.admin-dark_&]:text-zinc-400">
+                      Resultados
+                    </p>
+                    <div className="max-h-44 overflow-y-auto overflow-x-hidden rounded-xl border border-zinc-200 bg-zinc-200/25 [.admin-dark_&]:border-zinc-700 [.admin-dark_&]:bg-zinc-900/60">
                       {filtrarPicker(g.key).length === 0 ? (
-                        <p className="px-3 py-3 text-center text-xs text-zinc-400">Nenhum resultado</p>
+                        <p className="px-3 py-4 text-center text-xs text-zinc-400 [.admin-dark_&]:text-zinc-500">Nenhum resultado para esta busca</p>
                       ) : (
-                        filtrarPicker(g.key).map((p) => {
-                          const isCombo = Number(p.is_combo) === 1;
-                          const already = g.product_ids.includes(p.id!);
-                          const disabled = isCombo || already;
-                          return (
-                            <button
-                              key={`${g.key}-pick-${p.id}`}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => addProdutoAoGrupo(g.key, p.id!)}
-                              className={`flex w-full items-center justify-between gap-2 border-b border-zinc-50 px-3 py-2.5 text-left text-sm last:border-b-0 ${
-                                disabled
-                                  ? 'cursor-not-allowed bg-zinc-50 text-zinc-400'
-                                  : 'bg-white text-zinc-800 hover:bg-violet-50'
-                              }`}
-                            >
-                              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                              <span className="shrink-0 text-[10px] font-bold text-zinc-400">{fmtR$(Number(p.price) || 0)}</span>
-                              {isCombo ? (
-                                <span className="shrink-0 rounded bg-zinc-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-zinc-600">
-                                  combo
-                                </span>
-                              ) : already ? (
-                                <span className="shrink-0 text-[10px] font-bold text-emerald-600">no grupo</span>
-                              ) : (
-                                <Plus className="shrink-0 text-violet-600" size={16} />
-                              )}
-                            </button>
-                          );
-                        })
+                        <ul className="divide-y divide-zinc-200/90 [.admin-dark_&]:divide-zinc-800">
+                          {filtrarPicker(g.key).map((p) => {
+                            const isCombo = Number(p.is_combo) === 1;
+                            const already = g.product_ids.includes(p.id!);
+                            const disabled = isCombo || already;
+                            const price = fmtR$(Number(p.price) || 0);
+                            const titleHint = isCombo
+                              ? 'Produtos combo não podem entrar em outro combo'
+                              : already
+                                ? 'Este produto já está neste grupo'
+                                : 'Adicionar ao grupo';
+                            return (
+                              <li key={`${g.key}-pick-${p.id}`} className="list-none">
+                                <button
+                                  type="button"
+                                  disabled={disabled}
+                                  title={titleHint}
+                                  aria-label={`${p.name}. ${price}. ${titleHint}`}
+                                  onClick={() => addProdutoAoGrupo(g.key, p.id!)}
+                                  className={`flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors ${
+                                    isCombo
+                                      ? 'cursor-not-allowed border-l-[3px] border-l-amber-400/70 bg-amber-50/35 text-zinc-500 [.admin-dark_&]:border-l-amber-500/50 [.admin-dark_&]:bg-amber-500/[0.07] [.admin-dark_&]:text-zinc-500'
+                                      : already
+                                        ? 'cursor-not-allowed border-l-[3px] border-l-emerald-500 bg-emerald-50/30 text-zinc-600 [.admin-dark_&]:border-l-emerald-400 [.admin-dark_&]:bg-emerald-500/[0.08] [.admin-dark_&]:text-zinc-400'
+                                        : 'cursor-pointer border-l-[3px] border-l-transparent text-zinc-800 hover:border-l-violet-400 hover:bg-violet-100/70 [.admin-dark_&]:text-zinc-100 [.admin-dark_&]:hover:border-l-violet-400 [.admin-dark_&]:hover:bg-violet-500/12'
+                                  }`}
+                                >
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate font-medium leading-snug">{p.name}</span>
+                                    <span
+                                      className={`mt-0.5 block text-xs font-semibold tabular-nums tracking-tight ${
+                                        disabled
+                                          ? 'text-zinc-400 [.admin-dark_&]:text-zinc-500'
+                                          : 'text-zinc-600 [.admin-dark_&]:text-zinc-300'
+                                      }`}
+                                    >
+                                      {price}
+                                    </span>
+                                  </span>
+                                  <span className="flex shrink-0 items-center justify-end">
+                                    {isCombo ? (
+                                      <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200/90 bg-amber-100/60 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-amber-900 [.admin-dark_&]:border-amber-500/35 [.admin-dark_&]:bg-amber-500/15 [.admin-dark_&]:text-amber-200">
+                                        <Lock className="h-3 w-3 shrink-0" aria-hidden />
+                                        Combo
+                                      </span>
+                                    ) : already ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/90 bg-emerald-100/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-800 [.admin-dark_&]:border-emerald-500/40 [.admin-dark_&]:bg-emerald-500/20 [.admin-dark_&]:text-emerald-200">
+                                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                                        No grupo
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-violet-700 shadow-sm [.admin-dark_&]:border-violet-500/45 [.admin-dark_&]:bg-violet-500/20 [.admin-dark_&]:text-violet-200"
+                                        aria-hidden
+                                      >
+                                        <Plus className="h-4 w-4" strokeWidth={2.5} />
+                                      </span>
+                                    )}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
                       )}
                     </div>
                   </div>
@@ -2532,11 +2604,11 @@ function ModalComboAdmin({
           )}
 
           {!loadError && (
-            <div className="border-t border-zinc-100 pt-3">
+            <div className="border-t border-zinc-100 pt-3 [.admin-dark_&]:border-zinc-800">
               <button
                 type="button"
                 onClick={addGrupoVazio}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-50"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-violet-300 bg-violet-100/40 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-100/70 [.admin-dark_&]:border-violet-500/35 [.admin-dark_&]:bg-violet-500/10 [.admin-dark_&]:text-violet-200 [.admin-dark_&]:hover:bg-violet-500/18"
               >
                 <Plus size={16} /> Adicionar grupo
               </button>
@@ -2544,12 +2616,12 @@ function ModalComboAdmin({
           )}
         </div>
 
-        <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-white px-3 py-3 sm:flex-row sm:px-5 sm:py-4 2xl:px-6">
+        <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-100 bg-zinc-50/80 px-3 py-3 sm:flex-row sm:px-5 sm:py-4 2xl:px-6 [.admin-dark_&]:border-zinc-800 [.admin-dark_&]:bg-zinc-950/90">
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="min-h-[44px] flex-1 rounded-xl bg-zinc-100 py-2.5 text-sm font-bold text-zinc-800 transition-all hover:bg-zinc-200 disabled:opacity-50"
+            className="min-h-[44px] flex-1 rounded-xl bg-zinc-200/90 py-2.5 text-sm font-bold text-zinc-800 transition-all hover:bg-zinc-300/90 disabled:opacity-50 [.admin-dark_&]:bg-zinc-800 [.admin-dark_&]:text-zinc-100 [.admin-dark_&]:hover:bg-zinc-700"
           >
             Fechar
           </button>
@@ -2557,7 +2629,7 @@ function ModalComboAdmin({
             type="button"
             disabled={saving || loading || !!loadError}
             onClick={() => void salvarDefinicao()}
-            className="min-h-[44px] flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:bg-zinc-300"
+            className="min-h-[44px] flex-1 rounded-xl bg-zinc-900 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:bg-zinc-300 [.admin-dark_&]:bg-emerald-600 [.admin-dark_&]:hover:bg-emerald-500 [.admin-dark_&]:disabled:bg-zinc-700 [.admin-dark_&]:disabled:text-zinc-400"
           >
             {saving ? 'Salvando…' : 'Salvar definição'}
           </button>
