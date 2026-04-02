@@ -565,6 +565,8 @@ export function ProductOptionsModal({
   const modoCombo =
     (produto.is_combo === true || produto.is_combo === 1 || String(produto.is_combo) === '1') &&
     comboGruposUi.length > 0;
+  /** Cardápio online: combo usa modal mais alto, scroll só no miolo e espaçamento extra. */
+  const deliveryComboUX = isDelivery && modoCombo;
 
   const variacoesLista = useMemo(() => {
     if (modoCombo) return [];
@@ -1065,12 +1067,12 @@ export function ProductOptionsModal({
         <section
           key={g.id}
           className={`${
-            compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
+            compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (deliveryComboUX ? 'mx-3 mb-3 sm:mx-4 sm:mb-4' : isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
           } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
             temErro ? 'border-red-500/40 bg-red-500/10' : 'border-white/14 bg-zinc-900/85'
           }`}
         >
-          <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
+          <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : deliveryComboUX ? 'px-4 py-3 sm:px-5 sm:py-3.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
             <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
               <div className="min-w-0">
                 <p
@@ -1144,9 +1146,11 @@ export function ProductOptionsModal({
                       : useTightModalLayout
                         ? isPos
                           ? 'min-h-[44px] gap-2 px-2.5 py-2'
-                          : isDelivery
-                            ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
-                            : 'min-h-[44px] gap-2.5 px-3 py-2.5'
+                          : deliveryComboUX
+                            ? 'min-h-[44px] gap-2.5 px-3 py-2.5 sm:px-4'
+                            : isDelivery
+                              ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
+                              : 'min-h-[44px] gap-2.5 px-3 py-2.5'
                         : 'min-h-[44px] gap-4 px-4 py-4'
                   } ${
                     selecionado
@@ -1232,7 +1236,11 @@ export function ProductOptionsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex min-h-0 items-end justify-center overflow-x-hidden overflow-y-auto p-0 sm:items-center sm:p-4">
+    <div
+      className={`fixed inset-0 z-[70] flex min-h-0 items-end justify-center overflow-x-hidden overflow-y-auto p-0 sm:items-center sm:p-4 ${
+        deliveryComboUX ? 'sm:overflow-y-hidden' : ''
+      }`}
+    >
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose} />
 
@@ -1240,7 +1248,11 @@ export function ProductOptionsModal({
         transition={{ type: 'spring', damping: 30, stiffness: 400 }}
         className={`${mo.sheet} my-auto flex min-h-0 w-full max-w-[100vw] pb-[env(safe-area-inset-bottom)] sm:pb-0 ${
           isDelivery
-            ? 'max-h-[min(91dvh,91svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
+            ? deliveryComboUX
+              ? comboPersonalizar
+                ? 'max-h-[min(95dvh,95svh,95vh,100%)] sm:max-h-[min(95vh,95dvh,95svh)] sm:!max-w-lg'
+                : 'max-h-[min(92dvh,92svh,92vh,100%)] sm:max-h-[min(93vh,93dvh,93svh)] sm:!max-w-lg'
+              : 'max-h-[min(91dvh,91svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
             : isPos
               ? 'max-h-[min(84dvh,84svh,100%)] sm:max-h-[min(66vh,66dvh,580px)] sm:!max-w-lg'
               : 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(92vh,92dvh)]'
@@ -1278,7 +1290,9 @@ export function ProductOptionsModal({
                 : isPos
                   ? 'space-y-1.5 p-2.5 sm:p-2.5'
                   : isDelivery
-                    ? 'space-y-1.5 p-2.5 sm:p-3'
+                    ? deliveryComboUX
+                      ? 'space-y-2 px-5 py-4 sm:px-6 sm:py-5'
+                      : 'space-y-1.5 p-2.5 sm:p-3'
                     : 'space-y-4 p-5'
             } ${headerFoto ? '' : 'pr-16'}`}
           >
@@ -1407,16 +1421,18 @@ export function ProductOptionsModal({
         </div>
 
         <div
-          className={`${mo.scroll} min-h-0 flex-1 ${
-            compactLayout
-              ? 'py-1.5'
-              : isPos
-                ? '!py-0.5 sm:!py-1'
-                : useTightModalLayout
-                  ? isDelivery
-                    ? '!py-0.5 sm:!py-1.5'
-                    : '!py-1 sm:!py-1.5'
-                  : ''
+          className={`${mo.scroll} min-h-0 flex-1 touch-pan-y ${
+            deliveryComboUX
+              ? 'overscroll-y-contain !py-4 sm:!py-5'
+              : compactLayout
+                ? 'py-1.5'
+                : isPos
+                  ? '!py-0.5 sm:!py-1'
+                  : useTightModalLayout
+                    ? isDelivery
+                      ? '!py-0.5 sm:!py-1.5'
+                      : '!py-1 sm:!py-1.5'
+                    : ''
           }`}
         >
           {carregandoOpcoes && visualVariant === 'pos' && variacoesLista.length === 0 && grupos.length === 0 && !modoCombo ? (
@@ -1442,7 +1458,7 @@ export function ProductOptionsModal({
           ) : modoCombo ? (
             <>
               {comboPersonalizar ? (
-                <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : 'mx-2.5 mb-2 space-y-2'}>
+                <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : deliveryComboUX ? 'mx-3 mb-2 space-y-4 sm:mx-4' : 'mx-2.5 mb-2 space-y-2'}>
                   <button
                     type="button"
                     onClick={fecharPersonalizarCombo}
@@ -1490,7 +1506,7 @@ export function ProductOptionsModal({
                   })}
                 </div>
               ) : comboFlowStep === 'revisar' ? (
-                <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : 'mx-2.5 mb-2 space-y-2'}>
+                <div className={compactLayout ? 'mx-2.5 mb-2 space-y-2.5' : deliveryComboUX ? 'mx-3 mb-2 space-y-4 sm:mx-4' : 'mx-2.5 mb-2 space-y-2'}>
                   <button
                     type="button"
                     onClick={voltarRevisaoParaMontar}
@@ -1506,10 +1522,10 @@ export function ProductOptionsModal({
                       <section
                         key={g.id}
                         className={`${
-                          compactLayout ? 'mb-2' : useTightModalLayout ? (isDelivery ? 'mb-1.5' : 'mb-2') : 'mb-4'
+                          compactLayout ? 'mb-2' : deliveryComboUX ? 'mb-3 sm:mb-4' : useTightModalLayout ? (isDelivery ? 'mb-1.5' : 'mb-2') : 'mb-4'
                         } overflow-hidden rounded-[18px] border border-emerald-500/25 bg-zinc-900/85 shadow-[0_12px_36px_rgba(0,0,0,0.2)]`}
                       >
-                        <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : 'px-2.5 py-1.5'}`}>
+                        <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : deliveryComboUX ? 'px-4 py-3 sm:px-5 sm:py-3.5' : 'px-2.5 py-1.5'}`}>
                           <p className="text-sm font-black tracking-tight text-white">{g.nome}</p>
                           <p className="mt-0.5 text-[10px] font-semibold text-zinc-400">
                             Toque em Personalizar para alterar adicionais desta unidade.
@@ -1525,7 +1541,7 @@ export function ProductOptionsModal({
                             return (
                               <div
                                 key={inst.instancia_id}
-                                className={`flex flex-col gap-2 ${compactLayout ? 'px-2.5 py-2' : 'px-2.5 py-2'} sm:flex-row sm:items-center sm:justify-between`}
+                                className={`flex flex-col gap-2 ${compactLayout ? 'px-2.5 py-2' : deliveryComboUX ? 'px-3 py-3 sm:px-4 sm:py-3.5' : 'px-2.5 py-2'} sm:flex-row sm:items-center sm:justify-between`}
                               >
                                 <div className="min-w-0 flex-1">
                                   <p className={`${compactLayout ? 'text-[13px]' : 'text-sm'} font-semibold text-white`}>{label}</p>
@@ -1576,12 +1592,12 @@ export function ProductOptionsModal({
                     <section
                       key={g.id}
                       className={`${
-                        compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
+                        compactLayout ? 'mx-2.5 mb-2.5' : useTightModalLayout ? (deliveryComboUX ? 'mx-3 mb-3 sm:mx-4 sm:mb-4' : isDelivery ? 'mx-2.5 mb-1.5' : 'mx-2.5 mb-2') : 'mx-4 mb-4'
                       } overflow-hidden ${compactLayout ? 'rounded-[18px]' : useTightModalLayout ? 'rounded-[18px]' : 'rounded-[24px]'} border shadow-[0_12px_36px_rgba(0,0,0,0.2)] ${
                         temErro ? 'border-red-500/40 bg-red-500/10' : 'border-emerald-500/25 bg-zinc-900/85'
                       }`}
                     >
-                      <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
+                      <div className={`border-b border-white/12 bg-zinc-900/95 ${compactLayout ? 'px-2.5 py-2' : useTightModalLayout ? (isPos ? 'px-2 py-1.5' : deliveryComboUX ? 'px-4 py-3 sm:px-5 sm:py-3.5' : isDelivery ? 'px-2.5 py-1.5' : 'px-2.5 py-2') : 'p-4'}`}>
                         <div className={`flex items-start justify-between ${compactLayout ? 'gap-1.5' : useTightModalLayout ? 'gap-2' : 'gap-3'}`}>
                           <div className="min-w-0">
                             <p
@@ -1638,6 +1654,8 @@ export function ProductOptionsModal({
                                   : useTightModalLayout
                                     ? isPos
                                       ? 'min-h-[44px] gap-2 px-2.5 py-2'
+                                      : deliveryComboUX
+                                      ? 'min-h-[44px] gap-2.5 px-3 py-2.5 sm:px-4'
                                       : isDelivery
                                         ? 'min-h-[40px] gap-2 px-2.5 py-1.5'
                                         : 'min-h-[44px] gap-2.5 px-3 py-2.5'
@@ -1809,7 +1827,9 @@ export function ProductOptionsModal({
                 : isPos
                   ? 'mx-2.5 mt-0 rounded-lg border border-white/14 bg-zinc-900/85 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.16)]'
                   : isDelivery
-                    ? 'mx-2.5 mt-0 rounded-lg border border-white/14 bg-zinc-900/85 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.14)]'
+                    ? deliveryComboUX
+                      ? 'mx-3 mt-1 rounded-xl border border-white/14 bg-zinc-900/85 px-5 py-4 shadow-[0_6px_18px_rgba(0,0,0,0.14)] sm:mx-4 sm:px-6'
+                      : 'mx-2.5 mt-0 rounded-lg border border-white/14 bg-zinc-900/85 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(0,0,0,0.14)]'
                     : 'mx-4 mt-1 rounded-[28px] border border-white/14 bg-zinc-900/85 px-5 py-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]'
             }
           >
@@ -1820,7 +1840,19 @@ export function ProductOptionsModal({
           </div>
         </div>
 
-        <div className={`${mo.footer} shrink-0 ${compactLayout ? '!p-2.5' : isPos ? '!p-2.5 sm:!p-3 sm:!pb-3' : isDelivery ? '!p-2.5 !pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:!p-4 sm:!pb-4' : ''}`}>
+        <div
+          className={`${mo.footer} shrink-0 ${
+            deliveryComboUX
+              ? 'relative z-20 !border-t !border-white/12 !bg-zinc-950 !px-5 !pb-[max(0.75rem,env(safe-area-inset-bottom))] !pt-4 shadow-[0_-14px_40px_rgba(0,0,0,0.5)] sm:!px-6 sm:!pb-4 sm:!pt-5'
+              : compactLayout
+                ? '!p-2.5'
+                : isPos
+                  ? '!p-2.5 sm:!p-3 sm:!pb-3'
+                  : isDelivery
+                    ? '!p-2.5 !pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:!p-4 sm:!pb-4'
+                    : ''
+          }`}
+        >
           <div className={`rounded-[22px] border ${
             compactLayout ? 'mb-1.5 !rounded-xl !px-2.5 !py-1.5' : isPos ? 'mb-1 !rounded-lg !px-2 !py-1' : isDelivery ? 'mb-1 !rounded-lg !px-2 !py-1' : 'mb-3 px-4 py-3'
           } ${
