@@ -1,3 +1,5 @@
+import type { ComboPedidoPorGrupo } from './comboOrder';
+
 export type OrderStatus =
   | 'Criado'
   | 'Em Preparo'
@@ -23,9 +25,15 @@ export interface OrderItemInput {
   obs_opcoes?: string;
   /**
    * JSON em `selecoes_json`: mapa grupo de adicionais → { opcaoId: quantidade }.
-   * Combos: chave `combo` com { grupoComboId: { productId: qtd } }.
+   * Combos: chave `combo` com grupoId → instâncias
+   * Por instância: `produto_id`, `instancia_id`, opcionalmente `selecoes` ou `opcoes` ou `adicionais` (mesmo mapa), `observacao`, `extras`; ou formato legado `grupoId` → `{ productId: qtd }`.
+   * Mapa por instância = mesmo formato de adicionais do produto componente (`produto_grupos_opcao` / `produto_opcao_itens`).
    */
-  selecoes?: (Record<number, Record<number, number>> & { combo?: Record<number, Record<number, number>> }) | null;
+  selecoes?:
+    | (Record<number, Record<number, number>> & {
+        combo?: ComboPedidoPorGrupo | Record<number, Record<number, number>>;
+      })
+    | null;
 }
 
 export interface PaymentInput {

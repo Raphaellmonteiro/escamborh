@@ -480,12 +480,12 @@ async function applyAuthoritativeComboItemsToOrder(
     if (vid !== null && Number.isInteger(vid) && vid > 0) {
       throw new AppError('Combo não aceita variação vendável', 400);
     }
-    const comboValidado = await validateAuthoritativeComboSelections({
+    const { validado: comboValidado, adicionaisTotal } = await validateAuthoritativeComboSelections({
       tenantId: tid,
       comboProductId: n.product_id,
       rawCombo: extractRawComboSelections(raw),
     });
-    const price_at_time = Number(meta.price || 0);
+    const price_at_time = Number(meta.price || 0) + Number(adicionaisTotal || 0);
     out.push({
       ...n,
       variation_id: null,

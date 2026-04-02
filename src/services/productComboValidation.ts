@@ -3,29 +3,134 @@
  * Usada pelo delivery, rotas admin e pode ser reutilizada no PDV.
  */
 import { q1, qAll } from '../db';
-import { AppError } from '../utils/errors';
+import type { ComboPedidoInstancia, ComboPedidoPorGrupo } from '../types/comboOrder';
+import { AppError, isAppError } from '../utils/errors';
+import { validateProductOpcoesSelections } from './productOpcoesValidation';
 
-/** grupoId → (productId do cardápio → quantidade) */
+export type { ComboPedidoInstancia, ComboPedidoPorGrupo };
+
+/** grupoId → (productId do cardápio → quantidade) — formato legado / agregado */
 export type ComboEscolhas = Record<number, Record<number, number>>;
 
-export function normalizeComboEscolhas(raw: unknown): ComboEscolhas {
+const MAX_INSTANCIA_ID_LEN = 128;
+const MAX_COMBO_INST_OBS_LEN = 4000;
+
+function parseObservacaoInstancia(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const t = String(raw).trim();
+  if (!t) return null;
+  return t.length > MAX_COMBO_INST_OBS_LEN ? t.slice(0, MAX_COMBO_INST_OBS_LEN) : t;
+}
+
+function isLegacyComboGrupoValor(val: unknown): val is Record<string, unknown> {
+  if (!val || typeof val !== 'object' || Array.isArray(val)) return false;
+  for (const v of Object.values(val as Record<string, unknown>)) {
+    if (typeof v === 'number') continue;
+    if (typeof v === 'string' && String(v).trim() !== '' && Number.isFinite(Number(v))) continue;
+    return false;
+  }
+  return true;
+}
+
+function parseInstanciaExtras(entry: Record<string, unknown>): Record<string, unknown> | undefined {
+  const raw = entry.extras;
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new AppError('extras do item de combo invalido', 400);
+  }
+  return raw as Record<string, unknown>;
+}
+
+/**
+ * Aceita formato novo (grupo → array de { produto_id, instancia_id?, extras? })
+ * ou legado (grupo → { productId: quantidade }).
+ * Quantidade por produto = número de instâncias com esse produto_id.
+ */
+export function normalizeComboInputToInstancias(raw: unknown): ComboPedidoPorGrupo {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
 
-  const normalized: ComboEscolhas = {};
-  for (const [groupIdRaw, itemMap] of Object.entries(raw as Record<string, unknown>)) {
+  const normalized: ComboPedidoPorGrupo = {};
+  for (const [groupIdRaw, groupVal] of Object.entries(raw as Record<string, unknown>)) {
     const groupId = Number(groupIdRaw);
-    if (!Number.isInteger(groupId) || groupId <= 0 || !itemMap || typeof itemMap !== 'object') continue;
+    if (!Number.isInteger(groupId) || groupId <= 0) continue;
 
-    const inner: Record<number, number> = {};
-    for (const [productIdRaw, qtyRaw] of Object.entries(itemMap as Record<string, unknown>)) {
-      const productId = Number(productIdRaw);
-      const qty = Number(qtyRaw);
-      if (!Number.isInteger(productId) || productId <= 0 || !Number.isFinite(qty) || qty <= 0) continue;
-      inner[productId] = Math.floor(qty);
+    if (Array.isArray(groupVal)) {
+      const insts: ComboPedidoInstancia[] = [];
+      for (let idx = 0; idx < groupVal.length; idx++) {
+        const entry = groupVal[idx];
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          throw new AppError(`Instancia de combo invalida (grupo ${groupId})`, 400);
+        }
+        const r = entry as Record<string, unknown>;
+        const pid = Number(r.produto_id ?? r.product_id);
+        if (!Number.isInteger(pid) || pid <= 0) {
+          throw new AppError(`produto_id invalido no combo (grupo ${groupId})`, 400);
+        }
+        let iid = String(r.instancia_id ?? '').trim();
+        if (!iid) {
+          iid = `g${groupId}-p${pid}-i${idx}`;
+        }
+        if (iid.length > MAX_INSTANCIA_ID_LEN) {
+          throw new AppError(`instancia_id muito longo (grupo ${groupId})`, 400);
+        }
+        const obs = parseObservacaoInstancia(r.observacao);
+        const rawOp = r.selecoes ?? r.opcoes ?? r.adicionais;
+        if (rawOp !== undefined && rawOp !== null) {
+          if (typeof rawOp !== 'object' || Array.isArray(rawOp)) {
+            throw new AppError(`selecoes da instancia de combo invalidas (grupo ${groupId})`, 400);
+          }
+        }
+        const extras = parseInstanciaExtras(r);
+        const row: ComboPedidoInstancia = { produto_id: pid, instancia_id: iid };
+        if (obs) row.observacao = obs;
+        if (rawOp !== undefined && rawOp !== null) row.selecoes_input = rawOp;
+        if (extras && Object.keys(extras).length > 0) row.extras = extras;
+        insts.push(row);
+      }
+      if (insts.length) normalized[groupId] = insts;
+      continue;
     }
-    if (Object.keys(inner).length > 0) {
-      normalized[groupId] = inner;
+
+    if (groupVal && typeof groupVal === 'object' && !Array.isArray(groupVal)) {
+      if (!isLegacyComboGrupoValor(groupVal)) {
+        throw new AppError(`Formato de combo invalido (grupo ${groupId})`, 400);
+      }
+      const insts: ComboPedidoInstancia[] = [];
+      for (const [productIdRaw, qtyRaw] of Object.entries(groupVal as Record<string, unknown>)) {
+        const productId = Number(productIdRaw);
+        const qty = Math.floor(Number(qtyRaw));
+        if (!Number.isInteger(productId) || productId <= 0) continue;
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+        for (let i = 0; i < qty; i++) {
+          insts.push({
+            produto_id: productId,
+            instancia_id: `legacy:${groupId}:${productId}:${i}`,
+          });
+        }
+      }
+      if (insts.length) normalized[groupId] = insts;
     }
+  }
+  return normalized;
+}
+
+/** Agrega instâncias em contagens por produto (útil para relatórios ou legado). */
+export function aggregateComboInstanciasPorProduto(insts: ComboPedidoInstancia[]): Record<number, number> {
+  const inner: Record<number, number> = {};
+  for (const it of insts) {
+    inner[it.produto_id] = (inner[it.produto_id] || 0) + 1;
+  }
+  return inner;
+}
+
+export function normalizeComboEscolhas(raw: unknown): ComboEscolhas {
+  const inst = normalizeComboInputToInstancias(raw);
+  const normalized: ComboEscolhas = {};
+  for (const [gidStr, arr] of Object.entries(inst)) {
+    const gid = Number(gidStr);
+    if (!Number.isInteger(gid) || gid <= 0) continue;
+    const inner = aggregateComboInstanciasPorProduto(arr);
+    if (Object.keys(inner).length > 0) normalized[gid] = inner;
   }
   return normalized;
 }
@@ -270,12 +375,14 @@ export async function loadComboGruposForProduto(tenantId: number, comboProductId
 /**
  * Valida escolhas do cliente contra a configuração do combo.
  * Garante produtos permitidos, ativos, diferentes do pai, e min/max por grupo.
+ * Preço: o valor do produto combo (`produtos.price`) é fixo por unidade; `adicionaisTotal` soma apenas
+ * `preco_adicional` das opções de cada instância (sem usar preço de catálogo dos componentes).
  */
 export async function validateAuthoritativeComboSelections(params: {
   tenantId: number;
   comboProductId: number;
   rawCombo: unknown;
-}) {
+}): Promise<{ validado: ComboPedidoPorGrupo; adicionaisTotal: number }> {
   const product = await q1<{ id: number; is_combo: number; active: number }>(
     'SELECT id, COALESCE(is_combo,0) AS is_combo, active FROM produtos WHERE id=? AND tenant_id=?',
     [params.comboProductId, params.tenantId]
@@ -295,24 +402,33 @@ export async function validateAuthoritativeComboSelections(params: {
     throw new AppError('Combo sem grupos configurados', 400);
   }
 
-  const escolhas = normalizeComboEscolhas(params.rawCombo);
-  const validado: ComboEscolhas = {};
+  const escolhasInst = normalizeComboInputToInstancias(params.rawCombo);
+  const validado: ComboPedidoPorGrupo = {};
+  let adicionaisTotal = 0;
 
   for (const g of grupos) {
     const allowed = new Set(g.produtos.map((p) => p.product_id));
-    const picked = escolhas[g.id] || {};
-    const normalizedGroup: Record<number, number> = {};
+    const pickedInst = escolhasInst[g.id] || [];
+    const seenIds = new Set<string>();
+    const normalizedInst: ComboPedidoInstancia[] = [];
 
-    for (const [pidRaw, qtyRaw] of Object.entries(picked)) {
-      const pid = Number(pidRaw);
-      const qty = Number(qtyRaw);
+    for (const row of pickedInst) {
+      const pid = row.produto_id;
+      const iid = String(row.instancia_id || '').trim();
+      if (!iid) {
+        throw new AppError(`instancia_id ausente no combo (grupo ${g.nome})`, 400);
+      }
+      if (seenIds.has(iid)) {
+        throw new AppError(`instancia_id duplicado no combo (grupo ${g.nome})`, 400);
+      }
+      seenIds.add(iid);
+
       if (!allowed.has(pid)) {
         throw new AppError(`Item invalido no combo (grupo ${g.nome})`, 400);
       }
       if (pid === params.comboProductId) {
         throw new AppError('Combo nao pode incluir a si mesmo', 400);
       }
-      if (!Number.isFinite(qty) || qty <= 0) continue;
       const comp = await q1<{ active: number }>(
         'SELECT active FROM produtos WHERE id=? AND tenant_id=?',
         [pid, params.tenantId]
@@ -320,10 +436,37 @@ export async function validateAuthoritativeComboSelections(params: {
       if (!comp || Number(comp.active) !== 1) {
         throw new AppError(`Componente do combo indisponivel`, 400);
       }
-      normalizedGroup[pid] = Math.floor(qty);
+
+      let validatedOpcoes: Record<number, Record<number, number>>;
+      try {
+        const op = await validateProductOpcoesSelections({
+          tenantId: params.tenantId,
+          productId: pid,
+          rawSelecoes: row.selecoes_input,
+          baseProductPrice: 0,
+          applyOpcoesPricing: true,
+        });
+        validatedOpcoes = op.selecoes;
+        adicionaisTotal += Number(op.priceAtTime || 0);
+      } catch (e: unknown) {
+        if (isAppError(e)) {
+          throw new AppError(
+            `${e.message} (combo, grupo "${g.nome}", instancia ${iid})`,
+            e.statusCode,
+            e.code
+          );
+        }
+        throw e;
+      }
+
+      const out: ComboPedidoInstancia = { produto_id: pid, instancia_id: iid };
+      if (row.observacao) out.observacao = row.observacao;
+      if (Object.keys(validatedOpcoes).length > 0) out.selecoes = validatedOpcoes;
+      if (row.extras && Object.keys(row.extras).length > 0) out.extras = row.extras;
+      normalizedInst.push(out);
     }
 
-    const total = Object.values(normalizedGroup).reduce((a, q) => a + q, 0);
+    const total = normalizedInst.length;
     const min = Math.max(0, Number(g.qtd_min || 0));
     const maxRaw = Number(g.qtd_max || 0);
     const max = maxRaw > 0 ? maxRaw : null;
@@ -340,14 +483,14 @@ export async function validateAuthoritativeComboSelections(params: {
       throw new AppError(`Quantidade acima do limite no grupo "${g.nome}" (maximo ${max})`, 400);
     }
 
-    if (Object.keys(normalizedGroup).length > 0) {
-      validado[g.id] = normalizedGroup;
+    if (normalizedInst.length > 0) {
+      validado[g.id] = normalizedInst;
     } else if (Number(g.obrigatorio) === 1 && min > 0) {
       throw new AppError(`Grupo obrigatorio "${g.nome}" vazio`, 400);
     }
   }
 
-  return validado;
+  return { validado, adicionaisTotal };
 }
 
 const CARDAPIO_COMBO_CHUNK = 400;
