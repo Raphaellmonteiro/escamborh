@@ -98,6 +98,25 @@ export const deliveryPublicPedidoCreateRateLimit = rateLimit({
   message: { error: 'Muitas requisições. Tente novamente em instantes.' },
 });
 
+/** POST /api/privacidade/solicitar-exclusao — por tenant (após JWT); reduz spam em lgpd_solicitacoes. */
+export const lgpdSolicitacaoExclusaoRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Limite de solicitações de exclusão (LGPD) atingido para esta loja. Tente novamente em até 1 hora.',
+  },
+  keyGenerator: (req) => {
+    const raw = (req as Request & { tenantId?: number | string }).tenantId;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) {
+      return `lgpd_solicitacao_exclusao:tenant:${n}`;
+    }
+    return `lgpd_solicitacao_exclusao:ip:${req.ip || 'unknown'}`;
+  },
+});
+
 const PRODUCT_MIME_FILTER_SET = new Set<string>(PRODUCT_IMAGE_ALLOWED_CLIENT_MIMES);
 const STATIC_MIME_FILTER_SET = new Set<string>(STATIC_IMAGE_ALLOWED_CLIENT_MIMES);
 

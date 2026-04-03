@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { qInsert } from '../db';
+import { lgpdSolicitacaoExclusaoRateLimit } from '../middleware';
 import { sendInternalError } from '../utils/internalServerError';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
 import { solicitarExclusaoBodySchema } from '../validation/schemas/privacidade';
@@ -7,7 +8,7 @@ import { solicitarExclusaoBodySchema } from '../validation/schemas/privacidade';
 export function createPrivacidadeRouter() {
   const router = Router();
 
-  router.post('/solicitar-exclusao', async (req: any, res) => {
+  router.post('/solicitar-exclusao', lgpdSolicitacaoExclusaoRateLimit, async (req: any, res) => {
     try {
       const tenantId = Number(req.tenantId);
       if (!Number.isFinite(tenantId) || tenantId <= 0) {

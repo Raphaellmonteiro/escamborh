@@ -12,3 +12,10 @@ export const solicitarExclusaoBodySchema = z.object({
     z.string().trim().max(5000, 'motivo muito longo.').optional()
   ),
 });
+
+/** PATCH /api/admin/lgpd-solicitacoes/:id/status */
+export const adminLgpdStatusPatchSchema = z.object({
+  status: z.enum(['pendente', 'em_analise', 'concluida', 'indeferida'], {
+    message: 'status inválido.',
+  }),
+});

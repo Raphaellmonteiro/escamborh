@@ -39,7 +39,17 @@ app.set('trust proxy', 1);
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        // Inclui ws:/wss: além do pedido inicial — HMR do Vite (middlewareMode) e alguns browsers não tratam WebSocket como 'self' junto de http.
+        connectSrc: ["'self'", "https:", "http:", "ws:", "wss:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'", "https:", "data:"],
+      },
+    },
   })
 );
 

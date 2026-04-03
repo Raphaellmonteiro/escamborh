@@ -38,6 +38,8 @@ import {
   RefreshCw,
   Unlock,
   Menu,
+  FileText,
+  LifeBuoy,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card, Button } from '../components/ui/Card';
@@ -51,6 +53,13 @@ const PLAN_OPTIONS = [
   { value: 'basico', label: 'Basico' },
   { value: 'basico_delivery', label: 'Basico + Delivery' },
   { value: 'completo', label: 'Completo' },
+] as const;
+
+const LGPD_STATUS_OPTIONS = [
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'em_analise', label: 'Em análise' },
+  { value: 'concluida', label: 'Concluída' },
+  { value: 'indeferida', label: 'Indeferida' },
 ] as const;
 
 function normalizeAdminPlanValue(plan?: string | null) {
@@ -86,7 +95,7 @@ export default function AdminPanel() {
   >(null);
   const [buscaCliente, setBuscaCliente] = useState('');
   const [token, setToken] = useState<string | null>(localStorage.getItem('admin_token'));
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'clientes' | 'financeiro' | 'diagnosticos'>('clientes');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'clientes' | 'suporte' | 'financeiro' | 'diagnosticos'>('clientes');
   const [stats, setStats] = useState<any>(null);
   const [financeiro, setFinanceiro] = useState<any>(null);
   const [solicitacoes, setSolicitacoes] = useState<any[]>([]);
@@ -135,7 +144,33 @@ export default function AdminPanel() {
   const [tenantLogs, setTenantLogs] = useState<Array<{ id: number; usuario_nome: string; cargo: string; acao: string; detalhes: string | null; created_at: string }>>([]);
   const [tenantLogsLoading, setTenantLogsLoading] = useState(false);
   const [tenantLogsError, setTenantLogsError] = useState<string | null>(null);
+  const [lgpdItems, setLgpdItems] = useState<
+    Array<{
+      id: number;
+      tenant_id: number;
+      tipo: string;
+      entidade_id: number;
+      status: string;
+      created_at: string;
+      motivo_resumo: string | null;
+    }>
+  >([]);
+  const [lgpdLoading, setLgpdLoading] = useState(false);
+  const [lgpdError, setLgpdError] = useState<string | null>(null);
+  const [lgpdUpdatingId, setLgpdUpdatingId] = useState<number | null>(null);
   const [adminNavOpen, setAdminNavOpen] = useState(false);
+
+  const [suporteTenantInput, setSuporteTenantInput] = useState('');
+  const [suporteTenantId, setSuporteTenantId] = useState<number | null>(null);
+  const [suporteOverview, setSuporteOverview] = useState<Record<string, unknown> | null>(null);
+  const [suporteLogs, setSuporteLogs] = useState<Array<{ id: number; usuario_nome: string; cargo: string; acao: string; detalhes: string | null; created_at: string }>>([]);
+  const [suportePedidos, setSuportePedidos] = useState<any[]>([]);
+  const [suporteLoading, setSuporteLoading] = useState(false);
+  const [suporteError, setSuporteError] = useState<string | null>(null);
+  const [suporteImgCheck, setSuporteImgCheck] = useState<{ verificados: number; urls_invalidas: any[]; imagens_quebradas: any[] } | null>(null);
+  const [suporteImgLoading, setSuporteImgLoading] = useState(false);
+  const [suporteNovaSenha, setSuporteNovaSenha] = useState('');
+  const [suporteActionBusy, setSuporteActionBusy] = useState(false);
 
   // ── Listas paginadas para performance em listas grandes ─────────────────────
   const clientesFiltrados = useMemo(() =>
@@ -213,6 +248,73 @@ export default function AdminPanel() {
     } else {
       setTenantLogs([]);
       setTenantLogsError(null);
+    }
+  }, [token, selectedTenantId, activeTab]);
+
+  const fetchLgpdSolicitacoes = async (tenantId: number) => {
+    setLgpdLoading(true);
+    setLgpdError(null);
+    try {
+      const res = await fetch(`/api/admin/lgpd-solicitacoes?tenant_id=${tenantId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401 || res.status === 403) {
+        handleAuthError();
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setLgpdItems(Array.isArray(data?.items) ? data.items : []);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setLgpdItems([]);
+        setLgpdError((err as any)?.error || `Erro ${res.status}`);
+      }
+    } catch (e: any) {
+      setLgpdItems([]);
+      setLgpdError(e?.message || 'Erro de conexão');
+    } finally {
+      setLgpdLoading(false);
+    }
+  };
+
+  const patchLgpdStatus = async (tenantId: number, solicitacaoId: number, status: string) => {
+    setLgpdUpdatingId(solicitacaoId);
+    setLgpdError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/lgpd-solicitacoes/${solicitacaoId}/status?tenant_id=${tenantId}`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        }
+      );
+      if (res.status === 401 || res.status === 403) {
+        handleAuthError();
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showActionToast((err as any)?.error || (err as any)?.message || `Erro ${res.status}`, false);
+        await fetchLgpdSolicitacoes(tenantId);
+        return;
+      }
+      showActionToast('Status atualizado.', true);
+      await fetchLgpdSolicitacoes(tenantId);
+    } catch (e: any) {
+      showActionToast(e?.message || 'Erro de conexão', false);
+    } finally {
+      setLgpdUpdatingId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (token && selectedTenantId && activeTab === 'clientes') {
+      fetchLgpdSolicitacoes(selectedTenantId);
+    } else {
+      setLgpdItems([]);
+      setLgpdError(null);
     }
   }, [token, selectedTenantId, activeTab]);
 
@@ -382,6 +484,56 @@ export default function AdminPanel() {
     setToken(null);
   };
 
+  useEffect(() => {
+    if (!token || activeTab !== 'suporte' || !suporteTenantId) return;
+    let cancelled = false;
+    setSuporteLoading(true);
+    setSuporteError(null);
+    setSuporteImgCheck(null);
+    const h = { Authorization: `Bearer ${token}` };
+    (async () => {
+      try {
+        const [resO, resL, resP] = await Promise.all([
+          fetch(`/api/admin/cliente-overview?tenant_id=${suporteTenantId}`, { headers: h }),
+          fetch(`/api/admin/logs?tenant_id=${suporteTenantId}&limit=100`, { headers: h }),
+          fetch(`/api/admin/pedidos?tenant_id=${suporteTenantId}&limit=20`, { headers: h }),
+        ]);
+        if (cancelled) return;
+        if (resO.status === 401 || resO.status === 403) {
+          handleAuthError();
+          return;
+        }
+        const errBody = async (r: Response) => (await r.json().catch(() => ({}))) as { error?: string };
+        if (!resO.ok) {
+          const e = await errBody(resO);
+          setSuporteOverview(null);
+          setSuporteError(e.error || `Overview erro ${resO.status}`);
+        } else {
+          setSuporteOverview(await resO.json());
+        }
+        if (resL.ok) {
+          const jl = await resL.json();
+          setSuporteLogs(Array.isArray(jl?.logs) ? jl.logs : []);
+        } else {
+          setSuporteLogs([]);
+        }
+        if (resP.ok) {
+          const jp = await resP.json();
+          setSuportePedidos(Array.isArray(jp) ? jp : []);
+        } else {
+          setSuportePedidos([]);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) setSuporteError(e instanceof Error ? e.message : 'Erro de conexão');
+      } finally {
+        if (!cancelled) setSuporteLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeTab, suporteTenantId]);
+
   const executeAdminAction = async () => {
     if (!actionConfirmModal || !selectedTenantId || actionConfirmReason.trim().length < 10) return;
     setActionConfirmLoading(true);
@@ -506,11 +658,12 @@ export default function AdminPanel() {
     }
   };
 
-  const openPedidoDetalhe = async (orderId: number) => {
-    if (!selectedTenantId || !token) return;
+  const openPedidoDetalhe = async (orderId: number, tenantIdOverride?: number | null) => {
+    const tid = tenantIdOverride ?? selectedTenantId;
+    if (!tid || !token) return;
     setPedidoDetalheModal({ orderId, loading: true });
     try {
-      const res = await fetch(`/api/admin/tenant/${selectedTenantId}/pedidos/${orderId}`, {
+      const res = await fetch(`/api/admin/pedidos/${orderId}?tenant_id=${tid}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -786,6 +939,396 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
     }
   };
 
+  const openSuporteForTenant = (id: number) => {
+    setSuporteTenantInput(String(id));
+    setSuporteTenantId(id);
+    setActiveTab('suporte');
+    setAdminNavOpen(false);
+  };
+
+  const handleSuporteCarregarTenant = () => {
+    const n = parseInt(suporteTenantInput.trim(), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      showActionToast('Informe um tenant_id numérico válido', false);
+      return;
+    }
+    setSuporteTenantId(n);
+  };
+
+  const handleSuporteForcarLogout = async () => {
+    if (!suporteTenantId || !token) return;
+    if (!confirm('Invalidar todas as sessões deste tenant? Todos os usuários precisarão entrar de novo.')) return;
+    setSuporteActionBusy(true);
+    try {
+      const res = await fetch('/api/admin/forcar-logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: suporteTenantId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) showActionToast(`Sessões invalidadas (${data.users_affected ?? 0} usuário(s))`, true);
+      else showActionToast(data.error || `Erro ${res.status}`, false);
+    } catch (e: unknown) {
+      showActionToast(e instanceof Error ? e.message : 'Erro de conexão', false);
+    } finally {
+      setSuporteActionBusy(false);
+    }
+  };
+
+  const handleSuporteResetCaixa = async () => {
+    if (!suporteTenantId || !token) return;
+    const reason = window.prompt('Motivo do reset do caixa (mínimo 10 caracteres):');
+    if (!reason || reason.trim().length < 10) {
+      showActionToast('Motivo obrigatório com pelo menos 10 caracteres.', false);
+      return;
+    }
+    setSuporteActionBusy(true);
+    try {
+      const res = await fetch('/api/admin/caixa/reset', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: suporteTenantId, reason: reason.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        showActionToast(`Caixa: ${data.reset_count ?? 0} fechamento(s)`, true);
+        if (token && activeTab === 'suporte' && suporteTenantId) {
+          setSuporteLoading(true);
+          const h = { Authorization: `Bearer ${token}` };
+          const resO = await fetch(`/api/admin/cliente-overview?tenant_id=${suporteTenantId}`, { headers: h });
+          if (resO.ok) setSuporteOverview(await resO.json());
+          setSuporteLoading(false);
+        }
+      } else {
+        showActionToast(data.error || `Erro ${res.status}`, false);
+      }
+    } catch (e: unknown) {
+      showActionToast(e instanceof Error ? e.message : 'Erro de conexão', false);
+    } finally {
+      setSuporteActionBusy(false);
+    }
+  };
+
+  const handleSuporteVerificarImagens = async () => {
+    if (!suporteTenantId || !token) return;
+    setSuporteImgLoading(true);
+    setSuporteImgCheck(null);
+    try {
+      const res = await fetch(`/api/admin/verificar-imagens?tenant_id=${suporteTenantId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSuporteImgCheck({
+          verificados: data.verificados ?? 0,
+          urls_invalidas: Array.isArray(data.urls_invalidas) ? data.urls_invalidas : [],
+          imagens_quebradas: Array.isArray(data.imagens_quebradas) ? data.imagens_quebradas : [],
+        });
+        showActionToast('Verificação de imagens concluída', true);
+      } else {
+        showActionToast(data.error || `Erro ${res.status}`, false);
+      }
+    } catch (e: unknown) {
+      showActionToast(e instanceof Error ? e.message : 'Erro de conexão', false);
+    } finally {
+      setSuporteImgLoading(false);
+    }
+  };
+
+  const handleSuporteResetSenhaTenant = async () => {
+    if (!suporteTenantId || !token) return;
+    const s = suporteNovaSenha.trim();
+    if (s.length < 6) {
+      showActionToast('Nova senha: mínimo 6 caracteres', false);
+      return;
+    }
+    if (!confirm('Redefinir senha de login de todos os usuários deste tenant para o valor informado?')) return;
+    setSuporteActionBusy(true);
+    try {
+      const res = await fetch('/api/admin/reset-senha', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: suporteTenantId, nova_senha: s }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setSuporteNovaSenha('');
+        showActionToast('Senhas atualizadas', true);
+      } else {
+        showActionToast(data.error || `Erro ${res.status}`, false);
+      }
+    } catch (e: unknown) {
+      showActionToast(e instanceof Error ? e.message : 'Erro de conexão', false);
+    } finally {
+      setSuporteActionBusy(false);
+    }
+  };
+
+  const renderSuporteContent = () => (
+    <div className="min-w-0 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+        <div className="flex-1 min-w-[12rem]">
+          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tenant (ID)</label>
+          <div className="flex gap-2 flex-wrap">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={suporteTenantInput}
+              onChange={(e) => setSuporteTenantInput(e.target.value)}
+              placeholder="Ex.: 42"
+              className="flex-1 min-w-[8rem] px-4 py-2.5 min-h-[44px] !bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
+            <Button
+              type="button"
+              onClick={handleSuporteCarregarTenant}
+              className="shrink-0 !bg-emerald-600 hover:!bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl"
+            >
+              Carregar
+            </Button>
+          </div>
+        </div>
+        {suporteTenantId && (
+          <p className="text-sm text-zinc-400">
+            Carregado: <span className="font-mono text-emerald-400">#{suporteTenantId}</span>
+          </p>
+        )}
+      </div>
+
+      {suporteLoading && (
+        <div className="flex items-center gap-2 text-zinc-400 text-sm">
+          <Spinner /> Carregando dados do tenant…
+        </div>
+      )}
+      {suporteError && (
+        <div className="rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">{suporteError}</div>
+      )}
+
+      {suporteOverview && !suporteLoading && (
+        <>
+          <Card className="!bg-zinc-900 !border-zinc-800 p-4 sm:p-5">
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3">Cliente (overview)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+              <div>
+                <p className="text-zinc-500 text-xs uppercase font-bold">Estabelecimento</p>
+                <p className="text-white font-semibold">{String(suporteOverview.nome_estabelecimento ?? '—')}</p>
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs uppercase font-bold">Status</p>
+                <p className="text-zinc-200">{String(suporteOverview.status ?? '—')}</p>
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs uppercase font-bold">Vencimento</p>
+                <p className="text-zinc-200">
+                  {suporteOverview.vencimento
+                    ? new Date(String(suporteOverview.vencimento)).toLocaleString('pt-BR')
+                    : suporteOverview.trial_fim
+                      ? `Trial ${new Date(String(suporteOverview.trial_fim)).toLocaleDateString('pt-BR')}`
+                      : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs uppercase font-bold">Caixa</p>
+                <p className={suporteOverview.caixa_aberto ? 'text-amber-400 font-bold' : 'text-emerald-400'}>
+                  {suporteOverview.caixa_aberto ? `Aberto (${String(suporteOverview.caixas_abertos_count ?? '')})` : 'Sem caixa aberto'}
+                </p>
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs uppercase font-bold">Pedidos hoje</p>
+                <p className="text-zinc-200 font-mono">{String(suporteOverview.pedidos_hoje ?? '—')}</p>
+              </div>
+              <div>
+                <p className="text-zinc-500 text-xs uppercase font-bold">Usuários</p>
+                <p className="text-zinc-200 font-mono">{String(suporteOverview.usuarios ?? '—')}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-zinc-500 text-xs uppercase font-bold">Última atividade</p>
+                <p className="text-zinc-200">
+                  {suporteOverview.ultima_atividade
+                    ? new Date(String(suporteOverview.ultima_atividade)).toLocaleString('pt-BR')
+                    : '—'}
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <div id="suporte-secao-pedidos" className="scroll-mt-8">
+          <Card className="!bg-zinc-900 !border-zinc-800 p-4 sm:p-5">
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3">Operação</h3>
+            <div className="overflow-x-auto rounded-xl border border-zinc-800">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="bg-zinc-950 text-zinc-400 text-xs uppercase">
+                  <tr>
+                    <th className="px-3 py-2">Pedido</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Canal</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                    <th className="px-3 py-2">Quando</th>
+                    <th className="px-3 py-2 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {suportePedidos.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
+                        Nenhum pedido recente
+                      </td>
+                    </tr>
+                  ) : (
+                    suportePedidos.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-zinc-800/50">
+                        <td className="px-3 py-2 font-mono text-zinc-200">#{p.order_number || p.id}</td>
+                        <td className="px-3 py-2 text-zinc-300">{p.status}</td>
+                        <td className="px-3 py-2 text-zinc-400">{p.canal}</td>
+                        <td className="px-3 py-2 text-right text-zinc-200">
+                          R$ {Number(p.total_amount || 0).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-500 text-xs whitespace-nowrap">
+                          {p.created_at ? new Date(p.created_at).toLocaleString('pt-BR') : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => openPedidoDetalhe(p.id, suporteTenantId)}
+                            className="text-emerald-400 text-xs font-bold hover:underline"
+                          >
+                            Ver
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          </div>
+
+          <Card className="!bg-zinc-900 !border-zinc-800 p-4 sm:p-5">
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3">Logs</h3>
+            <div className="overflow-x-auto max-h-[320px] overflow-y-auto rounded-xl border border-zinc-800">
+              <table className="w-full min-w-[640px] text-left text-xs">
+                <thead className="sticky top-0 bg-zinc-950 text-zinc-400 uppercase">
+                  <tr>
+                    <th className="px-2 py-2">Quando</th>
+                    <th className="px-2 py-2">Usuário</th>
+                    <th className="px-2 py-2">Ação</th>
+                    <th className="px-2 py-2">Detalhes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {suporteLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-2 py-4 text-center text-zinc-500">
+                        Sem registros
+                      </td>
+                    </tr>
+                  ) : (
+                    suporteLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-zinc-800/40">
+                        <td className="px-2 py-1.5 text-zinc-500 whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString('pt-BR')}
+                        </td>
+                        <td className="px-2 py-1.5 text-zinc-300">{log.usuario_nome}</td>
+                        <td className="px-2 py-1.5 text-zinc-400 font-mono">{log.acao}</td>
+                        <td className="px-2 py-1.5 text-zinc-500 max-w-[280px] truncate" title={log.detalhes || ''}>
+                          {log.detalhes || '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card className="!bg-zinc-900 !border-zinc-800 p-4 sm:p-5">
+            <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3">Ações rápidas</h3>
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={suporteActionBusy}
+                onClick={handleSuporteForcarLogout}
+                className="px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-900/50 text-amber-200 text-sm font-bold border border-amber-800 hover:bg-amber-900 disabled:opacity-50"
+              >
+                Forçar logout (todas sessões)
+              </button>
+              <button
+                type="button"
+                disabled={suporteActionBusy}
+                onClick={handleSuporteResetCaixa}
+                className="px-4 py-2.5 min-h-[44px] rounded-xl bg-zinc-800 text-zinc-200 text-sm font-bold border border-zinc-700 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                Resetar caixa
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('suporte-secao-pedidos');
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-900/40 text-emerald-200 text-sm font-bold border border-emerald-800 hover:bg-emerald-900/60"
+              >
+                Ver pedidos
+              </button>
+              <button
+                type="button"
+                disabled={suporteImgLoading}
+                onClick={handleSuporteVerificarImagens}
+                className="px-4 py-2.5 min-h-[44px] rounded-xl bg-zinc-800 text-zinc-200 text-sm font-bold border border-zinc-700 hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {suporteImgLoading ? 'Verificando…' : 'Verificar imagens'}
+              </button>
+            </div>
+            <div className="mt-4 pt-4 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-end gap-2 flex-wrap">
+              <div className="flex-1 min-w-[12rem]">
+                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Reset senha (todos usuários do tenant)</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={suporteNovaSenha}
+                  onChange={(e) => setSuporteNovaSenha(e.target.value)}
+                  placeholder="Nova senha (mín. 6)"
+                  className="w-full px-3 py-2 min-h-[44px] !bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-zinc-100"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={suporteActionBusy}
+                onClick={handleSuporteResetSenhaTenant}
+                className="px-4 py-2.5 min-h-[44px] rounded-xl bg-violet-900/50 text-violet-200 text-sm font-bold border border-violet-800 hover:bg-violet-900 disabled:opacity-50"
+              >
+                Aplicar reset de senha
+              </button>
+            </div>
+            {suporteImgCheck && (
+              <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 text-sm text-zinc-300 space-y-2">
+                <p>
+                  Produtos com foto verificados: <strong className="text-white">{suporteImgCheck.verificados}</strong>
+                </p>
+                <p className="text-amber-400">URLs inválidas: {suporteImgCheck.urls_invalidas.length}</p>
+                <p className="text-red-400">Imagens quebradas / inacessíveis: {suporteImgCheck.imagens_quebradas.length}</p>
+                {(suporteImgCheck.urls_invalidas.length > 0 || suporteImgCheck.imagens_quebradas.length > 0) && (
+                  <ul className="text-xs text-zinc-500 max-h-32 overflow-y-auto font-mono space-y-1">
+                    {suporteImgCheck.urls_invalidas.slice(0, 15).map((x: any, i: number) => (
+                      <li key={`inv-${i}`}>
+                        #{x.product_id} {x.motivo}: {String(x.raw).slice(0, 80)}
+                      </li>
+                    ))}
+                    {suporteImgCheck.imagens_quebradas.slice(0, 15).map((x: any, i: number) => (
+                      <li key={`brk-${i}`}>
+                        #{x.product_id} {String(x.url).slice(0, 100)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+
   const renderClientesContent = () => {
     if (selectedTenantId && selectedTenant) {
       const cliente = clientes.find((c: any) => c.id === selectedTenantId);
@@ -975,6 +1518,103 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     className="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-lg transition-all">
                     Carregar mais
                   </button>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <div className="p-4 border-b border-zinc-800 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-bold text-white flex items-center gap-2">
+                  <FileText size={18} className="text-cyan-400 shrink-0" />
+                  Solicitações LGPD (exclusão de dados)
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Gestão antes do prazo legal; motivo exibido resumido (até 240 caracteres).</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => selectedTenantId && fetchLgpdSolicitacoes(selectedTenantId)}
+                disabled={lgpdLoading}
+                className="self-start sm:self-auto p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300 disabled:opacity-50 transition-colors"
+                title="Atualizar"
+              >
+                <RefreshCw size={16} className={lgpdLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+            <div className="p-2 sm:p-4">
+              {lgpdLoading && lgpdItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 text-zinc-400" role="status">
+                  <Spinner className="h-7 w-7" />
+                  <span className="text-sm">Carregando solicitações…</span>
+                </div>
+              ) : lgpdError ? (
+                <div className="text-center py-6">
+                  <p className="text-red-500 text-sm font-medium mb-2">{lgpdError}</p>
+                  <Button
+                    type="button"
+                    onClick={() => selectedTenantId && fetchLgpdSolicitacoes(selectedTenantId)}
+                    variant="secondary"
+                    className="text-xs"
+                  >
+                    Tentar novamente
+                  </Button>
+                </div>
+              ) : lgpdItems.length === 0 ? (
+                <EmptyState
+                  variant="admin"
+                  icon={ShieldCheck}
+                  title="Nenhuma solicitação LGPD"
+                  description="Pedidos de exclusão registrados pelo estabelecimento aparecem aqui."
+                  className="!py-10 !sm:py-12"
+                />
+              ) : (
+                <div className="overflow-x-auto -mx-2 sm:mx-0">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-800 text-xs uppercase tracking-wider text-zinc-500">
+                        <th className="py-2 pr-3 pl-2 sm:pl-0">Data</th>
+                        <th className="py-2 pr-3">Tipo</th>
+                        <th className="py-2 pr-3">ID entidade</th>
+                        <th className="py-2 pr-3">Status</th>
+                        <th className="py-2 pr-2 sm:pr-0">Motivo (resumo)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800">
+                      {lgpdItems.map((row) => (
+                        <tr key={row.id} className="text-zinc-200">
+                          <td className="py-3 pr-3 pl-2 sm:pl-0 whitespace-nowrap text-xs text-zinc-400">
+                            {row.created_at ? new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          </td>
+                          <td className="py-3 pr-3 capitalize">{row.tipo}</td>
+                          <td className="py-3 pr-3 font-mono text-xs">{row.entidade_id}</td>
+                          <td className="py-3 pr-3">
+                            <select
+                              className="w-full min-w-[9.5rem] max-w-[11rem] rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2 text-xs text-white focus:border-cyan-500 outline-none disabled:opacity-50"
+                              value={row.status}
+                              disabled={lgpdUpdatingId === row.id}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (selectedTenantId && next !== row.status) {
+                                  patchLgpdStatus(selectedTenantId, row.id, next);
+                                }
+                              }}
+                              aria-label={`Status da solicitação ${row.id}`}
+                            >
+                              {LGPD_STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-3 pr-2 sm:pr-0 text-xs text-zinc-400 max-w-[240px]">
+                            <span className="line-clamp-3">{row.motivo_resumo ?? '—'}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -1586,6 +2226,14 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                             <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 max-w-[min(100%,280px)] sm:max-w-none ml-auto">
                               <button
                                 type="button"
+                                onClick={() => openSuporteForTenant(c.id)}
+                                className="px-2 sm:px-3 py-2 min-h-[40px] bg-transparent text-cyan-400 rounded-lg text-[11px] sm:text-xs font-bold hover:bg-cyan-500/20 transition-colors flex items-center gap-1.5"
+                                title="Aba Suporte"
+                              >
+                                <LifeBuoy size={14} /> <span className="hidden sm:inline">Suporte</span><span className="sm:hidden">Sup.</span>
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => { setSelectedTenantId(c.id); setSelectedTenant({ id: c.id, nome_estabelecimento: c.nome_estabelecimento }); }}
                                 className="px-2 sm:px-3 py-2 min-h-[40px] bg-transparent text-emerald-400 rounded-lg text-[11px] sm:text-xs font-bold hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5"
                               >
@@ -1830,6 +2478,13 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
           >
             <Users size={18} /> Clientes
           </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('suporte'); setAdminNavOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 min-h-[44px] rounded-xl font-medium transition-all ${activeTab === 'suporte' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-300 hover:bg-zinc-800/60'}`}
+          >
+            <LifeBuoy size={18} /> Suporte
+          </button>
           <button 
             onClick={() => { setActiveTab('diagnosticos'); setAdminNavOpen(false); }}
             className={`w-full flex items-center gap-3 px-4 py-3 min-h-[44px] rounded-xl font-medium transition-all ${activeTab === 'diagnosticos' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-300 hover:bg-zinc-800/60'}`}
@@ -1920,6 +2575,16 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
 
           <div className={activeTab !== 'clientes' ? 'hidden' : ''}>
           {renderClientesContent()}
+          </div>
+
+          <div className={activeTab !== 'suporte' ? 'hidden' : ''}>
+            <div className="min-w-0 space-y-4 mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                <LifeBuoy className="text-emerald-500 shrink-0" size={24} /> Suporte ao cliente
+              </h2>
+              <p className="text-sm text-zinc-400">Visão operacional por tenant: overview, pedidos recentes, logs e ações rápidas.</p>
+            </div>
+            {renderSuporteContent()}
           </div>
 
           <div className={activeTab !== 'financeiro' ? 'hidden' : ''}>

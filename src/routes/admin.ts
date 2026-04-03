@@ -1,4 +1,5 @@
 // src/routes/admin.ts — painel administrativo FlowPDV
+import fs from 'fs';
 import { Router, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -6,6 +7,8 @@ import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
 import { loginRateLimiter, authenticateToken, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
 import { logError } from '../utils/logger';
 import { sendInternalError } from '../utils/internalServerError';
+import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
+import { adminLgpdStatusPatchSchema } from '../validation/schemas/privacidade';
 import { generatePublicId } from '../utils/publicIds';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
@@ -14,6 +17,8 @@ import { invalidateTenantPlanCache } from '../services/tenantPlan';
 import { confirmOrderPayment } from '../services/ordersService';
 import { normalizeProductProductionInput } from '../utils/preparation';
 import { hashPlainSecurityPassword } from '../utils/securityPasswordStorage';
+import { resolveProductUploadDiskPath } from '../utils/productPhotoFs';
+import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 
 const TZ = 'America/Sao_Paulo';
 const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
@@ -1137,6 +1142,387 @@ export function createAdminRouter() {
         motoboys: motoboys || [],
       });
     } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
+  });
+
+  admin.get('/lgpd-solicitacoes', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'Informe tenant_id válido na query.' });
+      }
+      const tenant = await q1<{ id: number }>('SELECT id FROM clientes WHERE id=? LIMIT 1', [tenantId]);
+      if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
+
+      const rows = await qAll<{
+        id: number;
+        tenant_id: number;
+        tipo: string;
+        entidade_id: number;
+        status: string;
+        created_at: string;
+        motivo: string | null;
+      }>(
+        'SELECT id, tenant_id, tipo, entidade_id, status, created_at, motivo FROM lgpd_solicitacoes WHERE tenant_id=? ORDER BY created_at DESC',
+        [tenantId]
+      );
+
+      const items = rows.map((r) => ({
+        id: r.id,
+        tenant_id: r.tenant_id,
+        tipo: r.tipo,
+        entidade_id: r.entidade_id,
+        status: r.status,
+        created_at: r.created_at,
+        motivo_resumo:
+          r.motivo == null || String(r.motivo).trim() === ''
+            ? null
+            : String(r.motivo).length > 240
+              ? `${String(r.motivo).slice(0, 237)}...`
+              : String(r.motivo),
+      }));
+
+      res.json({ items });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:lgpd-solicitacoes', e);
+    }
+  });
+
+  admin.patch('/lgpd-solicitacoes/:id/status', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'Informe tenant_id válido na query.' });
+      }
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: 'id inválido.' });
+      }
+
+      const tenant = await q1<{ id: number }>('SELECT id FROM clientes WHERE id=? LIMIT 1', [tenantId]);
+      if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
+
+      const body = parseBodyOrReply(res, adminLgpdStatusPatchSchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+
+      const existing = await q1<{ id: number }>(
+        'SELECT id FROM lgpd_solicitacoes WHERE id=? AND tenant_id=?',
+        [id, tenantId]
+      );
+      if (!existing) {
+        return res.status(404).json({ error: 'Solicitação não encontrada para este tenant.' });
+      }
+
+      await qRun('UPDATE lgpd_solicitacoes SET status=? WHERE id=? AND tenant_id=?', [body.status, id, tenantId]);
+      res.json({ ok: true });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:lgpd-solicitacoes-status', e);
+    }
+  });
+
+  // ─── Suporte operacional (query tenant_id; não altera rotas legadas) ─────────
+  function adminAbsoluteUrl(req: Request, publicPath: string): string {
+    const pathNorm = publicPath.startsWith('/') ? publicPath : `/${publicPath}`;
+    const host = req.get('host');
+    if (!host) return pathNorm;
+    const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    return `${proto}://${host}${pathNorm}`;
+  }
+
+  async function remoteImageRespondsOk(url: string): Promise<boolean> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      let r = await fetch(url, { method: 'HEAD', signal: ctrl.signal, redirect: 'follow' });
+      if (r.status === 405 || r.status === 501) {
+        r = await fetch(url, {
+          method: 'GET',
+          signal: ctrl.signal,
+          redirect: 'follow',
+          headers: { Range: 'bytes=0-0' },
+        });
+      }
+      return r.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  admin.get('/cliente-overview', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1<{
+        id: number;
+        nome_estabelecimento: string;
+        status: string;
+        vencimento: string | null;
+        trial_fim: string | null;
+        ultimo_acesso: string | null;
+        usuario: string;
+        email: string;
+        plano: string | null;
+      }>(
+        `SELECT id, nome_estabelecimento, status, vencimento, trial_fim, ultimo_acesso, usuario, email, plano
+         FROM clientes WHERE id=?`,
+        [tenantId]
+      );
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const todayStr = getTodayDateInTimeZone();
+      const [caixaRow, pedidosHoje, usuariosRow] = await Promise.all([
+        q1<{ n: unknown }>(
+          "SELECT COUNT(*)::int AS n FROM caixa WHERE status='aberto' AND tenant_id=?",
+          [tenantId]
+        ),
+        q1<{ n: unknown }>(
+          `SELECT COUNT(*)::int AS n FROM pedidos WHERE tenant_id=?
+           AND (created_at AT TIME ZONE '${TZ}')::date = ?`,
+          [tenantId, todayStr]
+        ),
+        q1<{ n: unknown }>('SELECT COUNT(*)::int AS n FROM usuarios WHERE cliente_id=?', [tenantId]),
+      ]);
+
+      const caixaCount = sqlCount(caixaRow ? { c: caixaRow.n } : null);
+      const pedidosCount = sqlCount(pedidosHoje ? { c: pedidosHoje.n } : null);
+      const usuariosCount = sqlCount(usuariosRow ? { c: usuariosRow.n } : null);
+
+      res.json({
+        tenant_id: cliente.id,
+        nome_estabelecimento: cliente.nome_estabelecimento,
+        status: cliente.status,
+        vencimento: cliente.vencimento,
+        trial_fim: cliente.trial_fim,
+        plano: cliente.plano,
+        usuario: cliente.usuario,
+        email: cliente.email,
+        caixa_aberto: caixaCount > 0,
+        caixas_abertos_count: caixaCount,
+        pedidos_hoje: pedidosCount,
+        usuarios: usuariosCount,
+        ultima_atividade: cliente.ultimo_acesso,
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:cliente-overview', e);
+    }
+  });
+
+  admin.get('/logs', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const limit = Math.min(Math.max(1, Number(req.query.limit) || 100), 500);
+      const logs = await qAll<{
+        id: number;
+        tenant_id: number;
+        usuario_nome: string;
+        cargo: string;
+        acao: string;
+        detalhes: string | null;
+        created_at: string;
+      }>(
+        'SELECT id, tenant_id, usuario_nome, cargo, acao, detalhes, created_at FROM system_logs WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?',
+        [tenantId, limit]
+      );
+      res.json({ logs });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:logs-query', e);
+    }
+  });
+
+  admin.post('/forcar-logout', async (req, res) => {
+    try {
+      const tenantId = Number(req.body?.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ success: false, error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
+
+      const updated = await qAll<{ id: number }>(
+        'UPDATE usuarios SET token_version=COALESCE(token_version,1)+1 WHERE cliente_id=? RETURNING id',
+        [tenantId]
+      );
+      await qRun(
+        'INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
+        [tenantId, 'Admin', 'admin', 'ADMIN_FORCAR_LOGOUT', `Sessões invalidadas (${updated.length} usuário(s)).`]
+      );
+      res.json({ success: true, users_affected: updated.length });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:forcar-logout', e);
+    }
+  });
+
+  admin.post('/reset-senha', async (req, res) => {
+    try {
+      const tenantId = Number(req.body?.tenant_id);
+      const novaSenha = String(req.body?.nova_senha ?? '').trim();
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ success: false, error: 'tenant_id inválido' });
+      }
+      if (novaSenha.length < 6) {
+        return res.status(400).json({ success: false, error: 'nova_senha deve ter pelo menos 6 caracteres' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
+
+      await qRun('UPDATE usuarios SET password=? WHERE cliente_id=?', [bcrypt.hashSync(novaSenha, 10), tenantId]);
+      await qRun(
+        'INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
+        [tenantId, 'Admin', 'admin', 'ADMIN_RESET_SENHA', 'Senha de login dos usuários do tenant redefinida via API admin.']
+      );
+      res.json({ success: true });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:reset-senha', e);
+    }
+  });
+
+  admin.get('/pedidos', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const limit = Math.min(Math.max(1, Number(req.query.limit) || 30), 100);
+      const rows = await qAll(
+        `SELECT id, order_number, status, canal, total_amount, pagamento_tipo, pagamento_status, created_at, cancelado_at
+         FROM pedidos WHERE tenant_id=? ORDER BY created_at DESC LIMIT ?`,
+        [tenantId, limit]
+      );
+      res.json(
+        rows.map((p: any) => ({
+          ...p,
+          total_amount: Number(p.total_amount || 0),
+          created_at: p.created_at,
+        }))
+      );
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:pedidos-list', e);
+    }
+  });
+
+  admin.get('/pedidos/:orderId', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      const orderId = Number(req.params.orderId);
+      if (!Number.isInteger(tenantId) || tenantId <= 0 || !Number.isInteger(orderId) || orderId <= 0) {
+        return res.status(400).json({ error: 'tenant_id e orderId válidos são obrigatórios' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const pedido = await q1(
+        `SELECT id, order_number, status, canal, total_amount, pagamento_tipo, pagamento_status,
+                observation, created_at, cancelado_at, tipo_retirada, tenant_id
+         FROM pedidos WHERE id=? AND tenant_id=?`,
+        [orderId, tenantId]
+      );
+      if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+      const itens = await qAll(
+        `SELECT ip.id, ip.product_id, ip.quantity, ip.type, ip.price_at_time, ip.variation_id,
+                COALESCE(p.name, 'Produto') AS product_name
+         FROM itens_pedido ip
+         LEFT JOIN produtos p ON p.id = ip.product_id AND p.tenant_id = ip.tenant_id
+         WHERE ip.order_id=? AND ip.tenant_id=?
+         ORDER BY ip.id ASC`,
+        [orderId, tenantId]
+      );
+
+      const pagamentos = await qAll(
+        `SELECT id, method, amount_paid, change_given, created_at
+         FROM pagamentos WHERE order_id=? AND tenant_id=? ORDER BY id ASC`,
+        [orderId, tenantId]
+      );
+
+      res.json({
+        pedido: {
+          ...(pedido as object),
+          total_amount: Number((pedido as any).total_amount || 0),
+        },
+        itens: (itens || []).map((r: any) => ({
+          ...r,
+          quantity: Number(r.quantity || 0),
+          price_at_time: Number(r.price_at_time || 0),
+        })),
+        pagamentos: (pagamentos || []).map((r: any) => ({
+          ...r,
+          amount_paid: Number(r.amount_paid || 0),
+          change_given: Number(r.change_given || 0),
+        })),
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:pedidos-detalhe', e);
+    }
+  });
+
+  admin.get('/verificar-imagens', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const produtos = await qAll<{ id: number; name: string | null; photo_url: string | null }>(
+        `SELECT id, name, photo_url FROM produtos
+         WHERE tenant_id=? AND photo_url IS NOT NULL AND TRIM(photo_url) <> ''
+         ORDER BY id ASC
+         LIMIT 400`,
+        [tenantId]
+      );
+
+      const urls_invalidas: { product_id: number; name: string | null; raw: string; motivo: string }[] = [];
+      const imagens_quebradas: { product_id: number; name: string | null; url: string }[] = [];
+
+      for (const p of produtos) {
+        const raw = String(p.photo_url || '').trim();
+        const norm = normalizeProductPhotoPublicUrl(raw);
+        if (!norm) {
+          urls_invalidas.push({ product_id: p.id, name: p.name, raw, motivo: 'URL não normalizável' });
+          continue;
+        }
+
+        const disk = resolveProductUploadDiskPath(raw);
+        if (disk) {
+          if (!fs.existsSync(disk)) {
+            imagens_quebradas.push({ product_id: p.id, name: p.name, url: norm });
+          }
+          continue;
+        }
+
+        if (/^https?:\/\//i.test(norm)) {
+          const ok = await remoteImageRespondsOk(norm);
+          if (!ok) imagens_quebradas.push({ product_id: p.id, name: p.name, url: norm });
+          continue;
+        }
+
+        const absolute = adminAbsoluteUrl(req, norm);
+        const okLocal = await remoteImageRespondsOk(absolute);
+        if (!okLocal) imagens_quebradas.push({ product_id: p.id, name: p.name, url: norm });
+      }
+
+      res.json({
+        tenant_id: tenantId,
+        verificados: produtos.length,
+        urls_invalidas,
+        imagens_quebradas,
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:verificar-imagens', e);
+    }
   });
 
   // Monta /api/admin/* com proteção
