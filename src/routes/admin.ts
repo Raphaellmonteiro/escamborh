@@ -250,13 +250,25 @@ async function runDiagnostics(tenantIdFilter?: number): Promise<{ tenant_id: num
 export function createAdminRouter() {
   const router = Router();
 
-  const ADMIN_USER     = process.env.ADMIN_USER     || 'admin@dev';
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'dev-admin-password';
+  const adminUser = process.env.ADMIN_USER?.trim();
+  const adminPassword = process.env.ADMIN_PASSWORD?.trim();
+  if (process.env.NODE_ENV === 'production') {
+    if (!adminUser || !adminPassword) {
+      console.error('❌ FATAL: ADMIN_USER e ADMIN_PASSWORD são obrigatórios no .env em produção.');
+      process.exit(1);
+    }
+  }
 
   // POST /api/admin/login
   router.post('/admin/login', loginRateLimiter, (req, res) => {
     const { usuario, senha } = req.body;
-    if (usuario === ADMIN_USER && senha === ADMIN_PASSWORD) {
+    if (!adminUser || !adminPassword) {
+      return res.status(503).json({
+        success: false,
+        message: 'Login administrativo não configurado. Defina ADMIN_USER e ADMIN_PASSWORD no ambiente.',
+      });
+    }
+    if (usuario === adminUser && senha === adminPassword) {
       const token = jwt.sign({ role: 'admin' }, ADMIN_SECRET, { expiresIn: '8h' });
       return res.json({ success: true, token });
     }

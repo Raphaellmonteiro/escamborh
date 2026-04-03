@@ -10,6 +10,7 @@ import {
   deliveryPublicPedidoResumoRateLimit,
   authDeliveryCliente,
   optionalAuthDeliveryCliente,
+  JWT_SECRET,
 } from '../middleware';
 import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
@@ -253,7 +254,7 @@ async function resolveDeliveryCustomerId(tenantId: number, clienteToken?: unknow
   if (!clienteToken) return null;
 
   try {
-    const dec: any = jwt.verify(String(clienteToken), process.env.JWT_SECRET || 'dev_secret');
+    const dec: any = jwt.verify(String(clienteToken), JWT_SECRET);
     if (dec.tipo === 'delivery_cliente' && Number(dec.tenantId) === Number(tenantId)) {
       return Number(dec.clienteId);
     }
@@ -1104,7 +1105,7 @@ export function createDeliveryPublicRouter() {
       const cliente = await q1('SELECT * FROM delivery_clientes WHERE tenant_id=? AND telefone=?', [tenant.id, tel]);
       if (cliente) {
         await qRun('UPDATE delivery_clientes SET ultimo_acesso=NOW() WHERE id=?', [cliente.id]);
-        const token = jwt.sign({ clienteId: cliente.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '90d' });
+        const token = jwt.sign({ clienteId: cliente.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '90d' });
         return res.json({
           success: true,
           novo: false,
@@ -1133,7 +1134,7 @@ export function createDeliveryPublicRouter() {
       const { telefone: tel, nome, email } = body;
       const existe = await q1('SELECT * FROM delivery_clientes WHERE tenant_id=? AND telefone=?', [tenant.id, tel]);
       if (existe) {
-        const token = jwt.sign({ clienteId: existe.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '90d' });
+        const token = jwt.sign({ clienteId: existe.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '90d' });
         return res.json({
           success: true,
           token,
@@ -1150,7 +1151,7 @@ export function createDeliveryPublicRouter() {
         'INSERT INTO delivery_clientes (tenant_id,nome,telefone,email,origem_cadastro) VALUES (?,?,?,?,?)',
         [tenant.id, nome, tel, email ?? null, 'delivery_online']
       );
-      const token = jwt.sign({ clienteId, tenantId: tenant.id, tipo: 'delivery_cliente' }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '90d' });
+      const token = jwt.sign({ clienteId, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '90d' });
       res.json({ success: true, token, cliente: { id: clienteId, nome, telefone: tel, email: email ?? null, favoritos: [] } });
     } catch (e: any) {
       sendInternalError(res, 'delivery-public', e);
