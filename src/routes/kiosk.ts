@@ -4,7 +4,7 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { q1, qAll, qRun, qInsert } from '../db';
-import { publicRateLimit } from '../middleware';
+import { publicRateLimit, requireTrustedBrowserOrigin } from '../middleware';
 import { resolveRequiresPreparation } from '../utils/preparation';
 import { notifyTenantOrderStreams, setupSseStream } from '../sse';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
@@ -180,6 +180,7 @@ async function syncMesaOrderVisibility(
 export function createKioskRouter() {
   const router = Router();
   const PIPELINE_KDS = ['Criado','Em Preparo','Pronto','Entregue'];
+  const requireBrowserOrigin = requireTrustedBrowserOrigin();
 
   // ── Página HTML do quiosque de ponto ──────────────────────────────────────
   router.get('/kiosk/ponto/:slug', (req, res) => {
@@ -457,7 +458,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
   router.use('/public/kds',   kioskRateLimit);
 
   // ── API pública do quiosque ───────────────────────────────────────────────
-  router.post('/public/ponto/:slug/login-func', loginKioskLimit, async (req, res) => {
+  router.post('/public/ponto/:slug/login-func', loginKioskLimit, requireBrowserOrigin, async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -480,7 +481,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.post('/public/ponto/:slug/save-face', async (req, res) => {
+  router.post('/public/ponto/:slug/save-face', requireBrowserOrigin, async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -585,7 +586,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.post('/public/ponto/:slug/registrar', async (req, res) => {
+  router.post('/public/ponto/:slug/registrar', requireBrowserOrigin, async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -688,7 +689,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.patch('/public/kds/:slug/orders/:id/advance', kdsAdvanceLimit, async (req, res) => {
+  router.patch('/public/kds/:slug/orders/:id/advance', kdsAdvanceLimit, requireBrowserOrigin, async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -731,7 +732,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
   });
 
   // ── Mesa QR code ──────────────────────────────────────────────────────────
-  router.post('/public/mesa/:slug/:numero/pedir', async (req, res) => {
+  router.post('/public/mesa/:slug/:numero/pedir', requireBrowserOrigin, async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 

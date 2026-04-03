@@ -116,3 +116,12 @@ Copie `.env.example` para `.env` e preencha:
 JWT_SECRET=sua_chave_secreta_aqui
 ANTHROPIC_API_KEY=opcional_FlowAI_analise_Claude
 ```
+
+## SSE e Multi-Instancia
+
+- O estado de SSE atual fica em memoria no processo Node (`src/sse.ts`), em um mapa por tenant.
+- O limite `SSE_MAX_PER_TENANT` e aplicado por replica, nao de forma global.
+- Em multiplas instancias, cada replica mantem seus proprios clientes conectados e faz broadcast apenas para os clientes locais.
+- Na pratica, isso significa que o SSE segue funcionando como aceleracao local, mas nao garante entrega instantanea entre replicas.
+- O painel delivery e o KDS continuam com polling periodico, entao a consistencia eventual permanece mesmo quando um evento nasce em outra instancia.
+- Para diagnostico leve, use `SSE_INSTANCE_ID` para identificar a replica nos logs/headers e `SSE_LOG_CONNECTIONS=1` para registrar aberturas/fechamentos de stream.

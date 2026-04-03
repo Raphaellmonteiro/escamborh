@@ -4,7 +4,14 @@ import { Router, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
-import { loginRateLimiter, authenticateToken, authenticateAdmin, ADMIN_SECRET, JWT_SECRET } from '../middleware';
+import {
+  loginRateLimiter,
+  authenticateToken,
+  authenticateAdmin,
+  ADMIN_SECRET,
+  JWT_SECRET,
+  requireTrustedBrowserOrigin,
+} from '../middleware';
 import { logError } from '../utils/logger';
 import { sendInternalError } from '../utils/internalServerError';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
@@ -249,6 +256,7 @@ async function runDiagnostics(tenantIdFilter?: number): Promise<{ tenant_id: num
 
 export function createAdminRouter() {
   const router = Router();
+  const requireBrowserOrigin = requireTrustedBrowserOrigin();
 
   const adminUser = process.env.ADMIN_USER?.trim();
   const adminPassword = process.env.ADMIN_PASSWORD?.trim();
@@ -260,7 +268,7 @@ export function createAdminRouter() {
   }
 
   // POST /api/admin/login
-  router.post('/admin/login', loginRateLimiter, (req, res) => {
+  router.post('/admin/login', loginRateLimiter, requireBrowserOrigin, (req, res) => {
     const { usuario, senha } = req.body;
     if (!adminUser || !adminPassword) {
       return res.status(503).json({

@@ -1,18 +1,75 @@
 import type { Request, Response } from 'express';
 
 const SSE_PING_MS = 30000;
+const DEFAULT_SSE_MAX_PER_TENANT = 48;
+const MAX_SSE_CONNECTIONS_PER_TENANT = 500;
+const SSE_LIMIT_RETRY_AFTER_SECONDS = 10;
+const SSE_LOG_CONNECTIONS = process.env.SSE_LOG_CONNECTIONS === '1';
+const SSE_STORAGE_MODE = 'memory-local';
 
-/** Limite de streams SSE simultâneos por tenant (reconexão agressiva / bugs no cliente). Sobrescreva com SSE_MAX_PER_TENANT. */
+function resolveSseInstanceId(): string {
+  const candidates = [
+    process.env.SSE_INSTANCE_ID,
+    process.env.RAILWAY_REPLICA_ID,
+    process.env.HOSTNAME,
+    process.env.NODE_APP_INSTANCE,
+  ];
+
+  for (const value of candidates) {
+    const normalized = value?.trim();
+    if (normalized) return normalized;
+  }
+
+  return `pid-${process.pid}`;
+}
+
+const SSE_INSTANCE_ID = resolveSseInstanceId();
+
+function logSse(level: 'info' | 'warn', message: string, meta: Record<string, unknown> = {}): void {
+  const entry = {
+    level,
+    timestamp: new Date().toISOString(),
+    context: 'sse',
+    message,
+    meta: {
+      instanceId: SSE_INSTANCE_ID,
+      storageMode: SSE_STORAGE_MODE,
+      ...meta,
+    },
+  };
+
+  if (level === 'warn') console.warn(entry);
+  else console.info(entry);
+}
+
+/** Per-process limit only. This mitigates local reconnect storms, but does not coordinate replicas. */
 function maxSseConnectionsPerTenant(): number {
   const raw = process.env.SSE_MAX_PER_TENANT?.trim();
   if (raw) {
     const n = Number(raw);
-    if (Number.isFinite(n) && n >= 1) return Math.min(Math.floor(n), 500);
+    if (Number.isFinite(n) && n >= 1) {
+      return Math.min(Math.floor(n), MAX_SSE_CONNECTIONS_PER_TENANT);
+    }
   }
-  return 48;
+  return DEFAULT_SSE_MAX_PER_TENANT;
 }
 
-/** Clientes SSE ativos por tenant (painel autenticado + KDS público compartilham o mesmo mapa). */
+function getTenantClientCount(tenantId: number): number {
+  return sseClients.get(tenantId)?.size ?? 0;
+}
+
+function applySseDiagnosticHeaders(
+  res: Response,
+  activeConnections: number,
+  limit: number
+): void {
+  res.setHeader('X-FlowPDV-SSE-Instance', SSE_INSTANCE_ID);
+  res.setHeader('X-FlowPDV-SSE-Storage', SSE_STORAGE_MODE);
+  res.setHeader('X-FlowPDV-SSE-Active', String(activeConnections));
+  res.setHeader('X-FlowPDV-SSE-Limit', String(limit));
+}
+
+/** Active SSE clients per tenant for this Node process only. */
 export const sseClients = new Map<number, Set<Response>>();
 
 export function registerSseClient(tenantId: number, res: Response): void {
@@ -43,16 +100,35 @@ export function setupSseStream(tenantId: number, req: Request, res: Response): v
   if (!Number.isFinite(tid) || tid <= 0) return;
 
   const limit = maxSseConnectionsPerTenant();
-  const current = sseClients.get(tid);
-  if (current && current.size >= limit) {
+  const currentCount = getTenantClientCount(tid);
+
+  if (currentCount >= limit) {
+    applySseDiagnosticHeaders(res, currentCount, limit);
+    res.setHeader('Retry-After', String(SSE_LIMIT_RETRY_AFTER_SECONDS));
+    logSse('warn', 'Tenant SSE limit reached on this instance', {
+      tenantId: tid,
+      activeConnections: currentCount,
+      limit,
+      path: req.originalUrl,
+      method: req.method,
+    });
     res.status(503).json({
       success: false,
       error:
-        'Limite de conexões em tempo real atingido. Feche abas ou telas antigas do painel/KDS e tente de novo.',
+        'Limite local de conexoes SSE atingido nesta instancia. Feche abas ou telas antigas do painel/KDS e tente novamente.',
+      code: 'SSE_LIMIT_PER_INSTANCE',
+      details: {
+        instanceId: SSE_INSTANCE_ID,
+        storageMode: SSE_STORAGE_MODE,
+        activeConnections: currentCount,
+        limit,
+        retryAfterSeconds: SSE_LIMIT_RETRY_AFTER_SECONDS,
+      },
     });
     return;
   }
 
+  applySseDiagnosticHeaders(res, currentCount + 1, limit);
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -60,6 +136,16 @@ export function setupSseStream(tenantId: number, req: Request, res: Response): v
   res.write('event: connected\ndata: {}\n\n');
 
   registerSseClient(tid, res);
+
+  if (SSE_LOG_CONNECTIONS) {
+    logSse('info', 'SSE stream registered', {
+      tenantId: tid,
+      activeConnections: getTenantClientCount(tid),
+      limit,
+      path: req.originalUrl,
+      method: req.method,
+    });
+  }
 
   let ping: ReturnType<typeof setInterval> | undefined;
   let settled = false;
@@ -71,6 +157,15 @@ export function setupSseStream(tenantId: number, req: Request, res: Response): v
       ping = undefined;
     }
     unregisterSseClient(tid, res);
+    if (SSE_LOG_CONNECTIONS) {
+      logSse('info', 'SSE stream cleaned up', {
+        tenantId: tid,
+        activeConnections: getTenantClientCount(tid),
+        limit,
+        path: req.originalUrl,
+        method: req.method,
+      });
+    }
   };
 
   ping = setInterval(() => {

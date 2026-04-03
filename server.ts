@@ -18,7 +18,7 @@ import { isCloudinaryProductUploadEnabled } from './src/services/cloudinaryProdu
 import { assertProductionImageStorageConfigured } from './src/services/imageUploadPolicy';
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
-import { requestLogger } from './src/middleware';
+import { ALLOWED_BROWSER_ORIGINS, requestLogger } from './src/middleware';
 import { errorHandler } from './src/middlewares/errorHandler';
 
 // ── Rotas ─────────────────────────────────────────────────────────────────────
@@ -67,11 +67,7 @@ console.log(
 );
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-const ALLOWED_ORIGINS = (
-  process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3001'
-)
-  .split(',')
-  .map((o) => o.trim());
+const ALLOWED_ORIGINS = ALLOWED_BROWSER_ORIGINS;
 
 app.use(
   cors({

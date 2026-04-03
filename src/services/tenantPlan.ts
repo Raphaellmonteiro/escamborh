@@ -25,7 +25,8 @@ export type TenantPlanContext = {
   trialFim: string | null;
 };
 
-const TENANT_PLAN_CACHE_TTL_MS = 30 * 1000;
+// Cache em memoria por processo: em multi-instancia, cada replica mantem seu proprio Map.
+export const TENANT_PLAN_CACHE_TTL_MS = 30 * 1000;
 
 type TenantPlanCacheEntry = { expiresAt: number; context: TenantPlanContext };
 
@@ -41,7 +42,15 @@ function normalizeCacheableTenantId(tenantId: number | string): number | null {
 /** Remove entradas do cache de plano para o tenant (ex.: após alteração no admin). */
 export function invalidateTenantPlanCache(tenantId: number | string): void {
   const id = normalizeCacheableTenantId(tenantId);
-  if (id != null) tenantPlanCacheById.delete(id);
+  if (id == null) return;
+
+  const removed = tenantPlanCacheById.delete(id);
+  if (removed) {
+    console.info('[tenant-plan] local cache invalidated', {
+      tenantId: id,
+      ttlMs: TENANT_PLAN_CACHE_TTL_MS,
+    });
+  }
 }
 
 function readTenantPlanCache(id: number): TenantPlanContext | null {

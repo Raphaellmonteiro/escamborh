@@ -4,6 +4,7 @@ import {
   authenticateToken,
   extractBearerToken,
   publicRateLimit,
+  requireTrustedBrowserOrigin,
   requireAnyPermission,
   requirePlanFeature,
   resolveAuthenticatedSession,
@@ -88,6 +89,7 @@ function createPontosRouter() {
 export function createApiRouter() {
   const router = Router();
   const protectedRouter = Router();
+  const requireBrowserOrigin = requireTrustedBrowserOrigin();
 
   router.use(createAuthRouter());
   router.use(createAdminRouter());
@@ -108,6 +110,7 @@ export function createApiRouter() {
   router.post(
     '/products/suggestions/event',
     publicRateLimit,
+    requireBrowserOrigin,
     async (req: Request, res: Response) => {
       try {
         let tenantId: number | null = null;

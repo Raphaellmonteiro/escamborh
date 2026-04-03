@@ -37,6 +37,74 @@ type AuthenticatedSession =
       body: { error: string };
     };
 
+const DEFAULT_ALLOWED_ORIGINS = 'http://localhost:5173,http://localhost:3001';
+
+function normalizeAllowedOrigin(input?: string | null): string | null {
+  const value = String(input || '').trim();
+  if (!value) return null;
+  try {
+    return new URL(value).origin.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function parseAllowedOrigins(raw?: string | null): string[] {
+  return String(raw || '')
+    .split(',')
+    .map((origin) => normalizeAllowedOrigin(origin))
+    .filter((origin): origin is string => Boolean(origin));
+}
+
+export const ALLOWED_BROWSER_ORIGINS = parseAllowedOrigins(
+  process.env.ALLOWED_ORIGINS || DEFAULT_ALLOWED_ORIGINS
+);
+
+function extractRequestOrigin(req: Request): string | null {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+  const proto = forwardedProto || req.protocol;
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0]?.trim();
+  if (!proto || !host) return null;
+  return normalizeAllowedOrigin(`${proto}://${host}`);
+}
+
+function extractSourceOrigin(req: Request): string | null {
+  const originHeader = normalizeAllowedOrigin(req.get('origin'));
+  if (originHeader) return originHeader;
+  return normalizeAllowedOrigin(req.get('referer'));
+}
+
+/**
+ * Mitigacao pragmatica de CSRF para rotas acionadas por browser.
+ * Aceita mesma origem e origens explicitamente permitidas.
+ * Quando `Origin`/`Referer` estiverem ausentes, preserva integracoes legitimas por padrao.
+ */
+export function requireTrustedBrowserOrigin(opts?: {
+  allowMissing?: boolean;
+  extraAllowedOrigins?: string[];
+}) {
+  const allowMissing = opts?.allowMissing ?? true;
+  const allowedOrigins = new Set([
+    ...ALLOWED_BROWSER_ORIGINS,
+    ...parseAllowedOrigins(opts?.extraAllowedOrigins?.join(',')),
+  ]);
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    const sourceOrigin = extractSourceOrigin(req);
+    if (!sourceOrigin) {
+      if (allowMissing) return next();
+      return res.status(403).json({ error: 'Origem nao permitida' });
+    }
+
+    const requestOrigin = extractRequestOrigin(req);
+    if ((requestOrigin && sourceOrigin === requestOrigin) || allowedOrigins.has(sourceOrigin)) {
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Origem nao permitida' });
+  };
+}
+
 // ── Segredos ──────────────────────────────────────────────────────────────────
 export const JWT_SECRET = process.env.JWT_SECRET || (() => {
   if (process.env.NODE_ENV === 'production') {

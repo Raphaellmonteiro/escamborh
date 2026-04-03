@@ -11,6 +11,7 @@ import {
   authDeliveryCliente,
   optionalAuthDeliveryCliente,
   JWT_SECRET,
+  requireTrustedBrowserOrigin,
 } from '../middleware';
 import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
@@ -804,6 +805,7 @@ async function buildProdutosComOpcoesBatched(tenantId: number, produtos: any[]):
 
 export function createDeliveryPublicRouter() {
   const router = Router();
+  const requireBrowserOrigin = requireTrustedBrowserOrigin();
 
   async function getTenant(slug: string) {
     return q1('SELECT * FROM clientes WHERE usuario=? AND status=?', [slug, 'ativo']);
@@ -1049,7 +1051,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/cupom/validar', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
+  router.post('/:slug/cupom/validar', publicRateLimit, requireBrowserOrigin, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1066,7 +1068,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/pedido/resumo', deliveryPublicPedidoResumoRateLimit, requireDeliveryPublicPlan, async (req, res) => {
+  router.post('/:slug/pedido/resumo', deliveryPublicPedidoResumoRateLimit, requireBrowserOrigin, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1095,7 +1097,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/auth/identificar', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
+  router.post('/:slug/auth/identificar', publicRateLimit, requireBrowserOrigin, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1105,7 +1107,7 @@ export function createDeliveryPublicRouter() {
       const cliente = await q1('SELECT * FROM delivery_clientes WHERE tenant_id=? AND telefone=?', [tenant.id, tel]);
       if (cliente) {
         await qRun('UPDATE delivery_clientes SET ultimo_acesso=NOW() WHERE id=?', [cliente.id]);
-        const token = jwt.sign({ clienteId: cliente.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '90d' });
+        const token = jwt.sign({ clienteId: cliente.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '15d' });
         return res.json({
           success: true,
           novo: false,
@@ -1125,7 +1127,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/auth/cadastrar', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
+  router.post('/:slug/auth/cadastrar', publicRateLimit, requireBrowserOrigin, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1134,7 +1136,7 @@ export function createDeliveryPublicRouter() {
       const { telefone: tel, nome, email } = body;
       const existe = await q1('SELECT * FROM delivery_clientes WHERE tenant_id=? AND telefone=?', [tenant.id, tel]);
       if (existe) {
-        const token = jwt.sign({ clienteId: existe.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '90d' });
+        const token = jwt.sign({ clienteId: existe.id, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '15d' });
         return res.json({
           success: true,
           token,
@@ -1151,7 +1153,7 @@ export function createDeliveryPublicRouter() {
         'INSERT INTO delivery_clientes (tenant_id,nome,telefone,email,origem_cadastro) VALUES (?,?,?,?,?)',
         [tenant.id, nome, tel, email ?? null, 'delivery_online']
       );
-      const token = jwt.sign({ clienteId, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '90d' });
+      const token = jwt.sign({ clienteId, tenantId: tenant.id, tipo: 'delivery_cliente' }, JWT_SECRET, { expiresIn: '15d' });
       res.json({ success: true, token, cliente: { id: clienteId, nome, telefone: tel, email: email ?? null, favoritos: [] } });
     } catch (e: any) {
       sendInternalError(res, 'delivery-public', e);
@@ -1254,7 +1256,7 @@ export function createDeliveryPublicRouter() {
     }
   });
 
-  router.post('/:slug/pedido', deliveryPublicPedidoCreateRateLimit, requireDeliveryPublicPlan, async (req: any, res) => {
+  router.post('/:slug/pedido', deliveryPublicPedidoCreateRateLimit, requireBrowserOrigin, requireDeliveryPublicPlan, async (req: any, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
@@ -1541,6 +1543,7 @@ export function createDeliveryPublicRouter() {
   router.post(
     '/:slug/pedido/:pedidoId/confirmar-pix',
     publicRateLimit,
+    requireBrowserOrigin,
     requireDeliveryTrackingPlan,
     optionalAuthDeliveryCliente,
     async (req: any, res) => {
@@ -1604,7 +1607,7 @@ export function createDeliveryPublicRouter() {
     }
   );
 
-  router.post('/:slug/suggestions', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
+  router.post('/:slug/suggestions', publicRateLimit, requireBrowserOrigin, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });

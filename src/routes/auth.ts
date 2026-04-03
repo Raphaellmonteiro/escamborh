@@ -3,7 +3,13 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { q1, qInsert } from '../db';
-import { JWT_SECRET, loginRateLimiter, authenticateToken, publicRateLimit } from '../middleware';
+import {
+  JWT_SECRET,
+  loginRateLimiter,
+  authenticateToken,
+  publicRateLimit,
+  requireTrustedBrowserOrigin,
+} from '../middleware';
 import { isAppError } from '../utils/errors';
 import { sendInternalError } from '../utils/internalServerError';
 import { validateSecurityPassword } from '../utils/securityPassword';
@@ -16,9 +22,10 @@ import {
 
 export function createAuthRouter() {
   const router = Router();
+  const requireBrowserOrigin = requireTrustedBrowserOrigin();
 
   // POST /api/login
-  router.post('/login', loginRateLimiter, async (req, res) => {
+  router.post('/login', loginRateLimiter, requireBrowserOrigin, async (req, res) => {
     try {
       const body = parseBodyOrReply(res, loginBodySchema, req.body, replyZod400Api);
       if (!body) return;
@@ -125,7 +132,7 @@ export function createAuthRouter() {
   });
 
   // POST /api/public/solicitar-acesso
-  router.post('/public/solicitar-acesso', publicRateLimit, async (req, res) => {
+  router.post('/public/solicitar-acesso', publicRateLimit, requireBrowserOrigin, async (req, res) => {
     try {
       const body = parseBodyOrReply(res, solicitarAcessoBodySchema, req.body, replyZod400Api);
       if (!body) return;
