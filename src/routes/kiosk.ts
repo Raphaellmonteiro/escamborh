@@ -10,6 +10,7 @@ import { notifyTenantOrderStreams, setupSseStream } from '../sse';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
 import { loginBodySchema } from '../validation/schemas/publicForms';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
+import { sanitizeFuncionarioRowForClient, verifyEmployeePinAndRehashIfLegacy } from '../utils/funcionarioPin';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -575,7 +576,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Não encontrado' });
       const funcs = await qAll("SELECT id,nome,cargo,pin,foto_url FROM funcionarios WHERE tenant_id=? AND status='ativo' ORDER BY nome", [tenant.id]);
-      res.json({ estabelecimento:tenant.nome_estabelecimento, funcionarios:funcs });
+      res.json({
+        estabelecimento: tenant.nome_estabelecimento,
+        funcionarios: funcs.map((r) => sanitizeFuncionarioRowForClient(r as Record<string, unknown>)),
+      });
     } catch (error) {
       handlePublicRouteError(res, 'GET /public/ponto/:slug', slug, error);
     }
@@ -592,7 +596,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const func = await q1("SELECT * FROM funcionarios WHERE id=? AND tenant_id=? AND status='ativo'", [func_id, tenant.id]);
       if (!func) return res.status(404).json({ error:'Funcionário não encontrado' });
       if (metodo !== 'face') {
-        if (func.pin && func.pin !== String(pin)) return res.status(401).json({ success:false, error:'PIN incorreto' });
+        const stored = func.pin as string | null | undefined;
+        if (stored && String(stored).trim()) {
+          const ok = await verifyEmployeePinAndRehashIfLegacy(stored, String(pin ?? ''), Number(func.id), tenant.id);
+          if (!ok) return res.status(401).json({ success: false, error: 'PIN incorreto' });
+        }
       }
       const now = new Date();
       const data = now.toLocaleDateString('en-CA', { timeZone: TZ });

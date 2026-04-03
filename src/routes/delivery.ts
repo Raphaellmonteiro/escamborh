@@ -13,7 +13,7 @@ import {
   requireAnyPermission,
   uploadDeliveryCardapioLogo,
   uploadDeliveryCardapioBanner,
-  checkMagicBytes,
+  hardenUploadedImageFile,
 } from '../middleware';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
@@ -232,7 +232,7 @@ export function createDeliveryRouter() {
   router.post(
     '/cardapio-visual/logo',
     uploadDeliveryCardapioLogo.single('logo'),
-    checkMagicBytes,
+    hardenUploadedImageFile({ allowGif: false }),
     async (req: any, res) => {
       try {
         if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
@@ -293,7 +293,7 @@ export function createDeliveryRouter() {
   router.post(
     '/cardapio-visual/banner/:index',
     uploadDeliveryCardapioBanner.single('banner'),
-    checkMagicBytes,
+    hardenUploadedImageFile({ allowGif: false }),
     async (req: any, res) => {
       try {
         const idx = parseInt(String(req.params.index), 10);

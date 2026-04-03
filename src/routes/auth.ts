@@ -80,7 +80,12 @@ export function createAuthRouter() {
       return res.json({ success: true });
     } catch (e: any) {
       if (isAppError(e)) {
-        if (e.statusCode === 400) return res.status(400).json({ success: false });
+        if (e.statusCode === 400) {
+          if (e.code === 'SECURITY_PASSWORD_REQUIRED' || e.code === 'SECURITY_PASSWORD_NOT_CONFIGURED') {
+            return res.status(400).json({ success: false, message: e.message, code: e.code });
+          }
+          return res.status(400).json({ success: false });
+        }
         if (e.code === 'AUTH_USER_NOT_FOUND') return res.status(401).json({ success: false, message: e.message });
         if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(403).json({ success: false, message: e.message });
       }
@@ -105,7 +110,12 @@ export function createAuthRouter() {
       return res.json({ success: true });
     } catch (e: any) {
       if (isAppError(e)) {
-        if (e.statusCode === 400) return res.status(400).json({ success: false });
+        if (e.statusCode === 400) {
+          if (e.code === 'SECURITY_PASSWORD_REQUIRED' || e.code === 'SECURITY_PASSWORD_NOT_CONFIGURED') {
+            return res.status(400).json({ success: false, message: e.message, code: e.code });
+          }
+          return res.status(400).json({ success: false });
+        }
         if (e.code === 'AUTH_USER_NOT_FOUND') return res.status(401).json({ success: false, message: e.message });
         if (e.code === 'SECURITY_PASSWORD_INVALID') return res.status(403).json({ success: false, message: e.message });
       }

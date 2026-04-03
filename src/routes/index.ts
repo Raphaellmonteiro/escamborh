@@ -25,6 +25,8 @@ import { createPrintRouter } from './print';
 import { createProductsRouter } from './products';
 import { createRhRouter } from './rh';
 import { createSettingsRouter, createCategoriesRouter } from './settings';
+import { createLegalRouter } from './legal';
+import { createPrivacidadeRouter } from './privacidade';
 import { deletePointRecord, updatePointRecord } from '../services/pointService';
 import { setupSseStream } from '../sse';
 
@@ -169,6 +171,8 @@ export function createApiRouter() {
   );
 
   protectedRouter.use(authenticateToken);
+  protectedRouter.use('/legal', createLegalRouter());
+  protectedRouter.use('/privacidade', createPrivacidadeRouter());
   protectedRouter.use('/products', requirePlanFeature('products'), createProductsRouter());
   protectedRouter.use('/settings', requirePlanFeature('configuracoes'), requireAnyPermission('configuracoes'), createSettingsRouter());
   protectedRouter.use('/categories', requirePlanFeature('products'), requireAnyPermission('products'), createCategoriesRouter());

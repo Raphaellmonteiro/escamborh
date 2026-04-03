@@ -187,6 +187,16 @@ export default function LoginScreen({
             Painel Admin
           </a>
         </div>
+
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+          <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-600 transition-colors">
+            Política de Privacidade
+          </a>
+          <span className="text-zinc-300" aria-hidden>·</span>
+          <a href="/termos" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-600 transition-colors">
+            Termos de Uso
+          </a>
+        </div>
       </motion.div>
     </div>
   );

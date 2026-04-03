@@ -76,7 +76,7 @@ export function isClientSuppliedLocalUploadImageUrl(url: unknown): boolean {
 }
 
 /**
- * Após Multer + checkMagicBytes: grava no Cloudinary (se configurado) ou em disco/S3 (só desenvolvimento ou escape hatch).
+ * Após Multer + hardenUploadedImageFile: grava no Cloudinary (se configurado) ou em disco/S3 (só desenvolvimento ou escape hatch).
  */
 export async function persistMulterImageFile(options: {
   file: Express.Multer.File;

@@ -9,7 +9,7 @@ import {
   normalizeTipoContrato,
   usesAutoDecimoTerceiro,
 } from '../services/employeeContract';
-import { uploadFotoFunc, checkMagicBytes } from '../middleware';
+import { uploadFotoFunc, hardenUploadedImageFile } from '../middleware';
 import { deleteStoredUpload } from '../services/uploadPersistence';
 import { uploadEmployeePhotoToCloudinary } from '../services/cloudinaryProduct';
 import {
@@ -46,6 +46,29 @@ import {
   listBeneficios,
   upsertBeneficio,
 } from '../services/hrManagerialService';
+import { hashPlainSecurityPassword } from '../utils/securityPasswordStorage';
+import { normalizeFuncionarioCpfForStorage } from '../utils/funcionarioCpf';
+import {
+  encryptFuncionarioCpfForStorage,
+  ensureFuncionarioCpfStoredForm,
+} from '../utils/funcionarioCpfCrypto';
+import { sanitizeFuncionarioRowForClient } from '../utils/funcionarioPin';
+import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
+import {
+  rhAdiantamentoPostBodySchema,
+  rhAjustePostBodySchema,
+  rhBancoHorasMovBodySchema,
+  rhBeneficiosPutBodySchema,
+  rhDecimoPatchBodySchema,
+  rhEventoPostBodySchema,
+  rhFeriasPatchBodySchema,
+  rhFolhaPagamentoPostBodySchema,
+  rhFuncionarioWriteBodySchema,
+  rhHoraExtraPatchBodySchema,
+  rhHoraExtraPostBodySchema,
+  rhPontosManualBodySchema,
+  rhPontosPutBodySchema,
+} from '../validation/schemas/rh';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -154,7 +177,8 @@ export function createRhRouter() {
   // ── Funcionários CRUD ─────────────────────────────────────────────────────
   router.get('/', async (req: any, res) => {
     try {
-      res.json(await qAll('SELECT * FROM funcionarios WHERE tenant_id=? ORDER BY nome ASC', [req.tenantId]));
+      const rows = await qAll('SELECT * FROM funcionarios WHERE tenant_id=? ORDER BY nome ASC', [req.tenantId]);
+      res.json(rows.map((r: Record<string, unknown>) => sanitizeFuncionarioRowForClient(r)));
     } catch (e: any) {
       sendInternalError(res, 'routes/rh', e);
     }
@@ -169,17 +193,31 @@ export function createRhRouter() {
     }
   });
 
+  /** Dados cadastrais para edição (único ponto que devolve CPF completo na API de funcionários). */
+  router.get('/:id/dados-edicao', async (req: any, res) => {
+    try {
+      const employeeId = Number(req.params.id);
+      if (!Number.isInteger(employeeId) || employeeId <= 0) {
+        return res.status(400).json({ error: 'ID inválido' });
+      }
+      const row = await q1('SELECT * FROM funcionarios WHERE id=? AND tenant_id=?', [employeeId, req.tenantId]);
+      if (!row) return res.status(404).json({ error: 'Funcionário não encontrado' });
+      res.json(sanitizeFuncionarioRowForClient(row as Record<string, unknown>, { includeCpfCompleto: true }));
+    } catch (e: any) {
+      sendInternalError(res, 'routes/rh', e);
+    }
+  });
+
   router.patch('/ferias/:feriasId', async (req: any, res) => {
     try {
       const feriasId = Number(req.params.feriasId);
       const gate = await assertFixoForFeriasOps(req.tenantId, feriasId);
       if (gate.ok === false) return res.status(400).json({ error: gate.error });
-      const { action } = req.body || {};
+      const body = parseBodyOrReply(res, rhFeriasPatchBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { action } = body;
       if (action === 'schedule') {
-        const { data_inicio_gozo, data_fim_gozo } = req.body || {};
-        if (!data_inicio_gozo || !data_fim_gozo) {
-          return res.status(400).json({ error: 'Informe data_inicio_gozo e data_fim_gozo.' });
-        }
+        const { data_inicio_gozo, data_fim_gozo } = body;
         const rowCheck = await q1<{ funcionario_id: number }>(
           'SELECT funcionario_id FROM func_ferias WHERE id=? AND tenant_id=?',
           [feriasId, req.tenantId]
@@ -207,11 +245,10 @@ export function createRhRouter() {
         return res.json({ success: true, ferias: r.row });
       }
       if (action === 'complete') {
-        const valor_pago = req.body?.valor_pago;
         const r = await completeFerias({
           tenantId: req.tenantId,
           feriasId,
-          valorPago: Number(valor_pago),
+          valorPago: body.valor_pago,
         });
         if (r.ok === false) return res.status(400).json({ error: r.error });
         return res.json({ success: true, ferias: r.row });
@@ -227,15 +264,14 @@ export function createRhRouter() {
       const dtId = Number(req.params.dtId);
       const gate = await assertFixoForDecimoOps(req.tenantId, dtId);
       if (gate.ok === false) return res.status(400).json({ error: gate.error });
-      const { action } = req.body || {};
+      const body = parseBodyOrReply(res, rhDecimoPatchBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { action } = body;
       if (action === 'set_calculo') {
-        const modo = String(req.body?.modo || '').trim();
-        if (modo !== 'automatico' && modo !== 'manual') {
-          return res.status(400).json({ error: 'modo deve ser automatico ou manual.' });
-        }
+        const modo = body.modo;
         const valorTotalManual =
-          modo === 'manual' && req.body?.valor_total_manual != null
-            ? Number(req.body.valor_total_manual)
+          modo === 'manual' && body.valor_total_manual != null
+            ? Number(body.valor_total_manual)
             : null;
         const r = await updateDecimoCalculoModo({
           tenantId: req.tenantId,
@@ -263,22 +299,38 @@ export function createRhRouter() {
 
   router.post('/', async (req: any, res) => {
     try {
-      const { nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,foto_url } = req.body;
-      if (!nome) return res.status(400).json({ error:'Nome obrigatório' });
-      const tipoContrato = req.body.tipo_contrato || 'fixo';
-      const allowedTipoContrato = ['fixo', 'diarista', 'evento'];
-      if (!allowedTipoContrato.includes(tipoContrato)) {
-        return res.status(400).json({ error: 'tipo_contrato inválido' });
-      }
+      const body = parseBodyOrReply(res, rhFuncionarioWriteBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const {
+        nome,
+        cargo,
+        salario_base,
+        horario_entrada,
+        horario_saida,
+        carga_horaria,
+        dias_semana,
+        tolerancia_minutos,
+        dias_trabalho_mes,
+        data_admissao,
+        telefone,
+        cpf,
+        pin,
+        foto_url,
+      } = body;
+      const tipoContrato = body.tipo_contrato || 'fixo';
       if (forbidClientSuppliedLocalUploadImageUrls() && isClientSuppliedLocalUploadImageUrl(foto_url)) {
         return res.status(400).json({
           error:
             'foto_url não pode apontar para /uploads. Cadastre sem foto e use POST /rh/:id/foto para enviar a imagem.',
         });
       }
+      const pinPlain = pin != null ? String(pin).trim() : '';
+      const pinStored = pinPlain ? hashPlainSecurityPassword(pinPlain) : null;
+      const cpfNorm = normalizeFuncionarioCpfForStorage(cpf);
+      if (cpfNorm.ok === false) return res.status(400).json({ error: cpfNorm.error });
       const id = await qInsert(
         'INSERT INTO funcionarios (tenant_id,nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,tipo_contrato,foto_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [req.tenantId,nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null]
+        [req.tenantId,nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,encryptFuncionarioCpfForStorage(cpfNorm.digits),pinStored,tipoContrato,foto_url||null]
       );
       res.json({ id });
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
@@ -286,21 +338,77 @@ export function createRhRouter() {
 
   router.put('/:id', async (req: any, res) => {
     try {
-      const { nome,cargo,salario_base,horario_entrada,horario_saida,carga_horaria,dias_semana,tolerancia_minutos,dias_trabalho_mes,data_admissao,telefone,cpf,pin,foto_url } = req.body;
-      const tipoContrato = req.body.tipo_contrato || 'fixo';
-      const allowedTipoContrato = ['fixo', 'diarista', 'evento'];
-      if (!allowedTipoContrato.includes(tipoContrato)) {
-        return res.status(400).json({ error: 'tipo_contrato inválido' });
-      }
+      const body = parseBodyOrReply(res, rhFuncionarioWriteBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const {
+        nome,
+        cargo,
+        salario_base,
+        horario_entrada,
+        horario_saida,
+        carga_horaria,
+        dias_semana,
+        tolerancia_minutos,
+        dias_trabalho_mes,
+        data_admissao,
+        telefone,
+        cpf,
+        pin,
+        foto_url,
+      } = body;
+      const tipoContrato = body.tipo_contrato || 'fixo';
       if (forbidClientSuppliedLocalUploadImageUrls() && isClientSuppliedLocalUploadImageUrl(foto_url)) {
         return res.status(400).json({
           error:
             'foto_url não pode apontar para /uploads. Remova o campo ou use POST /rh/:id/foto para enviar a imagem.',
         });
       }
+      const pinProvided = Object.prototype.hasOwnProperty.call(body, 'pin');
+      const cpfProvided = Object.prototype.hasOwnProperty.call(body, 'cpf');
+      let pinStored: string | null;
+      if (pinProvided) {
+        const t = pin != null ? String(pin).trim() : '';
+        pinStored = t ? hashPlainSecurityPassword(t) : null;
+      } else {
+        const cur = await q1<{ pin: string | null }>('SELECT pin FROM funcionarios WHERE id=? AND tenant_id=?', [
+          req.params.id,
+          req.tenantId,
+        ]);
+        pinStored = cur?.pin ?? null;
+      }
+      let cpfStored: string | null;
+      if (cpfProvided) {
+        const cpfNorm = normalizeFuncionarioCpfForStorage(cpf);
+        if (cpfNorm.ok === false) return res.status(400).json({ error: cpfNorm.error });
+        cpfStored = encryptFuncionarioCpfForStorage(cpfNorm.digits);
+      } else {
+        const curCpf = await q1<{ cpf: string | null }>('SELECT cpf FROM funcionarios WHERE id=? AND tenant_id=?', [
+          req.params.id,
+          req.tenantId,
+        ]);
+        cpfStored = ensureFuncionarioCpfStoredForm(curCpf?.cpf ?? null);
+      }
       await qRun(
         'UPDATE funcionarios SET nome=?,cargo=?,salario_base=?,horario_entrada=?,horario_saida=?,carga_horaria=?,dias_semana=?,tolerancia_minutos=?,dias_trabalho_mes=?,data_admissao=?,telefone=?,cpf=?,pin=?,tipo_contrato=?,foto_url=? WHERE id=? AND tenant_id=?',
-        [nome,cargo||'',salario_base||0,horario_entrada||'08:00',horario_saida||'17:00',carga_horaria||8,dias_semana||'1,2,3,4,5',tolerancia_minutos||10,dias_trabalho_mes||26,data_admissao||null,telefone||null,cpf||null,pin||null,tipoContrato,foto_url||null,req.params.id,req.tenantId]
+        [
+          nome,
+          cargo || '',
+          salario_base || 0,
+          horario_entrada || '08:00',
+          horario_saida || '17:00',
+          carga_horaria || 8,
+          dias_semana || '1,2,3,4,5',
+          tolerancia_minutos || 10,
+          dias_trabalho_mes || 26,
+          data_admissao || null,
+          telefone || null,
+          cpfStored,
+          pinStored,
+          tipoContrato,
+          foto_url || null,
+          req.params.id,
+          req.tenantId,
+        ]
       );
       res.json({ success:true });
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
@@ -313,7 +421,7 @@ export function createRhRouter() {
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
 
-  router.post('/:id/foto', uploadFotoFunc.single('foto'), checkMagicBytes, async (req: any, res) => {
+  router.post('/:id/foto', uploadFotoFunc.single('foto'), hardenUploadedImageFile({ allowGif: false }), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       const employeeId = Number(req.params.id);
@@ -390,8 +498,9 @@ export function createRhRouter() {
 
   router.post('/:id/pontos-manual', async (req: any, res) => {
     try {
-      const { data, hora, tipo } = req.body;
-      if (!data||!hora||!tipo) return res.status(400).json({ error:'data, hora e tipo obrigatórios' });
+      const body = parseBodyOrReply(res, rhPontosManualBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { data, hora, tipo } = body;
       await qRun('INSERT INTO func_pontos (tenant_id,funcionario_id,data,hora,tipo,ip) VALUES (?,?,?,?,?,?)',
         [req.tenantId,req.params.id,data,hora,tipo,'manual-admin']);
       res.json({success:true});
@@ -401,11 +510,13 @@ export function createRhRouter() {
   // ── Pontos admin (/pontos/:id) ────────────────────────────────────────────
   router.put('/pontos/:pontId', async (req: any, res) => {
     try {
-      const { hora, tipo } = req.body;
+      const body = parseBodyOrReply(res, rhPontosPutBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { hora, tipo } = body;
       const result = await updatePointRecord({
         tenantId: req.tenantId,
         pointId: req.params.pontId,
-        hora: String(hora || ''),
+        hora: String(hora),
         tipo: tipo != null ? String(tipo) : null,
       });
       if (result.ok === false) return res.status(result.status).json({ error: result.error });
@@ -437,10 +548,11 @@ export function createRhRouter() {
 
   router.post('/:id/horas-extras', async (req: any, res) => {
     try {
-      const { data, minutos, observacao, minutos_pago_folha, destino } = req.body;
-      if (!data||!minutos) return res.status(400).json({ error:'data e minutos obrigatórios' });
+      const parsed = parseBodyOrReply(res, rhHoraExtraPostBodySchema, req.body, replyZod400ErrorKey);
+      if (!parsed) return;
+      const { data, minutos, observacao, minutos_pago_folha, destino } = parsed;
       const total = Math.floor(Number(minutos));
-      if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error:'minutos inválidos' });
+      if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error: 'minutos inválidos' });
       const funcRow = await q1<{ tipo_contrato: string | null }>(
         'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
         [req.params.id, req.tenantId]
@@ -519,7 +631,9 @@ export function createRhRouter() {
         [heId, req.tenantId]
       );
       if (!row) return res.status(404).json({ error: 'Registro não encontrado' });
-      const { minutos, minutos_pago_folha, destino, observacao } = req.body || {};
+      const parsed = parseBodyOrReply(res, rhHoraExtraPatchBodySchema, req.body, replyZod400ErrorKey);
+      if (!parsed) return;
+      const { minutos, minutos_pago_folha, destino, observacao } = parsed;
       const total =
         minutos != null && String(minutos).trim() !== ''
           ? Math.floor(Number(minutos))
@@ -553,7 +667,7 @@ export function createRhRouter() {
         bancoAplicavel: hourBankApplicable(normalizeTipoContrato(funcRow?.tipo_contrato)),
       });
       if (destinoCheck.ok === false) return res.status(400).json({ error: destinoCheck.error });
-      const data = req.body?.data != null ? String(req.body.data).trim() : row.data;
+      const data = parsed.data != null ? String(parsed.data).trim() : row.data;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return res.status(400).json({ error: 'data inválida' });
       const createdBy = req.user?.username != null ? String(req.user.username) : null;
       let uq = `UPDATE func_horas_extras SET data=?, minutos=?, minutos_pago_folha=?, destino_pendente=0`;
@@ -623,19 +737,21 @@ export function createRhRouter() {
 
   router.post('/:id/banco-horas/movimentacoes', async (req: any, res) => {
     try {
-      const { data_referencia, tipo, minutos, origem, observacao, competencia_referencia } = req.body || {};
+      const body = parseBodyOrReply(res, rhBancoHorasMovBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { data_referencia, tipo, minutos, origem, observacao, competencia_referencia } = body;
       const createdBy = req.user?.username != null ? String(req.user.username) : null;
       const result = await addHourBankMovement({
         tenantId: req.tenantId,
         employeeId: Number(req.params.id),
-        dataReferencia: String(data_referencia || ''),
-        tipo: String(tipo || ''),
-        minutos: Number(minutos),
-        origem: String(origem || ''),
+        dataReferencia: data_referencia,
+        tipo,
+        minutos,
+        origem,
         observacao: observacao != null ? String(observacao) : null,
         createdBy,
         metadataJson: null,
-        payrollReference: competencia_referencia != null ? String(competencia_referencia) : null,
+        payrollReference: competencia_referencia != null ? String(competencia_referencia).trim() || null : null,
       });
       if (result.ok === false) return res.status(400).json({ error: result.error });
       res.json({ success: true, movimentacao: result.mov });
@@ -657,10 +773,11 @@ export function createRhRouter() {
 
   router.post('/:id/eventos', async (req: any, res) => {
     try {
-      const { data, tipo, horas_ausentes, observacao } = req.body;
-      if (!data||!tipo) return res.status(400).json({ error:'data e tipo obrigatórios' });
+      const body = parseBodyOrReply(res, rhEventoPostBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { data, tipo, horas_ausentes, observacao } = body;
       const id = await qInsert('INSERT INTO func_eventos (tenant_id,funcionario_id,data,tipo,horas_ausentes,observacao) VALUES (?,?,?,?,?,?)',
-        [req.tenantId,req.params.id,data,tipo,horas_ausentes||0,observacao||null]);
+        [req.tenantId,req.params.id,data,tipo,horas_ausentes ?? 0,observacao ?? null]);
       res.json({success:true,id});
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
@@ -681,8 +798,9 @@ export function createRhRouter() {
 
   router.post('/:id/adiantamentos', async (req: any, res) => {
     try {
-      const { valor, motivo } = req.body;
-      if (!valor) return res.status(400).json({ error:'valor obrigatório' });
+      const body = parseBodyOrReply(res, rhAdiantamentoPostBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { valor, motivo } = body;
       const funcRow = await q1<{ tipo_contrato: string | null }>(
         'SELECT tipo_contrato FROM funcionarios WHERE id=? AND tenant_id=?',
         [req.params.id, req.tenantId]
@@ -695,7 +813,7 @@ export function createRhRouter() {
         });
       }
       const id = await qInsert('INSERT INTO func_adiantamentos (tenant_id,funcionario_id,valor,motivo) VALUES (?,?,?,?)',
-        [req.tenantId,req.params.id,valor,motivo||null]);
+        [req.tenantId,req.params.id,valor,motivo ?? null]);
       res.json({success:true,id});
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
@@ -777,8 +895,9 @@ export function createRhRouter() {
           error: 'Benefícios gerenciais não se aplicam a colaboradores por evento.',
         });
       }
-      const items = req.body?.items;
-      if (!Array.isArray(items)) return res.status(400).json({ error: 'Envie items: array' });
+      const parsed = parseBodyOrReply(res, rhBeneficiosPutBodySchema, req.body, replyZod400ErrorKey);
+      if (!parsed) return;
+      const { items } = parsed;
       for (const it of items) {
         await upsertBeneficio({
           tenantId: req.tenantId,
@@ -799,10 +918,11 @@ export function createRhRouter() {
 
   router.post('/:id/ajustes', async (req: any, res) => {
     try {
-      const { tipo, valor, motivo } = req.body;
-      if (!tipo||!valor) return res.status(400).json({ error:'tipo e valor obrigatórios' });
+      const body = parseBodyOrReply(res, rhAjustePostBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { tipo, valor, motivo } = body;
       const id = await qInsert('INSERT INTO func_ajustes_salario (tenant_id,funcionario_id,tipo,valor,motivo) VALUES (?,?,?,?,?)',
-        [req.tenantId,req.params.id,tipo,valor,motivo||null]);
+        [req.tenantId,req.params.id,tipo,valor,motivo ?? null]);
       res.json({success:true,id});
     } catch(e: any) { sendInternalError(res, 'routes/rh', e); }
   });
@@ -959,9 +1079,10 @@ export function createRhRouter() {
           })
         : [];
 
+      const funcSafe = sanitizeFuncionarioRowForClient(func as Record<string, unknown>);
       res.json({
-        func,
-        funcionario: func,
+        func: funcSafe,
+        funcionario: funcSafe,
         dias,
         horas_extras_pendentes,
         resumo:{
@@ -1022,9 +1143,11 @@ export function createRhRouter() {
             limit: 100,
           })
         : [];
+      const funcionarioSafe = sanitizeFuncionarioRowForClient(legacy.funcionario as Record<string, unknown>);
+      const { funcionario: _legacyFuncionarioRaw, ...legacySemFuncionario } = legacy;
       res.json({
-        ...legacy,
-        funcionario: legacy.funcionario,
+        ...legacySemFuncionario,
+        funcionario: funcionarioSafe,
         competencia,
         contract_profile: computed.contract_profile,
         pagamentos_sem_teto_folha: computed.pagamentos_sem_teto_folha ?? false,
@@ -1048,7 +1171,9 @@ export function createRhRouter() {
 
   router.post('/:id/folha/pagamentos', async (req: any, res) => {
     try {
-      const { month, year, tipo, valor, observacao } = req.body || {};
+      const body = parseBodyOrReply(res, rhFolhaPagamentoPostBodySchema, req.body, replyZod400ErrorKey);
+      if (!body) return;
+      const { month, year, tipo, valor, observacao } = body;
       const mm = month != null ? String(month) : String(new Date().getMonth() + 1);
       const yy = year != null ? String(year) : String(new Date().getFullYear());
       const createdBy = req.user?.username != null ? String(req.user.username) : null;
@@ -1057,8 +1182,8 @@ export function createRhRouter() {
         employeeId: Number(req.params.id),
         month: mm,
         year: yy,
-        tipo: String(tipo || ''),
-        valor: Number(valor),
+        tipo,
+        valor,
         observacao: observacao != null ? String(observacao) : null,
         createdBy,
       });

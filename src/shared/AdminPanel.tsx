@@ -711,15 +711,19 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
       alert("A senha de login deve ter pelo menos 6 caracteres.");
       return;
     }
+    const body: Record<string, string> = {};
+    if (novaSenha.trim()) body.nova_senha = novaSenha.trim();
+    if (novaSenhaAdmin.trim()) body.senha_admin = novaSenhaAdmin.trim();
+    if (novaSenhaCaixa.trim()) body.senha_caixa = novaSenhaCaixa.trim();
+    if (Object.keys(body).length === 0) {
+      alert('Preencha a senha de login e/ou as sub-senhas que deseja alterar.');
+      return;
+    }
     try {
       const res = await fetch(`/api/admin/clientes/${editSenha.id}/senha`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ 
-          nova_senha: novaSenha,
-          senha_admin: novaSenhaAdmin,
-          senha_caixa: novaSenhaCaixa
-        })
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         setEditSenha(null);
@@ -834,7 +838,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     <button onClick={() => openEditPlano(cliente)} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
                       <Pencil size={16} /> Editar cliente
                     </button>
-                    <button onClick={() => { setEditSenha(cliente); setNovaSenha(''); setNovaSenhaAdmin(cliente.senha_admin || '123321'); setNovaSenhaCaixa(cliente.senha_caixa || '123321'); setShowAcoesMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
+                    <button onClick={() => { setEditSenha(cliente); setNovaSenha(''); setNovaSenhaAdmin(''); setNovaSenhaCaixa(''); setShowAcoesMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
                       <KeyRound size={16} /> Gerenciar senhas
                     </button>
                     <button onClick={() => { setSubUsersCliente(cliente); fetchSubUsers(cliente.id); setShowAcoesMenu(false); }} className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800 flex items-center gap-2">
@@ -1593,7 +1597,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                               <button type="button" onClick={() => openEditPlano(c)} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-blue-400 rounded-lg hover:bg-blue-500/20 transition-colors" title="Editar">
                                 <Pencil size={16} />
                               </button>
-                              <button type="button" onClick={() => { setEditSenha(c); setNovaSenha(''); setNovaSenhaAdmin(c.senha_admin || '123321'); setNovaSenhaCaixa(c.senha_caixa || '123321'); }} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-violet-400 rounded-lg hover:bg-violet-500/20 transition-colors" title="Senhas">
+                              <button type="button" onClick={() => { setEditSenha(c); setNovaSenha(''); setNovaSenhaAdmin(''); setNovaSenhaCaixa(''); }} className="p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center bg-transparent text-violet-400 rounded-lg hover:bg-violet-500/20 transition-colors" title="Senhas">
                                 <KeyRound size={16} />
                               </button>
                               <button type="button" onClick={() => handleBloquear(c.id, c.status === 'ativo' ? 'bloquear' : 'desbloquear')} className={`p-2 min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg transition-colors ${c.status === 'ativo' ? 'bg-transparent text-red-400 hover:bg-red-500/20' : 'bg-transparent text-emerald-400 hover:bg-emerald-500/20'}`} title={c.status === 'ativo' ? 'Bloquear' : 'Desbloquear'}>
@@ -2777,7 +2781,9 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
 
               <div className="bg-amber-950 border border-amber-800 rounded-2xl p-4 mb-6 flex items-start gap-3">
                 <AlertCircle size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-amber-700">A nova senha será aplicada imediatamente. O cliente poderá fazer login com ela na próxima tentativa.</p>
+                <p className="text-xs text-amber-700">
+                  Sub-senhas são gravadas com hash no servidor. Preencha apenas os campos que quiser alterar. A senha de login do cliente continua separada.
+                </p>
               </div>
 
 <form onSubmit={handleUpdateSenha} className="space-y-5">
@@ -2805,24 +2811,32 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Sub-senha: Gerência</label>
                     <input
-                      required
-                      type="text"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Deixe em branco para não alterar"
                       className="w-full px-4 py-3 bg-amber-950 border border-amber-800 rounded-xl outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all font-mono font-bold text-amber-200"
                       value={novaSenhaAdmin}
                       onChange={e => setNovaSenhaAdmin(e.target.value)}
                     />
-                    <p className="text-[10px] text-zinc-400">Acesso a relatórios e exclusões.</p>
+                    <p className="text-[10px] text-zinc-400">
+                      Acesso a relatórios e exclusões.
+                      {editSenha.senha_admin_configurada ? ' Atualmente configurada.' : ' Ainda não configurada no estabelecimento.'}
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Sub-senha: Caixa</label>
                     <input
-                      required
-                      type="text"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Deixe em branco para não alterar"
                       className="w-full px-4 py-3 bg-emerald-950 border border-emerald-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all font-mono font-bold text-emerald-200"
                       value={novaSenhaCaixa}
                       onChange={e => setNovaSenhaCaixa(e.target.value)}
                     />
-                    <p className="text-[10px] text-zinc-400">Abertura e fechamento de caixa.</p>
+                    <p className="text-[10px] text-zinc-400">
+                      Abertura e fechamento de caixa.
+                      {editSenha.senha_caixa_configurada ? ' Atualmente configurada.' : ' Ainda não configurada no estabelecimento.'}
+                    </p>
                   </div>
                 </div>
 
@@ -2830,7 +2844,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                   <Button type="submit" className="flex-1 min-h-[44px] bg-violet-600 hover:bg-violet-700">
                     <KeyRound size={16} /> Salvar Senhas
                   </Button>
-                  <Button variant="secondary" type="button" onClick={() => { setEditSenha(null); setNovaSenha(''); }} className="min-h-[44px] sm:min-w-[120px]">Cancelar</Button>
+                  <Button variant="secondary" type="button" onClick={() => { setEditSenha(null); setNovaSenha(''); setNovaSenhaAdmin(''); setNovaSenhaCaixa(''); }} className="min-h-[44px] sm:min-w-[120px]">Cancelar</Button>
                 </div>
               </form>
             </motion.div>

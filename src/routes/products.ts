@@ -4,7 +4,7 @@ import { q1, qAll, qRun, qInsert, withTx, txQ1, txQAll, txInsert, txRun } from '
 import { deleteStoredUpload } from '../services/uploadPersistence';
 import { uploadProductImageToCloudinary } from '../services/cloudinaryProduct';
 import { persistMulterImageFile } from '../services/imageUploadPolicy';
-import { upload, checkMagicBytes, requireAnyPermission } from '../middleware';
+import { upload, hardenUploadedImageFile, requireAnyPermission } from '../middleware';
 import { validateSecurityPassword } from '../utils/securityPassword';
 import { normalizeBarcode } from '../utils/barcode';
 import { generatePublicId } from '../utils/publicIds';
@@ -1135,7 +1135,7 @@ function normalizeProductPromotionInput(
     }
   });
 
-  router.post('/:id/photo', upload.single('photo'), checkMagicBytes, async (req: any, res) => {
+  router.post('/:id/photo', upload.single('photo'), hardenUploadedImageFile({ allowGif: true }), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
       const productId = Number(req.params.id);

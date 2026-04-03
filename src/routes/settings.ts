@@ -1,8 +1,7 @@
 // src/routes/settings.ts
 import { Router, Request } from 'express';
-import bcrypt from 'bcryptjs';
 import { pool, q1, qAll, qRun } from '../db';
-import { uploadLogo, checkMagicBytes } from '../middleware';
+import { uploadLogo, hardenUploadedImageFile } from '../middleware';
 import { getTenantPlanContext } from '../services/tenantPlan';
 import { sendInternalError } from '../utils/internalServerError';
 import { deleteStoredUpload } from '../services/uploadPersistence';
@@ -13,6 +12,7 @@ import {
   unlinkAllTenantLogos,
   unlinkTenantLogosExcept,
 } from '../utils/tenantLogoUpload';
+import { hashPlainSecurityPassword, subsenhaPerfilPrecisaAtencao } from '../utils/securityPasswordStorage';
 
 export function createSettingsRouter() {
   const router = Router();
@@ -25,7 +25,9 @@ export function createSettingsRouter() {
       const cargo      = (req as any).userCargo      || usuario?.cargo      || 'dono';
       const permissoes = (req as any).userPermissoes || (usuario?.permissoes ? JSON.parse(usuario.permissoes) : null);
       const nomeUsuario= (req as any).userName       || usuario?.nome       || '';
-      const senhaPadrao = (cliente?.senha_admin === '123321') || (cliente?.senha_caixa === '123321');
+      const senhaPadrao =
+        subsenhaPerfilPrecisaAtencao(cliente?.senha_admin) ||
+        subsenhaPerfilPrecisaAtencao(cliente?.senha_caixa);
       const logo_url = await resolveTenantLogoPublicUrl(req.tenantId);
       res.json({
         nome_estabelecimento: cliente?.nome_estabelecimento || 'FlowPDV',
@@ -58,10 +60,12 @@ export function createSettingsRouter() {
 
       if (nome_estabelecimento?.trim()) { updates.push('nome_estabelecimento=?'); params.push(nome_estabelecimento.trim()); }
       if (senha_admin?.trim()) {
-        updates.push('senha_admin=?'); params.push(senha_admin.trim());
+        updates.push('senha_admin=?'); params.push(hashPlainSecurityPassword(senha_admin));
         await qRun('UPDATE usuarios SET token_version=token_version+1 WHERE username=?', [req.user?.username || '']);
       }
-      if (senha_caixa?.trim()) { updates.push('senha_caixa=?'); params.push(senha_caixa.trim()); }
+      if (senha_caixa?.trim()) {
+        updates.push('senha_caixa=?'); params.push(hashPlainSecurityPassword(senha_caixa));
+      }
       if (updates.length === 0) return res.json({ success: true });
       params.push(req.tenantId);
       await qRun(`UPDATE clientes SET ${updates.join(',')} WHERE id=?`, params);
@@ -103,7 +107,7 @@ export function createSettingsRouter() {
     }
   });
 
-  router.post('/logo', uploadLogo.single('logo'), checkMagicBytes, async (req: any, res) => {
+  router.post('/logo', uploadLogo.single('logo'), hardenUploadedImageFile({ allowGif: false }), async (req: any, res) => {
     try {
       if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
       const prev = await resolveTenantLogoPublicUrl(req.tenantId);

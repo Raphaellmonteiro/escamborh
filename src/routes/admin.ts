@@ -13,6 +13,7 @@ import { getPlanFeatures, type PaidTenantPlan, type PlanFeature } from '../confi
 import { invalidateTenantPlanCache } from '../services/tenantPlan';
 import { confirmOrderPayment } from '../services/ordersService';
 import { normalizeProductProductionInput } from '../utils/preparation';
+import { hashPlainSecurityPassword } from '../utils/securityPasswordStorage';
 
 const TZ = 'America/Sao_Paulo';
 const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
@@ -354,10 +355,18 @@ export function createAdminRouter() {
     try {
       const now = new Date();
       const lista = await qAll('SELECT * FROM clientes ORDER BY created_at DESC', []);
-      res.json(lista.map((c: any) => {
-        const td = c.vencimento ? new Date(c.vencimento) : c.trial_fim ? new Date(c.trial_fim) : null;
-        return { ...c, dias_restantes: td ? Math.ceil((td.getTime()-now.getTime())/86400000) : null };
-      }));
+      res.json(
+        lista.map((c: any) => {
+          const { senha_admin, senha_caixa, ...rest } = c;
+          const td = c.vencimento ? new Date(c.vencimento) : c.trial_fim ? new Date(c.trial_fim) : null;
+          return {
+            ...rest,
+            senha_admin_configurada: !!String(senha_admin ?? '').trim(),
+            senha_caixa_configurada: !!String(senha_caixa ?? '').trim(),
+            dias_restantes: td ? Math.ceil((td.getTime() - now.getTime()) / 86400000) : null,
+          };
+        })
+      );
     } catch (e: unknown) { sendInternalError(res, 'routes/admin', e); }
   });
 
@@ -402,8 +411,12 @@ export function createAdminRouter() {
     try {
       const { nova_senha, senha_admin, senha_caixa } = req.body;
       if (nova_senha?.trim()) await qRun('UPDATE usuarios SET password=? WHERE cliente_id=?', [bcrypt.hashSync(nova_senha,10), req.params.id]);
-      if (senha_admin) await qRun('UPDATE clientes SET senha_admin=? WHERE id=?', [senha_admin, req.params.id]);
-      if (senha_caixa) await qRun('UPDATE clientes SET senha_caixa=? WHERE id=?', [senha_caixa, req.params.id]);
+      if (senha_admin?.trim()) {
+        await qRun('UPDATE clientes SET senha_admin=? WHERE id=?', [hashPlainSecurityPassword(senha_admin), req.params.id]);
+      }
+      if (senha_caixa?.trim()) {
+        await qRun('UPDATE clientes SET senha_caixa=? WHERE id=?', [hashPlainSecurityPassword(senha_caixa), req.params.id]);
+      }
       res.json({ success: true });
     } catch {
       sendInternalError(res, 'routes/admin:clientesSenha', new Error('Erro ao atualizar senhas'));

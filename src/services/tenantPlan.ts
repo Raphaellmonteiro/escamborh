@@ -25,7 +25,7 @@ export type TenantPlanContext = {
   trialFim: string | null;
 };
 
-const TENANT_PLAN_CACHE_TTL_MS = 5 * 60 * 1000;
+const TENANT_PLAN_CACHE_TTL_MS = 30 * 1000;
 
 type TenantPlanCacheEntry = { expiresAt: number; context: TenantPlanContext };
 

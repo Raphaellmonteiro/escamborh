@@ -4,6 +4,7 @@ dist/
 coverage/
 uploads/
 backup/
+backups/
 .DS_Store
 *.log
 .env*

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings, Upload, Trash2,
   CreditCard, Smartphone, Banknote, Image, Lock, Store, AlertTriangle,
-  Printer, Wifi, CheckCircle2, XCircle, Loader,
+  Printer, Wifi, CheckCircle2, XCircle, Loader, FileText,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Modal } from '../components/ui/Modal';
@@ -245,6 +245,44 @@ export default function ConfiguracoesScreen({
     </div>
   );
 
+  const legalDocsCard = (
+    <div className="rounded-2xl border border-fp-border bg-fp-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-fp-border bg-fp-secondary/30">
+        <p className="text-xs font-bold uppercase tracking-wider text-fptext-muted">Legal</p>
+        <p className="text-sm font-bold text-fptext-primary mt-0.5">Privacidade e termos</p>
+      </div>
+      <Row
+        icon={<FileText size={16} />}
+        label="Política de Privacidade"
+        sub="Texto público e informativo"
+      >
+        <a
+          href="/privacidade"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-bold text-cyan-700 hover:text-cyan-900 shrink-0"
+        >
+          Abrir →
+        </a>
+      </Row>
+      <div className="h-px bg-fp-border" />
+      <Row
+        icon={<FileText size={16} />}
+        label="Termos de Uso"
+        sub="Condições de uso da plataforma"
+      >
+        <a
+          href="/termos"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-bold text-cyan-700 hover:text-cyan-900 shrink-0"
+        >
+          Abrir →
+        </a>
+      </Row>
+    </div>
+  );
+
   if (loadingPerfil) return (
     <div className="flex items-center justify-center h-full">
       <div className="w-8 h-8 border-2 border-fp-border border-t-fptext-primary rounded-full animate-spin" />
@@ -269,6 +307,8 @@ export default function ConfiguracoesScreen({
           <Settings size={20} className="text-fptext-muted" />
           <h1 className="text-xl font-black text-fptext-primary">Configurações</h1>
         </div>
+
+        {legalDocsCard}
 
         {/* ── Aviso: senha padrão ─────────────────────────────────────────── */}
         <AnimatePresence>

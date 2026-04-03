@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 
 // ── Banco e migrações ─────────────────────────────────────────────────────────
-import { runMigrations } from './src/db';
+import { runMigrations, query } from './src/db';
 import { UPLOADS_ROOT } from './src/uploadsRoot';
 import { isS3ObjectStorageEnabled } from './src/services/uploadPersistence';
 import { isCloudinaryProductUploadEnabled } from './src/services/cloudinaryProduct';
@@ -25,6 +25,7 @@ import { errorHandler } from './src/middlewares/errorHandler';
 import { createDeliveryPublicRouter } from './src/routes/delivery-public';
 import { createKioskRouter } from './src/routes/kiosk';
 import { createApiRouter } from './src/routes';
+import { MAX_IMAGE_UPLOAD_BYTES } from './src/utils/imageUploadSecurity';
 
 // ─────────────────────────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
@@ -97,8 +98,20 @@ app.use('/uploads', (req, res, next) => {
 });
 app.use(requestLogger);
 
-// ── Rotas públicas ────────────────────────────────────────────────────────────
-app.use('/api', createApiRouter());
+// ── Health (sem autenticação; leve) ───────────────────────────────────────────
+app.get('/health', async (_req, res) => {
+  try {
+    await query('SELECT 1');
+    res.json({ status: 'ok' });
+  } catch {
+    res.sendStatus(500);
+  }
+});
+
+// ── API: legado `/api` + versão explícita `/api/v1` (mesmo router, sem duplicar lógica)
+const apiRouter = createApiRouter();
+app.use('/api', apiRouter);
+app.use('/api/v1', apiRouter);
 app.use('/public/delivery', createDeliveryPublicRouter());
 app.use('/', createKioskRouter());
 
@@ -121,9 +134,10 @@ app.get('/delivery/:slug', (_req, res, next) => {
 app.use((err: any, _req: any, res: any, next: any) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
+      const mb = Math.round(MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024));
       return res.status(400).json({
         success: false,
-        message: 'Arquivo muito grande. Máximo permitido: 10MB.',
+        message: `Arquivo muito grande. Máximo permitido: ${mb}MB.`,
       });
     }
 

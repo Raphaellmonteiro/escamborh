@@ -9,9 +9,35 @@ export function createLogsRouter() {
 
   router.post('/', async (req: Request, res) => {
     try {
-      const { usuario_nome, cargo, acao, detalhes } = req.body;
-      await qRun('INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
-        [req.tenantId, usuario_nome||'Sistema', cargo||'dono', acao, detalhes||null]);
+      const tenantId = req.tenantId;
+      if (tenantId == null || !Number.isFinite(Number(tenantId))) {
+        return res.status(403).json({ error: 'Tenant não identificado' });
+      }
+
+      const acaoRaw = req.body?.acao;
+      const acao = typeof acaoRaw === 'string' ? acaoRaw.trim() : '';
+      if (!acao) {
+        return res.status(400).json({ error: 'Ação (acao) é obrigatória' });
+      }
+
+      let detalhes: string | null = null;
+      if (req.body?.detalhes != null && req.body.detalhes !== '') {
+        detalhes = String(req.body.detalhes);
+      }
+
+      const usuarioNome =
+        (req.userName && String(req.userName).trim()) ||
+        (req.user?.username && String(req.user.username).trim()) ||
+        'Usuário';
+      const cargo =
+        (req.userCargo && String(req.userCargo).trim()) ||
+        (req.user?.role && String(req.user.role).trim()) ||
+        'dono';
+
+      await qRun(
+        'INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
+        [tenantId, usuarioNome, cargo, acao, detalhes]
+      );
       res.json({ ok: true });
     } catch (e: any) { sendInternalError(res, 'routes/logs', e); }
   });

@@ -1,6 +1,7 @@
 // src/middleware.ts — middlewares, multer, rate limiters
 import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
+import type { Express } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
@@ -12,6 +13,14 @@ import { getTenantFeatures } from './services/tenantPlan';
 import { sendInternalError } from './utils/internalServerError';
 import { UPLOADS_ROOT } from './uploadsRoot';
 import { useMulterMemoryForImageUploads } from './services/imageUploadPolicy';
+import {
+  MAX_IMAGE_UPLOAD_BYTES,
+  PRODUCT_IMAGE_ALLOWED_CLIENT_MIMES,
+  STATIC_IMAGE_ALLOWED_CLIENT_MIMES,
+  cleanupMulterImageFile,
+  hardenMulterImageFile,
+  normalizeClientMime,
+} from './utils/imageUploadSecurity';
 
 type AuthenticatedSession =
   | {
@@ -89,52 +98,29 @@ export const deliveryPublicPedidoCreateRateLimit = rateLimit({
   message: { error: 'Muitas requisições. Tente novamente em instantes.' },
 });
 
-// ── Validação de magic bytes de imagem ────────────────────────────────────────
-const IMAGE_SIGNATURES = [
-  { sig: [0xFF, 0xD8, 0xFF],                                                         label: 'JPEG' },
-  { sig: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],                          label: 'PNG'  },
-  { sig: [0x47, 0x49, 0x46, 0x38],                                                    label: 'GIF'  },
-  { sig: [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
-    mask: [1,    1,    1,    1,    0, 0, 0, 0, 1,    1,    1,    1   ],              label: 'WEBP' },
-];
+const PRODUCT_MIME_FILTER_SET = new Set<string>(PRODUCT_IMAGE_ALLOWED_CLIENT_MIMES);
+const STATIC_MIME_FILTER_SET = new Set<string>(STATIC_IMAGE_ALLOWED_CLIENT_MIMES);
 
-function isValidImageBytes(filePath: string): boolean {
-  try {
-    const fd  = fs.openSync(filePath, 'r');
-    const buf = Buffer.alloc(12);
-    fs.readSync(fd, buf, 0, 12, 0);
-    fs.closeSync(fd);
-    return IMAGE_SIGNATURES.some(({ sig, mask }) =>
-      sig.every((byte, i) => (mask && !mask[i]) || buf[i] === byte)
-    );
-  } catch { return false; }
-}
-
-function isValidImageBuffer(buf: Buffer): boolean {
-  if (!buf || buf.length < 3) return false;
-  const head = buf.subarray(0, 12);
-  return IMAGE_SIGNATURES.some(({ sig, mask }) =>
-    sig.every((byte, i) => (mask && !mask[i]) || head[i] === byte)
-  );
-}
-
-export function checkMagicBytes(req: any, res: any, next: any) {
-  const file = req.file;
-  if (!file) return next();
-  if (file.buffer) {
-    if (!isValidImageBuffer(file.buffer)) {
-      return res.status(400).json({ success: false, message: 'Arquivo rejeitado: conteúdo não é uma imagem válida.' });
+/**
+ * Valida nome/extensão/MIME, magic bytes, alinhamento extensão × conteúdo × MIME,
+ * reencode leve (sharp) para JPEG/PNG/WEBP e grava buffer + disco alinhados ao fluxo Cloudinary/local.
+ */
+export function hardenUploadedImageFile(opts: { allowGif: boolean }) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) return next();
+    try {
+      const result = await hardenMulterImageFile(file, opts);
+      if (result.ok === false) {
+        cleanupMulterImageFile(file);
+        return res.status(400).json({ success: false, message: result.message });
+      }
+      next();
+    } catch (e) {
+      cleanupMulterImageFile(file);
+      next(e);
     }
-    return next();
-  }
-  if (file.path) {
-    if (!isValidImageBytes(file.path)) {
-      fs.unlink(file.path, () => {});
-      return res.status(400).json({ success: false, message: 'Arquivo rejeitado: conteúdo não é uma imagem válida.' });
-    }
-    return next();
-  }
-  next();
+  };
 }
 
 // ── Multer — fotos de produto ─────────────────────────────────────────────────
@@ -145,10 +131,11 @@ const productDiskStorage = multer.diskStorage({
 
 export const upload = multer({
   storage: useMulterMemoryForImageUploads() ? multer.memoryStorage() : productDiskStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Apenas imagens são permitidas'));
+    PRODUCT_MIME_FILTER_SET.has(normalizeClientMime(file.mimetype))
+      ? cb(null, true)
+      : cb(new Error('Apenas imagens são permitidas'));
   },
 });
 
@@ -164,9 +151,9 @@ const logoStorage = multer.diskStorage({
 
 export const uploadLogo = multer({
   storage: useMulterMemoryForImageUploads() ? multer.memoryStorage() : logoStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
-    ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+    STATIC_MIME_FILTER_SET.has(normalizeClientMime(file.mimetype))
       ? cb(null, true)
       : cb(new Error('Apenas JPEG, PNG ou WEBP'));
   },
@@ -188,9 +175,9 @@ const deliveryCardapioLogoStorage = multer.diskStorage({
 /** Logo exclusiva do cardápio online (delivery); arquivos em uploads/delivery/ */
 export const uploadDeliveryCardapioLogo = multer({
   storage: useMulterMemoryForImageUploads() ? multer.memoryStorage() : deliveryCardapioLogoStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
-    ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+    STATIC_MIME_FILTER_SET.has(normalizeClientMime(file.mimetype))
       ? cb(null, true)
       : cb(new Error('Apenas JPEG, PNG ou WEBP'));
   },
@@ -212,9 +199,9 @@ const deliveryCardapioBannerStorage = multer.diskStorage({
 /** Banner do topo do cardápio; campo `banner`; rota deve incluir `:index` (0–3). */
 export const uploadDeliveryCardapioBanner = multer({
   storage: useMulterMemoryForImageUploads() ? multer.memoryStorage() : deliveryCardapioBannerStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
-    ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+    STATIC_MIME_FILTER_SET.has(normalizeClientMime(file.mimetype))
       ? cb(null, true)
       : cb(new Error('Apenas JPEG, PNG ou WEBP'));
   },
@@ -232,9 +219,9 @@ const fotoFuncStorage = multer.diskStorage({
 
 export const uploadFotoFunc = multer({
   storage: useMulterMemoryForImageUploads() ? multer.memoryStorage() : fotoFuncStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
-    ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)
+    STATIC_MIME_FILTER_SET.has(normalizeClientMime(file.mimetype))
       ? cb(null, true)
       : cb(new Error('Apenas imagens'));
   },
@@ -274,11 +261,15 @@ function resolveRequestPathname(req: Request): string {
   return full;
 }
 
-/** Rotas /api/admin/* (exceto login): JWT de admin não passa em resolveAuthenticatedSession; este fallback mantém o painel com um único Bearer. */
+/** Rotas /api/admin/* e /api/v1/admin/* (exceto login): JWT de admin não passa em resolveAuthenticatedSession; este fallback mantém o painel com um único Bearer. */
 function isProtectedPlatformAdminApiPath(req: Request): boolean {
   const reqPath = resolveRequestPathname(req);
-  if (reqPath !== '/api/admin' && !reqPath.startsWith('/api/admin/')) return false;
-  return reqPath !== '/api/admin/login';
+  const legacy = reqPath === '/api/admin' || reqPath.startsWith('/api/admin/');
+  const v1 = reqPath === '/api/v1/admin' || reqPath.startsWith('/api/v1/admin/');
+  if (!legacy && !v1) return false;
+  if (legacy && reqPath === '/api/admin/login') return false;
+  if (v1 && reqPath === '/api/v1/admin/login') return false;
+  return true;
 }
 
 function tryApplyPlatformAdminBearer(req: Request): boolean {
@@ -403,6 +394,11 @@ export async function resolveAuthenticatedSession(req: Request): Promise<Authent
   }
 
   try {
+    const userId = Number(user?.id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return { ok: false, status: 401, body: { error: 'Sessão inválida ou expirada' } };
+    }
+
     const row = await q1<{
       token_version: number;
       ativo: number | null;
@@ -431,17 +427,19 @@ export async function resolveAuthenticatedSession(req: Request): Promise<Authent
        FROM usuarios u
        LEFT JOIN clientes c_owner ON c_owner.usuario = u.username
        LEFT JOIN clientes c_sub ON c_sub.id = u.cliente_id
-       WHERE u.username = ?
+       WHERE u.id = ?
        LIMIT 1`,
-      [user.username]
+      [userId]
     );
 
     if (!row) {
       return { ok: false, status: 401, body: { error: 'Sessão inválida. Por favor, faça login novamente.' } };
     }
 
-    if (user.token_version !== row.token_version) {
-      return { ok: false, status: 401, body: { error: 'Sessão expirada. Por favor, faça login novamente.' } };
+    const jwtVersion = Number(user.token_version ?? 0);
+    const dbVersion = Number(row.token_version ?? 1);
+    if (jwtVersion !== dbVersion) {
+      return { ok: false, status: 401, body: { error: 'Sessão inválida ou expirada' } };
     }
 
     if (Number(row.ativo) === 0) {
@@ -593,9 +591,17 @@ function redactBodyForLogs(value: unknown, depth = 0): unknown {
   return value;
 }
 
+function normalizeApiPathForRedaction(path: string): string {
+  if (path === '/api/v1' || path.startsWith('/api/v1/')) {
+    return '/api' + path.slice('/api/v1'.length);
+  }
+  return path;
+}
+
 function shouldRedactEntireRequestBody(path: string): boolean {
-  if (FULL_REDACT_BODY_PATHS.has(path)) return true;
-  if (path.endsWith('/login-func')) return true;
+  const p = normalizeApiPathForRedaction(path);
+  if (FULL_REDACT_BODY_PATHS.has(p)) return true;
+  if (p.endsWith('/login-func')) return true;
   return false;
 }
 

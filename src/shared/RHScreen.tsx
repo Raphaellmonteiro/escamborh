@@ -35,6 +35,10 @@ interface Func {
   horario_entrada: string; horario_saida: string; carga_horaria: number;
   dias_semana: string; tolerancia_minutos: number; dias_trabalho_mes: number;
   data_admissao: string; telefone?: string; cpf?: string; pin?: string;
+  /** CPF mascarado nas listagens e folha/espelho (ex.: ***.***.***-45). */
+  cpf_mascarado?: string | null;
+  /** Definido pela API após remover o PIN do payload (não enviar de volta). */
+  pin_configurado?: boolean;
   foto_url?: string; status: string;
   tipo_contrato?: 'fixo' | 'diarista' | 'evento';
 }
@@ -173,6 +177,12 @@ interface Folha {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 const fmtDate = (d: string) => d ? new Date(d.includes('T') ? d : d + 'T12:00:00').toLocaleDateString('pt-BR') : '-';
+/** Formata 11 dígitos para o campo de CPF; repassa texto parcial sem alterar. */
+const formatCpfDigitsForInput = (raw: string | undefined) => {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (d.length !== 11) return raw || '';
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+};
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const DIAS_LABEL = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TIPOS_EVENTO = [
@@ -798,7 +808,12 @@ function TabLista({
   const handleSalvar = async () => {
     setSaving(true);
     try {
-      const body = { ...form, salario_base:parseFloat(form.salario_base), carga_horaria:parseFloat(form.carga_horaria), tolerancia_minutos:parseInt(form.tolerancia_minutos), dias_trabalho_mes:parseInt(form.dias_trabalho_mes), tipo_contrato: form.tipo_contrato || 'fixo' };
+      const body: Record<string, unknown> = { ...form, salario_base:parseFloat(form.salario_base), carga_horaria:parseFloat(form.carga_horaria), tolerancia_minutos:parseInt(form.tolerancia_minutos), dias_trabalho_mes:parseInt(form.dias_trabalho_mes), tipo_contrato: form.tipo_contrato || 'fixo' };
+      delete body.pin_configurado;
+      delete body.cpf_mascarado;
+      if (!String(form.pin || '').trim()) {
+        delete body.pin;
+      }
       const url = modal==='novo' ? '/api/funcionarios' : `/api/funcionarios/${selected!.id}`;
       const r = await fetch(url, { method:modal==='novo'?'POST':'PUT', headers:jHdrs, body:JSON.stringify(body) });
       const data = await r.json();
@@ -861,7 +876,7 @@ function TabLista({
   const preencherFormulario = (f:Func) => {
     setSelected(f);
     const tc = f.tipo_contrato === 'diarista' || f.tipo_contrato === 'evento' ? f.tipo_contrato : 'fixo';
-    setForm({ nome:f.nome, cargo:f.cargo, salario_base:String(f.salario_base), horario_entrada:f.horario_entrada||'08:00', horario_saida:f.horario_saida||'17:00', carga_horaria:String(f.carga_horaria||8), dias_semana:f.dias_semana||'1,2,3,4,5', tolerancia_minutos:String(f.tolerancia_minutos||10), dias_trabalho_mes:String(f.dias_trabalho_mes||26), data_admissao:f.data_admissao||'', telefone:f.telefone||'', cpf:f.cpf||'', pin:f.pin||'', tipo_contrato: tc });
+    setForm({ nome:f.nome, cargo:f.cargo, salario_base:String(f.salario_base), horario_entrada:f.horario_entrada||'08:00', horario_saida:f.horario_saida||'17:00', carga_horaria:String(f.carga_horaria||8), dias_semana:f.dias_semana||'1,2,3,4,5', tolerancia_minutos:String(f.tolerancia_minutos||10), dias_trabalho_mes:String(f.dias_trabalho_mes||26), data_admissao:f.data_admissao||'', telefone:f.telefone||'', cpf:formatCpfDigitsForInput(f.cpf), pin:'', tipo_contrato: tc });
     // Usa caminho relativo: funciona tanto em localhost quanto em produção
     setFotoPreview(f.foto_url ? f.foto_url : '');
     // Carrega dados de acesso existente
@@ -873,9 +888,22 @@ function TabLista({
     }
   };
 
-  const openEdit = (f:Func) => {
-    preencherFormulario(f);
-    setModal('edit');
+  const openEdit = (f: Func) => {
+    void (async () => {
+      try {
+        const r = await fetch(`/api/funcionarios/${f.id}/dados-edicao`, { headers: hdrs });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          alert((err as { error?: string }).error || 'Não foi possível carregar os dados para edição.');
+          return;
+        }
+        const detail = (await r.json()) as Func;
+        setModal('edit');
+        preencherFormulario(detail);
+      } catch {
+        alert('Não foi possível carregar os dados para edição.');
+      }
+    })();
   };
 
   const toggleDia = (v:number) => { const arr=form.dias_semana.split(',').map(Number).filter(n=>!isNaN(n)); const next=arr.includes(v)?arr.filter(x=>x!==v):[...arr,v].sort(); setForm({...form,dias_semana:next.join(',')}); };
@@ -944,7 +972,7 @@ function TabLista({
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <InfoChip label="Salário base" value={fmt(f.salario_base)}/>
                 <InfoChip label="Jornada" value={`${f.horario_entrada||'08:00'}–${f.horario_saida||'17:00'}`}/>
-                <InfoChip label="PIN" value={f.pin ? 'Definido' : 'Pendente'}/>
+                <InfoChip label="PIN" value={f.pin_configurado ? 'Definido' : 'Pendente'}/>
                 <InfoChip label="Foto" value={f.foto_url ? 'Cadastrada' : 'Sem foto'}/>
                 <InfoChip label="Acesso" value={acesso ? 'Liberado' : 'Sem acesso'}/>
                 <InfoChip label="Status" value={f.status}/>
@@ -1019,7 +1047,14 @@ function TabLista({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FInput label="Data de admissão" type="date" value={form.data_admissao} onChange={v=>setForm({...form,data_admissao:v})}/>
-            <FInput label="PIN (bater ponto)" value={form.pin} onChange={v=>setForm({...form,pin:v})} placeholder="Ex: 1234"/>
+            <FInput
+              label="PIN (bater ponto)"
+              type="password"
+              autoComplete="new-password"
+              value={form.pin}
+              onChange={v=>setForm({...form,pin:v})}
+              placeholder={modal === 'edit' ? 'Novo PIN (vazio = manter)' : 'Ex: 1234'}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <FInput label="Telefone" value={form.telefone} onChange={v=>setForm({...form,telefone:v})} placeholder="(11) 99999-9999"/>
@@ -2056,7 +2091,7 @@ function TabEspelho({ token, onIrFolha }: { token: string; onIrFolha?: () => voi
       <div class="header">
         <div>
           <h1>Espelho de Ponto</h1>
-          <p class="sub">${mesLabel} · ${func.nome} · ${func.cargo}</p>
+          <p class="sub">${mesLabel} · ${func.nome} · ${func.cargo}${func.cpf_mascarado ? ` · CPF ${func.cpf_mascarado}` : ''}</p>
         </div>
         <div style="text-align:right;font-size:11px;color:#555">
           ${func.horario_entrada||'08:00'} – ${func.horario_saida||'17:00'} · ${func.carga_horaria||8}h/dia<br/>
@@ -3245,7 +3280,7 @@ function TabFolha({ token, onIrEspelho }: { token: string; onIrEspelho?: () => v
                     <p className="font-black text-[var(--text-main)] text-lg">{folha.funcionario.nome}</p>
                     <p className="text-[var(--text-muted)]">{folha.funcionario.cargo}</p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
-                      {folha.funcionario.cpf && <span>CPF: {folha.funcionario.cpf}</span>}
+                      {folha.funcionario.cpf_mascarado && <span>CPF: {folha.funcionario.cpf_mascarado}</span>}
                       {folha.funcionario.data_admissao && (
                         <span>Admissão: {fmtDate(folha.funcionario.data_admissao)}</span>
                       )}
@@ -3849,8 +3884,8 @@ function SCard({ label, value, color, small=false, hint }: { label:string; value
   const txt:Record<string,string>={emerald:'text-emerald-700',red:'text-red-700',blue:'text-blue-700',purple:'text-purple-700',amber:'text-amber-700',orange:'text-orange-700',cyan:'text-cyan-800'};
   return <div className={`${bg[color]} border rounded-xl p-3`}><p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</p><p className={`font-black mt-1 ${txt[color]} ${small?'text-sm':'text-2xl'}`}>{value}</p>{hint && <p className="mt-1 text-[10px] text-[var(--text-muted)] leading-snug">{hint}</p>}</div>;
 }
-function FInput({ label, value, onChange, placeholder='', type='text' }: { label:string; value:string; onChange:(v:string)=>void; placeholder?:string; type?:string }) {
-  return <div><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</label><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full px-3 py-2.5 bg-[var(--bg-main)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"/></div>;
+function FInput({ label, value, onChange, placeholder='', type='text', autoComplete }: { label:string; value:string; onChange:(v:string)=>void; placeholder?:string; type?:string; autoComplete?: string }) {
+  return <div><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">{label}</label><input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} className="mt-1 w-full px-3 py-2.5 bg-[var(--bg-main)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"/></div>;
 }
 function MBtns({ onCancel, onConfirm, saving, label }: { onCancel:()=>void; onConfirm:()=>void; saving:boolean; label:string }) {
   return <div className="flex gap-3 mt-5"><button onClick={onCancel} className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-sm font-bold">Cancelar</button><button onClick={onConfirm} disabled={saving} className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">{saving?<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:label}</button></div>;

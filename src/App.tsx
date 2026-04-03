@@ -47,6 +47,9 @@ const KDSScreen             = lazy(() => import('./segments/restaurante/KDSScree
 const ClienteDisplayScreen  = lazy(() => import('./segments/restaurante/ClienteDisplayScreen'));
 const ClienteMesaScreen     = lazy(() => import('./segments/restaurante/ClienteMesaScreen'));
 const MesasScreen           = lazy(() => import('./segments/bar/MesasScreen'));
+const PrivacyPolicyPublicPage = lazy(() => import('./shared/legal/PrivacyPolicyPublicPage'));
+const TermsOfUsePublicPage  = lazy(() => import('./shared/legal/TermsOfUsePublicPage'));
+const LegalAcceptanceGate   = lazy(() => import('./shared/legal/LegalAcceptanceGate'));
 
 import { Button }            from './components/ui/Card';
 import { Input }             from './components/ui/Card';
@@ -224,9 +227,18 @@ export default function App() {
 
   const [showSolicitacao, setShowSolicitacao] = useState(false);
   const [licenseError, setLicenseError] = useState<'bloqueado' | 'trial_expirado' | null>(null);
+  const [legalNeedsAcceptance, setLegalNeedsAcceptance] = useState(false);
+  const [legalGateResolved, setLegalGateResolved] = useState(() => {
+    try {
+      return !localStorage.getItem('token');
+    } catch {
+      return true;
+    }
+  });
   const [taxasPagamento, setTaxasPagamento] = useState({ debito: 0, credito: 0, pix: 0 });
   const [senhaPadrao, setSenhaPadrao]       = useState(false);
   const path = window.location.pathname;
+  const isLegalPublicPage = path === '/privacidade' || path === '/termos';
   const isAdmin = path.startsWith('/admin');
   const bookingMatch = path.match(/^\/agendar\/(.+)$/);
   const bookingSlug  = bookingMatch ? bookingMatch[1] : null;
@@ -251,6 +263,8 @@ export default function App() {
   else if (mesaMatch)     document.title = 'Sua Mesa — FlowPDV';
   else if (trackingMatch) document.title = 'Acompanhar Pedido Online — FlowPDV';
   else if (deliveryMatch) document.title = 'Peça Online — FlowPDV';
+  else if (path === '/privacidade') document.title = 'Política de Privacidade — FlowPDV';
+  else if (path === '/termos') document.title = 'Termos de Uso — FlowPDV';
   else                    document.title = 'FlowPDV';
 
   const segmentoOperacional = getOperationalSegment(estabelecimentoSegmento);
@@ -373,6 +387,14 @@ React.useEffect(() => {
     return (
       <Suspense fallback={<PublicRouteFallback />}>
         <ClienteMesaScreen slug={mesaMatch[1]} mesa={mesaMatch[2]} />
+      </Suspense>
+    );
+  }
+
+  if (isLegalPublicPage) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        {path === '/privacidade' ? <PrivacyPolicyPublicPage /> : <TermsOfUsePublicPage />}
       </Suspense>
     );
   }
@@ -530,7 +552,7 @@ const handleAuth = async (e: React.FormEvent) => {
     fetch('/api/logs', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario_nome: userName || 'Usuário', cargo: userCargo, acao, detalhes }),
+      body: JSON.stringify({ acao, ...(detalhes != null && detalhes !== '' ? { detalhes } : {}) }),
     }).catch(() => {});
   };
 
@@ -545,13 +567,47 @@ const handleAuth = async (e: React.FormEvent) => {
     setUserName('');
     setPlanFeatures(getSafeFallbackPlanFeatures());
     setPlanProfile(null);
+    setLegalNeedsAcceptance(false);
+    setLegalGateResolved(true);
     setToken(null);
   };
+
+  useEffect(() => {
+    if (!token) {
+      setLegalNeedsAcceptance(false);
+      setLegalGateResolved(true);
+      return;
+    }
+
+    let cancelled = false;
+    setLegalGateResolved(false);
+
+    (async () => {
+      try {
+        const res = await fetch('/api/legal/status', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('legal_status');
+        const data = (await res.json()) as { needs_acceptance?: boolean };
+        if (!cancelled) setLegalNeedsAcceptance(!!data.needs_acceptance);
+      } catch {
+        if (!cancelled) setLegalNeedsAcceptance(false);
+      } finally {
+        if (!cancelled) setLegalGateResolved(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const isProtectedApiUrl = (url: string) =>
     url.includes('/api/')
     && !url.includes('/api/login')
-    && !url.includes('/api/admin');
+    && !url.includes('/api/v1/login')
+    && !url.includes('/api/admin')
+    && !url.includes('/api/v1/admin');
 
   const isSessionInvalidResponse = async (response: Response) => {
     if (response.status === 401) return true;
@@ -620,6 +676,7 @@ const handleAuth = async (e: React.FormEvent) => {
           onLogin={(t) => {
               setToken(t);
               localStorage.setItem('token', t);
+              setLegalGateResolved(false);
               try { setSlugAtual((JSON.parse(atob(t.split('.')[1])) as any).username || ''); } catch {}
             }} 
           onShowSolicitacao={() => setShowSolicitacao(true)}
@@ -629,6 +686,28 @@ const handleAuth = async (e: React.FormEvent) => {
           <SolicitacaoModal isOpen={showSolicitacao} onClose={() => setShowSolicitacao(false)} />
         </Suspense>
       </>
+    );
+  }
+
+  if (!legalGateResolved) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+        <div className="text-center">
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+          <p className="mt-4 text-sm font-medium text-zinc-600">Verificando termos e privacidade…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (legalNeedsAcceptance) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <LegalAcceptanceGate
+          token={token}
+          onAccepted={() => setLegalNeedsAcceptance(false)}
+        />
+      </Suspense>
     );
   }
 

@@ -141,7 +141,7 @@ export async function runMigrations() {
         ultimo_acesso TIMESTAMPTZ,
         segmento TEXT DEFAULT 'Restaurante/Food',
         taxa_debito REAL DEFAULT 0, taxa_credito REAL DEFAULT 0, taxa_pix REAL DEFAULT 0,
-        senha_admin TEXT DEFAULT '123321', senha_caixa TEXT DEFAULT '123321',
+        senha_admin TEXT, senha_caixa TEXT,
         printer_config TEXT DEFAULT NULL,
         plano TEXT DEFAULT 'trial', valor_plano REAL DEFAULT 0,
         vencimento TIMESTAMPTZ,
@@ -388,6 +388,8 @@ export async function runMigrations() {
 
     await client.query(`
       ALTER TABLE clientes ADD COLUMN IF NOT EXISTS logo_url TEXT;
+      ALTER TABLE clientes ALTER COLUMN senha_admin DROP DEFAULT;
+      ALTER TABLE clientes ALTER COLUMN senha_caixa DROP DEFAULT;
       ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS minutos_pago_folha INTEGER NULL;
       ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS destino_pendente INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS tipo_contrato TEXT DEFAULT 'fixo';
@@ -729,6 +731,23 @@ export async function runMigrations() {
     `);
 
     await client.query(`DELETE FROM usuarios WHERE username='admin'`);
+
+    await client.query(`
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS legal_bundle_version TEXT;
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS legal_accepted_at TIMESTAMPTZ;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lgpd_solicitacoes (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        entidade_id INTEGER NOT NULL,
+        motivo TEXT,
+        status TEXT NOT NULL DEFAULT 'pendente',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
 
     console.log('Migracoes PostgreSQL concluidas.');
   } catch (err: any) {

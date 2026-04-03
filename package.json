@@ -11,10 +11,14 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check-product-photos": "tsx scripts/check-product-photos.ts",
     "clear-missing-product-photos": "tsx scripts/clear-missing-product-photos.ts",
     "preview-cardapio": "tsx scripts/generate-cardapio-preview.ts",
-    "test:delivery-zona": "tsx scripts/test-delivery-bairro-zona.ts"
+    "test:delivery-zona": "tsx scripts/test-delivery-bairro-zona.ts",
+    "test:funcionario-pin": "vitest run src/utils/funcionarioPin.test.ts",
+    "test:funcionario-cpf": "tsx --test src/utils/funcionarioCpf.test.ts src/utils/funcionarioCpfCrypto.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",
@@ -34,6 +38,7 @@
     "pg": "^8.20.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sharp": "^0.34.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -51,6 +56,7 @@
     "tailwindcss": "^3.4.19",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.0.0"
   }
 }
