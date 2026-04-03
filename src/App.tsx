@@ -26,6 +26,8 @@ import { playNewOrderSound } from './utils/sound';
 import LoginScreen           from './shared/LoginScreen';
 import POSScreen             from './shared/POSScreen';
 import LicenseBlockedScreen  from './shared/LicenseBlockedScreen';
+import LegalAcceptanceGate   from './shared/legal/LegalAcceptanceGate';
+import ChunkLoadErrorBoundary from './shared/ChunkLoadErrorBoundary';
 
 const AdminPanel            = lazy(() => import('./shared/AdminPanel'));
 const OrdersScreen          = lazy(() => import('./shared/OrdersScreen'));
@@ -49,7 +51,6 @@ const ClienteMesaScreen     = lazy(() => import('./segments/restaurante/ClienteM
 const MesasScreen           = lazy(() => import('./segments/bar/MesasScreen'));
 const PrivacyPolicyPublicPage = lazy(() => import('./shared/legal/PrivacyPolicyPublicPage'));
 const TermsOfUsePublicPage  = lazy(() => import('./shared/legal/TermsOfUsePublicPage'));
-const LegalAcceptanceGate   = lazy(() => import('./shared/legal/LegalAcceptanceGate'));
 
 import { Button }            from './components/ui/Card';
 import { Input }             from './components/ui/Card';
@@ -691,10 +692,10 @@ const handleAuth = async (e: React.FormEvent) => {
 
   if (!legalGateResolved) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-fp-app px-4">
         <div className="text-center">
-          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
-          <p className="mt-4 text-sm font-medium text-zinc-600">Verificando termos e privacidade…</p>
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-fp-border border-t-fp-accent" />
+          <p className="mt-4 text-sm font-medium text-fptext-muted">Verificando termos e privacidade…</p>
         </div>
       </div>
     );
@@ -702,16 +703,15 @@ const handleAuth = async (e: React.FormEvent) => {
 
   if (legalNeedsAcceptance) {
     return (
-      <Suspense fallback={<PublicRouteFallback />}>
-        <LegalAcceptanceGate
-          token={token}
-          onAccepted={() => setLegalNeedsAcceptance(false)}
-        />
-      </Suspense>
+      <LegalAcceptanceGate
+        token={token}
+        onAccepted={() => setLegalNeedsAcceptance(false)}
+      />
     );
   }
 
   return (
+    <ChunkLoadErrorBoundary>
     <div className="flex h-screen min-h-0 bg-fp-app overflow-hidden flex-col lg:flex-row">
       {mobileNavOpen && (
         <button
@@ -1174,6 +1174,7 @@ const handleAuth = async (e: React.FormEvent) => {
       )}
       </div>
     </div>
+    </ChunkLoadErrorBoundary>
   );
 }
 
