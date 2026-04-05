@@ -20,6 +20,7 @@ import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { createPixPayment } from '../services/paymentsService';
 import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
 import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomationService';
+import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
 import { isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 import { getCustomerLoyaltyTier } from '../services/customerLoyaltyTier';
@@ -514,6 +515,38 @@ router.get('/pedidos', async (req: Request, res) => {
       q += ' ORDER BY p.created_at DESC LIMIT ?'; params.push(Number(limit));
 
       const rows = await qAll(q, params);
+
+      await Promise.allSettled(
+        rows
+          .filter(
+            (row: any) =>
+              String(row.pagamento_tipo || '').trim().toLowerCase() === 'pix' &&
+              String(row.pagamento_status || '').trim().toLowerCase() !== 'pago'
+          )
+          .map(async (row: any) => {
+            try {
+              const result = await revalidatePixPaymentByOrder({
+                orderId: Number(row.id),
+                tenantId: Number(req.tenantId),
+              });
+
+              if (
+                String(result.externalStatus || '').trim().toLowerCase() === 'approved' ||
+                String(result.externalStatus || '').trim().toLowerCase() === 'paid' ||
+                result.orderUpdated
+              ) {
+                row.pagamento_status = 'pago';
+              }
+            } catch (error) {
+              if (isAppError(error) && error.statusCode === 404) return;
+              logError('routes/delivery.getPedidos.revalidatePix', error, {
+                orderId: row.id,
+                tenantId: req.tenantId,
+              });
+            }
+          })
+      );
+
       res.json(
         rows.map((p: any) => {
           let itens = p.itens;

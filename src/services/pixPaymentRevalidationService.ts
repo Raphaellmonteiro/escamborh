@@ -39,58 +39,14 @@ function isPixPayment(payment: OrderPaymentRecord) {
   return String(payment.method || '').trim().toLowerCase() === 'pix';
 }
 
-async function revalidatePixPaymentRecord(
-  payment: OrderPaymentRecord
+async function finalizePaidPixPayment(
+  payment: OrderPaymentRecord,
+  paidStatus: string | null,
+  alreadyPaid: boolean,
+  paidAt: string
 ): Promise<RevalidatePixPaymentResult> {
-  const externalId = normalizeOptionalText(payment.external_id);
-  const provider = normalizeOptionalText(payment.provider);
-  const internalStatus = normalizeOptionalText(payment.status);
-
-  if (!externalId) {
-    throw new AppError('Pagamento PIX sem external_id para revalidacao', 400);
-  }
-
-  if (provider !== 'mercado_pago') {
-    throw new AppError('Provider PIX nao suportado para revalidacao', 400);
-  }
-
-  const providerConfig = await getTenantPaymentProviderConfig(payment.tenant_id);
-
-  if (providerConfig.provider !== 'mercado_pago' || !providerConfig.accessToken) {
-    throw new AppError('Configuracao do Mercado Pago nao encontrada para o tenant', 400);
-  }
-
-  const providerPayment = await getPaymentStatus({
-    provider: 'mercado_pago',
-    externalId,
-    accessToken: providerConfig.accessToken,
-    sandbox: providerConfig.sandbox,
-  });
-
-  const externalStatus = normalizeOptionalText(providerPayment.status);
-  const alreadyPaid = internalStatus === 'paid';
-
-  if (!isExternalPaymentPaid(externalStatus)) {
-    return {
-      matched: true,
-      paymentUpdated: false,
-      orderUpdated: false,
-      alreadyPaid,
-      externalId,
-      externalStatus,
-      internalStatus,
-      paidAt: payment.paid_at ?? normalizeOptionalText(providerPayment.paid_at),
-      orderId: payment.order_id,
-      paymentId: payment.id,
-    };
-  }
-
-  const paidAt =
-    normalizeOptionalText(providerPayment.paid_at) ||
-    normalizeOptionalText(payment.paid_at) ||
-    new Date().toISOString();
-
   let paymentUpdated = false;
+
   if (!alreadyPaid) {
     await updatePaymentStatus({
       id: payment.id,
@@ -121,13 +77,76 @@ async function revalidatePixPaymentRecord(
     paymentUpdated,
     orderUpdated: !orderWasPaid,
     alreadyPaid,
-    externalId,
-    externalStatus,
-    internalStatus,
+    externalId: normalizeOptionalText(payment.external_id),
+    externalStatus: paidStatus,
+    internalStatus: normalizeOptionalText(payment.status),
     paidAt,
     orderId: payment.order_id,
     paymentId: payment.id,
   };
+}
+
+async function revalidatePixPaymentRecord(
+  payment: OrderPaymentRecord
+): Promise<RevalidatePixPaymentResult> {
+  const externalId = normalizeOptionalText(payment.external_id);
+  const provider = normalizeOptionalText(payment.provider);
+  const internalStatus = normalizeOptionalText(payment.status);
+
+  if (!externalId) {
+    throw new AppError('Pagamento PIX sem external_id para revalidacao', 400);
+  }
+
+  if (provider !== 'mercado_pago') {
+    throw new AppError('Provider PIX nao suportado para revalidacao', 400);
+  }
+
+  const providerConfig = await getTenantPaymentProviderConfig(payment.tenant_id);
+  const alreadyPaid = internalStatus === 'paid';
+
+  if (isExternalPaymentPaid(internalStatus)) {
+    return finalizePaidPixPayment(
+      payment,
+      internalStatus,
+      alreadyPaid,
+      normalizeOptionalText(payment.paid_at) || new Date().toISOString()
+    );
+  }
+
+  if (providerConfig.provider !== 'mercado_pago' || !providerConfig.accessToken) {
+    throw new AppError('Configuracao do Mercado Pago nao encontrada para o tenant', 400);
+  }
+
+  const providerPayment = await getPaymentStatus({
+    provider: 'mercado_pago',
+    externalId,
+    accessToken: providerConfig.accessToken,
+    sandbox: providerConfig.sandbox,
+  });
+
+  const externalStatus = normalizeOptionalText(providerPayment.status);
+
+  if (!isExternalPaymentPaid(externalStatus)) {
+    return {
+      matched: true,
+      paymentUpdated: false,
+      orderUpdated: false,
+      alreadyPaid,
+      externalId,
+      externalStatus,
+      internalStatus,
+      paidAt: payment.paid_at ?? normalizeOptionalText(providerPayment.paid_at),
+      orderId: payment.order_id,
+      paymentId: payment.id,
+    };
+  }
+
+  const paidAt =
+    normalizeOptionalText(providerPayment.paid_at) ||
+    normalizeOptionalText(payment.paid_at) ||
+    new Date().toISOString();
+
+  return finalizePaidPixPayment(payment, externalStatus, alreadyPaid, paidAt);
 }
 
 export async function revalidatePixPaymentByExternalId(input: {

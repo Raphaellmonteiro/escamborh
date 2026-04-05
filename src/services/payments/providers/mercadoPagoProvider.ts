@@ -10,11 +10,56 @@ import type {
 const MERCADO_PAGO_API_BASE_URL = 'https://api.mercadopago.com';
 const DEFAULT_PIX_EXPIRATION_MINUTES = 30;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+const MERCADO_PAGO_PAYMENT_WEBHOOK_PATH = '/api/webhooks/payments/mercado-pago';
 
 function normalizeOptionalText(value: unknown) {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim();
   return normalized ? normalized : null;
+}
+
+function normalizePublicBaseUrl(rawValue: unknown) {
+  const normalized = normalizeOptionalText(rawValue);
+  if (!normalized) return null;
+
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)
+    ? normalized
+    : `https://${normalized}`;
+
+  try {
+    const url = new URL(withProtocol);
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function resolvePublicBackendBaseUrl() {
+  const envCandidates = [
+    process.env.FLOWPDV_PUBLIC_URL,
+    process.env.PUBLIC_API_BASE_URL,
+    process.env.APP_URL,
+    process.env.BACKEND_URL,
+    process.env.RAILWAY_STATIC_URL,
+    process.env.RAILWAY_PUBLIC_DOMAIN,
+  ];
+
+  for (const candidate of envCandidates) {
+    const normalized = normalizePublicBaseUrl(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+function buildMercadoPagoNotificationUrl() {
+  const publicBaseUrl = resolvePublicBackendBaseUrl();
+  if (!publicBaseUrl) return null;
+
+  return `${publicBaseUrl}${MERCADO_PAGO_PAYMENT_WEBHOOK_PATH}`;
 }
 
 function buildDefaultPayerEmail(input: CreatePixProviderPaymentInput) {
@@ -142,12 +187,14 @@ export async function createMercadoPagoPixPayment(
   const payerName = normalizeOptionalText(input.payerName) || 'Cliente';
   const expiresAt = buildPixExpirationIso(input.expiresAt);
   const idempotencyKey = `${input.tenantId}-${input.orderId}-pix`;
+  const notificationUrl = buildMercadoPagoNotificationUrl();
   const requestBody = {
     transaction_amount: Number(input.amount.toFixed(2)),
     description: input.description,
     payment_method_id: 'pix',
     external_reference: input.externalReference,
     date_of_expiration: expiresAt,
+    ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     payer: {
       email: payerEmail,
       first_name: payerName.slice(0, 120),
@@ -201,6 +248,7 @@ export async function createMercadoPagoPixPayment(
           payment_method_id: requestBody.payment_method_id,
           external_reference: requestBody.external_reference,
           date_of_expiration: requestBody.date_of_expiration,
+          notification_url: notificationUrl,
           payer: {
             email_preview: maskEmail(requestBody.payer.email),
             first_name: requestBody.payer.first_name,
@@ -229,6 +277,7 @@ export async function createMercadoPagoPixPayment(
       payment_method_id: requestBody.payment_method_id,
       external_reference: requestBody.external_reference,
       date_of_expiration: requestBody.date_of_expiration,
+      notification_url: notificationUrl,
       payer: {
         email_preview: maskEmail(requestBody.payer.email),
         first_name: requestBody.payer.first_name,

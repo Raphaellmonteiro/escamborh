@@ -27,6 +27,7 @@ import {
 } from '../services/operationalAutomationService';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { createPixPayment, getPaymentByOrderId } from '../services/paymentsService';
+import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
 import { batchLoadComboGruposForCardapio } from '../services/productComboValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
@@ -216,6 +217,30 @@ function buildPublicPixPayment(
     qr_code_image_base64: qrCodeBase64,
     expires_at: payment.expires_at || null,
   };
+}
+
+async function tryRevalidatePendingPixOrder(input: {
+  orderId: number;
+  tenantId: number;
+  paymentMethod?: unknown;
+  paymentStatus?: unknown;
+  context: string;
+}) {
+  if (String(input.paymentMethod || '').trim().toLowerCase() !== 'pix') return;
+  if (String(input.paymentStatus || '').trim().toLowerCase() === 'pago') return;
+
+  try {
+    await revalidatePixPaymentByOrder({
+      orderId: input.orderId,
+      tenantId: input.tenantId,
+    });
+  } catch (error) {
+    if (isAppError(error) && error.statusCode === 404) return;
+    logError(input.context, error, {
+      orderId: input.orderId,
+      tenantId: input.tenantId,
+    });
+  }
 }
 
 function getCurrentDateInTimeZone() {
@@ -1084,7 +1109,35 @@ export function createDeliveryPublicRouter() {
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
 
-      const pedido = await q1(
+      let pedido = await q1(
+        `SELECT p.*, m.nome as motoboy_nome,
+          (SELECT STRING_AGG(pr.name||' x'||ip.quantity::text,', ') FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens
+         FROM pedidos p LEFT JOIN delivery_motoboys m ON m.id=p.motoboy_id AND m.tenant_id=p.tenant_id
+         WHERE p.id=? AND p.tenant_id=?`,
+        [req.params.id, tenant.id]
+      );
+
+      if (!pedido) return res.status(404).json({ error: 'Pedido nao encontrado' });
+
+      pedido.total_amount = Number(pedido.total_amount || 0);
+      pedido.taxa_entrega = Number(pedido.taxa_entrega || 0);
+      try {
+        pedido.delivery_checkout_snapshot = pedido.delivery_checkout_snapshot
+          ? JSON.parse(pedido.delivery_checkout_snapshot)
+          : null;
+      } catch {
+        pedido.delivery_checkout_snapshot = null;
+      }
+
+      await tryRevalidatePendingPixOrder({
+        orderId: Number(pedido.id),
+        tenantId: Number(tenant.id),
+        paymentMethod: pedido.pagamento_tipo,
+        paymentStatus: pedido.pagamento_status,
+        context: 'delivery-public.track.revalidatePix',
+      });
+
+      pedido = await q1(
         `SELECT p.*, m.nome as motoboy_nome,
           (SELECT STRING_AGG(pr.name||' x'||ip.quantity::text,', ') FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id WHERE ip.order_id=p.id) as resumo_itens
          FROM pedidos p LEFT JOIN delivery_motoboys m ON m.id=p.motoboy_id AND m.tenant_id=p.tenant_id
@@ -1108,6 +1161,7 @@ export function createDeliveryPublicRouter() {
         orderId: Number(pedido.id),
         tenantId: Number(tenant.id),
       });
+
       const latestPixPayment = persistedPayments.find(
         (payment) => String(payment.method || '').trim().toLowerCase() === 'pix'
       );

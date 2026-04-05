@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
-import { logError } from '../utils/logger';
+import { logError, logInfo } from '../utils/logger';
 
 export function createWebhooksRouter() {
   const router = Router();
@@ -22,13 +22,22 @@ export function createWebhooksRouter() {
         payload,
         queryDataId,
         headers,
-      }).catch((error) => {
-        logError('webhooks.mercadoPagoPayment', error, {
-          path: req.originalUrl,
-          method: req.method,
-          queryDataId,
+      })
+        .then((result) => {
+          logInfo('webhooks.mercadoPagoPayment.result', {
+            path: req.originalUrl,
+            method: req.method,
+            queryDataId,
+            ...result,
+          });
+        })
+        .catch((error) => {
+          logError('webhooks.mercadoPagoPayment', error, {
+            path: req.originalUrl,
+            method: req.method,
+            queryDataId,
+          });
         });
-      });
     }
   );
 

@@ -251,6 +251,12 @@ type OrderPaymentAggregateRow = {
   payment_count: number | string | null;
 };
 
+type LatestPixPaymentStatusRow = {
+  order_id: number | string;
+  status: string | null;
+  paid_at?: string | null;
+};
+
 type OrderAutomationFlagsRow = {
   pedido_id: number | string;
   automation_auto_delivery_accept: boolean | null;
@@ -292,6 +298,15 @@ function parseOrderId(orderId: number | string) {
   }
 
   return parsed;
+}
+
+function normalizePaymentStatusKey(status?: string | null) {
+  return String(status || '').trim().toLowerCase();
+}
+
+function isPixPaymentPaidLike(status?: string | null) {
+  const normalized = normalizePaymentStatusKey(status);
+  return normalized === 'approved' || normalized === 'paid';
 }
 
 /** Mesma regra do item de pedido (balcão): observation ou obs_opcoes, trim e limite de tamanho. */
@@ -1724,6 +1739,50 @@ export async function getOrders(filters: GetOrdersFilters) {
     }
 
     const orderIds = orders.map((order) => order.id);
+    const latestPixPaymentRows = await qAll<LatestPixPaymentStatusRow>(
+      `SELECT DISTINCT ON (order_id) order_id, status, paid_at
+       FROM pedido_pagamentos
+       WHERE tenant_id=? AND order_id IN (${orderIds.map(() => '?').join(',')}) AND LOWER(method)='pix'
+       ORDER BY order_id, created_at DESC, id DESC`,
+      [filters.tenantId, ...orderIds]
+    );
+    const latestPixPaymentByOrder = new Map<number, LatestPixPaymentStatusRow>();
+
+    for (const row of latestPixPaymentRows) {
+      latestPixPaymentByOrder.set(Number(row.order_id), row);
+    }
+
+    const pixOrdersToConfirm = orders.filter((order) => {
+      if (String(order.pagamento_tipo || '').trim().toLowerCase() !== 'pix') return false;
+      if (normalizePaymentStatusKey(order.pagamento_status) === 'pago') return false;
+      return isPixPaymentPaidLike(latestPixPaymentByOrder.get(Number(order.id))?.status);
+    });
+
+    if (pixOrdersToConfirm.length > 0) {
+      const pixConfirmationResults = await Promise.allSettled(
+        pixOrdersToConfirm.map((order) =>
+          confirmOrderPayment({
+            orderId: order.id,
+            tenantId: filters.tenantId,
+          })
+        )
+      );
+
+      pixConfirmationResults.forEach((result, index) => {
+        const order = pixOrdersToConfirm[index];
+        if (result.status === 'fulfilled') {
+          order.pagamento_status = result.value.pagamento_status;
+          order.pagamento_confirmado_at = result.value.paid_at;
+          order.pagamento_confirmado_valor = result.value.amount_paid;
+          return;
+        }
+        logError('ordersService.getOrders.confirmPendingPix', result.reason, {
+          tenantId: filters.tenantId,
+          orderId: order.id,
+        });
+      });
+    }
+
     const items = await qAll<OrderItemRow>(
       `SELECT ip.order_id, ip.product_id, ip.quantity, ip.type, ip.price_at_time,
               ip.observation, ip.selecoes_json,

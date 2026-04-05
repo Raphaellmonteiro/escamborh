@@ -6,6 +6,7 @@ import {
   getTenantPaymentProviderConfig,
   updatePaymentStatus,
 } from './paymentsService';
+import { logError } from '../utils/logger';
 
 type MercadoPagoWebhookPayload = {
   action?: unknown;
@@ -242,6 +243,8 @@ async function findOrderByExternalReference(
 export async function processMercadoPagoPaymentWebhook(
   input: ProcessMercadoPagoWebhookInput
 ): Promise<ProcessMercadoPagoWebhookResult> {
+  let externalId: string | null = null;
+
   try {
     const payload =
       input.payload && typeof input.payload === 'object'
@@ -272,7 +275,7 @@ export async function processMercadoPagoPaymentWebhook(
       };
     }
 
-    const externalId = extractMercadoPagoExternalId(payload, input.queryDataId);
+    externalId = extractMercadoPagoExternalId(payload, input.queryDataId);
 
     if (!externalId) {
       return {
@@ -401,15 +404,11 @@ export async function processMercadoPagoPaymentWebhook(
       alreadyPaid,
       externalId,
     };
-  } catch {
-    return {
-      received: true,
-      matched: false,
-      paymentUpdated: false,
-      orderUpdated: false,
-      alreadyPaid: false,
-      externalId: null,
-      ignoredReason: 'erro_processamento',
-    };
+  } catch (error) {
+    logError('paymentWebhooksService.processMercadoPagoPaymentWebhook', error, {
+      externalId,
+      queryDataId: input.queryDataId,
+    });
+    throw error;
   }
 }

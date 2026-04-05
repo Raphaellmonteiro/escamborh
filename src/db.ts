@@ -486,6 +486,31 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_pix_config (
+        tenant_id INTEGER NOT NULL,
+        pix_enabled INTEGER NOT NULL DEFAULT 0,
+        pix_mode TEXT NOT NULL DEFAULT 'manual',
+        provider TEXT,
+        provider_config_json TEXT,
+        auto_confirm INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS pix_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS pix_mode TEXT NOT NULL DEFAULT 'manual';
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS provider TEXT;
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS provider_config_json TEXT;
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS auto_confirm INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE tenant_pix_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_pix_config_tenant
+        ON tenant_pix_config (tenant_id);
+    `);
+
+    await client.query(`
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelado_at TIMESTAMPTZ;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelamento_motivo TEXT;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelado_por INTEGER;
