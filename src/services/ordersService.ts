@@ -44,6 +44,7 @@ import {
   emitWhatsAppOrderStatusEvent,
   orderCancelledWhatsAppEvent,
   orderCreatedWhatsAppEvent,
+  orderPaymentConfirmedWhatsAppEvent,
 } from './whatsAppEventsService';
 
 const TZ = 'America/Sao_Paulo';
@@ -2070,6 +2071,7 @@ export async function confirmOrderPayment(input: ConfirmOrderPaymentInput): Prom
         );
         return {
           skipNotify: true as const,
+          isPixPayment: normalizePaymentMethodKey(String(order.pagamento_tipo || '')) === 'pix',
           paid_at: snap?.pagamento_confirmado_at || null,
           amount_paid: Number(snap?.pagamento_confirmado_valor ?? total),
           payment_total_paid: centsToMoney(paidCents),
@@ -2127,6 +2129,7 @@ export async function confirmOrderPayment(input: ConfirmOrderPaymentInput): Prom
 
       return {
         skipNotify: false as const,
+        isPixPayment: normalizePaymentMethodKey(String(order.pagamento_tipo || '')) === 'pix',
         paid_at: snap?.pagamento_confirmado_at || null,
         amount_paid: total,
         payment_total_paid: centsToMoney(totalPaidAfterCents),
@@ -2135,6 +2138,14 @@ export async function confirmOrderPayment(input: ConfirmOrderPaymentInput): Prom
 
     if (!result.skipNotify) {
       notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
+    }
+
+    if (!result.skipNotify && result.isPixPayment && input.emitWhatsAppPaymentConfirmed) {
+      await orderPaymentConfirmedWhatsAppEvent({
+        tenantId: input.tenantId,
+        orderId,
+        source: input.source || 'ordersService.confirmOrderPayment',
+      });
     }
 
     const { skipNotify: _sn, ...rest } = result;

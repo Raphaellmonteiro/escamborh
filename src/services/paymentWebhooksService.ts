@@ -466,6 +466,8 @@ export async function processMercadoPagoPaymentWebhook(
       await confirmOrderPayment({
         orderId: Number(order.id),
         tenantId: Number(order.tenant_id),
+        emitWhatsAppPaymentConfirmed: true,
+        source: 'paymentWebhooksService.processMercadoPagoPaymentWebhook',
       });
     }
 

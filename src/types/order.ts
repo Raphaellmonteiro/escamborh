@@ -162,6 +162,8 @@ export interface ConfirmOrderPaymentInput {
   orderId: number | string;
   tenantId: number | string;
   userId?: number;
+  emitWhatsAppPaymentConfirmed?: boolean;
+  source?: string;
 }
 
 export interface GetOrdersFilters {

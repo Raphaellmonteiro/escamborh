@@ -56,6 +56,7 @@ type DeliveryZoneInfo = {
 type RegisterInboundWhatsAppMessagesInput = {
   tenantId: number | string;
   payload: unknown;
+  webhookEventName?: string | null;
 };
 
 type NormalizedInboundWhatsAppMessage = {
@@ -212,6 +213,17 @@ function maskPhone(rawPhone: string | null) {
   const digits = String(rawPhone || '').replace(/\D/g, '');
   if (digits.length <= 4) return digits || null;
   return `${digits.slice(0, 2)}***${digits.slice(-2)}`;
+}
+
+function summarizeText(value: unknown, maxLength = 180) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+}
+
+function extractPayloadEventName(payload: unknown) {
+  const root = getRecord(payload);
+  return normalizeOptionalText(root?.event ?? root?.type ?? root?.webhookType);
 }
 
 function includesAny(text: string, terms: string[]) {
@@ -925,6 +937,15 @@ async function processInboundAutoReply(input: {
   const intent = classifySimpleIntent(input.message.message_text);
   const handoffReason = resolveHumanHandoffReason(input.message.message_text, intent);
 
+  logInfo('whatsAppInboundService.message.received', {
+    tenantId: input.tenantId,
+    inboundMessageId: input.message.id,
+    phone: input.message.customer_phone,
+    text: summarizeText(input.message.message_text),
+    intent,
+    provider: input.message.provider,
+  });
+
   if (handoffReason) {
     await activateHumanHandoff({
       tenantId: input.tenantId,
@@ -942,6 +963,8 @@ async function processInboundAutoReply(input: {
     logInfo('whatsAppInboundService.humanHandoff.activated', {
       tenantId: input.tenantId,
       inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
       intent: intent || 'atendente',
       handoffReason,
       recipient: maskPhone(input.message.customer_phone),
@@ -965,6 +988,8 @@ async function processInboundAutoReply(input: {
     logInfo('whatsAppInboundService.autoReply.blockedByHumanHandoff', {
       tenantId: input.tenantId,
       inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
       intent,
       handoffReason: activeHandoff.reason,
       handoffCreatedAt: activeHandoff.createdAt,
@@ -977,6 +1002,14 @@ async function processInboundAutoReply(input: {
     await updateInboundMessageAutomation(input.message.id, {
       intent: null,
       autoReplyStatus: 'ignored_no_intent',
+    });
+
+    logInfo('whatsAppInboundService.autoReply.ignoredNoIntent', {
+      tenantId: input.tenantId,
+      inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
+      intent: null,
     });
     return;
   }
@@ -993,6 +1026,14 @@ async function processInboundAutoReply(input: {
     await updateInboundMessageAutomation(input.message.id, {
       intent,
       autoReplyStatus: 'ignored_no_reply',
+    });
+
+    logInfo('whatsAppInboundService.autoReply.ignoredNoReply', {
+      tenantId: input.tenantId,
+      inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
+      intent,
     });
     return;
   }
@@ -1019,6 +1060,8 @@ async function processInboundAutoReply(input: {
     logInfo('whatsAppInboundService.autoReply.sent', {
       tenantId: input.tenantId,
       inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
       intent,
       provider: sendResult.provider,
       recipient: maskPhone(input.message.customer_phone),
@@ -1040,6 +1083,8 @@ async function processInboundAutoReply(input: {
     logError('whatsAppInboundService.autoReply.send', error, {
       tenantId: input.tenantId,
       inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
       intent,
       provider: normalizeProviderName(input.config.provider),
       recipient: maskPhone(input.message.customer_phone),
@@ -1270,6 +1315,14 @@ export async function registerInboundWhatsAppMessages(
 ): Promise<RegisterInboundWhatsAppMessagesResult> {
   const tenantId = parsePositiveInt(input.tenantId);
   if (!tenantId) {
+    logInfo('whatsAppInboundService.tenantResolved', {
+      tenantId: input.tenantId,
+      resolvedTenantId: null,
+      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      payloadEvent: extractPayloadEventName(input.payload),
+      accepted: false,
+      reason: 'invalid_tenant_id',
+    });
     return {
       accepted: false,
       reason: 'invalid_tenant_id',
@@ -1287,6 +1340,14 @@ export async function registerInboundWhatsAppMessages(
   );
 
   if (!config) {
+    logInfo('whatsAppInboundService.tenantResolved', {
+      tenantId,
+      resolvedTenantId: tenantId,
+      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      payloadEvent: extractPayloadEventName(input.payload),
+      accepted: false,
+      reason: 'tenant_whatsapp_config_not_found',
+    });
     return {
       accepted: false,
       reason: 'tenant_whatsapp_config_not_found',
@@ -1297,6 +1358,16 @@ export async function registerInboundWhatsAppMessages(
   }
 
   if (!toBool(config.whatsapp_enabled, false)) {
+    logInfo('whatsAppInboundService.tenantResolved', {
+      tenantId,
+      resolvedTenantId: tenantId,
+      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      payloadEvent: extractPayloadEventName(input.payload),
+      provider: normalizeProviderName(config.provider),
+      providerConfigPresent: Boolean(normalizeOptionalText(config.provider_config_json)),
+      accepted: false,
+      reason: 'whatsapp_disabled',
+    });
     return {
       accepted: false,
       reason: 'whatsapp_disabled',
@@ -1322,7 +1393,26 @@ export async function registerInboundWhatsAppMessages(
   );
   const inboundMessages = extractInboundMessages(tenantId, provider, input.payload);
 
+  logInfo('whatsAppInboundService.tenantResolved', {
+    tenantId,
+    resolvedTenantId: tenantId,
+    webhookEventName: normalizeOptionalText(input.webhookEventName),
+    payloadEvent: extractPayloadEventName(input.payload),
+    provider,
+    providerConfigPresent: Boolean(normalizeOptionalText(config.provider_config_json)),
+    tenantFound: Boolean(tenant),
+    accepted: true,
+    extractedMessages: inboundMessages.length,
+  });
+
   if (inboundMessages.length === 0) {
+    logInfo('whatsAppInboundService.noSupportedMessages', {
+      tenantId,
+      provider,
+      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      payloadEvent: extractPayloadEventName(input.payload),
+      reason: 'no_supported_messages_found',
+    });
     return {
       accepted: true,
       reason: 'no_supported_messages_found',

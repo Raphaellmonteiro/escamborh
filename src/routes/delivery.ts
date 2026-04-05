@@ -89,6 +89,207 @@ function normalizePaymentProvider(value: unknown) {
   return normalized;
 }
 
+type TenantWhatsAppConfigSyncRow = {
+  whatsapp_enabled?: number | boolean | string | null;
+  provider?: string | null;
+  provider_config_json?: string | null;
+  whatsapp_number?: string | null;
+  instance_name?: string | null;
+  channel_identifier?: string | null;
+};
+
+function normalizeWhatsAppProvider(value: unknown) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  if (!normalized) return null;
+  if (normalized === 'evolution') return 'evolution_api';
+  return normalized;
+}
+
+function parseConfigJsonObject(value: unknown): Record<string, any> {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return { ...(value as Record<string, any>) };
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { ...(parsed as Record<string, any>) };
+    }
+  } catch {
+    /* ignore invalid provider_config_json here */
+  }
+
+  return {};
+}
+
+function getConfigValueText(record: Record<string, any>, keys: string[]) {
+  for (const key of keys) {
+    const normalized = normalizeOptionalText(record[key]);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+function toFlag(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function buildTenantWhatsAppInboundWebhookPath(tenantId: number) {
+  return `/api/webhooks/whatsapp/inbound/${tenantId}`;
+}
+
+function resolveEvolutionWhatsAppSyncFields(cfg: Record<string, any>, fallbackWhatsapp: unknown) {
+  const evolutionUrl = normalizeOptionalText(cfg.evolution_url);
+  const evolutionToken = normalizeOptionalText(cfg.evolution_token);
+  const evolutionInstance = normalizeOptionalText(cfg.evolution_instance);
+  const whatsappNumber =
+    normalizeOptionalText(cfg.evolution_phone_number) ||
+    normalizeOptionalText(cfg.whatsapp) ||
+    normalizeOptionalText(fallbackWhatsapp);
+  const channelIdentifier =
+    normalizeOptionalText(cfg.evolution_channel_id) ||
+    evolutionInstance;
+  const configured = Boolean(evolutionUrl && evolutionToken && evolutionInstance);
+  const provider = configured ? 'evolution_api' : null;
+  const providerConfig =
+    configured
+      ? {
+          base_url: evolutionUrl,
+          apikey: evolutionToken,
+          instance: evolutionInstance,
+          phone_number: whatsappNumber,
+          display_number: whatsappNumber,
+          instance_name: evolutionInstance,
+          channel_id: channelIdentifier,
+        }
+      : null;
+
+  return {
+    evolutionUrl,
+    evolutionToken,
+    evolutionInstance,
+    whatsappNumber,
+    channelIdentifier,
+    configured,
+    provider,
+    providerConfigJson: providerConfig ? JSON.stringify(providerConfig) : null,
+  };
+}
+
+function hydrateDeliveryConfigWithTenantWhatsAppConfig(
+  cfg: Record<string, any>,
+  tenantWhatsAppConfig: TenantWhatsAppConfigSyncRow | null,
+  fallbackWhatsapp: unknown
+) {
+  if (!tenantWhatsAppConfig) {
+    if (!normalizeOptionalText(cfg.evolution_phone_number)) {
+      cfg.evolution_phone_number =
+        normalizeOptionalText(cfg.whatsapp) || normalizeOptionalText(fallbackWhatsapp);
+    }
+    return;
+  }
+
+  const provider = normalizeWhatsAppProvider(tenantWhatsAppConfig.provider);
+  const providerConfig = parseConfigJsonObject(tenantWhatsAppConfig.provider_config_json);
+
+  if ((provider === 'evolution_api' || provider === 'evolution') && !normalizeOptionalText(cfg.evolution_url)) {
+    cfg.evolution_url = getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url']);
+  }
+  if ((provider === 'evolution_api' || provider === 'evolution') && !normalizeOptionalText(cfg.evolution_token)) {
+    cfg.evolution_token = getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']);
+  }
+  if (!normalizeOptionalText(cfg.evolution_instance)) {
+    cfg.evolution_instance =
+      normalizeOptionalText(tenantWhatsAppConfig.instance_name) ||
+      getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName']);
+  }
+  if (!normalizeOptionalText(cfg.evolution_phone_number)) {
+    cfg.evolution_phone_number =
+      normalizeOptionalText(tenantWhatsAppConfig.whatsapp_number) ||
+      getConfigValueText(providerConfig, ['phone_number', 'display_number', 'whatsapp_number']) ||
+      normalizeOptionalText(cfg.whatsapp) ||
+      normalizeOptionalText(fallbackWhatsapp);
+  }
+  if (!normalizeOptionalText(cfg.evolution_channel_id)) {
+    cfg.evolution_channel_id =
+      normalizeOptionalText(tenantWhatsAppConfig.channel_identifier) ||
+      getConfigValueText(providerConfig, ['channel_id', 'channel_identifier']) ||
+      normalizeOptionalText(tenantWhatsAppConfig.instance_name) ||
+      getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName']);
+  }
+}
+
+async function syncTenantWhatsAppConfigFromDeliveryConfig(
+  tenantId: number,
+  cfg: Record<string, any>,
+  fallbackWhatsapp: unknown
+) {
+  const hasEvolutionFields = [
+    'evolution_url',
+    'evolution_token',
+    'evolution_instance',
+    'evolution_phone_number',
+    'evolution_channel_id',
+  ].some((key) => Object.prototype.hasOwnProperty.call(cfg, key));
+
+  const current = await q1<TenantWhatsAppConfigSyncRow>(
+    `SELECT provider
+       FROM tenant_whatsapp_config
+      WHERE tenant_id=?`,
+    [tenantId]
+  );
+  const currentProvider = normalizeWhatsAppProvider(current?.provider);
+
+  if (!hasEvolutionFields && currentProvider && currentProvider !== 'evolution_api') {
+    return;
+  }
+
+  const resolved = resolveEvolutionWhatsAppSyncFields(cfg, fallbackWhatsapp);
+  if (!current && !hasEvolutionFields && !resolved.configured && !resolved.whatsappNumber) {
+    return;
+  }
+
+  await qRun(
+    `INSERT INTO tenant_whatsapp_config (
+        tenant_id,
+        whatsapp_enabled,
+        provider,
+        provider_config_json,
+        whatsapp_number,
+        instance_name,
+        channel_identifier,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+      ON CONFLICT (tenant_id) DO UPDATE SET
+        whatsapp_enabled=EXCLUDED.whatsapp_enabled,
+        provider=EXCLUDED.provider,
+        provider_config_json=EXCLUDED.provider_config_json,
+        whatsapp_number=EXCLUDED.whatsapp_number,
+        instance_name=EXCLUDED.instance_name,
+        channel_identifier=EXCLUDED.channel_identifier,
+        updated_at=NOW()`,
+    [
+      tenantId,
+      resolved.configured ? 1 : 0,
+      resolved.provider,
+      resolved.providerConfigJson,
+      resolved.whatsappNumber,
+      resolved.evolutionInstance,
+      resolved.channelIdentifier,
+    ]
+  );
+}
+
 function pedidoVinculoCliente(aliasP = 'p', aliasC = 'c') {
   return `${aliasP}.tenant_id = ${aliasC}.tenant_id AND (${aliasP}.cliente_id = ${aliasC}.id OR ${aliasP}.delivery_cliente_id = ${aliasC}.id)`;
 }
@@ -218,17 +419,51 @@ export function createDeliveryRouter() {
 
   router.get('/config', async (req: Request, res) => {
     try {
-      const row = await q1('SELECT delivery_ativo, delivery_config FROM clientes WHERE id=?', [req.tenantId]);
+      const row = await q1<{ delivery_ativo?: number | boolean | null; delivery_config?: string | null; whatsapp?: string | null }>(
+        'SELECT delivery_ativo, delivery_config, whatsapp FROM clientes WHERE id=?',
+        [req.tenantId]
+      );
       const base = coerceDeliveryConfigRow(row?.delivery_config ?? null);
+      const tenantWhatsAppConfig = await q1<TenantWhatsAppConfigSyncRow>(
+        `SELECT whatsapp_enabled,
+                provider,
+                provider_config_json,
+                whatsapp_number,
+                instance_name,
+                channel_identifier
+           FROM tenant_whatsapp_config
+          WHERE tenant_id=?`,
+        [req.tenantId]
+      );
+      hydrateDeliveryConfigWithTenantWhatsAppConfig(base, tenantWhatsAppConfig, row?.whatsapp);
       applyNormalizedBannerSlots(base);
-      res.json({ ativo: !!row?.delivery_ativo, ...base });
+      const resolvedProvider = normalizeWhatsAppProvider(tenantWhatsAppConfig?.provider);
+      const resolvedWhatsApp = resolveEvolutionWhatsAppSyncFields(base, row?.whatsapp);
+      res.json({
+        ativo: !!row?.delivery_ativo,
+        ...base,
+        whatsapp_provider: resolvedProvider,
+        whatsapp_enabled: toFlag(tenantWhatsAppConfig?.whatsapp_enabled),
+        whatsapp_active_number: resolvedWhatsApp.whatsappNumber,
+        whatsapp_inbound_webhook_path: buildTenantWhatsAppInboundWebhookPath(Number(req.tenantId)),
+      });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
 
   router.put('/config', async (req: Request, res) => {
     try {
-      const { ativo, ...rest } = req.body;
-      const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
+      const {
+        ativo,
+        whatsapp_provider: _whatsappProvider,
+        whatsapp_enabled: _whatsappEnabled,
+        whatsapp_active_number: _whatsappActiveNumber,
+        whatsapp_inbound_webhook_path: _whatsappInboundWebhookPath,
+        ...rest
+      } = req.body;
+      const row = await q1<{ delivery_config: string | null; whatsapp?: string | null }>(
+        'SELECT delivery_config, whatsapp FROM clientes WHERE id=?',
+        [req.tenantId]
+      );
       const existing = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const merged = mergeDeliveryConfigClientPut(existing, rest && typeof rest === 'object' && !Array.isArray(rest) ? rest : {});
       if (forbidClientSuppliedLocalUploadImageUrls()) {
@@ -250,6 +485,7 @@ export function createDeliveryRouter() {
         }
       }
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
+      await syncTenantWhatsAppConfigFromDeliveryConfig(Number(req.tenantId), merged, row?.whatsapp);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });

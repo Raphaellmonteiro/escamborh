@@ -516,6 +516,9 @@ export async function runMigrations() {
         whatsapp_enabled INTEGER NOT NULL DEFAULT 0,
         provider TEXT,
         provider_config_json TEXT,
+        whatsapp_number TEXT,
+        instance_name TEXT,
+        channel_identifier TEXT,
         auto_notify_order_created INTEGER NOT NULL DEFAULT 0,
         auto_notify_order_accepted INTEGER NOT NULL DEFAULT 0,
         auto_notify_order_preparing INTEGER NOT NULL DEFAULT 0,
@@ -530,6 +533,9 @@ export async function runMigrations() {
       ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS whatsapp_enabled INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS provider TEXT;
       ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS provider_config_json TEXT;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS whatsapp_number TEXT;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS instance_name TEXT;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS channel_identifier TEXT;
       ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_created INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_accepted INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_preparing INTEGER NOT NULL DEFAULT 0;

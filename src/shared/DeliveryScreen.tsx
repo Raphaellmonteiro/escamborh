@@ -82,6 +82,12 @@ interface DeliveryConfig {
   desconto_primeiro_cliente_valor?: number;
   desconto_primeiro_cliente_min_pedido?: number;
   evolution_url?: string; evolution_token?: string; evolution_instance?: string;
+  evolution_phone_number?: string;
+  evolution_channel_id?: string;
+  whatsapp_provider?: string | null;
+  whatsapp_enabled?: boolean;
+  whatsapp_active_number?: string | null;
+  whatsapp_inbound_webhook_path?: string | null;
   theme_mode?: 'dark_premium' | 'light_red';
   automation?: Partial<TenantAutomationConfig>;
   /** Logo só do cardápio online (`/uploads/delivery/...`). Vazio = logo geral (Configurações). */
@@ -1390,6 +1396,7 @@ function TabClientes({ token }: { token: string }) {
               />
             </div>
           )}
+
         </div>
       )}
 
@@ -2190,6 +2197,29 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
     }
   }
 
+  const normalizedWhatsAppProvider = String(cfg.whatsapp_provider || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const whatsappProviderLabel =
+    normalizedWhatsAppProvider === 'evolution_api' || normalizedWhatsAppProvider === 'evolution'
+      ? 'Evolution API'
+      : (cfg.whatsapp_provider || 'Nao configurado');
+  const whatsappAiNumber = String(
+    cfg.whatsapp_active_number ||
+    cfg.evolution_phone_number ||
+    cfg.whatsapp ||
+    ''
+  ).trim();
+  const whatsappAiInstance = String(cfg.evolution_instance || '').trim();
+  const whatsappChannelIdentifier = String(cfg.evolution_channel_id || cfg.evolution_instance || '').trim();
+  const whatsappInboundWebhookPath = String(cfg.whatsapp_inbound_webhook_path || '').trim();
+  const whatsappConfigured = Boolean(
+    String(cfg.evolution_url || '').trim() &&
+    String(cfg.evolution_token || '').trim() &&
+    whatsappAiInstance
+  );
+
   return (
     <div className="space-y-5 max-w-2xl">
       {/* Seções principais */}
@@ -2197,7 +2227,7 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
         <SectionBtn k="loja"      label="Loja"        icon={<Settings size={14}/>}/>
         <SectionBtn k="zonas"     label="Zonas"       icon={<Map size={14}/>}/>
         <SectionBtn k="cupons"    label="Cupons"      icon={<Tag size={14}/>}/>
-        <SectionBtn k="evolution" label="WhatsApp Auto" icon={<Zap size={14}/>}/>
+        <SectionBtn k="evolution" label="WhatsApp IA" icon={<Zap size={14}/>}/>
       </div>
 
       {/* ── LOJA (subdomínios) ───────────────────────────────────── */}
@@ -2871,6 +2901,28 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
             </p>
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Provider ativo</p>
+              <p className="mt-1 text-sm font-black text-zinc-900">{whatsappProviderLabel}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Numero usado pela IA</p>
+              <p className="mt-1 text-sm font-black text-zinc-900">{whatsappAiNumber || 'Nao informado'}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Instancia ativa</p>
+              <p className="mt-1 text-sm font-black text-zinc-900">{whatsappAiInstance || 'Nao informada'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-xs text-cyan-900">
+            <p className="font-bold">Envio e recebimento usam a mesma configuracao</p>
+            <p className="mt-1">
+              O numero e a instancia informados abaixo ficam vinculados ao tenant e serao usados pela IA tanto para enviar mensagens quanto para receber o inbound deste tenant.
+            </p>
+          </div>
+
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1">
             <p className="font-bold">Como configurar a Evolution API:</p>
             <p>1. Instale: <code className="bg-amber-100 px-1 rounded">docker run -d evolutionapi/evolution-api</code></p>
@@ -2900,7 +2952,47 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 placeholder="meu-restaurante"
                 className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
             </div>
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Numero do WhatsApp da IA</label>
+              <input value={cfg.evolution_phone_number||''} onChange={e=>setCfg(c=>({...c,evolution_phone_number:e.target.value}))}
+                placeholder="5511999999999"
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Numero exibido como canal ativo deste tenant. Se ficar vazio, o sistema usa o WhatsApp geral da loja apenas como fallback visual.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Identificador do canal</label>
+              <input value={cfg.evolution_channel_id||''} onChange={e=>setCfg(c=>({...c,evolution_channel_id:e.target.value}))}
+                placeholder={cfg.evolution_instance||'meu-restaurante'}
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Opcional. Se ficar vazio, o sistema usa o nome da instancia como identificador do canal.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Webhook inbound do tenant</label>
+              <input value={whatsappInboundWebhookPath} readOnly
+                className="w-full px-3 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-sm text-zinc-600 focus:outline-none"/>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Configure este caminho no provider para que a IA receba mensagens neste mesmo tenant.
+              </p>
+            </div>
           </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600">
+            <p><strong>Canal atual:</strong> {whatsappProviderLabel} {whatsappAiNumber ? `- ${whatsappAiNumber}` : ''} {whatsappAiInstance ? `- instancia ${whatsappAiInstance}` : ''}</p>
+            <p className="mt-1"><strong>Channel ID:</strong> {whatsappChannelIdentifier || 'Nao informado'}</p>
+          </div>
+
+          {!whatsappConfigured && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl">
+              <AlertCircle size={14} className="text-zinc-500"/>
+              <p className="text-xs font-bold text-zinc-700">
+                Preencha URL, token e instancia para ativar o canal do tenant. O numero exibivel e o webhook acima ajudam a identificar o canal correto.
+              </p>
+            </div>
+          )}
 
           {cfg.evolution_url && cfg.evolution_token && cfg.evolution_instance && (
             <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl">

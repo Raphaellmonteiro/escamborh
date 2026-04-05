@@ -6,6 +6,7 @@ type TenantId = number | string;
 
 type WhatsAppOrderEventName =
   | 'order_created'
+  | 'payment_confirmed'
   | 'order_accepted'
   | 'order_preparing'
   | 'order_out_for_delivery'
@@ -54,6 +55,7 @@ type WhatsAppMessagePayload = {
 
 const SUCCESS_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {
   order_created: 'WHATSAPP_ORDER_CREATED',
+  payment_confirmed: 'WHATSAPP_ORDER_PAYMENT_CONFIRMED',
   order_accepted: 'WHATSAPP_ORDER_ACCEPTED',
   order_preparing: 'WHATSAPP_ORDER_PREPARING',
   order_out_for_delivery: 'WHATSAPP_ORDER_OUT_FOR_DELIVERY',
@@ -63,6 +65,7 @@ const SUCCESS_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {
 
 const ERROR_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {
   order_created: 'WHATSAPP_ORDER_CREATED_ERROR',
+  payment_confirmed: 'WHATSAPP_ORDER_PAYMENT_CONFIRMED_ERROR',
   order_accepted: 'WHATSAPP_ORDER_ACCEPTED_ERROR',
   order_preparing: 'WHATSAPP_ORDER_PREPARING_ERROR',
   order_out_for_delivery: 'WHATSAPP_ORDER_OUT_FOR_DELIVERY_ERROR',
@@ -75,6 +78,7 @@ const CONFIG_FLAG_BY_NAME: Record<
   keyof TenantWhatsAppConfigRow
 > = {
   order_created: 'auto_notify_order_created',
+  payment_confirmed: 'auto_notify_order_accepted',
   order_accepted: 'auto_notify_order_accepted',
   order_preparing: 'auto_notify_order_preparing',
   order_out_for_delivery: 'auto_notify_order_out_for_delivery',
@@ -133,6 +137,16 @@ function buildDefaultOrderStatusMessage(
   switch (eventName) {
     case 'order_created':
       return [greeting, `${orderLabel} foi recebido com sucesso.`, totalLine, storeLine]
+        .filter(Boolean)
+        .join('\n');
+    case 'payment_confirmed':
+      return [
+        greeting,
+        `Recebemos o pagamento do ${orderLabel}.`,
+        `${orderLabel} foi confirmado e seguira para preparo.`,
+        totalLine,
+        storeLine,
+      ]
         .filter(Boolean)
         .join('\n');
     case 'order_accepted':
@@ -342,6 +356,10 @@ async function registerWhatsAppOrderEvent(
 
 export async function orderCreatedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
   await registerWhatsAppOrderEvent('order_created', input);
+}
+
+export async function orderPaymentConfirmedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
+  await registerWhatsAppOrderEvent('payment_confirmed', input);
 }
 
 export async function orderAcceptedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {

@@ -69,6 +69,8 @@ async function finalizePaidPixPayment(
     await confirmOrderPayment({
       orderId: payment.order_id,
       tenantId: payment.tenant_id,
+      emitWhatsAppPaymentConfirmed: true,
+      source: 'pixPaymentRevalidationService.finalizePaidPixPayment',
     });
   }
 

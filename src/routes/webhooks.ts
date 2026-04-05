@@ -42,21 +42,38 @@ export function createWebhooksRouter() {
     }
   );
 
-  router.post('/whatsapp/inbound/:tenantId', (req, res) => {
+  const handleInbound = (req: any, res: any) => {
     const payload = req.body;
     const tenantId = req.params.tenantId;
+    const eventName =
+      typeof req.params?.eventName === 'string' && req.params.eventName.trim()
+        ? req.params.eventName.trim().toLowerCase()
+        : null;
+
+    logInfo('webhooks.whatsappInbound.received', {
+      path: req.originalUrl,
+      method: req.method,
+      tenantId,
+      eventName,
+      payloadEvent:
+        payload && typeof payload === 'object' && !Array.isArray(payload)
+          ? (payload as Record<string, unknown>).event ?? null
+          : null,
+    });
 
     res.status(200).json({ received: true });
 
     void registerInboundWhatsAppMessages({
       tenantId,
       payload,
+      webhookEventName: eventName,
     })
       .then((result) => {
         logInfo('webhooks.whatsappInbound.result', {
           path: req.originalUrl,
           method: req.method,
           tenantId,
+          eventName,
           provider: result.provider,
           accepted: result.accepted,
           reason: result.reason,
@@ -69,9 +86,13 @@ export function createWebhooksRouter() {
           path: req.originalUrl,
           method: req.method,
           tenantId,
+          eventName,
         });
       });
-  });
+  };
+
+  router.post('/whatsapp/inbound/:tenantId', handleInbound);
+  router.post('/whatsapp/inbound/:tenantId/:eventName', handleInbound);
 
   return router;
 }
