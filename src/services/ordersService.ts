@@ -1232,7 +1232,7 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
       const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);
       const isPixOrder = normalizePaymentMethodKey(result.paymentMethod || '') === 'pix';
 
-      if (isPixOrder && Boolean(parsed.provider_enabled)) {
+      if (isPixOrder) {
         try {
           paymentPix = await createPixPayment({
             tenant_id: tenantId,

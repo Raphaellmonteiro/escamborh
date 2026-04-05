@@ -295,6 +295,11 @@ export default function DeliveryScreen({
   onOpenCentralBalcao?: () => void;
 }) {
   const [tab, setTab] = useState<'balcao' | 'painel' | 'clientes' | 'motoboys' | 'relatorio' | 'config'>('painel');
+  useEffect(() => {
+    if (!hasMotoboyFeature && tab === 'motoboys') {
+      setTab('painel');
+    }
+  }, [hasMotoboyFeature, tab]);
 
   return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} className="h-full min-h-0 overflow-y-auto bg-fp-secondary">
@@ -332,12 +337,15 @@ export default function DeliveryScreen({
             { key:'motoboys',  label:'Motoboys',        icon:<Truck size={14}/> },
             { key:'relatorio', label:'Relatório',       icon:<BarChart2 size={14}/> },
             { key:'config',    label:'Configurações',  icon:<Settings size={14}/> },
-          ] as const).map(t => (
-            <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${tab===t.key?'bg-zinc-900 text-white dark:bg-zinc-800':'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'}`}>
-              {t.icon}{t.label}
-            </button>
-          ))}
+          ] as const).map(t => {
+            if (t.key === 'motoboys' && !hasMotoboyFeature) return null;
+            return (
+              <button key={t.key} type="button" onClick={() => setTab(t.key)}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${tab===t.key?'bg-zinc-900 text-white dark:bg-zinc-800':'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'}`}>
+                {t.icon}{t.label}
+              </button>
+            );
+          })}
         </div>
 
         {tab === 'balcao'    && (
@@ -347,7 +355,7 @@ export default function DeliveryScreen({
         )}
         {tab === 'painel'    && <TabPainel token={token} hasMotoboyFeature={hasMotoboyFeature} />}
         {tab === 'clientes'  && <TabClientes token={token} />}
-        {tab === 'motoboys'  && <TabMotoboys token={token} />}
+        {tab === 'motoboys'  && hasMotoboyFeature && <TabMotoboys token={token} />}
         {tab === 'relatorio' && <TabRelatorio token={token} />}
         {tab === 'config'    && <TabConfig   token={token} slug={slug} />}
       </div>

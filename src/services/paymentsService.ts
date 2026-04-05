@@ -11,6 +11,7 @@ import {
   createMercadoPagoPixPayment,
   type CreatePixProviderPaymentResult,
 } from './payments/providers';
+import { getTenantPixConfig } from './tenantPixConfigService';
 
 type TenantId = number | string;
 
@@ -67,6 +68,8 @@ export type CreatePixPaymentResult = {
   qr_code_base64: string | null;
   expires_at: string | null;
 };
+
+type TenantPixFlowMode = 'manual' | 'automatic';
 
 function ensureTenantId(tenantId: TenantId) {
   if (tenantId === null || tenantId === undefined || tenantId === '') {
@@ -201,6 +204,39 @@ function mapPixResultFromPayment(payment: OrderPaymentRecord): CreatePixPaymentR
     qr_code_text: payment.qr_code_text ?? null,
     qr_code_base64: payment.qr_code_image_base64 ?? null,
     expires_at: payment.expires_at ?? null,
+  };
+}
+
+async function resolveTenantPixFlow(tenantId: number): Promise<{
+  shouldAttemptAutomaticPix: boolean;
+  mode: TenantPixFlowMode;
+}> {
+  const tenantPixConfig = await getTenantPixConfig(tenantId);
+
+  if (!tenantPixConfig) {
+    return {
+      shouldAttemptAutomaticPix: true,
+      mode: 'manual',
+    };
+  }
+
+  if (!tenantPixConfig.pix_enabled) {
+    return {
+      shouldAttemptAutomaticPix: false,
+      mode: 'manual',
+    };
+  }
+
+  if (tenantPixConfig.pix_mode === 'automatic') {
+    return {
+      shouldAttemptAutomaticPix: false,
+      mode: 'automatic',
+    };
+  }
+
+  return {
+    shouldAttemptAutomaticPix: false,
+    mode: 'manual',
   };
 }
 
@@ -371,6 +407,7 @@ export async function createPixPayment(
   const tenantId = parsePositiveId(input.tenant_id, 'Tenant');
   const orderId = parsePositiveId(input.order_id, 'Pedido');
   const amount = normalizeAmount(input.amount);
+  const pixFlow = await resolveTenantPixFlow(tenantId);
 
   await ensureOrderExistsForTenant(orderId, tenantId);
 
@@ -387,6 +424,11 @@ export async function createPixPayment(
       );
     }
     return mapPixResultFromPayment(existingPayment);
+  }
+
+  if (!pixFlow.shouldAttemptAutomaticPix) {
+    // Branch reservado para integracao futura do PIX automatico por tenant.
+    return null;
   }
 
   const providerConfig = await getTenantPaymentProviderConfig(tenantId);
