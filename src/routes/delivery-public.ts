@@ -51,6 +51,7 @@ import {
 } from '../validation/schemas/publicForms';
 
 const TZ = 'America/Sao_Paulo';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 type DeliveryZone = { nome: string; taxa: number };
 type OrderChannel = 'delivery' | 'retirada';
 type FirstCustomerDiscountType = 'percentual' | 'fixo' | 'frete_gratis';
@@ -143,6 +144,13 @@ function normalizeItemObservationForDb(raw: unknown): string | null {
   const s = String(raw).trim();
   if (!s) return null;
   return s.length > MAX_ITEM_OBSERVATION_LEN ? s.slice(0, MAX_ITEM_OBSERVATION_LEN) : s;
+}
+
+function normalizeOptionalEmail(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return null;
+  return EMAIL_REGEX.test(normalized) ? normalized : null;
 }
 
 function parseDeliveryConfig(rawConfig?: unknown): DeliveryConfig {
@@ -1369,6 +1377,19 @@ export function createDeliveryPublicRouter() {
         }
       }
       const clienteId = await resolveDeliveryCustomerId(tenant.id, clienteToken);
+      const customerEmailFromBody = normalizeOptionalEmail(
+        req.body?.customer_email ?? req.body?.cliente_email
+      );
+      let customerEmail = customerEmailFromBody;
+
+      if (!customerEmail && clienteId) {
+        const deliveryCustomer = await q1<{ email?: string | null }>(
+          'SELECT email FROM delivery_clientes WHERE id=? AND tenant_id=?',
+          [clienteId, tenant.id]
+        );
+        customerEmail = normalizeOptionalEmail(deliveryCustomer?.email);
+      }
+
       const enderecoSalvo = await resolveSavedDeliveryAddress({
         tenantId: tenant.id,
         clienteId,
@@ -1558,6 +1579,7 @@ export function createDeliveryPublicRouter() {
             order_id: Number(result.orderId),
             amount: totalFinal,
             customer_name: cliente_nome || null,
+            customer_email: customerEmail,
             external_reference: result.orderNumber,
             description: `${canalPedido === 'retirada' ? 'Pedido retirada' : 'Pedido delivery'} #${result.orderNumber}`,
             metadata: {
@@ -1566,22 +1588,36 @@ export function createDeliveryPublicRouter() {
             },
           });
         } catch (error) {
-          paymentPixError = error;
+          paymentPixError = isAppError(error)
+            ? new AppError(
+                `${error.message}. Pedido nao foi confirmado.`,
+                error.statusCode >= 500 ? error.statusCode : 502,
+                'DELIVERY_PIX_CREATE_FAILED'
+              )
+            : new AppError(
+                'Nao foi possivel gerar o Pix deste pedido agora. Pedido nao foi confirmado.',
+                502,
+                'DELIVERY_PIX_CREATE_FAILED'
+              );
           logError('delivery-public.createPixPayment', error, {
             tenantId: tenant.id,
             orderId: result.orderId,
             orderNumber: result.orderNumber,
+            customerEmailPreview: customerEmail
+              ? customerEmail.replace(/(^..).+(@.*$)/, '$1***$2')
+              : null,
           });
         }
 
-        if (!paymentPix && !hasStaticPixFallback) {
-          if (isAppError(paymentPixError)) {
-            throw paymentPixError;
-          }
+        if (paymentPixError) {
+          throw paymentPixError;
+        }
 
+        if (!paymentPix && !hasStaticPixFallback) {
           throw new AppError(
-            'Nao foi possivel gerar o Pix deste pedido e nao ha configuracao estatica para fallback.',
-            502
+            'Nao foi possivel gerar o Pix deste pedido e nao ha configuracao estatica para fallback. Pedido nao foi confirmado.',
+            502,
+            'DELIVERY_PIX_UNAVAILABLE'
           );
         }
       }

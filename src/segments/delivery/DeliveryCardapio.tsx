@@ -4663,6 +4663,7 @@ const finalizar = async () => {
         desconto_pix: pag==='pix' ? descontoPix : 0,
         observation: obsCompleta,
         cliente_nome: cliente.nome, cliente_tel: cliente.telefone,
+        customer_email: cliente.email || undefined,
         endereco: tipoAtendimento === 'retirada' ? null : endStr,
         clienteToken: cliToken,
         canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',

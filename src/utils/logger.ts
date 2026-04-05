@@ -55,3 +55,15 @@ export function logError(context: string, error: unknown, meta: LogMeta = {}) {
     meta: safeMeta,
   });
 }
+
+export function logInfo(context: string, meta: LogMeta = {}) {
+  const timestamp = new Date().toISOString();
+  const safeMeta = sanitize(meta);
+
+  console.info({
+    level: 'info',
+    timestamp,
+    context,
+    meta: safeMeta,
+  });
+}

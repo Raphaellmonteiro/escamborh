@@ -1,5 +1,5 @@
 import { AppError } from '../../../utils/errors';
-import { logError } from '../../../utils/logger';
+import { logError, logInfo } from '../../../utils/logger';
 import type {
   CreatePixProviderPaymentInput,
   CreatePixProviderPaymentResult,
@@ -9,6 +9,7 @@ import type {
 
 const MERCADO_PAGO_API_BASE_URL = 'https://api.mercadopago.com';
 const DEFAULT_PIX_EXPIRATION_MINUTES = 30;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 function normalizeOptionalText(value: unknown) {
   if (value === null || value === undefined) return null;
@@ -18,6 +19,12 @@ function normalizeOptionalText(value: unknown) {
 
 function buildDefaultPayerEmail(input: CreatePixProviderPaymentInput) {
   return `pedido-${input.tenantId}-${input.orderId}@example.com`;
+}
+
+function normalizeOptionalEmail(value: unknown) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+  return EMAIL_REGEX.test(normalized) ? normalized.toLowerCase() : null;
 }
 
 function buildPixExpirationIso(rawExpiresAt?: string | null) {
@@ -42,6 +49,51 @@ function maskEmail(value: string | null) {
   if (!localPart || !domainPart) return '[INVALID_EMAIL]';
   if (localPart.length <= 2) return `***@${domainPart}`;
   return `${localPart.slice(0, 2)}***@${domainPart}`;
+}
+
+function buildMercadoPagoResponseLog(
+  payload: any,
+  status: number,
+  responseText: string
+) {
+  const transactionData = payload?.point_of_interaction?.transaction_data ?? {};
+  const causes = Array.isArray(payload?.cause)
+    ? payload.cause.map((item: any) => ({
+        code: normalizeOptionalText(item?.code),
+        description: normalizeOptionalText(item?.description),
+        data: normalizeOptionalText(item?.data),
+      }))
+    : [];
+
+  return {
+    status,
+    id: normalizeOptionalText(payload?.id),
+    status_text: normalizeOptionalText(payload?.status),
+    status_detail: normalizeOptionalText(payload?.status_detail),
+    external_reference: normalizeOptionalText(payload?.external_reference),
+    date_of_expiration: normalizeOptionalText(payload?.date_of_expiration),
+    transaction_amount:
+      typeof payload?.transaction_amount === 'number'
+        ? payload.transaction_amount
+        : null,
+    live_mode:
+      typeof payload?.live_mode === 'boolean' ? payload.live_mode : null,
+    payer: {
+      email_preview: maskEmail(normalizeOptionalText(payload?.payer?.email)),
+    },
+    pix: {
+      qr_code_present: Boolean(normalizeOptionalText(transactionData?.qr_code)),
+      qr_code_base64_present: Boolean(
+        normalizeOptionalText(transactionData?.qr_code_base64)
+      ),
+    },
+    error: normalizeOptionalText(payload?.error),
+    message: normalizeOptionalText(payload?.message),
+    causes,
+    raw_response_preview: payload
+      ? null
+      : normalizeOptionalText(responseText)?.slice(0, 500) || null,
+  };
 }
 
 function buildMercadoPagoApiErrorMessage(
@@ -81,8 +133,12 @@ export async function createMercadoPagoPixPayment(
     throw new AppError('Access token do Mercado Pago nao configurado', 400);
   }
 
-  const providedPayerEmail = normalizeOptionalText(input.payerEmail);
+  const rawProvidedPayerEmail = normalizeOptionalText(input.payerEmail);
+  const providedPayerEmail = normalizeOptionalEmail(input.payerEmail);
   const payerEmail = providedPayerEmail || buildDefaultPayerEmail(input);
+  const invalidProvidedPayerEmail = Boolean(
+    rawProvidedPayerEmail && !providedPayerEmail
+  );
   const payerName = normalizeOptionalText(input.payerName) || 'Cliente';
   const expiresAt = buildPixExpirationIso(input.expiresAt);
   const idempotencyKey = `${input.tenantId}-${input.orderId}-pix`;
@@ -117,6 +173,12 @@ export async function createMercadoPagoPixPayment(
     payload = null;
   }
 
+  const responseLog = buildMercadoPagoResponseLog(
+    payload,
+    response.status,
+    responseText
+  );
+
   if (!response.ok) {
     const apiMessage = buildMercadoPagoApiErrorMessage(payload, responseText, response.status);
 
@@ -143,13 +205,10 @@ export async function createMercadoPagoPixPayment(
             email_preview: maskEmail(requestBody.payer.email),
             first_name: requestBody.payer.first_name,
             used_fallback_email: !providedPayerEmail,
+            invalid_provided_email: invalidProvidedPayerEmail,
           },
         },
-        response: {
-          status: response.status,
-          payload,
-          responseText: payload ? null : normalizeOptionalText(responseText),
-        },
+        response: responseLog,
       }
     );
 
@@ -160,7 +219,38 @@ export async function createMercadoPagoPixPayment(
   const externalId = normalizeOptionalText(payload?.id);
   const qrCodeText = normalizeOptionalText(transactionData?.qr_code);
 
+  logInfo('mercadoPagoProvider.createPixPayment.response', {
+    tenantId: input.tenantId,
+    orderId: input.orderId,
+    environment: input.sandbox ? 'teste' : 'producao',
+    provider: 'mercado_pago',
+    request: {
+      transaction_amount: requestBody.transaction_amount,
+      payment_method_id: requestBody.payment_method_id,
+      external_reference: requestBody.external_reference,
+      date_of_expiration: requestBody.date_of_expiration,
+      payer: {
+        email_preview: maskEmail(requestBody.payer.email),
+        first_name: requestBody.payer.first_name,
+        used_fallback_email: !providedPayerEmail,
+        invalid_provided_email: invalidProvidedPayerEmail,
+      },
+    },
+    response: responseLog,
+  });
+
   if (!externalId || !qrCodeText) {
+    logError(
+      'mercadoPagoProvider.createPixPayment.invalidSuccessPayload',
+      new Error('Mercado Pago nao retornou dados suficientes do Pix'),
+      {
+        tenantId: input.tenantId,
+        orderId: input.orderId,
+        environment: input.sandbox ? 'teste' : 'producao',
+        provider: 'mercado_pago',
+        response: responseLog,
+      }
+    );
     throw new AppError('Mercado Pago nao retornou dados suficientes do Pix', 502);
   }
 
