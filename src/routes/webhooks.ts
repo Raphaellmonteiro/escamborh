@@ -1,35 +1,35 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router } from 'express';
 import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
-
-type AsyncRouteHandler = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => Promise<void>;
-
-function asyncHandler(handler: AsyncRouteHandler) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    void handler(req, res, next).catch(next);
-  };
-}
+import { logError } from '../utils/logger';
 
 export function createWebhooksRouter() {
   const router = Router();
 
+  // Webhook publico: Mercado Pago nao envia o JWT interno do sistema.
   router.post(
     '/payments/mercado-pago',
-    asyncHandler(async (req, res) => {
-      const result = await processMercadoPagoPaymentWebhook({
-        payload: req.body,
-        queryDataId: req.query['data.id'],
-        headers: {
-          xSignature: req.header('x-signature'),
-          xRequestId: req.header('x-request-id'),
-        },
-      });
+    (req, res) => {
+      const payload = req.body;
+      const queryDataId = req.query['data.id'];
+      const headers = {
+        xSignature: req.header('x-signature'),
+        xRequestId: req.header('x-request-id'),
+      };
 
-      res.json({ success: true, ...result });
-    })
+      res.status(200).json({ received: true });
+
+      void processMercadoPagoPaymentWebhook({
+        payload,
+        queryDataId,
+        headers,
+      }).catch((error) => {
+        logError('webhooks.mercadoPagoPayment', error, {
+          path: req.originalUrl,
+          method: req.method,
+          queryDataId,
+        });
+      });
+    }
   );
 
   return router;
