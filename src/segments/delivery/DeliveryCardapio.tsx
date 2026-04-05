@@ -5608,6 +5608,33 @@ const finalizar = async () => {
   );
 }
 
+const PIX_WAITING_PAYMENT_STATUSES = new Set([
+  'aguardando_pagamento',
+  'aguardando_confirmacao',
+  'pending',
+  'pendente',
+  'in_process',
+]);
+
+const PIX_PAID_PAYMENT_STATUSES = new Set([
+  'pago',
+  'paid',
+  'approved',
+]);
+
+function normalizePixPaymentStatus(status: unknown): string {
+  return String(status || '').trim().toLowerCase();
+}
+
+function isPixPaidStatus(status: unknown): boolean {
+  return PIX_PAID_PAYMENT_STATUSES.has(normalizePixPaymentStatus(status));
+}
+
+function isPixWaitingStatus(status: unknown): boolean {
+  const key = normalizePixPaymentStatus(status);
+  return key ? PIX_WAITING_PAYMENT_STATUSES.has(key) : false;
+}
+
 function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken, onNovo }: { pedidoOk: PedidoConfirmado;config:Config;slug:string;tipoAtendimento: TipoAtendimento;clienteToken:string|null;onNovo:()=>void }) {
   const isPix = pedidoOk.pagamento_tipo === 'pix';
   const isRetirada = pedidoOk.canal === 'retirada' || tipoAtendimento === 'retirada';
@@ -5622,9 +5649,15 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
 
   // Mescla o payload do pedido com a config carregada para nao perder campos opcionais como whatsapp.
   const pxConf = { ...config, ...configPixPedido } as Config;
-  const pagamentoStatusKey = String(pagamentoStatus || '').trim().toLowerCase();
-  const paymentPixStatusKey = String(paymentPix?.status || '').trim().toLowerCase();
-  const pixPago = pagamentoStatusKey === 'pago' || paymentPixStatusKey === 'paid' || paymentPixStatusKey === 'approved';
+  const pagamentoStatusKey = normalizePixPaymentStatus(pagamentoStatus);
+  const paymentPixStatusKey = normalizePixPaymentStatus(paymentPix?.status);
+  const pixPago = isPixPaidStatus(pagamentoStatusKey) || isPixPaidStatus(paymentPixStatusKey);
+  const pixAguardandoPagamento = !pixPago && (
+    isPixWaitingStatus(pagamentoStatusKey)
+    || isPixWaitingStatus(paymentPixStatusKey)
+    || (!pagamentoStatusKey && !paymentPixStatusKey)
+  );
+  const statusPagamentoPix = pixPago ? 'Pagamento confirmado' : 'Aguardando pagamento';
   const pixQrImageBase64 =
     paymentPix?.qr_code_base64 ||
     paymentPix?.qr_code_image_base64 ||
@@ -5659,18 +5692,18 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
     };
 
     void syncPedido();
-    if (pixPago) {
+    if (pixPago || !pixAguardandoPagamento) {
       return () => {
         active = false;
       };
     }
 
-    const timer = setInterval(() => { void syncPedido(); }, 5000);
+    const timer = setInterval(() => { void syncPedido(); }, 3000);
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [isPix, pedidoOk.orderId, pixPago, slug]);
+  }, [isPix, pedidoOk.orderId, pixAguardandoPagamento, pixPago, slug]);
 
   useEffect(() => {
     if (!isPix) return;
@@ -5733,23 +5766,55 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
 
         {/* ── FLUXO PIX (legado: pedidos que não passaram pelo checkout modal) ── */}
         {mostrarInstrucoesPixPosPedido && (
-          <>
+          <div className="space-y-3">
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-xs font-black uppercase tracking-wider text-amber-800">Status do pagamento</p>
-              <p className="mt-1 text-lg font-black text-amber-950">Aguardando pagamento</p>
-              <p className="mt-1 text-sm text-amber-900/90">A tela atualiza automaticamente quando o webhook confirmar o Pix.</p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-lg font-black text-amber-950">{statusPagamentoPix}</p>
+                  <p className="mt-1 text-sm text-amber-900/90">Atualizacao automatica a cada 3 segundos.</p>
+                </div>
+                <Loader2 size={18} className="shrink-0 animate-spin text-amber-700" />
+              </div>
             </div>
-            {!temPix && (
+            {temPix ? (
+              <div className="bg-white rounded-2xl p-4 shadow-sm space-y-4">
+                <div className="flex justify-center">
+                  <div className="rounded-2xl border border-zinc-100 bg-white p-3 shadow-sm">
+                    <img
+                      src={
+                        pixQrImageBase64
+                          ? `data:image/png;base64,${pixQrImageBase64}`
+                          : `https://api.qrserver.com/v1/create-qr-code/?size=192x192&ecc=M&data=${encodeURIComponent(pixPayload)}`
+                      }
+                      alt="QR Code Pix"
+                      width={192}
+                      height={192}
+                      className="h-48 w-48 max-w-full rounded-xl object-contain"
+                      onError={e=>{(e.target as HTMLImageElement).style.display='none';}}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={copiar}
+                  disabled={!pixPayload}
+                  className={`flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition-all ${
+                    copiado
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-zinc-900 text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400'
+                  }`}
+                >
+                  <Copy size={18} />
+                  {copiado ? 'Codigo Pix copiado' : 'Copiar codigo Pix'}
+                </button>
+              </div>
+            ) : (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                Nao foi possivel carregar o QR Code deste pedido agora. Tente novamente em instantes ou fale com a loja.
+                Nao foi possivel carregar o QR Code deste pedido agora.
               </div>
             )}
-            {temPix && !pixQrImageBase64 && pixPayload && (
-              <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                O QR Code visual nao carregou, mas o codigo Pix copia e cola esta disponivel abaixo para concluir o pagamento.
-              </div>
-            )}
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            {false && (<div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="bg-amber-50 px-4 py-3 border-b border-amber-100">
                 <p className="font-black text-amber-800 text-sm">Como pagar agora</p>
               </div>
@@ -5766,9 +5831,9 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
                   </div>
                 ))}
               </div>
-            </div>
+            </div>)}
 
-            {temPix && (
+            {false && temPix && (
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-3">Abrir direto no seu banco</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -5787,7 +5852,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
               <p className="text-[10px] text-zinc-400 text-center mt-2">Toque no banco para abrir direto no app</p>
             </div>
             )}
-            {temPix && (
+            {false && temPix && (
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Pix Copia e Cola</p>
               <div className="flex justify-center">
@@ -5850,6 +5915,13 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
             <p className="text-xs text-zinc-400 text-center -mt-2">O botão libera após copiar o código Pix</p>
 
             </div>
+            <button
+              type="button"
+              onClick={() => setAcompanharOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-700 transition-all hover:bg-zinc-50"
+            >
+              <Clock size={16}/>Acompanhar pedido
+            </button>
             {waMsgPix && (
               <button
                 type="button"
@@ -5859,27 +5931,32 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
                 <Smartphone size={16}/>Enviar comprovante pelo WhatsApp
               </button>
             )}
-          </>
+          </div>
         )}
 
         {/* ── PIX CONFIRMADO / checkout modal já com Pix na etapa de pagamento ── */}
         {mostrarBlocoPixConfirmado && (
           <div className="space-y-3">
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 [&>p]:hidden">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-emerald-800">Status do pagamento</p>
+                <p className="mt-1 text-lg font-black text-emerald-950">{statusPagamentoPix}</p>
+                <p className="mt-1 text-sm text-emerald-900/90">Tela atualizada automaticamente apos a confirmacao do Pix.</p>
+              </div>
               <p className="text-lg font-black text-amber-950">Pagamento confirmado ✓</p>
               <p className="mt-1 text-sm text-amber-900/90">Pedido registrado — acompanhe o preparo abaixo quando quiser.</p>
             </div>
             <button
               type="button"
               onClick={() => setAcompanharOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-zinc-900 py-3.5 text-sm font-bold text-white transition-all hover:bg-zinc-800"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-700 transition-all hover:bg-zinc-50"
             >
-              <Clock size={16}/>Acompanhar pedido online
+              <Clock size={16}/>Acompanhar pedido
             </button>
-            <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            {false && (<div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
               <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0"><Clock size={20} className="text-amber-500"/></div>
               <div><p className="text-xs text-zinc-400">Tempo estimado</p><p className="font-black text-zinc-900">{config.tempo_preparo||35}–{(config.tempo_preparo||35)+10} min</p></div>
-            </div>
+            </div>)}
             {waMsgPix && (
               <button
                 type="button"
