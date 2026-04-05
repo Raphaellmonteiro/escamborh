@@ -2,9 +2,12 @@ import { Router } from 'express';
 import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
 import { registerInboundWhatsAppMessages } from '../services/whatsAppInboundService';
 import { logError, logInfo } from '../utils/logger';
+import { createWhatsAppWebhookRouter } from './webhooks/whatsappWebhook';
 
 export function createWebhooksRouter() {
   const router = Router();
+
+  router.use('/whatsapp', createWhatsAppWebhookRouter());
 
   // Webhook publico: Mercado Pago nao envia o JWT interno do sistema.
   router.post(

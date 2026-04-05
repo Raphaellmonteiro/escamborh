@@ -7,6 +7,12 @@ import {
   sendWhatsAppConversationMessage,
 } from '../services/whatsAppConversationService';
 import { AppError } from '../utils/errors';
+import {
+  createWhatsAppInstance,
+  generateQrCode,
+  getStatus,
+  sendMessage,
+} from '../services/whatsappService';
 
 type TenantRequest = Request & { tenantId: number | string };
 
@@ -22,10 +28,84 @@ function asyncHandler(handler: AsyncRouteHandler) {
   };
 }
 
+function getRequestTenantId(req: TenantRequest) {
+  const tenantId = Number(req.tenantId);
+
+  if (!Number.isInteger(tenantId) || tenantId <= 0) {
+    throw new AppError('Tenant invalido', 400);
+  }
+
+  return tenantId;
+}
+
+function sendRouteError(res: Response, error: unknown) {
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({ error: error.message, code: error.code });
+  }
+
+  const message = error instanceof Error && error.message ? error.message : 'Erro interno do servidor';
+  return res.status(500).json({ error: message });
+}
+
+function createWhatsAppManagementRouter() {
+  const router = Router();
+
+  router.post('/create', async (req: TenantRequest, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const instanceName = await createWhatsAppInstance(tenantId);
+
+      res.status(201).json({ instanceName });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  router.get('/qrcode', async (req: TenantRequest, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const result = await generateQrCode(tenantId);
+
+      res.json(result);
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  router.get('/status', async (req: TenantRequest, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const result = await getStatus(tenantId);
+
+      res.json(result);
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  router.post('/send', async (req: TenantRequest, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const { number, text } = req.body ?? {};
+      const result = await sendMessage(tenantId, String(number ?? ''), String(text ?? ''));
+
+      res.json({
+        status: result.status,
+        data: result.data,
+      });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  return router;
+}
+
 export function createWhatsAppRouter() {
   const router = Router();
 
   router.use(requireAnyPermission('orders', 'delivery'));
+  router.use(createWhatsAppManagementRouter());
 
   router.get(
     '/conversations',
