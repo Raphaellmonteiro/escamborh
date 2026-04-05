@@ -627,12 +627,15 @@ type PedidoConfirmado = {
   itens?: any[];
   config_pix?: Partial<Config>;
   payment_pix?: {
+    id?: string | null;
+    payment_id?: string | null;
     provider?: string | null;
     external_id?: string | null;
     external_reference?: string | null;
     status?: string | null;
     qr_code_text?: string | null;
     qr_code_base64?: string | null;
+    qr_code_image_base64?: string | null;
     expires_at?: string | null;
   } | null;
   canal?: 'delivery'|'retirada';
@@ -5621,7 +5624,18 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
   const pagamentoStatusKey = String(pagamentoStatus || '').trim().toLowerCase();
   const paymentPixStatusKey = String(paymentPix?.status || '').trim().toLowerCase();
   const pixPago = pagamentoStatusKey === 'pago' || paymentPixStatusKey === 'paid' || paymentPixStatusKey === 'approved';
-  const temPix = paymentPix?.qr_code_text || pxConf.pix_chave || pxConf.pix_payload_estatico;
+  const pixQrImageBase64 =
+    paymentPix?.qr_code_base64 ||
+    paymentPix?.qr_code_image_base64 ||
+    pxConf.qr_code_image_base64 ||
+    null;
+  const temPix = Boolean(
+    paymentPix?.qr_code_text ||
+    pixQrImageBase64 ||
+    pxConf.pix_chave ||
+    pxConf.pix_payload_estatico ||
+    pixPayload
+  );
 
   useEffect(() => {
     if (!isPix) return;
@@ -5729,6 +5743,11 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
                 Nao foi possivel carregar o QR Code deste pedido agora. Tente novamente em instantes ou fale com a loja.
               </div>
             )}
+            {temPix && !pixQrImageBase64 && pixPayload && (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                O QR Code visual nao carregou, mas o codigo Pix copia e cola esta disponivel abaixo para concluir o pagamento.
+              </div>
+            )}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="bg-amber-50 px-4 py-3 border-b border-amber-100">
                 <p className="font-black text-amber-800 text-sm">Como pagar agora</p>
@@ -5774,8 +5793,8 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
                 <div className="p-2 bg-zinc-50 border border-zinc-200 rounded-xl">
                   <img
                     src={
-                      paymentPix?.qr_code_base64
-                        ? `data:image/png;base64,${paymentPix.qr_code_base64}`
+                      pixQrImageBase64
+                        ? `data:image/png;base64,${pixQrImageBase64}`
                         : `https://api.qrserver.com/v1/create-qr-code/?size=160x160&ecc=M&data=${encodeURIComponent(pixPayload)}`
                     }
                     alt="QR Code Pix" width={160} height={160}

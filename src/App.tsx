@@ -150,6 +150,9 @@ export default function App() {
     const feature = normalizeAccessFeature(tab);
     return planAllows(feature) && userAllows(feature);
   };
+  const tenantHasMotoboyFeature = token && !planProfile
+    ? true
+    : planFeatures.includes('funcionarios');
   const flowAIToken = token && planProfile && planAllows('ai') ? token : null;
   const alertsEnabled = Boolean(flowAIToken);
   const userRoleLabel =
@@ -1025,7 +1028,13 @@ const handleAuth = async (e: React.FormEvent) => {
           <Suspense fallback={<TabLoadingFallback />}>
             {activeTab === 'pos' && canAccess('pos') && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
             {activeTab === 'orders' && canAccess('orders') && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
-            {activeTab === 'central' && canAccess('orders') && <CentralPedidosScreen token={token} segmento={segmentoOperacional} />}
+            {activeTab === 'central' && canAccess('orders') && (
+              <CentralPedidosScreen
+                token={token}
+                segmento={segmentoOperacional}
+                hasMotoboyFeature={tenantHasMotoboyFeature}
+              />
+            )}
             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => handleTabChange('pos')} />}
             {activeTab === 'products' && canAccess('products') && (
               <ProductsScreen
@@ -1041,6 +1050,7 @@ const handleAuth = async (e: React.FormEvent) => {
             {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
               <DeliveryScreen
                 token={token}
+                hasMotoboyFeature={tenantHasMotoboyFeature}
                 slug={slugAtual}
                 onOpenCentralBalcao={() => {
                   sessionStorage.setItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, 'balcao');

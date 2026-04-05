@@ -135,7 +135,8 @@ export function isPaymentPendingOrder(order: Order): boolean {
   return Boolean(status) && status !== 'pago';
 }
 
-export function isOrderWithoutAssignedMotoboy(order: Order): boolean {
+export function isOrderWithoutAssignedMotoboy(order: Order, requireMotoboy = true): boolean {
+  if (!requireMotoboy) return false;
   const kind = getCentralOrderKind(order);
   if (kind !== 'delivery') return false;
   const status = normalizeStatusKey(order.status);
@@ -154,6 +155,7 @@ const ENTRADA_RETIRADA = new Set(['criado', 'pedido recebido', 'aguardando confi
 export type MapCentralColumnOptions = {
   /** Status do segmento (getSegCfg().statusConcluido) — ex.: Entregue, Concluído, Entregue. */
   segmentFinalStatus: string;
+  requireMotoboy?: boolean;
 };
 
 /**
@@ -203,19 +205,19 @@ export function passesCentralChannelFilter(order: Order, filter: CentralChannelF
   return true;
 }
 
-export function passesCentralQuickFilter(order: Order, filter: CentralQuickFilter): boolean {
+export function passesCentralQuickFilter(order: Order, filter: CentralQuickFilter, requireMotoboy = true): boolean {
   if (filter === 'todos') return true;
   if (filter === 'urgentes') return isUrgentOrder(order);
   if (filter === 'pagamento_pendente') return isPaymentPendingOrder(order);
   if (filter === 'qr_pendente') return isPendingQrMesaOrder(order);
-  if (filter === 'sem_motoboy') return isOrderWithoutAssignedMotoboy(order);
+  if (filter === 'sem_motoboy') return isOrderWithoutAssignedMotoboy(order, requireMotoboy);
   return true;
 }
 
-function getOrderPriorityScore(order: Order): number {
+function getOrderPriorityScore(order: Order, requireMotoboy = true): number {
   let score = getOrderAgeMinutes(order);
   if (isPendingQrMesaOrder(order)) score += 120;
-  if (isOrderWithoutAssignedMotoboy(order)) score += 90;
+  if (isOrderWithoutAssignedMotoboy(order, requireMotoboy)) score += 90;
   if (isPaymentPendingOrder(order)) score += 40;
   if (isUrgentOrder(order)) score += 30;
   return score;
@@ -236,6 +238,8 @@ export function groupOrdersByCentralColumn(
     outros: empty(),
   };
 
+  const requireMotoboy = opts.requireMotoboy !== false;
+
   for (const o of orders) {
     const col = mapOrderToCentralColumn(o, opts);
     if (!col) continue;
@@ -247,7 +251,7 @@ export function groupOrdersByCentralColumn(
       if (k === 'encerrado') {
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
-      return getOrderPriorityScore(b) - getOrderPriorityScore(a);
+      return getOrderPriorityScore(b, requireMotoboy) - getOrderPriorityScore(a, requireMotoboy);
     });
   });
 

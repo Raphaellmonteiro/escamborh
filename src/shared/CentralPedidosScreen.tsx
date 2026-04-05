@@ -340,10 +340,12 @@ const QUICK_FILTERS: { id: CentralQuickFilter; label: string }[] = [
 export default function CentralPedidosScreen({
   token,
   segmento,
+  hasMotoboyFeature = true,
 }: {
   token: string;
   /** Segmento operacional — define status final do segmento (ex.: Entregue vs Concluído). */
   segmento?: string;
+  hasMotoboyFeature?: boolean;
 }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -405,6 +407,10 @@ export default function CentralPedidosScreen({
 
   useEffect(() => {
     if (!token) return;
+    if (!hasMotoboyFeature) {
+      setMotoboys([]);
+      return;
+    }
     void (async () => {
       try {
         const res = await fetch('/api/delivery/motoboys', {
@@ -420,7 +426,18 @@ export default function CentralPedidosScreen({
         /* ignore */
       }
     })();
-  }, [token]);
+  }, [token, hasMotoboyFeature]);
+
+  useEffect(() => {
+    if (!hasMotoboyFeature && quickFilter === 'sem_motoboy') {
+      setQuickFilter('todos');
+    }
+  }, [hasMotoboyFeature, quickFilter]);
+
+  const quickFilters = useMemo(
+    () => (hasMotoboyFeature ? QUICK_FILTERS : QUICK_FILTERS.filter((f) => f.id !== 'sem_motoboy')),
+    [hasMotoboyFeature]
+  );
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -430,13 +447,19 @@ export default function CentralPedidosScreen({
   }, [fetchOrders]);
 
   const filtered = useMemo(
-    () => orders.filter((o) => passesCentralChannelFilter(o, channelFilter) && passesCentralQuickFilter(o, quickFilter)),
-    [orders, channelFilter, quickFilter]
+    () => orders.filter((o) =>
+      passesCentralChannelFilter(o, channelFilter) &&
+      passesCentralQuickFilter(o, quickFilter, hasMotoboyFeature)
+    ),
+    [orders, channelFilter, quickFilter, hasMotoboyFeature]
   );
 
   const buckets = useMemo(
-    () => groupOrdersByCentralColumn(filtered, { segmentFinalStatus: segCfg.statusConcluido }),
-    [filtered, segCfg.statusConcluido]
+    () => groupOrdersByCentralColumn(filtered, {
+      segmentFinalStatus: segCfg.statusConcluido,
+      requireMotoboy: hasMotoboyFeature,
+    }),
+    [filtered, segCfg.statusConcluido, hasMotoboyFeature]
   );
 
   return (
@@ -519,7 +542,7 @@ export default function CentralPedidosScreen({
 
         <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:mt-2 sm:gap-1.5 2xl:mt-3 2xl:gap-2">
           <span className={`${adminSectionEyebrowClass} text-[10px] 2xl:text-xs`}>Filtros</span>
-          {QUICK_FILTERS.map((f) => (
+          {quickFilters.map((f) => (
             <button
               key={f.id}
               type="button"
@@ -595,6 +618,7 @@ export default function CentralPedidosScreen({
                               token={token}
                               segmentFinalStatus={segCfg.statusConcluido}
                               motoboys={motoboys}
+                              hasMotoboyFeature={hasMotoboyFeature}
                               compactMode={compactMode}
                               onOpenDetail={() => setDetail(order)}
                               onActionDone={() => void fetchOrders()}
@@ -632,6 +656,7 @@ function OrderCard({
   token,
   segmentFinalStatus,
   motoboys,
+  hasMotoboyFeature,
   compactMode,
   onOpenDetail,
   onActionDone,
@@ -641,6 +666,7 @@ function OrderCard({
   token: string;
   segmentFinalStatus: string;
   motoboys: Array<{ id: number; nome: string }>;
+  hasMotoboyFeature: boolean;
   compactMode: boolean;
   onOpenDetail: () => void;
   onActionDone: () => void;
@@ -652,7 +678,7 @@ function OrderCard({
   const isQrPending = isPendingQrMesaOrder(order);
   const urgent = isUrgentOrder(order);
   const paymentPending = isPaymentPendingOrder(order);
-  const withoutMotoboy = isOrderWithoutAssignedMotoboy(order);
+  const withoutMotoboy = isOrderWithoutAssignedMotoboy(order, hasMotoboyFeature);
   const ageMinutes = getOrderAgeMinutes(order);
   const hasItemCustomization = orderHasAnyItemCustomization(order);
   const hasAutomationBadges = orderHasAutomationBadges(order);
@@ -670,8 +696,8 @@ function OrderCard({
       : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100';
 
   const primary = useMemo(
-    () => getCentralPrimaryAction(order, { columnId, segmentFinalStatus }),
-    [order, columnId, segmentFinalStatus]
+    () => getCentralPrimaryAction(order, { columnId, segmentFinalStatus, requireMotoboy: hasMotoboyFeature }),
+    [order, columnId, segmentFinalStatus, hasMotoboyFeature]
   );
 
   const [motoboyId, setMotoboyId] = useState<number | ''>('');

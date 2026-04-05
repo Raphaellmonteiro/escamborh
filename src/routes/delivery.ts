@@ -37,6 +37,7 @@ import {
 } from '../utils/deliveryConfigPersist';
 import { UPLOADS_ROOT } from '../uploadsRoot';
 import { deleteStoredUpload } from '../services/uploadPersistence';
+import { tenantHasFeature } from '../services/tenantPlan';
 import {
   forbidClientSuppliedLocalUploadImageUrls,
   isClientSuppliedLocalUploadImageUrl,
@@ -565,11 +566,16 @@ router.get('/pedidos', async (req: Request, res) => {
 
       const previousStatus = String(order.status || '').trim();
       const { status, motoboy_id } = req.body;
+      const requiresMotoboy = await tenantHasFeature(req.tenantId, 'funcionarios');
       const normalizedMotoboyId = motoboy_id == null || motoboy_id === ''
         ? null
         : Number(motoboy_id);
 
-      if (status === 'Saiu para Entrega' && (!Number.isInteger(normalizedMotoboyId) || normalizedMotoboyId <= 0)) {
+      if (
+        requiresMotoboy &&
+        status === 'Saiu para Entrega' &&
+        (!Number.isInteger(normalizedMotoboyId) || normalizedMotoboyId <= 0)
+      ) {
         return res.status(400).json({ error: 'Motoboy é obrigatório para enviar o pedido para entrega' });
       }
 

@@ -178,6 +178,38 @@ function buildPublicPixConfig(
   };
 }
 
+function buildPublicPixPayment(
+  payment?: {
+    provider?: string | null;
+    external_id?: string | null;
+    external_reference?: string | null;
+    status?: string | null;
+    qr_code_text?: string | null;
+    qr_code_base64?: string | null;
+    qr_code_image_base64?: string | null;
+    expires_at?: string | null;
+  } | null
+) {
+  if (!payment) return null;
+
+  const qrCodeBase64 =
+    payment.qr_code_base64 || payment.qr_code_image_base64 || null;
+  const paymentId = payment.external_id || null;
+
+  return {
+    id: paymentId,
+    payment_id: paymentId,
+    provider: payment.provider || null,
+    external_id: paymentId,
+    external_reference: payment.external_reference || null,
+    status: payment.status || null,
+    qr_code_text: payment.qr_code_text || null,
+    qr_code_base64: qrCodeBase64,
+    qr_code_image_base64: qrCodeBase64,
+    expires_at: payment.expires_at || null,
+  };
+}
+
 function getCurrentDateInTimeZone() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: TZ,
@@ -1075,17 +1107,20 @@ export function createDeliveryPublicRouter() {
       res.json({
         pedido,
         nome_estabelecimento: tenant.nome_estabelecimento,
-        payment_pix: latestPixPayment
-          ? {
-              provider: latestPixPayment.provider,
-              external_id: latestPixPayment.external_id,
-              external_reference: latestPixPayment.external_reference,
-              status: latestPixPayment.status,
-              qr_code_text: latestPixPayment.qr_code_text,
-              qr_code_base64: latestPixPayment.qr_code_image_base64,
-              expires_at: latestPixPayment.expires_at,
-            }
-          : null,
+        payment_pix: buildPublicPixPayment(
+          latestPixPayment
+            ? {
+                provider: latestPixPayment.provider,
+                external_id: latestPixPayment.external_id,
+                external_reference: latestPixPayment.external_reference,
+                status: latestPixPayment.status,
+                qr_code_text: latestPixPayment.qr_code_text,
+                qr_code_base64: latestPixPayment.qr_code_image_base64,
+                qr_code_image_base64: latestPixPayment.qr_code_image_base64,
+                expires_at: latestPixPayment.expires_at,
+              }
+            : null
+        ),
         config_pix: buildPublicPixConfig(
           dcfg,
           tenant.whatsapp,
@@ -1591,7 +1626,14 @@ export function createDeliveryPublicRouter() {
         pagamento_status: String(pagamento_tipo || '').trim().toLowerCase() === 'pix' ? 'aguardando_confirmacao' : 'pendente',
         waLink,
         mapsUrl,
-        payment_pix: paymentPix,
+        payment_pix: buildPublicPixPayment(
+          paymentPix
+            ? {
+                ...paymentPix,
+                qr_code_image_base64: paymentPix.qr_code_base64,
+              }
+            : null
+        ),
         config_pix: buildPublicPixConfig(dcfg, tenant.whatsapp, paymentPix),
         resumo_checkout: {
           taxa_entrega: checkoutSummary.taxa_entrega,

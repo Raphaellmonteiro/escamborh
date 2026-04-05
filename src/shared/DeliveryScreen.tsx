@@ -284,10 +284,12 @@ function DeliveryBalcaoCentralShortcut({ onOpen }: { onOpen: () => void }) {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function DeliveryScreen({
   token,
+  hasMotoboyFeature = true,
   slug,
   onOpenCentralBalcao,
 }: {
   token: string;
+  hasMotoboyFeature?: boolean;
   slug?: string;
   /** Abre a aba Operação com filtro Balcão (sessionStorage + navegação). */
   onOpenCentralBalcao?: () => void;
@@ -343,7 +345,7 @@ export default function DeliveryScreen({
             onOpen={() => onOpenCentralBalcao?.()}
           />
         )}
-        {tab === 'painel'    && <TabPainel   token={token} />}
+        {tab === 'painel'    && <TabPainel token={token} hasMotoboyFeature={hasMotoboyFeature} />}
         {tab === 'clientes'  && <TabClientes token={token} />}
         {tab === 'motoboys'  && <TabMotoboys token={token} />}
         {tab === 'relatorio' && <TabRelatorio token={token} />}
@@ -415,7 +417,7 @@ function subscribeAuthorizedSse(
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA PAINEL — com SSE + som + reimprimir
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabPainel({ token }: { token: string }) {
+function TabPainel({ token, hasMotoboyFeature = true }: { token: string; hasMotoboyFeature?: boolean }) {
   const DELIVERY_POLLING_INTERVAL_MS = 10000;
   const [pedidos, setPedidos]           = useState<Pedido[]>([]);
   const [motoboys, setMotoboys]         = useState<Motoboy[]>([]);
@@ -442,7 +444,7 @@ function TabPainel({ token }: { token: string }) {
     try {
       const [pRes, mRes, dRes] = await Promise.all([
         fetch('/api/delivery/pedidos', { headers: hdrs }),
-        fetch('/api/delivery/motoboys', { headers: hdrs }),
+        hasMotoboyFeature ? fetch('/api/delivery/motoboys', { headers: hdrs }) : Promise.resolve(null),
         fetch('/api/delivery/dashboard', { headers: hdrs }),
       ]);
       if (pRes.ok) {
@@ -462,14 +464,19 @@ function TabPainel({ token }: { token: string }) {
           }
         }
       }
-      if (mRes.ok) { const d = await mRes.json(); if (Array.isArray(d)) setMotoboys(d); }
+      if (hasMotoboyFeature && mRes?.ok) {
+        const d = await mRes.json();
+        if (Array.isArray(d)) setMotoboys(d);
+      } else if (!hasMotoboyFeature) {
+        setMotoboys([]);
+      }
       if (dRes.ok) { const d = await dRes.json(); setDash(d); }
     } catch {}
     finally {
       isFetchingRef.current = false;
       setLoading(false);
     }
-  }, [token, somAtivo]);
+  }, [token, somAtivo, hasMotoboyFeature]);
 
   // ── SSE complementar: hoje serve como keep-alive/aceleração quando houver
   // eventos úteis, mas o polling continua sendo a fonte confiável do painel.
@@ -681,7 +688,7 @@ function TabPainel({ token }: { token: string }) {
                       />
                     </div>
                   ) : colPedidos.map(p => (
-                    <PedidoCard key={p.id} pedido={p} motoboys={motoboys}
+                    <PedidoCard key={p.id} pedido={p} motoboys={motoboys} requiresMotoboy={hasMotoboyFeature}
                       onDetail={() => setSelectedPedido(p)}
                       onAvancar={(mbId) => cfg.next && mudarStatus(p.id, cfg.next!, mbId)}
                       onReimprimir={() => reimprimir(p.id)}
@@ -1045,9 +1052,10 @@ function TabPainel({ token }: { token: string }) {
 }
 
 // ─── PedidoCard ───────────────────────────────────────────────────────────────
-function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImprimirProducao, cfg }: {
+function PedidoCard({ pedido, motoboys, requiresMotoboy = true, onDetail, onAvancar, onReimprimir, onImprimirProducao, cfg }: {
   key?: React.Key;
   pedido: Pedido; motoboys: Motoboy[];
+  requiresMotoboy?: boolean;
   onDetail: () => void; onAvancar: (mbId?: number) => void | Promise<void>;
   onReimprimir: () => void | Promise<void>;
   onImprimirProducao: () => void | Promise<void>;
@@ -1106,7 +1114,7 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
       </div>
       {cfg.next && (
         <div className="mt-3 space-y-2">
-          {cfg.next==='Saiu para Entrega' && (
+          {cfg.next==='Saiu para Entrega' && requiresMotoboy && (
             <select value={selectedMotoboy} onChange={e=>setSelectedMotoboy(e.target.value?Number(e.target.value):'')}
               className={`w-full text-sm px-3 py-2.5 min-h-[44px] border rounded-xl bg-white dark:bg-zinc-800 transition-all ${!selectedMotoboy?'border-amber-400 dark:border-amber-500/50 bg-amber-50 dark:bg-amber-500/10':'border-zinc-200 dark:border-zinc-700'}`}>
               <option value="">⚠️ Selecione o motoboy...</option>
@@ -1117,7 +1125,7 @@ function PedidoCard({ pedido, motoboys, onDetail, onAvancar, onReimprimir, onImp
             </select>
           )}
           {(() => {
-            const precisaMotoboy = cfg.next==='Saiu para Entrega';
+            const precisaMotoboy = cfg.next==='Saiu para Entrega' && requiresMotoboy;
             const bloqueado = precisaMotoboy && (!selectedMotoboy || motoboys.length===0);
             return (
               <button

@@ -81,7 +81,7 @@ export type CentralPrimaryAction =
 
 export function getCentralPrimaryAction(
   order: Order,
-  opts: { segmentFinalStatus: string; columnId: CentralColumnId }
+  opts: { segmentFinalStatus: string; columnId: CentralColumnId; requireMotoboy?: boolean }
 ): CentralPrimaryAction | null {
   if (isOrderCanceledLike(order)) return null;
   if (opts.columnId === 'encerrado' || opts.columnId === 'outros') return null;
@@ -97,11 +97,12 @@ export function getCentralPrimaryAction(
   if (isDeliveryOrder(order)) {
     const next = getDeliveryNextStatus(order.status);
     if (!next) return null;
+    const requireMotoboy = opts.requireMotoboy !== false;
     return {
       kind: 'patch_delivery',
       status: next,
       label: labelForDeliveryNext(next),
-      needsMotoboy: next === 'Saiu para Entrega',
+      needsMotoboy: next === 'Saiu para Entrega' && requireMotoboy,
     };
   }
 
