@@ -26,6 +26,16 @@ import { normalizeProductProductionInput } from '../utils/preparation';
 import { hashPlainSecurityPassword } from '../utils/securityPasswordStorage';
 import { resolveProductUploadDiskPath } from '../utils/productPhotoFs';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
+import {
+  emitWhatsAppOrderStatusEvent,
+  orderCancelledWhatsAppEvent,
+} from '../services/whatsAppEventsService';
+import {
+  getWhatsAppConversationMessages,
+  listWhatsAppConversations,
+  normalizeWhatsAppConversationPhone,
+  sendWhatsAppConversationMessage,
+} from '../services/whatsAppConversationService';
 
 const TZ = 'America/Sao_Paulo';
 const ADMIN_PLAN_OPTIONS = ['basico', 'basico_delivery', 'completo'] as const;
@@ -739,6 +749,11 @@ export function createAdminRouter() {
         `UPDATE pedidos SET status='Cancelado', cancelado_at=NOW(), cancelamento_motivo=?, cancelado_por=NULL WHERE id=? AND tenant_id=?`,
         [reason, orderId, tenantId]
       );
+      await orderCancelledWhatsAppEvent({
+        tenantId,
+        orderId,
+        source: 'routes.admin.forceCancelOrder',
+      });
       notifyTenantOrderStreams(tenantId, 'status', { orderId });
 
       await logAdminAction(
@@ -988,6 +1003,12 @@ export function createAdminRouter() {
       if (pedido.cancelado_at) return res.status(400).json({ success: false, error: 'Pedido já cancelado' });
 
       await qRun('UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?', [status, orderId, tenantId]);
+      await emitWhatsAppOrderStatusEvent({
+        tenantId,
+        orderId,
+        status,
+        source: 'routes.admin.fixOrderStatus',
+      });
       notifyTenantOrderStreams(tenantId, 'status', { orderId });
       await qRun('INSERT INTO system_logs (tenant_id,usuario_nome,cargo,acao,detalhes) VALUES (?,?,?,?,?)',
         [tenantId, 'Admin', 'admin', 'ADMIN_FIX_PEDIDO_STATUS', `Pedido #${pedido.order_number || orderId} alterado de "${pedido.status}" para "${status}"`]);
@@ -1553,6 +1574,73 @@ export function createAdminRouter() {
       });
     } catch (e: unknown) {
       sendInternalError(res, 'routes/admin:verificar-imagens', e);
+    }
+  });
+
+  admin.get('/whatsapp/conversations', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const conversations = await listWhatsAppConversations(tenantId);
+      res.json({ conversations });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:whatsapp-conversations', e);
+    }
+  });
+
+  admin.get('/whatsapp/conversations/:phone', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.query.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const customerPhone = normalizeWhatsAppConversationPhone(req.params.phone);
+      if (!customerPhone) {
+        return res.status(400).json({ error: 'Telefone inválido' });
+      }
+
+      const conversation = await getWhatsAppConversationMessages(tenantId, customerPhone);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversa não encontrada' });
+      }
+
+      res.json(conversation);
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:whatsapp-conversation-detail', e);
+    }
+  });
+
+  admin.post('/whatsapp/conversations/:phone/send', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.body?.tenant_id);
+      if (!Number.isInteger(tenantId) || tenantId <= 0) {
+        return res.status(400).json({ error: 'tenant_id inválido' });
+      }
+      const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+      const customerPhone = normalizeWhatsAppConversationPhone(req.params.phone);
+      if (!customerPhone) {
+        return res.status(400).json({ error: 'Telefone inválido' });
+      }
+
+      const result = await sendWhatsAppConversationMessage({
+        tenantId,
+        customerPhone,
+        message: req.body?.message,
+      });
+
+      res.status(result.status === 'erro' ? 502 : 200).json(result);
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/admin:whatsapp-conversation-send', e);
     }
   });
 

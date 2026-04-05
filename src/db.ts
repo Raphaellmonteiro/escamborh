@@ -511,6 +511,91 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_whatsapp_config (
+        tenant_id INTEGER NOT NULL,
+        whatsapp_enabled INTEGER NOT NULL DEFAULT 0,
+        provider TEXT,
+        provider_config_json TEXT,
+        auto_notify_order_created INTEGER NOT NULL DEFAULT 0,
+        auto_notify_order_accepted INTEGER NOT NULL DEFAULT 0,
+        auto_notify_order_preparing INTEGER NOT NULL DEFAULT 0,
+        auto_notify_order_out_for_delivery INTEGER NOT NULL DEFAULT 0,
+        auto_notify_order_delivered INTEGER NOT NULL DEFAULT 0,
+        auto_notify_order_cancelled INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS whatsapp_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS provider TEXT;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS provider_config_json TEXT;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_created INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_accepted INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_preparing INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_out_for_delivery INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_delivered INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS auto_notify_order_cancelled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE tenant_whatsapp_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_whatsapp_config_tenant
+        ON tenant_whatsapp_config (tenant_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_inbound_messages (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        provider_message_id TEXT,
+        customer_phone TEXT NOT NULL,
+        customer_name TEXT,
+        message_text TEXT NOT NULL,
+        payload_json TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS provider TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS provider_message_id TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS customer_name TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS message_text TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS payload_json TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS intent TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_text TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_status TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_error TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_provider TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_external_id TEXT;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_attempted_at TIMESTAMPTZ;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS auto_reply_sent_at TIMESTAMPTZ;
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE whatsapp_inbound_messages ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_human_handoffs (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER NOT NULL,
+        customer_phone TEXT NOT NULL,
+        human_handoff_active INTEGER NOT NULL DEFAULT 1,
+        handoff_reason TEXT,
+        handoff_created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE whatsapp_human_handoffs ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE whatsapp_human_handoffs ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+      ALTER TABLE whatsapp_human_handoffs ADD COLUMN IF NOT EXISTS human_handoff_active INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE whatsapp_human_handoffs ADD COLUMN IF NOT EXISTS handoff_reason TEXT;
+      ALTER TABLE whatsapp_human_handoffs ADD COLUMN IF NOT EXISTS handoff_created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE whatsapp_human_handoffs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+
+    await client.query(`
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelado_at TIMESTAMPTZ;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelamento_motivo TEXT;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cancelado_por INTEGER;
@@ -672,6 +757,14 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_prod_var_vend_barcode ON produto_variacoes_vendaveis(tenant_id, codigo_barras);
       CREATE INDEX IF NOT EXISTS idx_ai_avisos_tenant_lido ON ai_avisos(tenant_id, lido);
       CREATE INDEX IF NOT EXISTS idx_ai_cache_tenant_tipo_dt ON ai_cache(tenant_id, tipo, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_inbound_messages_tenant ON whatsapp_inbound_messages(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_inbound_messages_phone ON whatsapp_inbound_messages(tenant_id, customer_phone, created_at DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_inbound_messages_provider_msg
+        ON whatsapp_inbound_messages(tenant_id, provider, provider_message_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_human_handoffs_tenant_phone
+        ON whatsapp_human_handoffs(tenant_id, customer_phone);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_human_handoffs_active
+        ON whatsapp_human_handoffs(tenant_id, human_handoff_active, handoff_created_at DESC);
     `);
 
     await client.query(`

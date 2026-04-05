@@ -11,6 +11,7 @@ import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
 import { loginBodySchema } from '../validation/schemas/publicForms';
 import { normalizeProductPhotoPublicUrl } from '../utils/productPhotoUrl';
 import { sanitizeFuncionarioRowForClient, verifyEmployeePinAndRehashIfLegacy } from '../utils/funcionarioPin';
+import { emitWhatsAppOrderStatusEvent } from '../services/whatsAppEventsService';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -703,6 +704,12 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const next = idx >= 0 && idx < PIPELINE_KDS.length - 1 ? PIPELINE_KDS[idx+1] : null;
       if (!next) return res.json({ success:true, message:'Já no status final' });
       await qRun('UPDATE pedidos SET status=? WHERE id=? AND tenant_id=?', [next, req.params.id, tenant.id]);
+      await emitWhatsAppOrderStatusEvent({
+        tenantId: tenant.id,
+        orderId: req.params.id,
+        status: next,
+        source: 'routes.kiosk.advanceKdsOrder',
+      });
       notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(req.params.id), newStatus: next });
       res.json({ success:true, newStatus:next });
     } catch (error) {

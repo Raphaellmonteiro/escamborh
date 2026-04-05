@@ -29,6 +29,10 @@ import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { createPixPayment, getPaymentByOrderId } from '../services/paymentsService';
 import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
 import { batchLoadComboGruposForCardapio } from '../services/productComboValidation';
+import {
+  emitWhatsAppOrderStatusEvent,
+  orderCreatedWhatsAppEvent,
+} from '../services/whatsAppEventsService';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
@@ -1675,6 +1679,18 @@ export function createDeliveryPublicRouter() {
           );
         }
       }
+
+      await orderCreatedWhatsAppEvent({
+        tenantId: tenant.id,
+        orderId: Number(result.orderId),
+        source: 'routes.deliveryPublic.createOrder',
+      });
+      await emitWhatsAppOrderStatusEvent({
+        tenantId: tenant.id,
+        orderId: Number(result.orderId),
+        status: initialOrderStatus,
+        source: 'routes.deliveryPublic.createOrder.initialStatus',
+      });
 
       notifyTenantOrderStreams(Number(tenant.id), 'new', { orderId: Number(result.orderId) });
 

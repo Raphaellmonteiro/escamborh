@@ -21,6 +21,10 @@ import { createPixPayment } from '../services/paymentsService';
 import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
 import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomationService';
 import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
+import {
+  emitWhatsAppOrderStatusEvent,
+  orderCreatedWhatsAppEvent,
+} from '../services/whatsAppEventsService';
 import { isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 import { getCustomerLoyaltyTier } from '../services/customerLoyaltyTier';
@@ -622,9 +626,17 @@ router.get('/pedidos', async (req: Request, res) => {
       if (status === 'Entregue')          { updates.push('entregue_at=NOW()'); }
       params.push(req.params.id, req.tenantId);
       await qRun(`UPDATE pedidos SET ${updates.join(',')} WHERE id=? AND tenant_id=?`, params);
+      const nextStatus = String(status || '').trim();
+      if (previousStatus !== nextStatus) {
+        await emitWhatsAppOrderStatusEvent({
+          tenantId: req.tenantId,
+          orderId: req.params.id,
+          status: nextStatus,
+          source: 'routes.delivery.patchStatus',
+        });
+      }
       notifyTenantOrderStreams(Number(req.tenantId), 'status', { orderId: Number(req.params.id) });
 
-      const nextStatus = String(status || '').trim();
       let kitchenPrintAutomation: { ok: boolean; message?: string; reason?: string } | undefined;
       if (previousStatus === 'Criado' && nextStatus === 'Pedido Recebido') {
         const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
@@ -1038,6 +1050,18 @@ router.get('/clientes', async (req: Request, res) => {
           origemCadastro: 'pedido_manual',
         });
       }
+
+      await orderCreatedWhatsAppEvent({
+        tenantId,
+        orderId,
+        source: 'routes.delivery.createOrder',
+      });
+      await emitWhatsAppOrderStatusEvent({
+        tenantId,
+        orderId,
+        status: 'Pedido Recebido',
+        source: 'routes.delivery.createOrder.initialStatus',
+      });
 
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
       const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
+import { registerInboundWhatsAppMessages } from '../services/whatsAppInboundService';
 import { logError, logInfo } from '../utils/logger';
 
 export function createWebhooksRouter() {
@@ -40,6 +41,37 @@ export function createWebhooksRouter() {
         });
     }
   );
+
+  router.post('/whatsapp/inbound/:tenantId', (req, res) => {
+    const payload = req.body;
+    const tenantId = req.params.tenantId;
+
+    res.status(200).json({ received: true });
+
+    void registerInboundWhatsAppMessages({
+      tenantId,
+      payload,
+    })
+      .then((result) => {
+        logInfo('webhooks.whatsappInbound.result', {
+          path: req.originalUrl,
+          method: req.method,
+          tenantId,
+          provider: result.provider,
+          accepted: result.accepted,
+          reason: result.reason,
+          savedCount: result.savedCount,
+          ignoredCount: result.ignoredCount,
+        });
+      })
+      .catch((error) => {
+        logError('webhooks.whatsappInbound', error, {
+          path: req.originalUrl,
+          method: req.method,
+          tenantId,
+        });
+      });
+  });
 
   return router;
 }

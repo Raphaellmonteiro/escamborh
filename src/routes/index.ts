@@ -28,6 +28,7 @@ import { createRhRouter } from './rh';
 import { createSettingsRouter, createCategoriesRouter } from './settings';
 import { createLegalRouter } from './legal';
 import { createPrivacidadeRouter } from './privacidade';
+import { createWhatsAppRouter } from './whatsapp';
 import { createWebhooksRouter } from './webhooks';
 import { deletePointRecord, updatePointRecord } from '../services/pointService';
 import { setupSseStream } from '../sse';
@@ -190,6 +191,7 @@ export function createApiRouter() {
   protectedRouter.use('/caixa', requirePlanFeature('caixa'), requireAnyPermission('finance'), createCaixaRouter());
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
+  protectedRouter.use('/whatsapp', createWhatsAppRouter());
   protectedRouter.use('/ai', createAiRouter());
   protectedRouter.use('/logs', requirePlanFeature('logs'), requireAnyPermission('logs'), createLogsRouter());
   protectedRouter.use('/usuarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createUsuariosRouter());

@@ -48,6 +48,32 @@ import { Spinner } from '../components/ui/Spinner';
 import { adminScreenPagePaddingClass } from '../components/ui/screenChrome';
 
 type AdminActionPayloadField = { type: 'number' | 'text' | 'textarea'; label: string; required: boolean };
+type SupportWhatsAppConversationSummary = {
+  customer_phone: string;
+  customer_name: string | null;
+  last_message: string;
+  last_message_at: string;
+  handoff_active: boolean;
+};
+type SupportWhatsAppConversationMessage = {
+  id: string;
+  customer_phone: string;
+  customer_name: string | null;
+  direction: 'inbound' | 'outbound';
+  text: string;
+  status: string;
+  raw_status: string | null;
+  created_at: string;
+  provider: string | null;
+  provider_message_id: string | null;
+  error: string | null;
+};
+type SupportWhatsAppConversationDetail = {
+  customer_phone: string;
+  customer_name: string | null;
+  handoff_active: boolean;
+  messages: SupportWhatsAppConversationMessage[];
+};
 
 const PLAN_OPTIONS = [
   { value: 'basico', label: 'Basico' },
@@ -81,9 +107,43 @@ function adminActionPostUrl(action: string): string {
   return ADMIN_CAIXA_RESET_ACTIONS.has(action) ? '/api/admin/caixa/reset' : '/api/admin/actions';
 }
 
+function formatAdminDateTime(value?: string | null) {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleString('pt-BR');
+}
+
+function formatWhatsAppPhone(value?: string | null) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '—';
+  if (digits.length === 13 && digits.startsWith('55')) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 12 && digits.startsWith('55')) {
+    return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  return `+${digits}`;
+}
+
+function getWhatsAppStatusClasses(status?: string | null) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'enviado' || normalized === 'sent' || normalized === 'recebido') {
+    return 'border-emerald-800 bg-emerald-950/60 text-emerald-200';
+  }
+  if (normalized === 'erro' || normalized === 'error') {
+    return 'border-red-800 bg-red-950/60 text-red-200';
+  }
+  if (normalized === 'bloqueado') {
+    return 'border-amber-800 bg-amber-950/60 text-amber-200';
+  }
+  return 'border-zinc-700 bg-zinc-900 text-zinc-300';
+}
+
 export default function AdminPanel() {
   const pendingEstoqueDeeplinkRef = useRef<number | null>(null);
   const pendingPedidoPdvRef = useRef<{ orderId: number; tab: 'active' | 'receipts'; orderCreatedAt?: string } | null>(null);
+  const suporteWhatsAppHistoryRef = useRef<HTMLDivElement | null>(null);
   const [pedidoDetalheModal, setPedidoDetalheModal] = useState<
     | null
     | {
@@ -171,6 +231,16 @@ export default function AdminPanel() {
   const [suporteImgLoading, setSuporteImgLoading] = useState(false);
   const [suporteNovaSenha, setSuporteNovaSenha] = useState('');
   const [suporteActionBusy, setSuporteActionBusy] = useState(false);
+  const [suporteWhatsAppConversations, setSuporteWhatsAppConversations] = useState<SupportWhatsAppConversationSummary[]>([]);
+  const [suporteWhatsAppLoading, setSuporteWhatsAppLoading] = useState(false);
+  const [suporteWhatsAppError, setSuporteWhatsAppError] = useState<string | null>(null);
+  const [suporteWhatsAppSelectedPhone, setSuporteWhatsAppSelectedPhone] = useState<string | null>(null);
+  const [suporteWhatsAppConversation, setSuporteWhatsAppConversation] = useState<SupportWhatsAppConversationDetail | null>(null);
+  const [suporteWhatsAppConversationLoading, setSuporteWhatsAppConversationLoading] = useState(false);
+  const [suporteWhatsAppConversationError, setSuporteWhatsAppConversationError] = useState<string | null>(null);
+  const [suporteWhatsAppDraft, setSuporteWhatsAppDraft] = useState('');
+  const [suporteWhatsAppSending, setSuporteWhatsAppSending] = useState(false);
+  const [suporteWhatsAppReloadKey, setSuporteWhatsAppReloadKey] = useState(0);
 
   // ── Listas paginadas para performance em listas grandes ─────────────────────
   const clientesFiltrados = useMemo(() =>
@@ -485,21 +555,35 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
+    setSuporteWhatsAppConversations([]);
+    setSuporteWhatsAppLoading(false);
+    setSuporteWhatsAppError(null);
+    setSuporteWhatsAppSelectedPhone(null);
+    setSuporteWhatsAppConversation(null);
+    setSuporteWhatsAppConversationLoading(false);
+    setSuporteWhatsAppConversationError(null);
+    setSuporteWhatsAppDraft('');
+  }, [suporteTenantId]);
+
+  useEffect(() => {
     if (!token || activeTab !== 'suporte' || !suporteTenantId) return;
     let cancelled = false;
     setSuporteLoading(true);
     setSuporteError(null);
     setSuporteImgCheck(null);
+    setSuporteWhatsAppLoading(true);
+    setSuporteWhatsAppError(null);
     const h = { Authorization: `Bearer ${token}` };
     (async () => {
       try {
-        const [resO, resL, resP] = await Promise.all([
+        const [resO, resL, resP, resW] = await Promise.all([
           fetch(`/api/admin/cliente-overview?tenant_id=${suporteTenantId}`, { headers: h }),
           fetch(`/api/admin/logs?tenant_id=${suporteTenantId}&limit=100`, { headers: h }),
           fetch(`/api/admin/pedidos?tenant_id=${suporteTenantId}&limit=20`, { headers: h }),
+          fetch(`/api/admin/whatsapp/conversations?tenant_id=${suporteTenantId}`, { headers: h }),
         ]);
         if (cancelled) return;
-        if (resO.status === 401 || resO.status === 403) {
+        if ([resO, resL, resP, resW].some((response) => response.status === 401 || response.status === 403)) {
           handleAuthError();
           return;
         }
@@ -523,16 +607,87 @@ export default function AdminPanel() {
         } else {
           setSuportePedidos([]);
         }
+        if (resW.ok) {
+          const jw = await resW.json();
+          const conversations = Array.isArray(jw?.conversations) ? jw.conversations : [];
+          setSuporteWhatsAppConversations(conversations);
+          setSuporteWhatsAppSelectedPhone((current) =>
+            conversations.some((conversation: SupportWhatsAppConversationSummary) => conversation.customer_phone === current)
+              ? current
+              : conversations[0]?.customer_phone ?? null
+          );
+        } else {
+          const e = await errBody(resW);
+          setSuporteWhatsAppConversations([]);
+          setSuporteWhatsAppError(e.error || `WhatsApp erro ${resW.status}`);
+        }
       } catch (e: unknown) {
-        if (!cancelled) setSuporteError(e instanceof Error ? e.message : 'Erro de conexão');
+        if (!cancelled) {
+          const message = e instanceof Error ? e.message : 'Erro de conexão';
+          setSuporteError(message);
+          setSuporteWhatsAppError(message);
+        }
       } finally {
-        if (!cancelled) setSuporteLoading(false);
+        if (!cancelled) {
+          setSuporteLoading(false);
+          setSuporteWhatsAppLoading(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [token, activeTab, suporteTenantId]);
+  }, [token, activeTab, suporteTenantId, suporteWhatsAppReloadKey]);
+
+  useEffect(() => {
+    if (!token || activeTab !== 'suporte' || !suporteTenantId || !suporteWhatsAppSelectedPhone) {
+      setSuporteWhatsAppConversation(null);
+      setSuporteWhatsAppConversationError(null);
+      setSuporteWhatsAppConversationLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSuporteWhatsAppConversationLoading(true);
+    setSuporteWhatsAppConversationError(null);
+
+    fetch(
+      `/api/admin/whatsapp/conversations/${encodeURIComponent(suporteWhatsAppSelectedPhone)}?tenant_id=${suporteTenantId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.status === 401 || res.status === 403) {
+          handleAuthError();
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSuporteWhatsAppConversation(null);
+          setSuporteWhatsAppConversationError((data as any)?.error || `Erro ${res.status}`);
+          return;
+        }
+        setSuporteWhatsAppConversation(data as SupportWhatsAppConversationDetail);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSuporteWhatsAppConversation(null);
+          setSuporteWhatsAppConversationError(error instanceof Error ? error.message : 'Erro de conexão');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSuporteWhatsAppConversationLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, activeTab, suporteTenantId, suporteWhatsAppSelectedPhone, suporteWhatsAppReloadKey]);
+
+  useEffect(() => {
+    if (!suporteWhatsAppHistoryRef.current) return;
+    suporteWhatsAppHistoryRef.current.scrollTop = suporteWhatsAppHistoryRef.current.scrollHeight;
+  }, [suporteWhatsAppConversation?.messages.length, suporteWhatsAppSelectedPhone]);
 
   const executeAdminAction = async () => {
     if (!actionConfirmModal || !selectedTenantId || actionConfirmReason.trim().length < 10) return;
@@ -1064,6 +1219,77 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
     }
   };
 
+  const handleSuporteWhatsAppRefresh = () => {
+    if (!suporteTenantId) return;
+    setSuporteWhatsAppReloadKey((current) => current + 1);
+  };
+
+  const handleSuporteWhatsAppSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !suporteTenantId || !suporteWhatsAppSelectedPhone) return;
+
+    const message = suporteWhatsAppDraft.trim();
+    if (!message) {
+      showActionToast('Digite uma mensagem antes de enviar.', false);
+      return;
+    }
+
+    setSuporteWhatsAppSending(true);
+    try {
+      const res = await fetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(suporteWhatsAppSelectedPhone)}/send`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: suporteTenantId, message }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        handleAuthError();
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      const responseMessage = (data as any)?.message as SupportWhatsAppConversationMessage | undefined;
+      const handoffActive = Boolean((data as any)?.handoff_active);
+
+      if (responseMessage) {
+        setSuporteWhatsAppConversation((current) => {
+          if (!current || current.customer_phone !== suporteWhatsAppSelectedPhone) return current;
+          return {
+            ...current,
+            handoff_active: handoffActive,
+            messages: [...current.messages, responseMessage],
+          };
+        });
+
+        setSuporteWhatsAppConversations((current) => {
+          const existing = current.find((conversation) => conversation.customer_phone === suporteWhatsAppSelectedPhone);
+          const updated: SupportWhatsAppConversationSummary = {
+            customer_phone: suporteWhatsAppSelectedPhone,
+            customer_name:
+              suporteWhatsAppConversation?.customer_name ??
+              existing?.customer_name ??
+              responseMessage.customer_name ??
+              null,
+            last_message: responseMessage.text,
+            last_message_at: responseMessage.created_at,
+            handoff_active: handoffActive,
+          };
+          return [updated, ...current.filter((conversation) => conversation.customer_phone !== suporteWhatsAppSelectedPhone)];
+        });
+      }
+
+      if (res.ok && (data as any)?.status === 'enviado') {
+        setSuporteWhatsAppDraft('');
+        showActionToast('Mensagem enviada manualmente.', true);
+      } else {
+        showActionToast((data as any)?.error || responseMessage?.error || `Erro ${res.status}`, false);
+      }
+    } catch (error: unknown) {
+      showActionToast(error instanceof Error ? error.message : 'Erro de conexão', false);
+    } finally {
+      setSuporteWhatsAppSending(false);
+    }
+  };
+
   const renderSuporteContent = () => (
     <div className="min-w-0 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
@@ -1147,6 +1373,180 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     ? new Date(String(suporteOverview.ultima_atividade)).toLocaleString('pt-BR')
                     : '—'}
                 </p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="!bg-zinc-900 !border-zinc-800 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">WhatsApp</h3>
+                <p className="text-sm text-zinc-500 mt-1">Lista de conversas, histórico por telefone, status e envio manual.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSuporteWhatsAppRefresh}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 min-h-[40px] rounded-xl border border-zinc-700 bg-zinc-950 text-xs font-bold text-zinc-200 hover:bg-zinc-800"
+              >
+                <RefreshCw size={14} /> Atualizar
+              </button>
+            </div>
+
+            {suporteWhatsAppError && (
+              <div className="mb-4 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+                {suporteWhatsAppError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-[320px,minmax(0,1fr)] gap-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 overflow-hidden">
+                <div className="border-b border-zinc-800 px-4 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500">
+                  Conversas {suporteWhatsAppConversations.length > 0 ? `(${suporteWhatsAppConversations.length})` : ''}
+                </div>
+                <div className="max-h-[520px] overflow-y-auto">
+                  {suporteWhatsAppLoading ? (
+                    <div className="flex items-center gap-2 px-4 py-6 text-sm text-zinc-400">
+                      <Spinner /> Carregando conversas...
+                    </div>
+                  ) : suporteWhatsAppConversations.length === 0 ? (
+                    <div className="px-4 py-8 text-sm text-zinc-500">
+                      Nenhuma conversa encontrada para este tenant.
+                    </div>
+                  ) : (
+                    suporteWhatsAppConversations.map((conversation) => {
+                      const isSelected = suporteWhatsAppSelectedPhone === conversation.customer_phone;
+                      return (
+                        <button
+                          type="button"
+                          key={conversation.customer_phone}
+                          onClick={() => setSuporteWhatsAppSelectedPhone(conversation.customer_phone)}
+                          className={`w-full text-left px-4 py-3 border-b border-zinc-800 transition-colors ${
+                            isSelected ? 'bg-emerald-950/40' : 'hover:bg-zinc-900/80'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-white truncate">
+                                {conversation.customer_name || formatWhatsAppPhone(conversation.customer_phone)}
+                              </p>
+                              <p className="text-xs text-zinc-500 font-mono mt-1">
+                                {formatWhatsAppPhone(conversation.customer_phone)}
+                              </p>
+                            </div>
+                            {conversation.handoff_active && (
+                              <span className="shrink-0 rounded-full border border-amber-800 bg-amber-950/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                                Handoff
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-3 text-sm text-zinc-300 line-clamp-2">{conversation.last_message}</p>
+                          <p className="mt-2 text-[11px] text-zinc-500">{formatAdminDateTime(conversation.last_message_at)}</p>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 overflow-hidden min-h-[420px] flex flex-col">
+                {!suporteWhatsAppSelectedPhone ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-10 text-sm text-zinc-500">
+                    Selecione uma conversa para abrir o histórico.
+                  </div>
+                ) : suporteWhatsAppConversationLoading ? (
+                  <div className="flex-1 flex items-center justify-center gap-2 px-6 py-10 text-sm text-zinc-400">
+                    <Spinner /> Carregando histórico...
+                  </div>
+                ) : suporteWhatsAppConversationError ? (
+                  <div className="m-4 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+                    {suporteWhatsAppConversationError}
+                  </div>
+                ) : suporteWhatsAppConversation ? (
+                  <>
+                    <div className="border-b border-zinc-800 px-4 py-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-white font-semibold truncate">
+                            {suporteWhatsAppConversation.customer_name || formatWhatsAppPhone(suporteWhatsAppConversation.customer_phone)}
+                          </p>
+                          <p className="text-xs text-zinc-500 font-mono mt-1">
+                            {formatWhatsAppPhone(suporteWhatsAppConversation.customer_phone)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-300">
+                            {suporteWhatsAppConversation.messages.length} mensagem(ns)
+                          </span>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                              suporteWhatsAppConversation.handoff_active
+                                ? 'border border-amber-800 bg-amber-950/60 text-amber-200'
+                                : 'border border-zinc-700 bg-zinc-900 text-zinc-400'
+                            }`}
+                          >
+                            {suporteWhatsAppConversation.handoff_active ? 'Handoff ativo' : 'Sem handoff ativo'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div ref={suporteWhatsAppHistoryRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-zinc-950/40">
+                      {suporteWhatsAppConversation.messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`flex ${message.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[88%] rounded-2xl border px-4 py-3 shadow-sm ${
+                              message.direction === 'outbound'
+                                ? 'border-emerald-900 bg-emerald-950/40 text-emerald-50'
+                                : 'border-zinc-800 bg-zinc-900 text-zinc-100'
+                            }`}
+                          >
+                            <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
+                            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                              <span>{message.direction === 'inbound' ? 'Inbound' : 'Outbound'}</span>
+                              <span>{formatAdminDateTime(message.created_at)}</span>
+                              <span className={`rounded-full border px-2 py-0.5 font-bold ${getWhatsAppStatusClasses(message.status)}`}>
+                                {message.status}
+                              </span>
+                            </div>
+                            {message.error && (
+                              <p className="mt-2 text-[11px] text-red-300">{message.error}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <form onSubmit={handleSuporteWhatsAppSend} className="border-t border-zinc-800 p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3 text-xs text-zinc-500">
+                        <span>Status do atendimento: {suporteWhatsAppConversation.handoff_active ? 'handoff ativo' : 'fluxo padrão'}</span>
+                        <span>Envio manual pelo endpoint existente</span>
+                      </div>
+                      <textarea
+                        value={suporteWhatsAppDraft}
+                        onChange={(e) => setSuporteWhatsAppDraft(e.target.value)}
+                        rows={4}
+                        placeholder="Digite a mensagem manual..."
+                        className="w-full resize-y rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={suporteWhatsAppSending}
+                          className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-60"
+                        >
+                          {suporteWhatsAppSending ? 'Enviando...' : 'Enviar manualmente'}
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center px-6 py-10 text-sm text-zinc-500">
+                    Histórico indisponível para a conversa selecionada.
+                  </div>
+                )}
               </div>
             </div>
           </Card>

@@ -40,6 +40,11 @@ import { touchStoreCustomerPurchase } from './storeCustomerService';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import { validateAuthoritativeComboSelections } from './productComboValidation';
+import {
+  emitWhatsAppOrderStatusEvent,
+  orderCancelledWhatsAppEvent,
+  orderCreatedWhatsAppEvent,
+} from './whatsAppEventsService';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -1215,6 +1220,7 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         resolvedClienteId,
         paymentMethod,
         customerName: clienteNome,
+        status: input.status,
       };
     });
 
@@ -1226,6 +1232,18 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         origemCadastro: 'balcao',
       }).catch((err) => logError('ordersService.createOrder.touchCliente', err, { tenantId, orderId: result.orderId }));
     }
+
+    await orderCreatedWhatsAppEvent({
+      tenantId,
+      orderId: result.orderId,
+      source: 'ordersService.createOrder',
+    });
+    await emitWhatsAppOrderStatusEvent({
+      tenantId,
+      orderId: result.orderId,
+      status: result.status,
+      source: 'ordersService.createOrder.initialStatus',
+    });
 
     try {
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
@@ -1364,6 +1382,11 @@ export async function cancelOrder(input: CancelOrderInput) {
         'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
         [orderId, input.tenantId]
       );
+    });
+    await orderCancelledWhatsAppEvent({
+      tenantId: input.tenantId,
+      orderId,
+      source: 'ordersService.cancelOrder',
     });
     notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
     return updatedOrder;
@@ -1581,7 +1604,7 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
   }
 
   try {
-    const updatedOrder = await withTx(async (client) => {
+    const result = await withTx(async (client) => {
       const order = await txQ1<OrderRow>(
         client,
         `SELECT *
@@ -1604,7 +1627,10 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
       }
 
       if (order.status === status) {
-        return order;
+        return {
+          updatedOrder: order,
+          statusChanged: false,
+        };
       }
 
       if (String(order.canal || '').trim().toLowerCase() === 'delivery') {
@@ -1638,14 +1664,33 @@ export async function updateOrderStatus(input: UpdateOrderStatusInput) {
         usuarioId: input.userId,
       });
 
-      return await txQ1<OrderRow>(
+      const updatedOrder = await txQ1<OrderRow>(
         client,
         'SELECT * FROM pedidos WHERE id=? AND tenant_id=?',
         [orderId, input.tenantId]
       );
+
+      if (!updatedOrder) {
+        throw new AppError('Pedido nao encontrado apos atualizar status', 500);
+      }
+
+      return {
+        updatedOrder,
+        statusChanged: String(order.status || '').trim() !== String(effectiveStatus || '').trim(),
+      };
     });
+
+    if (result.statusChanged) {
+      await emitWhatsAppOrderStatusEvent({
+        tenantId: input.tenantId,
+        orderId,
+        status: result.updatedOrder?.status,
+        source: 'ordersService.updateOrderStatus',
+      });
+    }
+
     notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
-    return updatedOrder;
+    return result.updatedOrder;
   } catch (error) {
     logError('ordersService.updateOrderStatus', error, {
       orderId,
@@ -1948,6 +1993,12 @@ export async function confirmQrOrder(input: { orderId: number | string; tenantId
       });
 
       return nextStatus;
+    });
+    await emitWhatsAppOrderStatusEvent({
+      tenantId: input.tenantId,
+      orderId,
+      status: novoStatus,
+      source: 'ordersService.confirmQrOrder',
     });
     notifyTenantOrderStreams(Number(input.tenantId), 'status', { orderId });
     return novoStatus;

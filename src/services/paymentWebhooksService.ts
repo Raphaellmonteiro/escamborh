@@ -6,7 +6,7 @@ import {
   getTenantPaymentProviderConfig,
   updatePaymentStatus,
 } from './paymentsService';
-import { logError } from '../utils/logger';
+import { logError, logInfo } from '../utils/logger';
 
 type MercadoPagoWebhookPayload = {
   action?: unknown;
@@ -35,6 +35,13 @@ type OrderLookupRow = {
   id: number | string;
   tenant_id: number | string;
   pagamento_status?: string | null;
+};
+
+type PaymentLookupRow = {
+  id: number;
+  tenant_id: number;
+  order_id: number;
+  status: string;
 };
 
 export type ProcessMercadoPagoWebhookInput = {
@@ -240,6 +247,19 @@ async function findOrderByExternalReference(
   );
 }
 
+async function findPaymentByExternalReference(
+  externalReference: string
+): Promise<PaymentLookupRow | null> {
+  return q1<PaymentLookupRow>(
+    `SELECT id, tenant_id, order_id, status
+     FROM pedido_pagamentos
+     WHERE external_reference=? AND LOWER(method)='pix'
+     ORDER BY updated_at DESC, id DESC
+     LIMIT 1`,
+    [externalReference]
+  );
+}
+
 export async function processMercadoPagoPaymentWebhook(
   input: ProcessMercadoPagoWebhookInput
 ): Promise<ProcessMercadoPagoWebhookResult> {
@@ -276,6 +296,13 @@ export async function processMercadoPagoPaymentWebhook(
     }
 
     externalId = extractMercadoPagoExternalId(payload, input.queryDataId);
+
+    logInfo('paymentWebhooksService.processMercadoPagoPaymentWebhook.received', {
+      externalId,
+      queryDataId: normalizeOptionalText(input.queryDataId),
+      eventType: extractMercadoPagoEventType(payload),
+      action: normalizeOptionalText(payload.action),
+    });
 
     if (!externalId) {
       return {
@@ -354,11 +381,36 @@ export async function processMercadoPagoPaymentWebhook(
       };
     }
 
+    if (!externalReference) {
+      logError(
+        'paymentWebhooksService.processMercadoPagoPaymentWebhook.missingExternalReference',
+        new Error('Pagamento aprovado sem external_reference'),
+        {
+          externalId,
+          externalStatus,
+        }
+      );
+
+      return {
+        received: true,
+        matched: Boolean(localPayment),
+        paymentUpdated: false,
+        orderUpdated: false,
+        alreadyPaid: String(localPayment?.status || '').trim().toLowerCase() === 'paid',
+        externalId,
+        ignoredReason: 'external_reference_ausente',
+      };
+    }
+
+    const matchedPayment =
+      localPayment ||
+      (await findPaymentByExternalReference(externalReference));
+
     let paymentUpdated = false;
-    if (localPayment && String(localPayment.status || '').trim().toLowerCase() !== 'paid') {
+    if (matchedPayment && String(matchedPayment.status || '').trim().toLowerCase() !== 'paid') {
       await updatePaymentStatus({
-        id: localPayment.id,
-        tenant_id: localPayment.tenant_id,
+        id: matchedPayment.id,
+        tenant_id: matchedPayment.tenant_id,
         status: 'paid',
         paid_at: paidAt,
         external_reference: externalReference,
@@ -366,16 +418,37 @@ export async function processMercadoPagoPaymentWebhook(
       paymentUpdated = true;
     }
 
+    if (matchedPayment) {
+      logInfo('paymentWebhooksService.processMercadoPagoPaymentWebhook.paymentFound', {
+        externalId,
+        externalReference,
+        paymentId: matchedPayment.id,
+        orderId: matchedPayment.order_id,
+        tenantId: matchedPayment.tenant_id,
+        paymentUpdated,
+      });
+    }
+
     const order =
-      (externalReference ? await findOrderByExternalReference(externalReference) : null) ||
-      (localPayment
+      (await findOrderByExternalReference(externalReference)) ||
+      (matchedPayment
         ? await q1<OrderLookupRow>(
             'SELECT id, tenant_id, pagamento_status FROM pedidos WHERE id=? AND tenant_id=?',
-            [localPayment.order_id, localPayment.tenant_id]
+            [matchedPayment.order_id, matchedPayment.tenant_id]
           )
         : null);
 
     if (!order) {
+      logError(
+        'paymentWebhooksService.processMercadoPagoPaymentWebhook.orderNotFound',
+        new Error('Pedido nao encontrado para pagamento aprovado'),
+        {
+          externalId,
+          externalReference,
+          paymentId: matchedPayment?.id ?? null,
+        }
+      );
+
       return {
         received: true,
         matched: false,
@@ -395,6 +468,16 @@ export async function processMercadoPagoPaymentWebhook(
         tenantId: Number(order.tenant_id),
       });
     }
+
+    logInfo('paymentWebhooksService.processMercadoPagoPaymentWebhook.orderUpdated', {
+      externalId,
+      externalReference,
+      orderId: Number(order.id),
+      tenantId: Number(order.tenant_id),
+      paymentUpdated,
+      orderUpdated: !alreadyPaid,
+      alreadyPaid,
+    });
 
     return {
       received: true,
