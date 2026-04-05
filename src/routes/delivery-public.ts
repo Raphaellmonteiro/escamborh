@@ -1544,8 +1544,14 @@ export function createDeliveryPublicRouter() {
         return { orderId, orderNumber };
       });
 
+      const isPixPayment = String(pagamento_tipo || '').trim().toLowerCase() === 'pix';
+      const hasStaticPixFallback = Boolean(
+        String(dcfg.pix_payload_estatico || '').trim() || String(dcfg.pix_chave || '').trim()
+      );
       let paymentPix: Awaited<ReturnType<typeof createPixPayment>> = null;
-      if (String(pagamento_tipo || '').trim().toLowerCase() === 'pix') {
+      let paymentPixError: unknown = null;
+
+      if (isPixPayment) {
         try {
           paymentPix = await createPixPayment({
             tenant_id: tenant.id,
@@ -1560,11 +1566,23 @@ export function createDeliveryPublicRouter() {
             },
           });
         } catch (error) {
+          paymentPixError = error;
           logError('delivery-public.createPixPayment', error, {
             tenantId: tenant.id,
             orderId: result.orderId,
             orderNumber: result.orderNumber,
           });
+        }
+
+        if (!paymentPix && !hasStaticPixFallback) {
+          if (isAppError(paymentPixError)) {
+            throw paymentPixError;
+          }
+
+          throw new AppError(
+            'Nao foi possivel gerar o Pix deste pedido e nao ha configuracao estatica para fallback.',
+            502
+          );
         }
       }
 

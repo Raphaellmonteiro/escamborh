@@ -1,4 +1,5 @@
 import { AppError } from '../../../utils/errors';
+import { logError } from '../../../utils/logger';
 import type {
   CreatePixProviderPaymentInput,
   CreatePixProviderPaymentResult,
@@ -16,7 +17,7 @@ function normalizeOptionalText(value: unknown) {
 }
 
 function buildDefaultPayerEmail(input: CreatePixProviderPaymentInput) {
-  return `pedido-${input.tenantId}-${input.orderId}@flowpdv.local`;
+  return `pedido-${input.tenantId}-${input.orderId}@example.com`;
 }
 
 function buildPixExpirationIso(rawExpiresAt?: string | null) {
@@ -27,6 +28,51 @@ function buildPixExpirationIso(rawExpiresAt?: string | null) {
   return expiresAt.toISOString();
 }
 
+function maskSecret(value: string | null) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+  if (normalized.length <= 8) return '[REDACTED]';
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`;
+}
+
+function maskEmail(value: string | null) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+  const [localPart, domainPart] = normalized.split('@');
+  if (!localPart || !domainPart) return '[INVALID_EMAIL]';
+  if (localPart.length <= 2) return `***@${domainPart}`;
+  return `${localPart.slice(0, 2)}***@${domainPart}`;
+}
+
+function buildMercadoPagoApiErrorMessage(
+  payload: any,
+  responseText: string,
+  status: number
+) {
+  const causes = Array.isArray(payload?.cause)
+    ? payload.cause
+        .map((item: any) => {
+          const code = normalizeOptionalText(item?.code);
+          const description = normalizeOptionalText(item?.description);
+          const data = normalizeOptionalText(item?.data);
+          return [code, description, data].filter(Boolean).join(' | ');
+        })
+        .filter(Boolean)
+    : [];
+
+  const details = [
+    normalizeOptionalText(payload?.message),
+    normalizeOptionalText(payload?.error),
+    ...causes,
+  ].filter(Boolean);
+
+  if (details.length > 0) {
+    return details.join(' || ');
+  }
+
+  return normalizeOptionalText(responseText) || `HTTP ${status}`;
+}
+
 export async function createMercadoPagoPixPayment(
   input: CreatePixProviderPaymentInput
 ): Promise<CreatePixProviderPaymentResult> {
@@ -35,28 +81,31 @@ export async function createMercadoPagoPixPayment(
     throw new AppError('Access token do Mercado Pago nao configurado', 400);
   }
 
-  const payerEmail = normalizeOptionalText(input.payerEmail) || buildDefaultPayerEmail(input);
+  const providedPayerEmail = normalizeOptionalText(input.payerEmail);
+  const payerEmail = providedPayerEmail || buildDefaultPayerEmail(input);
   const payerName = normalizeOptionalText(input.payerName) || 'Cliente';
   const expiresAt = buildPixExpirationIso(input.expiresAt);
+  const idempotencyKey = `${input.tenantId}-${input.orderId}-pix`;
+  const requestBody = {
+    transaction_amount: Number(input.amount.toFixed(2)),
+    description: input.description,
+    payment_method_id: 'pix',
+    external_reference: input.externalReference,
+    date_of_expiration: expiresAt,
+    payer: {
+      email: payerEmail,
+      first_name: payerName.slice(0, 120),
+    },
+  };
 
   const response = await fetch(`${MERCADO_PAGO_API_BASE_URL}/v1/payments`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'X-Idempotency-Key': `${input.tenantId}-${input.orderId}-pix`,
+      'X-Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({
-      transaction_amount: Number(input.amount.toFixed(2)),
-      description: input.description,
-      payment_method_id: 'pix',
-      external_reference: input.externalReference,
-      date_of_expiration: expiresAt,
-      payer: {
-        email: payerEmail,
-        first_name: payerName.slice(0, 120),
-      },
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const responseText = await response.text();
@@ -69,13 +118,42 @@ export async function createMercadoPagoPixPayment(
   }
 
   if (!response.ok) {
-    const apiMessage =
-      normalizeOptionalText(payload?.message) ||
-      normalizeOptionalText(payload?.error) ||
-      normalizeOptionalText(responseText) ||
-      `HTTP ${response.status}`;
+    const apiMessage = buildMercadoPagoApiErrorMessage(payload, responseText, response.status);
 
-    throw new AppError(`Falha ao gerar Pix no Mercado Pago: ${apiMessage}`, 502);
+    logError(
+      'mercadoPagoProvider.createPixPayment',
+      new Error(`Mercado Pago /v1/payments retornou HTTP ${response.status}`),
+      {
+        tenantId: input.tenantId,
+        orderId: input.orderId,
+        environment: input.sandbox ? 'teste' : 'producao',
+        provider: 'mercado_pago',
+        authorization_bearer_preview: accessToken ? `Bearer ${maskSecret(accessToken)}` : null,
+        hasAuthorizationBearer: Boolean(accessToken),
+        headers: {
+          content_type: 'application/json',
+          x_idempotency_key: idempotencyKey,
+        },
+        request: {
+          transaction_amount: requestBody.transaction_amount,
+          payment_method_id: requestBody.payment_method_id,
+          external_reference: requestBody.external_reference,
+          date_of_expiration: requestBody.date_of_expiration,
+          payer: {
+            email_preview: maskEmail(requestBody.payer.email),
+            first_name: requestBody.payer.first_name,
+            used_fallback_email: !providedPayerEmail,
+          },
+        },
+        response: {
+          status: response.status,
+          payload,
+          responseText: payload ? null : normalizeOptionalText(responseText),
+        },
+      }
+    );
+
+    throw new AppError(`Falha ao gerar Pix no Mercado Pago (HTTP ${response.status}): ${apiMessage}`, 502);
   }
 
   const transactionData = payload?.point_of_interaction?.transaction_data ?? {};
