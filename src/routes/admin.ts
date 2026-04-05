@@ -21,7 +21,7 @@ import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import { getPlanFeatures, type PaidTenantPlan, type PlanFeature } from '../config/planFeatures';
 import { invalidateTenantPlanCache } from '../services/tenantPlan';
-import { confirmOrderPayment } from '../services/ordersService';
+import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
 import { normalizeProductProductionInput } from '../utils/preparation';
 import { hashPlainSecurityPassword } from '../utils/securityPasswordStorage';
 import { resolveProductUploadDiskPath } from '../utils/productPhotoFs';
@@ -803,15 +803,26 @@ export function createAdminRouter() {
       if (pedido.pagamento_tipo !== 'pix') throw new Error('Pedido não é pagamento PIX');
       if (pedido.pagamento_status === 'pago') throw new Error('Pedido já está pago');
 
-      await confirmOrderPayment({ orderId, tenantId });
+      const result = await revalidatePixPaymentByOrder({ orderId, tenantId });
+      if (!['approved', 'paid'].includes(String(result.externalStatus || '').trim().toLowerCase())) {
+        throw new Error(
+          `Pagamento externo ainda nao consta como pago${result.externalStatus ? ` (${result.externalStatus})` : ''}`
+        );
+      }
 
       await logAdminAction(
         tenantId,
         'force_pix_check',
-        `Pedido #${pedido.order_number || orderId} PIX marcado como pago. Motivo: ${reason}`
+        `Pedido #${pedido.order_number || orderId} PIX revalidado manualmente. Externo: ${result.externalStatus || 'desconhecido'}. Motivo: ${reason}`
       );
 
-      return { order_id: orderId, order_number: pedido.order_number };
+      return {
+        order_id: orderId,
+        order_number: pedido.order_number,
+        payment_updated: result.paymentUpdated,
+        order_updated: result.orderUpdated,
+        external_status: result.externalStatus,
+      };
     },
 
     async recalculate_stock({ tenantId, reason }) {

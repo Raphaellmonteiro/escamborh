@@ -28,6 +28,7 @@ import { createRhRouter } from './rh';
 import { createSettingsRouter, createCategoriesRouter } from './settings';
 import { createLegalRouter } from './legal';
 import { createPrivacidadeRouter } from './privacidade';
+import { createWebhooksRouter } from './webhooks';
 import { deletePointRecord, updatePointRecord } from '../services/pointService';
 import { setupSseStream } from '../sse';
 
@@ -93,6 +94,7 @@ export function createApiRouter() {
 
   router.use(createAuthRouter());
   router.use(createAdminRouter());
+  router.use('/webhooks', createWebhooksRouter());
   router.get('/events', async (req, res) => {
     const session = await resolveAuthenticatedSession(req);
     if (session.ok === false) {

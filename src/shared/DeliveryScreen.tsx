@@ -67,6 +67,13 @@ interface DeliveryConfig {
   tempo_preparo?: number; whatsapp?: string; pix_chave?: string;
   pix_nome?: string; pix_cidade?: string; pix_payload_estatico?: string;
   desconto_pix?: number; horario_abertura?: string; horario_fechamento?: string;
+  payment_provider?: string;
+  provider_enabled?: boolean;
+  api_key?: string;
+  access_token?: string;
+  webhook_secret?: string;
+  pix_key?: string;
+  provider_sandbox?: boolean;
   modelo_entrega?: 'bairro_fixo';
   bairros_atendidos?: string; valor_por_entrega?: number;
   zonas_entrega?: Array<{ nome: string; taxa: number }>;
@@ -2245,6 +2252,44 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
           {lojaSub === 'pagamentos' && (
             <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
               <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><CreditCard size={16} className="text-zinc-500"/>Pagamentos</h4>
+              <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/80 dark:bg-blue-500/10 p-4 space-y-2">
+                <p className="text-sm font-black text-blue-950 dark:text-blue-300">PIX automÃ¡tico (preparaÃ§Ã£o)</p>
+                <p className="text-[11px] text-blue-800/80 dark:text-blue-200/80">
+                  O QR manual abaixo continua valendo normalmente. Esta Ã¡rea apenas salva credenciais e preferÃªncias por tenant para uma integraÃ§Ã£o futura.
+                </p>
+                <div className="flex items-center justify-between gap-4 pt-1">
+                  <div>
+                    <p className="font-bold text-zinc-800 dark:text-zinc-200">provider_enabled</p>
+                    <p className="text-[11px] text-zinc-500">Liga ou desliga o provider automÃ¡tico quando ele existir.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCfg(c=>({...c,provider_enabled:!c.provider_enabled}))}
+                    className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${cfg.provider_enabled?'bg-emerald-500':'bg-zinc-200 dark:bg-zinc-600'}`}
+                    aria-pressed={!!cfg.provider_enabled}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-zinc-200 rounded-full shadow transition-all ${cfg.provider_enabled?'left-6':'left-0.5'}`}/>
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label="payment_provider" value={cfg.payment_provider||''} onChange={v=>setCfg(c=>({...c,payment_provider:v}))} placeholder="mercadopago"/>
+                  <Field label="pix_key" value={cfg.pix_key||''} onChange={v=>setCfg(c=>({...c,pix_key:v}))} placeholder="Chave PIX do provider"/>
+                  <Field label="api_key" value={cfg.api_key||''} onChange={v=>setCfg(c=>({...c,api_key:v}))} type="password" placeholder="Opcional"/>
+                  <Field label="access_token" value={cfg.access_token||''} onChange={v=>setCfg(c=>({...c,access_token:v}))} type="password" placeholder="Opcional"/>
+                  <Field label="webhook_secret" value={cfg.webhook_secret||''} onChange={v=>setCfg(c=>({...c,webhook_secret:v}))} type="password" placeholder="Opcional"/>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Ambiente</label>
+                    <select
+                      value={cfg.provider_sandbox ? 'sandbox' : 'production'}
+                      onChange={e=>setCfg(c=>({...c,provider_sandbox:e.target.value === 'sandbox'}))}
+                      className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"
+                    >
+                      <option value="production">ProduÃ§Ã£o</option>
+                      <option value="sandbox">Sandbox</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
               <p className="text-xs text-zinc-500">Mesma lógica de Pix do checkout público (payload estático ou chave + EMV). Não altere sem testar o fechamento do pedido.</p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Chave Pix" value={cfg.pix_chave||''} onChange={v=>setCfg(c=>({...c,pix_chave:v}))} placeholder="email@ou.cpf"/>

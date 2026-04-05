@@ -1429,8 +1429,8 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     <button onClick={() => openActionConfirm({ action: 'clear_sessions', label: 'Limpar sessões', impact: 'Todos os usuários serão desconectados. Será necessário fazer login novamente.' })} className="w-full px-4 py-2 text-left text-sm text-amber-600 hover:bg-amber-900 flex items-center gap-2">
                       <LogOut size={16} /> Limpar sessões
                     </button>
-                    <button onClick={() => openActionConfirm({ action: 'force_pix_check', label: 'Marcar PIX como pago', impact: 'Marca manualmente um pedido PIX como pago. Use quando o pagamento foi confirmado fora do sistema.', payloadTemplate: { order_id: { type: 'number', label: 'ID do pedido', required: true } } })} className="w-full px-4 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-900 flex items-center gap-2">
-                      <DollarSign size={16} /> Marcar PIX como pago
+                    <button onClick={() => openActionConfirm({ action: 'force_pix_check', label: 'Revalidar pagamento PIX', impact: 'Consulta o provedor e, se o pagamento externo estiver aprovado, atualiza o PIX pendente no sistema.', payloadTemplate: { order_id: { type: 'number', label: 'ID do pedido', required: true } } })} className="w-full px-4 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-900 flex items-center gap-2">
+                      <DollarSign size={16} /> Revalidar pagamento PIX
                     </button>
                   </div>
                 </>

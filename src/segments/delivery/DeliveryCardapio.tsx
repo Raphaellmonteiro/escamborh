@@ -76,6 +76,11 @@ interface Config {
   pix_nome?: string;
   pix_cidade?: string;
   pix_payload_estatico?: string;
+  qr_code_image_base64?: string;
+  payment_provider?: string;
+  payment_external_id?: string;
+  payment_status?: string;
+  payment_expires_at?: string;
   whatsapp?: string;
   horario_abertura?: string;
   horario_fechamento?: string;
@@ -619,6 +624,14 @@ type PedidoConfirmado = {
   mapsUrl?: string;
   itens?: any[];
   config_pix?: Partial<Config>;
+  payment_pix?: {
+    provider?: string | null;
+    external_id?: string | null;
+    status?: string | null;
+    qr_code_text?: string | null;
+    qr_code_base64?: string | null;
+    expires_at?: string | null;
+  } | null;
   canal?: 'delivery'|'retirada';
   /** Pedido finalizado pelo checkout em modal: não exibir segunda tela de instruções Pix. */
   checkout_modal_concluido?: boolean;
@@ -1580,7 +1593,12 @@ export default function DeliveryCardapio() {
     setCheckoutOpen(false);
     setSacolaOpen(false);
     setCheckoutStep(1);
-    setPedidoSucessoOpen(true);
+    if (d.payment_pix) {
+      setPedidoSucessoOpen(false);
+      setTela('confirmado');
+    } else {
+      setPedidoSucessoOpen(true);
+    }
     void buscarMeusPedidos({ silent: true, keepDetail: true });
   };
   const fecharPedidoSucesso = useCallback(() => {
@@ -4674,8 +4692,9 @@ const finalizar = async () => {
           mapsUrl: d.mapsUrl,
           itens: cart,
           config_pix: d.config_pix,
+          payment_pix: d.payment_pix || null,
           canal: d.canal,
-          checkout_modal_concluido: true,
+          checkout_modal_concluido: !d.payment_pix,
         });
       }
       else setErro(d.error||'Erro ao enviar pedido');
@@ -5592,7 +5611,8 @@ const finalizar = async () => {
 function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken, onNovo }: { pedidoOk:any;config:Config;slug:string;tipoAtendimento: TipoAtendimento;clienteToken:string|null;onNovo:()=>void }) {
   const isPix = pedidoOk.pagamento_tipo === 'pix';
   const isRetirada = pedidoOk.canal === 'retirada' || tipoAtendimento === 'retirada';
-  const pixResolvidoNoCheckoutModal = pedidoOk.checkout_modal_concluido === true;
+  const paymentPix = pedidoOk.payment_pix || null;
+  const pixResolvidoNoCheckoutModal = pedidoOk.checkout_modal_concluido === true && !paymentPix;
   const [acompanharOpen, setAcompanharOpen] = useState(false);
   const [pixPago, setPixPago] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
@@ -5601,10 +5621,14 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
 
   // Mescla o payload do pedido com a config carregada para nao perder campos opcionais como whatsapp.
   const pxConf = { ...config, ...(pedidoOk.config_pix || {}) } as Config;
-  const temPix = pxConf.pix_chave || pxConf.pix_payload_estatico;
+  const temPix = paymentPix?.qr_code_text || pxConf.pix_chave || pxConf.pix_payload_estatico;
 
   useEffect(() => {
     if (!isPix) return;
+    if (paymentPix?.qr_code_text) {
+      setPixPayload(paymentPix.qr_code_text);
+      return;
+    }
     if (pxConf.pix_payload_estatico) {
       setPixPayload(injetarValorPix(pxConf.pix_payload_estatico, pedidoOk.total));
       return;
@@ -5617,7 +5641,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
         pedidoOk.total
       ));
     }
-  }, [isPix, pxConf, pedidoOk.total]);
+  }, [isPix, paymentPix?.qr_code_text, pxConf, pedidoOk.total]);
 
   const copiar = async () => {
     try { await navigator.clipboard.writeText(pixPayload); }
@@ -5712,7 +5736,11 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
               <div className="flex justify-center">
                 <div className="p-2 bg-zinc-50 border border-zinc-200 rounded-xl">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&ecc=M&data=${encodeURIComponent(pixPayload)}`}
+                    src={
+                      paymentPix?.qr_code_base64
+                        ? `data:image/png;base64,${paymentPix.qr_code_base64}`
+                        : `https://api.qrserver.com/v1/create-qr-code/?size=160x160&ecc=M&data=${encodeURIComponent(pixPayload)}`
+                    }
                     alt="QR Code Pix" width={160} height={160}
                     className="rounded-lg"
                     onError={e=>{(e.target as HTMLImageElement).style.display='none';}}
@@ -5722,7 +5750,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
               <div className="bg-zinc-50 rounded-xl px-4 py-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Chave Pix</span>
-                  <span className="font-bold text-zinc-800 font-mono">{pxConf.pix_chave || 'Código Estático QR'}</span>
+                  <span className="font-bold text-zinc-800 font-mono">{pxConf.pix_chave || paymentPix?.provider || 'Código Estático QR'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Valor</span>
@@ -5732,6 +5760,12 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-500">Recebedor</span>
                     <span className="font-bold text-zinc-700">{pxConf.pix_nome}</span>
+                  </div>
+                )}
+                {paymentPix?.expires_at && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Expira em</span>
+                    <span className="font-bold text-zinc-700">{new Date(paymentPix.expires_at).toLocaleString('pt-BR')}</span>
                   </div>
                 )}
               </div>

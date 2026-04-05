@@ -35,6 +35,7 @@ import { splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { requireProductInventoryTargets } from './stockIdentification';
 import { parseAutomationFromDeliveryConfigJson, shouldAutoPrintForBalcaoOrder } from './automationConfig';
 import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService';
+import { createPixPayment } from './paymentsService';
 import { touchStoreCustomerPurchase } from './storeCustomerService';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
@@ -1197,9 +1198,12 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
         receipt,
         senhaPedido,
         resolvedClienteId,
+        paymentMethod,
+        customerName: clienteNome,
       };
     });
 
+    let paymentPix: Awaited<ReturnType<typeof createPixPayment>> = null;
     if (result.resolvedClienteId) {
       void touchStoreCustomerPurchase({
         clienteId: result.resolvedClienteId,
@@ -1211,6 +1215,32 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
     try {
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
       const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);
+      const isPixOrder = normalizePaymentMethodKey(result.paymentMethod || '') === 'pix';
+
+      if (isPixOrder && Boolean(parsed.provider_enabled)) {
+        try {
+          paymentPix = await createPixPayment({
+            tenant_id: tenantId,
+            order_id: result.orderId,
+            amount: input.total_amount,
+            customer_name: result.customerName,
+            external_reference: result.orderNumber,
+            description: `Pedido #${result.orderNumber} - FlowPDV`,
+            metadata: {
+              channel: input.canal,
+              order_number: result.orderNumber,
+              source: 'ordersService.createOrder',
+            },
+          });
+        } catch (err) {
+          logError('ordersService.createOrder.createPixPayment', err, {
+            tenantId,
+            orderId: result.orderId,
+            orderNumber: result.orderNumber,
+          });
+        }
+      }
+
       const automation = parseAutomationFromDeliveryConfigJson(parsed);
       if (shouldAutoPrintForBalcaoOrder(automation, input.canal, input.tipo_retirada)) {
         void runAutomatedKitchenPrintForOrder(Number(tenantId), result.orderId, { trigger: 'balcao_order_create' }).catch(
@@ -1228,6 +1258,7 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
       orderNumber: result.orderNumber,
       receipt: result.receipt,
       senhaPedido: result.senhaPedido,
+      payment_pix: paymentPix,
     };
   } catch (error) {
     logError('ordersService.createOrder', error, { tenantId });

@@ -26,6 +26,7 @@ import {
   runAutomatedKitchenPrintForOrder,
 } from '../services/operationalAutomationService';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
+import { createPixPayment, getPaymentByOrderId } from '../services/paymentsService';
 import { batchLoadComboGruposForCardapio } from '../services/productComboValidation';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
@@ -146,6 +147,33 @@ function normalizeItemObservationForDb(raw: unknown): string | null {
 
 function parseDeliveryConfig(rawConfig?: unknown): DeliveryConfig {
   return coerceDeliveryConfigRow(rawConfig ?? null) as DeliveryConfig;
+}
+
+function buildPublicPixConfig(
+  config: DeliveryConfig,
+  fallbackWhatsapp: string | null | undefined,
+  paymentPix?: {
+    provider?: string | null;
+    external_id?: string | null;
+    status?: string | null;
+    qr_code_text?: string | null;
+    qr_code_base64?: string | null;
+    expires_at?: string | null;
+  } | null
+) {
+  return {
+    pix_chave: config.pix_chave,
+    pix_nome: config.pix_nome,
+    pix_cidade: config.pix_cidade,
+    pix_payload_estatico: paymentPix?.qr_code_text || config.pix_payload_estatico,
+    qr_code_image_base64: paymentPix?.qr_code_base64 || null,
+    payment_provider: paymentPix?.provider || null,
+    payment_external_id: paymentPix?.external_id || null,
+    payment_status: paymentPix?.status || null,
+    payment_expires_at: paymentPix?.expires_at || null,
+    whatsapp: config.whatsapp || fallbackWhatsapp || undefined,
+    desconto_pix: config.desconto_pix,
+  };
 }
 
 function getCurrentDateInTimeZone() {
@@ -1034,17 +1062,41 @@ export function createDeliveryPublicRouter() {
         pedido.delivery_checkout_snapshot = null;
       }
 
+      const persistedPayments = await getPaymentByOrderId({
+        orderId: Number(pedido.id),
+        tenantId: Number(tenant.id),
+      });
+      const latestPixPayment = persistedPayments.find(
+        (payment) => String(payment.method || '').trim().toLowerCase() === 'pix'
+      );
+
       res.json({
         pedido,
         nome_estabelecimento: tenant.nome_estabelecimento,
-        config_pix: {
-          pix_chave: dcfg.pix_chave,
-          pix_nome: dcfg.pix_nome,
-          pix_cidade: dcfg.pix_cidade,
-          pix_payload_estatico: dcfg.pix_payload_estatico,
-          whatsapp: dcfg.whatsapp || tenant.whatsapp,
-          desconto_pix: dcfg.desconto_pix,
-        },
+        payment_pix: latestPixPayment
+          ? {
+              provider: latestPixPayment.provider,
+              external_id: latestPixPayment.external_id,
+              status: latestPixPayment.status,
+              qr_code_text: latestPixPayment.qr_code_text,
+              qr_code_base64: latestPixPayment.qr_code_image_base64,
+              expires_at: latestPixPayment.expires_at,
+            }
+          : null,
+        config_pix: buildPublicPixConfig(
+          dcfg,
+          tenant.whatsapp,
+          latestPixPayment
+            ? {
+                provider: latestPixPayment.provider,
+                external_id: latestPixPayment.external_id,
+                status: latestPixPayment.status,
+                qr_code_text: latestPixPayment.qr_code_text,
+                qr_code_base64: latestPixPayment.qr_code_image_base64,
+                expires_at: latestPixPayment.expires_at,
+              }
+            : null
+        ),
       });
     } catch (e: any) {
       sendInternalError(res, 'delivery-public', e);
@@ -1453,6 +1505,30 @@ export function createDeliveryPublicRouter() {
         return { orderId, orderNumber };
       });
 
+      let paymentPix: Awaited<ReturnType<typeof createPixPayment>> = null;
+      if (String(pagamento_tipo || '').trim().toLowerCase() === 'pix') {
+        try {
+          paymentPix = await createPixPayment({
+            tenant_id: tenant.id,
+            order_id: Number(result.orderId),
+            amount: totalFinal,
+            customer_name: cliente_nome || null,
+            external_reference: result.orderNumber,
+            description: `${canalPedido === 'retirada' ? 'Pedido retirada' : 'Pedido delivery'} #${result.orderNumber}`,
+            metadata: {
+              channel: canalPedido,
+              order_number: result.orderNumber,
+            },
+          });
+        } catch (error) {
+          logError('delivery-public.createPixPayment', error, {
+            tenantId: tenant.id,
+            orderId: result.orderId,
+            orderNumber: result.orderNumber,
+          });
+        }
+      }
+
       notifyTenantOrderStreams(Number(tenant.id), 'new', { orderId: Number(result.orderId) });
 
       const waNumber = (dcfg.whatsapp || tenant.whatsapp || '').replace(/\D/g, '');
@@ -1510,14 +1586,8 @@ export function createDeliveryPublicRouter() {
         canal: canalPedido,
         waLink,
         mapsUrl,
-        config_pix: {
-          pix_chave: dcfg.pix_chave,
-          pix_nome: dcfg.pix_nome,
-          pix_cidade: dcfg.pix_cidade,
-          pix_payload_estatico: dcfg.pix_payload_estatico,
-          whatsapp: dcfg.whatsapp || tenant.whatsapp,
-          desconto_pix: dcfg.desconto_pix,
-        },
+        payment_pix: paymentPix,
+        config_pix: buildPublicPixConfig(dcfg, tenant.whatsapp, paymentPix),
         resumo_checkout: {
           taxa_entrega: checkoutSummary.taxa_entrega,
           desconto_pix: checkoutSummary.desconto_pix,

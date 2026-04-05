@@ -17,9 +17,11 @@ import {
 } from '../middleware';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
+import { createPixPayment } from '../services/paymentsService';
 import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
 import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomationService';
 import { isAppError } from '../utils/errors';
+import { logError } from '../utils/logger';
 import { getCustomerLoyaltyTier } from '../services/customerLoyaltyTier';
 import { buildValidOrderSqlClause } from '../services/orderValiditySql';
 import {
@@ -934,10 +936,35 @@ router.get('/clientes', async (req: Request, res) => {
 
       notifyTenantOrderStreams(tenantId, 'new', { orderId });
 
+      let paymentPix: Awaited<ReturnType<typeof createPixPayment>> = null;
+      if (String(pagamento_tipo || '').trim().toLowerCase() === 'pix') {
+        try {
+          paymentPix = await createPixPayment({
+            tenant_id: tenantId,
+            order_id: orderId,
+            amount: serverTotal,
+            customer_name: cliente_nome || null,
+            external_reference: on,
+            description: `Pedido delivery #${on}`,
+            metadata: {
+              channel: 'delivery_manual',
+              order_number: on,
+            },
+          });
+        } catch (error) {
+          logError('routes/delivery.createPixPayment', error, {
+            tenantId,
+            orderId,
+            orderNumber: on,
+          });
+        }
+      }
+
       res.json({
         success: true,
         orderId,
         orderNumber: on,
+        payment_pix: paymentPix,
         automation: kitchenPrintAutomation ? { kitchen_print: kitchenPrintAutomation } : undefined,
       });
     } catch (e: any) {

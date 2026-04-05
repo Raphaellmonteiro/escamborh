@@ -88,6 +88,25 @@ export async function runMigrations() {
         created_at TIMESTAMPTZ DEFAULT NOW(), tenant_id INTEGER DEFAULT 1,
         FOREIGN KEY(order_id) REFERENCES pedidos(id)
       );
+      CREATE TABLE IF NOT EXISTS pedido_pagamentos (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER DEFAULT 1,
+        order_id INTEGER NOT NULL,
+        method TEXT NOT NULL,
+        provider TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        amount REAL NOT NULL DEFAULT 0,
+        external_id TEXT,
+        external_reference TEXT,
+        qr_code_text TEXT,
+        qr_code_image_base64 TEXT,
+        paid_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ,
+        metadata_json TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        FOREIGN KEY(order_id) REFERENCES pedidos(id)
+      );
       CREATE TABLE IF NOT EXISTS despesas (
         id SERIAL PRIMARY KEY,
         description TEXT, amount REAL, category TEXT,
@@ -603,6 +622,9 @@ export async function runMigrations() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_pedidos_tenant_date      ON pedidos(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_pagamentos_tenant_date   ON pagamentos(tenant_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_pedido_pagamentos_tenant ON pedido_pagamentos(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_pedido_pagamentos_order  ON pedido_pagamentos(order_id);
+      CREATE INDEX IF NOT EXISTS idx_pedido_pagamentos_status ON pedido_pagamentos(status);
       CREATE INDEX IF NOT EXISTS idx_despesas_tenant_date     ON despesas(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_estoque_mov_tenant_date  ON estoque_movimentacoes(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_system_logs_tenant_date  ON system_logs(tenant_id, created_at);

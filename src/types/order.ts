@@ -43,6 +43,76 @@ export interface PaymentInput {
   change_given?: number;
 }
 
+export type PaymentStatus =
+  | 'pending'
+  | 'authorized'
+  | 'paid'
+  | 'failed'
+  | 'cancelled'
+  | 'expired'
+  | 'refunded'
+  | string;
+
+export type PaymentMethod =
+  | 'cash'
+  | 'pix'
+  | 'credit_card'
+  | 'debit_card'
+  | 'voucher'
+  | 'bank_transfer'
+  | 'other'
+  | string;
+
+export type PaymentProvider = 'internal' | 'manual' | 'generic' | string;
+
+export interface OrderPaymentRecord {
+  id: number;
+  tenant_id: number;
+  order_id: number;
+  method: PaymentMethod;
+  provider?: PaymentProvider | null;
+  status: PaymentStatus;
+  amount: number;
+  external_id?: string | null;
+  external_reference?: string | null;
+  qr_code_text?: string | null;
+  qr_code_image_base64?: string | null;
+  paid_at?: string | null;
+  expires_at?: string | null;
+  metadata_json?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateOrderPaymentInput {
+  tenant_id: number | string;
+  order_id: number | string;
+  method: PaymentMethod;
+  provider?: PaymentProvider | null;
+  status?: PaymentStatus;
+  amount: number;
+  external_id?: string | null;
+  external_reference?: string | null;
+  qr_code_text?: string | null;
+  qr_code_image_base64?: string | null;
+  paid_at?: string | null;
+  expires_at?: string | null;
+  metadata_json?: string | null;
+}
+
+export interface UpdateOrderPaymentStatusInput {
+  id: number | string;
+  tenant_id: number | string;
+  status: PaymentStatus;
+  paid_at?: string | null;
+  expires_at?: string | null;
+  external_id?: string | null;
+  external_reference?: string | null;
+  qr_code_text?: string | null;
+  qr_code_image_base64?: string | null;
+  metadata_json?: string | null;
+}
+
 export interface CreateOrderInput {
   items: OrderItemInput[];
   payments: PaymentInput[];
