@@ -79,6 +79,7 @@ interface Config {
   qr_code_image_base64?: string;
   payment_provider?: string;
   payment_external_id?: string;
+  payment_external_reference?: string;
   payment_status?: string;
   payment_expires_at?: string;
   whatsapp?: string;
@@ -621,12 +622,14 @@ type PedidoConfirmado = {
   total: number;
   orderId: number;
   pagamento_tipo: string;
+  pagamento_status?: string | null;
   mapsUrl?: string;
   itens?: any[];
   config_pix?: Partial<Config>;
   payment_pix?: {
     provider?: string | null;
     external_id?: string | null;
+    external_reference?: string | null;
     status?: string | null;
     qr_code_text?: string | null;
     qr_code_base64?: string | null;
@@ -1593,7 +1596,7 @@ export default function DeliveryCardapio() {
     setCheckoutOpen(false);
     setSacolaOpen(false);
     setCheckoutStep(1);
-    if (d.payment_pix) {
+    if (d.pagamento_tipo === 'pix') {
       setPedidoSucessoOpen(false);
       setTela('confirmado');
     } else {
@@ -4313,7 +4316,6 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const [novoEndereco, setNovoEndereco] = useState<DeliveryNovoEnderecoForm>(() => emptyDeliveryNovoEnderecoForm(true));
   const [modoRecebimento, setModoRecebimento] = useState<ModoRecebimentoPedido | null>(null);
   const [pag, setPag] = useState('pix');
-  const [pixCheckoutAck, setPixCheckoutAck] = useState(false);
   const [pixCheckoutCopiado, setPixCheckoutCopiado] = useState(false);
   const [obs, setObs] = useState('');
   const [precisaTroco, setPrecisaTroco] = useState(false);
@@ -4404,7 +4406,6 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
 
   useEffect(() => {
     if (pag !== 'pix') {
-      setPixCheckoutAck(false);
       setPixCheckoutCopiado(false);
     }
   }, [pag]);
@@ -4694,7 +4695,7 @@ const finalizar = async () => {
           config_pix: d.config_pix,
           payment_pix: d.payment_pix || null,
           canal: d.canal,
-          checkout_modal_concluido: !d.payment_pix,
+          pagamento_status: d.pagamento_status || (pag === 'pix' ? 'aguardando_confirmacao' : 'pendente'),
         });
       }
       else setErro(d.error||'Erro ao enviar pedido');
@@ -4767,16 +4768,12 @@ const finalizar = async () => {
     if (modalStep === 2) {
       if (!validarAvancoEtapa2()) return;
       setErro('');
-      setPixCheckoutAck(false);
       setModalStep(3);
       return;
     }
-    if (modalStep === 3) {
-      if (pag === 'pix' && pixPayloadCheckout && !pixCheckoutAck) {
+    if (modalStep === 3) { /*
         setErro('Toque em "Já confirmei o pagamento" abaixo antes de enviar o pedido.');
-        return;
-      }
-      setErro('');
+      */ setErro('');
     }
     void finalizar();
   };
@@ -5524,18 +5521,18 @@ const finalizar = async () => {
               Confira subtotal, taxa, descontos e total antes de confirmar.
             </div>
             {pag === 'pix' && (
+              <div className={`${cx.resumoCard} text-xs ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-300'}`}>
+                O QR Code final e o copia e cola deste pedido serao exibidos logo apos confirmar.
+              </div>
+            )}
+            {false && pag === 'pix' && (
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => { setPixCheckoutAck(true); setErro(''); }}
                   className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 py-3.5 text-sm font-black transition-all ${
-                    pixCheckoutAck
-                      ? isLightCheckout
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                        : 'border-emerald-500/50 bg-emerald-500/15 text-emerald-100'
-                      : isLightCheckout
-                        ? 'border-zinc-200 bg-white text-zinc-800 hover:border-red-300'
-                        : 'border-white/15 bg-zinc-950 text-zinc-100 hover:border-cyan-500/40'
+                    isLightCheckout
+                      ? 'border-zinc-200 bg-white text-zinc-800 hover:border-red-300'
+                      : 'border-white/15 bg-zinc-950 text-zinc-100 hover:border-cyan-500/40'
                   }`}
                 >
                   <CheckCircle2 size={18} />
@@ -5594,10 +5591,9 @@ const finalizar = async () => {
               <span className="truncate">
                 {modalStep === 3
                   ? (enviando ? 'Enviando...' : 'Confirmar pedido')
-                  : modalStep === 2
-                    ? pag === 'pix'
+                  : modalStep === 2 /*
                       ? 'Já fiz o pagamento'
-                      : 'Continuar para confirmar'
+                    */ ? 'Continuar para confirmar'
                     : 'Continuar'}
               </span>
             </button>
@@ -5608,20 +5604,58 @@ const finalizar = async () => {
   );
 }
 
-function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken, onNovo }: { pedidoOk:any;config:Config;slug:string;tipoAtendimento: TipoAtendimento;clienteToken:string|null;onNovo:()=>void }) {
+function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken, onNovo }: { pedidoOk: PedidoConfirmado;config:Config;slug:string;tipoAtendimento: TipoAtendimento;clienteToken:string|null;onNovo:()=>void }) {
   const isPix = pedidoOk.pagamento_tipo === 'pix';
   const isRetirada = pedidoOk.canal === 'retirada' || tipoAtendimento === 'retirada';
-  const paymentPix = pedidoOk.payment_pix || null;
-  const pixResolvidoNoCheckoutModal = pedidoOk.checkout_modal_concluido === true && !paymentPix;
   const [acompanharOpen, setAcompanharOpen] = useState(false);
-  const [pixPago, setPixPago] = useState(false);
-  const [confirmando, setConfirmando] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [pixPayload, setPixPayload] = useState('');
+  const [pagamentoStatus, setPagamentoStatus] = useState<string | null>(
+    pedidoOk.pagamento_status || (isPix ? 'aguardando_confirmacao' : null)
+  );
+  const [paymentPix, setPaymentPix] = useState<PedidoConfirmado['payment_pix']>(pedidoOk.payment_pix || null);
+  const [configPixPedido, setConfigPixPedido] = useState<Partial<Config>>(pedidoOk.config_pix || {});
 
   // Mescla o payload do pedido com a config carregada para nao perder campos opcionais como whatsapp.
-  const pxConf = { ...config, ...(pedidoOk.config_pix || {}) } as Config;
+  const pxConf = { ...config, ...configPixPedido } as Config;
+  const pagamentoStatusKey = String(pagamentoStatus || '').trim().toLowerCase();
+  const paymentPixStatusKey = String(paymentPix?.status || '').trim().toLowerCase();
+  const pixPago = pagamentoStatusKey === 'pago' || paymentPixStatusKey === 'paid' || paymentPixStatusKey === 'approved';
   const temPix = paymentPix?.qr_code_text || pxConf.pix_chave || pxConf.pix_payload_estatico;
+
+  useEffect(() => {
+    if (!isPix) return;
+
+    let active = true;
+    const syncPedido = async () => {
+      try {
+        const response = await fetch(`/public/delivery/${slug}/pedido/${pedidoOk.orderId}`);
+        if (!response.ok) return;
+
+        const body = await response.json();
+        if (!active) return;
+
+        setPagamentoStatus(body?.pedido?.pagamento_status || null);
+        if (body?.payment_pix) setPaymentPix(body.payment_pix);
+        if (body?.config_pix) setConfigPixPedido(body.config_pix);
+      } catch {
+        // Mantem os dados atuais quando a consulta falhar.
+      }
+    };
+
+    void syncPedido();
+    if (pixPago) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const timer = setInterval(() => { void syncPedido(); }, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [isPix, pedidoOk.orderId, pixPago, slug]);
 
   useEffect(() => {
     if (!isPix) return;
@@ -5653,27 +5687,17 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
     setCopiado(true); setTimeout(()=>setCopiado(false), 4000);
   };
 
-  const confirmarPagamento = async () => {
-    setConfirmando(true);
-    try {
-      const headers: Record<string, string> = {};
-      if (clienteToken) headers.Authorization = `Bearer ${clienteToken}`;
-      const r = await fetch(`/public/delivery/${slug}/pedido/${pedidoOk.orderId}/confirmar-pix`, { method:'POST', headers });
-      if (!r.ok) throw new Error('confirmar-pix');
-      setPixPago(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch {}
-    setConfirmando(false);
-  };
+  const confirmando = false;
+  const confirmarPagamento = () => undefined;
 
   const waNumber = pxConf.whatsapp?.replace(/\D/g,'');
   const waMsgPix = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(`🧾 *Comprovante Pix — Pedido #${pedidoOk.orderNumber}*\n\nOlá! Acabei de realizar o pagamento de *${fmt(pedidoOk.total)}* via Pix.\n\n📎 Segue o comprovante em anexo.`)}` : null;
   const waMsgEntrega = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(`✅ *Pedido Confirmado #${pedidoOk.orderNumber}*\n\nOlá! Meu pedido foi confirmado. Aguardo a entrega!\n💰 Pagarei *${fmt(pedidoOk.total)}* ${pedidoOk.pagamento_tipo === 'dinheiro' ? 'em dinheiro' : 'no cartão'} na entrega.`)}` : null;
   const waMsgOperacao = isRetirada ? null : waMsgEntrega;
 
-  const headerPedidoConfirmado = !isPix || pixPago || pixResolvidoNoCheckoutModal;
-  const mostrarInstrucoesPixPosPedido = isPix && !pixPago && temPix && !pixResolvidoNoCheckoutModal;
-  const mostrarBlocoPixConfirmado = isPix && (pixPago || pixResolvidoNoCheckoutModal);
+  const headerPedidoConfirmado = !isPix || pixPago;
+  const mostrarInstrucoesPixPosPedido = isPix && !pixPago;
+  const mostrarBlocoPixConfirmado = isPix && pixPago;
 
   return (
     <>
@@ -5684,7 +5708,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
           {headerPedidoConfirmado ? <CheckCircle2 size={36} className="text-white"/> : <Smartphone size={36} className="text-white"/>}
         </motion.div>
         <h2 className="text-2xl font-black text-white">
-          {isPix && !pixPago && !pixResolvidoNoCheckoutModal ? 'Pague via Pix' : 'Pedido confirmado!'}
+          {isPix && !pixPago ? 'Aguardando pagamento Pix' : 'Pedido confirmado!'}
         </h2>
         <p className="text-white/80 text-sm mt-1">#{pedidoOk.orderNumber}</p>
         <p className="text-4xl font-black text-white mt-2">{fmt(pedidoOk.total)}</p>
@@ -5695,6 +5719,16 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
         {/* ── FLUXO PIX (legado: pedidos que não passaram pelo checkout modal) ── */}
         {mostrarInstrucoesPixPosPedido && (
           <>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs font-black uppercase tracking-wider text-amber-800">Status do pagamento</p>
+              <p className="mt-1 text-lg font-black text-amber-950">Aguardando pagamento</p>
+              <p className="mt-1 text-sm text-amber-900/90">A tela atualiza automaticamente quando o webhook confirmar o Pix.</p>
+            </div>
+            {!temPix && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                Nao foi possivel carregar o QR Code deste pedido agora. Tente novamente em instantes ou fale com a loja.
+              </div>
+            )}
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="bg-amber-50 px-4 py-3 border-b border-amber-100">
                 <p className="font-black text-amber-800 text-sm">Como pagar agora</p>
@@ -5714,6 +5748,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
               </div>
             </div>
 
+            {temPix && (
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider mb-3">Abrir direto no seu banco</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -5731,6 +5766,8 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
               </div>
               <p className="text-[10px] text-zinc-400 text-center mt-2">Toque no banco para abrir direto no app</p>
             </div>
+            )}
+            {temPix && (
             <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
               <p className="text-xs font-black text-zinc-500 uppercase tracking-wider">Pix Copia e Cola</p>
               <div className="flex justify-center">
@@ -5768,15 +5805,23 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
                     <span className="font-bold text-zinc-700">{new Date(paymentPix.expires_at).toLocaleString('pt-BR')}</span>
                   </div>
                 )}
+                {(paymentPix?.external_reference || pxConf.payment_external_reference) && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-500">Referencia</span>
+                    <span className="font-bold text-zinc-700 font-mono">{paymentPix?.external_reference || pxConf.payment_external_reference}</span>
+                  </div>
+                )}
               </div>
               <button onClick={copiar}
                 className={`w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${copiado?'bg-cyan-600 text-white':'bg-zinc-900 hover:bg-zinc-800 text-white'}`}>
                 {copiado ? '✓ Código copiado!' : '📋 Copiar código Pix'}
               </button>
             </div>
+            )}
 
+            <div className="hidden">
             <button onClick={confirmarPagamento} disabled={confirmando}
-              className={`w-full py-4 rounded-2xl font-black text-base transition-all flex items-center justify-center gap-2 shadow-lg ${
+              className={`hidden w-full py-4 rounded-2xl font-black text-base transition-all items-center justify-center gap-2 shadow-lg ${
                 copiado ? 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-cyan-200' : 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
               }`}>
               {confirmando ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <CheckCircle2 size={20}/>}
@@ -5784,6 +5829,7 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
             </button>
             <p className="text-xs text-zinc-400 text-center -mt-2">O botão libera após copiar o código Pix</p>
 
+            </div>
             {waMsgPix && (
               <button
                 type="button"

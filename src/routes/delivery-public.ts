@@ -155,6 +155,7 @@ function buildPublicPixConfig(
   paymentPix?: {
     provider?: string | null;
     external_id?: string | null;
+    external_reference?: string | null;
     status?: string | null;
     qr_code_text?: string | null;
     qr_code_base64?: string | null;
@@ -169,6 +170,7 @@ function buildPublicPixConfig(
     qr_code_image_base64: paymentPix?.qr_code_base64 || null,
     payment_provider: paymentPix?.provider || null,
     payment_external_id: paymentPix?.external_id || null,
+    payment_external_reference: paymentPix?.external_reference || null,
     payment_status: paymentPix?.status || null,
     payment_expires_at: paymentPix?.expires_at || null,
     whatsapp: config.whatsapp || fallbackWhatsapp || undefined,
@@ -1077,6 +1079,7 @@ export function createDeliveryPublicRouter() {
           ? {
               provider: latestPixPayment.provider,
               external_id: latestPixPayment.external_id,
+              external_reference: latestPixPayment.external_reference,
               status: latestPixPayment.status,
               qr_code_text: latestPixPayment.qr_code_text,
               qr_code_base64: latestPixPayment.qr_code_image_base64,
@@ -1090,6 +1093,7 @@ export function createDeliveryPublicRouter() {
             ? {
                 provider: latestPixPayment.provider,
                 external_id: latestPixPayment.external_id,
+                external_reference: latestPixPayment.external_reference,
                 status: latestPixPayment.status,
                 qr_code_text: latestPixPayment.qr_code_text,
                 qr_code_base64: latestPixPayment.qr_code_image_base64,
@@ -1584,6 +1588,7 @@ export function createDeliveryPublicRouter() {
         orderNumber: result.orderNumber,
         total: totalFinal,
         canal: canalPedido,
+        pagamento_status: String(pagamento_tipo || '').trim().toLowerCase() === 'pix' ? 'aguardando_confirmacao' : 'pendente',
         waLink,
         mapsUrl,
         payment_pix: paymentPix,

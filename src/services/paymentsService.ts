@@ -41,6 +41,7 @@ type TenantPaymentProviderConfig = {
   enabled: boolean;
   provider: PaymentProvider | null;
   accessToken: string | null;
+  webhookSecret: string | null;
   sandbox: boolean;
 };
 
@@ -60,6 +61,7 @@ export type CreatePixPaymentResult = {
   payment: OrderPaymentRecord;
   provider: PaymentProvider | null;
   external_id: string | null;
+  external_reference: string | null;
   status: string;
   qr_code_text: string | null;
   qr_code_base64: string | null;
@@ -184,6 +186,7 @@ export async function getTenantPaymentProviderConfig(
     enabled: Boolean(config.provider_enabled),
     provider: normalizeProviderName(config.payment_provider),
     accessToken: normalizeOptionalText(config.access_token),
+    webhookSecret: normalizeOptionalText(config.webhook_secret),
     sandbox: Boolean(config.provider_sandbox),
   };
 }
@@ -193,6 +196,7 @@ function mapPixResultFromPayment(payment: OrderPaymentRecord): CreatePixPaymentR
     payment,
     provider: payment.provider ?? null,
     external_id: payment.external_id ?? null,
+    external_reference: payment.external_reference ?? null,
     status: payment.status,
     qr_code_text: payment.qr_code_text ?? null,
     qr_code_base64: payment.qr_code_image_base64 ?? null,
@@ -376,6 +380,12 @@ export async function createPixPayment(
   });
 
   if (existingPayment?.external_id || existingPayment?.qr_code_text) {
+    if (existingPayment.external_reference) {
+      await qRun(
+        'UPDATE pedidos SET pix_external_reference=COALESCE(?, pix_external_reference) WHERE id=? AND tenant_id=?',
+        [existingPayment.external_reference, orderId, tenantId]
+      );
+    }
     return mapPixResultFromPayment(existingPayment);
   }
 
@@ -428,8 +438,16 @@ export async function createPixPayment(
 
   if (providerResult.external_id) {
     await qRun(
-      'UPDATE pedidos SET pix_txid=COALESCE(?, pix_txid) WHERE id=? AND tenant_id=?',
-      [providerResult.external_id, orderId, tenantId]
+      `UPDATE pedidos
+       SET pix_txid=COALESCE(?, pix_txid),
+           pix_external_reference=COALESCE(?, pix_external_reference)
+       WHERE id=? AND tenant_id=?`,
+      [providerResult.external_id, providerResult.external_reference, orderId, tenantId]
+    );
+  } else if (providerResult.external_reference) {
+    await qRun(
+      'UPDATE pedidos SET pix_external_reference=COALESCE(?, pix_external_reference) WHERE id=? AND tenant_id=?',
+      [providerResult.external_reference, orderId, tenantId]
     );
   }
 
@@ -437,6 +455,7 @@ export async function createPixPayment(
     payment,
     provider: providerResult.provider,
     external_id: providerResult.external_id,
+    external_reference: providerResult.external_reference,
     status: payment.status,
     qr_code_text: payment.qr_code_text ?? null,
     qr_code_base64: payment.qr_code_image_base64 ?? null,

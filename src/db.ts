@@ -63,7 +63,7 @@ export async function runMigrations() {
         pagamento_tipo TEXT, pagamento_status TEXT DEFAULT 'pendente',
         taxa_entrega REAL DEFAULT 0, motoboy_id INTEGER,
         saiu_entrega_at TIMESTAMPTZ, entregue_at TIMESTAMPTZ,
-        pix_txid TEXT, delivery_cliente_id INTEGER,
+        pix_txid TEXT, pix_external_reference TEXT, delivery_cliente_id INTEGER,
         cancelado_at TIMESTAMPTZ,
         cancelamento_motivo TEXT,
         cancelado_por INTEGER,
@@ -409,6 +409,7 @@ export async function runMigrations() {
       ALTER TABLE clientes ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE clientes ALTER COLUMN senha_admin DROP DEFAULT;
       ALTER TABLE clientes ALTER COLUMN senha_caixa DROP DEFAULT;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_external_reference TEXT;
       ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS minutos_pago_folha INTEGER NULL;
       ALTER TABLE func_horas_extras ADD COLUMN IF NOT EXISTS destino_pendente INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE funcionarios ADD COLUMN IF NOT EXISTS tipo_contrato TEXT DEFAULT 'fixo';
