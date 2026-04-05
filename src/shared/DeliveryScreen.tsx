@@ -1871,6 +1871,13 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
   const bannerInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
   const [fallbackLogoUrl, setFallbackLogoUrl] = useState<string | null>(null);
   const [cvBusy, setCvBusy] = useState<'logo' | number | null>(null);
+  const [testingPixConfig, setTestingPixConfig] = useState(false);
+  const [pixTestResult, setPixTestResult] = useState<null | {
+    ok: boolean;
+    status: 'manual' | 'ready' | 'invalid';
+    message: string;
+    provider?: string | null;
+  }>(null);
 
   useEffect(() => {
     if (lojaSub !== 'aparencia') return;
@@ -1978,6 +1985,19 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
     })();
   }, [token]);
 
+  useEffect(() => {
+    setPixTestResult(null);
+  }, [
+    cfg.provider_enabled,
+    cfg.payment_provider,
+    cfg.access_token,
+    cfg.provider_sandbox,
+    cfg.pix_chave,
+    cfg.pix_payload_estatico,
+    cfg.pix_nome,
+    cfg.pix_cidade,
+  ]);
+
   const save = async () => {
     setSaving(true);
     try {
@@ -1993,6 +2013,47 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       setSaved(true); setTimeout(()=>setSaved(false), 2000);
     } catch {}
     setSaving(false);
+  };
+
+  const testPixConfig = async () => {
+    setTestingPixConfig(true);
+    setPixTestResult(null);
+    try {
+      const res = await fetch('/api/delivery/config/pix/test', {
+        method:'POST',
+        headers:{...hdrs,'Content-Type':'application/json'},
+        body: JSON.stringify({
+          provider_enabled: cfg.provider_enabled,
+          payment_provider: cfg.payment_provider,
+          api_key: cfg.api_key,
+          access_token: cfg.access_token,
+          webhook_secret: cfg.webhook_secret,
+          pix_key: cfg.pix_key,
+          provider_sandbox: cfg.provider_sandbox,
+          pix_chave: cfg.pix_chave,
+          pix_payload_estatico: cfg.pix_payload_estatico,
+        }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      setPixTestResult({
+        ok: res.ok && Boolean(data.success),
+        status: data.status === 'manual' ? 'manual' : res.ok ? 'ready' : 'invalid',
+        message:
+          typeof data.message === 'string' && data.message.trim()
+            ? data.message
+            : res.ok
+              ? 'Configuracao validada.'
+              : 'Falha ao validar a configuracao.',
+        provider: typeof data.provider === 'string' ? data.provider : null,
+      });
+    } catch {
+      setPixTestResult({
+        ok: false,
+        status: 'invalid',
+        message: 'Nao foi possivel validar a configuracao agora.',
+      });
+    }
+    setTestingPixConfig(false);
   };
 
   const addCupom = async () => {
@@ -2067,6 +2128,51 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
       {label}
     </button>
   );
+
+  const isAutomaticPix = Boolean(cfg.provider_enabled);
+  const normalizedPaymentProvider = String(cfg.payment_provider || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const providerSupported =
+    !normalizedPaymentProvider ||
+    normalizedPaymentProvider === 'mercado_pago' ||
+    normalizedPaymentProvider === 'mercadopago';
+  const providerLabel =
+    normalizedPaymentProvider === 'mercado_pago' || normalizedPaymentProvider === 'mercadopago'
+      ? 'Mercado Pago'
+      : (cfg.payment_provider || 'Nao definido');
+  const manualPixConfigured = Boolean(
+    String(cfg.pix_payload_estatico || '').trim() ||
+    String(cfg.pix_chave || '').trim()
+  );
+  const automaticMissingFields: string[] = [];
+  if (isAutomaticPix) {
+    if (!normalizedPaymentProvider) automaticMissingFields.push('provider');
+    if (!String(cfg.access_token || '').trim()) automaticMissingFields.push('access token');
+  }
+
+  let pixStatusVariant: 'success' | 'warning' | 'error' | 'info' = 'info';
+  let pixStatusLabel = 'QR manual ativo';
+  let pixStatusDescription = manualPixConfigured
+    ? 'O checkout segue usando o QR manual salvo para pedidos PIX.'
+    : 'Selecione QR manual e preencha uma chave Pix ou payload estatico para exibir o QR no checkout.';
+
+  if (isAutomaticPix) {
+    if (!providerSupported) {
+      pixStatusVariant = 'error';
+      pixStatusLabel = 'Provider nao suportado';
+      pixStatusDescription = 'Este modo automatico aceita apenas Mercado Pago neste fluxo atual.';
+    } else if (automaticMissingFields.length > 0) {
+      pixStatusVariant = 'warning';
+      pixStatusLabel = 'Integracao incompleta';
+      pixStatusDescription = `Faltando: ${automaticMissingFields.join(', ')}.`;
+    } else {
+      pixStatusVariant = 'success';
+      pixStatusLabel = 'Integracao pronta';
+      pixStatusDescription = `Novos pedidos PIX vao tentar gerar cobranca automatica via ${providerLabel}.`;
+    }
+  }
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -2250,6 +2356,174 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
           )}
 
           {lojaSub === 'pagamentos' && (
+            <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><CreditCard size={16} className="text-zinc-500"/>Pagamentos</h4>
+              <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/80 dark:bg-blue-500/10 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider text-blue-900 dark:text-blue-300">Modo atual do PIX</p>
+                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 mt-1">{isAutomaticPix ? 'PIX automatico' : 'QR manual'}</p>
+                    <p className="text-[11px] text-blue-900/80 dark:text-blue-100/80 mt-1">
+                      {isAutomaticPix
+                        ? 'O FlowPDV tenta gerar o PIX do pedido usando o provider configurado.'
+                        : 'O checkout mostra o QR manual salvo para o cliente pagar.'}
+                    </p>
+                  </div>
+                  <StatusChip variant={pixStatusVariant} size="md" rounded="xl" uppercase={false} emphasis="bold">
+                    {pixStatusLabel}
+                  </StatusChip>
+                </div>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-300">{pixStatusDescription}</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setCfg(c => ({ ...c, provider_enabled: false }))}
+                    className={`rounded-2xl border p-4 text-left transition-all ${
+                      !isAutomaticPix
+                        ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                        : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-black text-sm">QR manual</span>
+                      {!isAutomaticPix ? <CheckCircle2 size={16} /> : <Smartphone size={16} />}
+                    </div>
+                    <p className={`text-[11px] mt-2 ${!isAutomaticPix ? 'text-white/80 dark:text-zinc-700' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                      Usa chave Pix ou payload estatico ja salvo no checkout.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCfg(c => ({ ...c, provider_enabled: true }))}
+                    className={`rounded-2xl border p-4 text-left transition-all ${
+                      isAutomaticPix
+                        ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                        : 'border-zinc-200 bg-white text-zinc-800 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-zinc-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-black text-sm">PIX automatico</span>
+                      {isAutomaticPix ? <CheckCircle2 size={16} /> : <RefreshCw size={16} />}
+                    </div>
+                    <p className={`text-[11px] mt-2 ${isAutomaticPix ? 'text-white/80 dark:text-zinc-700' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                      Gera cobranca PIX automaticamente nos novos pedidos.
+                    </p>
+                  </button>
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Alternar o modo nao apaga o QR manual nem as credenciais do provider ja salvas.
+                </p>
+              </div>
+
+              {!isAutomaticPix && (
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">QR manual</p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                        Mesmo fluxo atual do checkout publico. Preencha a chave Pix ou o payload fixo.
+                      </p>
+                    </div>
+                    <StatusChip
+                      variant={manualPixConfigured ? 'success' : 'warning'}
+                      size="md"
+                      rounded="xl"
+                      uppercase={false}
+                      emphasis="bold"
+                    >
+                      {manualPixConfigured ? 'QR manual configurado' : 'QR manual incompleto'}
+                    </StatusChip>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Field label="Chave Pix" value={cfg.pix_chave||''} onChange={v=>setCfg(c=>({...c,pix_chave:v}))} placeholder="email@ou.cpf"/>
+                    <Field label="Nome Pix" value={cfg.pix_nome||''} onChange={v=>setCfg(c=>({...c,pix_nome:v}))} placeholder="Nome do recebedor"/>
+                    <Field label="Cidade Pix" value={cfg.pix_cidade||''} onChange={v=>setCfg(c=>({...c,pix_cidade:v}))} placeholder="Cidade"/>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Payload PIX estatico (QR Code fixo)</label>
+                    <textarea
+                      value={cfg.pix_payload_estatico||''}
+                      onChange={e=>setCfg(c=>({...c,pix_payload_estatico:e.target.value}))}
+                      placeholder="00020126580014BR.GOV.BCB.PIX..."
+                      rows={3}
+                      className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary resize-none"
+                    />
+                    <p className="text-[10px] text-zinc-400 mt-1">
+                      Quando preenchido, o cliente ve o QR com o valor do carrinho como hoje.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isAutomaticPix && (
+                <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">PIX automatico</p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                        As credenciais abaixo sao usadas para gerar o PIX automatico sem alterar o restante da configuracao.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <StatusChip variant={providerSupported ? 'info' : 'error'} size="md" rounded="xl" uppercase={false} emphasis="bold">
+                        Provider: {providerLabel}
+                      </StatusChip>
+                      <StatusChip variant={cfg.provider_sandbox ? 'warning' : 'success'} size="md" rounded="xl" uppercase={false} emphasis="bold">
+                        {cfg.provider_sandbox ? 'Sandbox' : 'Producao'}
+                      </StatusChip>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Field label="Provider" value={cfg.payment_provider||''} onChange={v=>setCfg(c=>({...c,payment_provider:v}))} placeholder="mercadopago"/>
+                    <Field label="pix_key" value={cfg.pix_key||''} onChange={v=>setCfg(c=>({...c,pix_key:v}))} placeholder="Chave PIX do provider"/>
+                    <Field label="api_key" value={cfg.api_key||''} onChange={v=>setCfg(c=>({...c,api_key:v}))} type="password" placeholder="Opcional"/>
+                    <Field label="Access token" value={cfg.access_token||''} onChange={v=>setCfg(c=>({...c,access_token:v}))} type="password" placeholder="Obrigatorio para Mercado Pago"/>
+                    <Field label="webhook_secret" value={cfg.webhook_secret||''} onChange={v=>setCfg(c=>({...c,webhook_secret:v}))} type="password" placeholder="Opcional"/>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Ambiente</label>
+                      <select
+                        value={cfg.provider_sandbox ? 'sandbox' : 'production'}
+                        onChange={e=>setCfg(c=>({...c,provider_sandbox:e.target.value === 'sandbox'}))}
+                        className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"
+                      >
+                        <option value="production">Producao</option>
+                        <option value="sandbox">Sandbox</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={testPixConfig}
+                      disabled={testingPixConfig}
+                      className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                    >
+                      <RefreshCw size={14} className={testingPixConfig ? 'animate-spin' : ''} />
+                      {testingPixConfig ? 'Validando...' : 'Testar configuracao'}
+                    </button>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Teste simples e seguro: valida o modo automatico e os campos obrigatorios sem gerar cobranca real.
+                    </p>
+                  </div>
+                  {pixTestResult && (
+                    <div className={`rounded-xl border px-3 py-3 text-sm ${
+                      pixTestResult.ok
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200'
+                        : 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
+                    }`}>
+                      <div className="flex items-center gap-2 font-bold">
+                        {pixTestResult.ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                        {pixTestResult.ok ? 'Teste concluido' : 'Ajuste necessario'}
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed">{pixTestResult.message}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {false && lojaSub === 'pagamentos' && (
             <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
               <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><CreditCard size={16} className="text-zinc-500"/>Pagamentos</h4>
               <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/80 dark:bg-blue-500/10 p-4 space-y-2">

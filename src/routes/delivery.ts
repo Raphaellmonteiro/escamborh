@@ -66,6 +66,23 @@ function normalizePhone(value: unknown) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function normalizeOptionalText(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
+}
+
+function normalizePaymentProvider(value: unknown) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  if (!normalized) return null;
+  if (normalized === 'mercadopago') return 'mercado_pago';
+  return normalized;
+}
+
 function pedidoVinculoCliente(aliasP = 'p', aliasC = 'c') {
   return `${aliasP}.tenant_id = ${aliasC}.tenant_id AND (${aliasP}.cliente_id = ${aliasC}.id OR ${aliasP}.delivery_cliente_id = ${aliasC}.id)`;
 }
@@ -229,6 +246,70 @@ export function createDeliveryRouter() {
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
+  });
+
+  router.post('/config/pix/test', async (req: Request, res) => {
+    try {
+      const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
+      const existing = coerceDeliveryConfigRow(row?.delivery_config ?? null);
+      const patch =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+          ? (req.body as Record<string, any>)
+          : {};
+      const merged = mergeDeliveryConfigClientPut(existing, patch);
+
+      if (!merged.provider_enabled) {
+        return res.json({
+          success: true,
+          mode: 'manual',
+          status: 'manual',
+          message: 'QR manual selecionado. O teste do provider automatico nao e necessario.',
+        });
+      }
+
+      const provider = normalizePaymentProvider(merged.payment_provider);
+      const accessToken = normalizeOptionalText(merged.access_token);
+
+      if (!provider) {
+        return res.status(400).json({
+          success: false,
+          mode: 'automatic',
+          status: 'invalid',
+          message: 'Informe o provider do PIX automatico para validar a configuracao.',
+        });
+      }
+
+      if (provider !== 'mercado_pago') {
+        return res.status(400).json({
+          success: false,
+          mode: 'automatic',
+          status: 'invalid',
+          provider,
+          message: 'Provider ainda nao suportado neste fluxo. Use mercadopago para PIX automatico.',
+        });
+      }
+
+      if (!accessToken) {
+        return res.status(400).json({
+          success: false,
+          mode: 'automatic',
+          status: 'invalid',
+          provider,
+          message: 'Access token ausente. Preencha o token do provider para continuar.',
+        });
+      }
+
+      return res.json({
+        success: true,
+        mode: 'automatic',
+        status: 'ready',
+        provider,
+        sandbox: Boolean(merged.provider_sandbox),
+        message: 'Configuracao pronta para teste em pedido PIX. Salve e gere um pedido para validar o fluxo automatico.',
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/delivery.pixTest', e);
+    }
   });
 
   router.post(
