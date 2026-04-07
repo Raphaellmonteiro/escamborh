@@ -166,9 +166,7 @@ function buildEvolutionApiRequest(config: ProviderConfigRecord, recipient: strin
     },
     body: {
       number: recipient,
-      textMessage: {
-        text: message,
-      },
+      text: message,
     },
   };
 }
