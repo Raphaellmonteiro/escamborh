@@ -2271,6 +2271,26 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                   O FlowPDV calcula o delivery por bairro com taxa fixa. A taxa padrão (aba Entrega) entra quando nenhum bairro cadastrado casar com o endereço. Zonas são editadas na aba <strong>Zonas</strong>.
                 </p>
               </div>
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+                <div className="flex items-center gap-2 text-sm font-black text-zinc-800 dark:text-zinc-100">
+                  <Globe size={16} className="text-zinc-500" />
+                  Identidade pública
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Link curto do cardápio</label>
+                  <input value={cfg.cardapio_link_curto||''} onChange={e=>setCfg(c=>({...c,cardapio_link_curto:e.target.value}))}
+                    placeholder="https://bit.ly/4t1mNgi" className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Opcional. Se preenchido, este link será usado como link público principal do cardápio.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Link público principal</p>
+                  <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-fptext-primary dark:border-zinc-700 dark:bg-zinc-800">
+                    <span className="font-mono break-all">{preferredCardapioPublicUrl || '—'}</span>
+                  </div>
+                </div>
+              </div>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-bold text-zinc-800 dark:text-zinc-200">Delivery ativo</p>
@@ -2663,26 +2683,6 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
             <div className="space-y-5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
               <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-2"><Palette size={16} className="text-zinc-500"/>Aparência da loja</h4>
               <p className="text-xs text-zinc-500">Visual do cardápio online público. Tema e textos abaixo: use Salvar no fim da página. Logo e banners são gravados ao enviar ou remover.</p>
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
-                <div className="flex items-center gap-2 text-sm font-black text-zinc-800 dark:text-zinc-100">
-                  <Globe size={16} className="text-zinc-500" />
-                  Identidade pública
-                </div>
-                <div className="mt-3">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Link curto do cardápio</label>
-                  <input value={cfg.cardapio_link_curto||''} onChange={e=>setCfg(c=>({...c,cardapio_link_curto:e.target.value}))}
-                    placeholder="https://bit.ly/4t1mNgi" className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
-                  <p className="mt-1 text-[11px] text-zinc-500">
-                    Opcional. Se preenchido, este link será usado como link público principal do cardápio.
-                  </p>
-                </div>
-                <div className="mt-3">
-                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Link público principal</p>
-                  <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-fptext-primary dark:border-zinc-700 dark:bg-zinc-800">
-                    <span className="font-mono break-all">{preferredCardapioPublicUrl || '—'}</span>
-                  </div>
-                </div>
-              </div>
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Tema do cardápio</label>
                 <select
