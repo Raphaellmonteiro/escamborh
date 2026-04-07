@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import type { Express } from 'express';
-import rateLimit from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
@@ -181,7 +181,7 @@ export const lgpdSolicitacaoExclusaoRateLimit = rateLimit({
     if (Number.isFinite(n) && n > 0) {
       return `lgpd_solicitacao_exclusao:tenant:${n}`;
     }
-    return `lgpd_solicitacao_exclusao:ip:${req.ip || 'unknown'}`;
+    return `lgpd_solicitacao_exclusao:ip:${ipKeyGenerator(req.ip || '')}`;
   },
 });
 
