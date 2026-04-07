@@ -1334,49 +1334,109 @@ function normalizeEvolutionCustomerPhoneCandidate(value: unknown) {
   return isTrustedBrazilWhatsAppPhone(phone) ? phone : null;
 }
 
+const EVOLUTION_PHONE_CANDIDATE_KEYS = [
+  'remoteJid',
+  'remoteJidAlt',
+  'participant',
+  'participantAlt',
+  'participantPn',
+  'participantLid',
+  'participantPhone',
+  'participantWaId',
+  'sender',
+  'senderAlt',
+  'senderJid',
+  'senderPn',
+  'senderPhone',
+  'senderNumber',
+  'senderWaId',
+  'senderWid',
+  'senderLid',
+  'from',
+  'fromJid',
+  'fromPn',
+  'fromPhone',
+  'fromWaId',
+  'phone',
+  'phoneNumber',
+  'phone_number',
+  'waId',
+  'wa_id',
+  'jid',
+  'jidAlt',
+  'userJid',
+  'userWid',
+  'author',
+  'ownerPn',
+];
+
+function getEvolutionFieldCandidates(record: JsonRecord | null, prefix: string) {
+  if (!record) return [] as Array<[field: string, value: unknown]>;
+
+  return EVOLUTION_PHONE_CANDIDATE_KEYS.map((field) => [
+    `${prefix}.${field}`,
+    record[field],
+  ] as [field: string, value: unknown]);
+}
+
+function getEvolutionMessageCandidates(messageNode: unknown, prefix: string) {
+  const message = getRecord(messageNode);
+  if (!message) return [] as Array<[field: string, value: unknown]>;
+
+  const candidates = [
+    ...getEvolutionFieldCandidates(message, prefix),
+    ...getEvolutionFieldCandidates(getRecord(message.contextInfo), `${prefix}.contextInfo`),
+  ];
+
+  for (const [entryKey, entryValue] of Object.entries(message)) {
+    const entryRecord = getRecord(entryValue);
+    if (!entryRecord) continue;
+
+    candidates.push(...getEvolutionFieldCandidates(entryRecord, `${prefix}.${entryKey}`));
+    candidates.push(
+      ...getEvolutionFieldCandidates(
+        getRecord(entryRecord.contextInfo),
+        `${prefix}.${entryKey}.contextInfo`
+      )
+    );
+  }
+
+  return candidates;
+}
+
 function getEvolutionPhoneCandidates(item: JsonRecord, envelope?: JsonRecord | null) {
   const key = getRecord(item.key);
   const contextInfo = getRecord(item.contextInfo);
+  const message = getRecord(item.message);
   const envelopeKey = getRecord(envelope?.key);
   const envelopeContextInfo = getRecord(envelope?.contextInfo);
+  const envelopeMessage = getRecord(envelope?.message);
 
   return [
-    ['key.remoteJid', key?.remoteJid],
-    ['item.remoteJid', item.remoteJid],
-    ['key.remoteJidAlt', key?.remoteJidAlt],
-    ['item.remoteJidAlt', item.remoteJidAlt],
-    ['key.participant', key?.participant],
-    ['item.participant', item.participant],
-    ['key.participantAlt', key?.participantAlt],
-    ['item.participantAlt', item.participantAlt],
-    ['key.participantPn', key?.participantPn],
-    ['item.participantPn', item.participantPn],
-    ['contextInfo.participant', contextInfo?.participant],
-    ['contextInfo.participantAlt', contextInfo?.participantAlt],
-    ['contextInfo.participantPn', contextInfo?.participantPn],
-    ['item.senderPn', item.senderPn],
-    ['item.senderPhone', item.senderPhone],
-    ['item.senderWaId', item.senderWaId],
-    ['envelope.key.remoteJid', envelopeKey?.remoteJid],
-    ['envelope.remoteJid', envelope?.remoteJid],
-    ['envelope.key.remoteJidAlt', envelopeKey?.remoteJidAlt],
-    ['envelope.remoteJidAlt', envelope?.remoteJidAlt],
-    ['envelope.key.participant', envelopeKey?.participant],
-    ['envelope.participant', envelope?.participant],
-    ['envelope.key.participantAlt', envelopeKey?.participantAlt],
-    ['envelope.participantAlt', envelope?.participantAlt],
-    ['envelope.key.participantPn', envelopeKey?.participantPn],
-    ['envelope.participantPn', envelope?.participantPn],
-    ['envelope.contextInfo.participant', envelopeContextInfo?.participant],
-    ['envelope.contextInfo.participantAlt', envelopeContextInfo?.participantAlt],
-    ['envelope.contextInfo.participantPn', envelopeContextInfo?.participantPn],
+    ...getEvolutionFieldCandidates(key, 'key'),
+    ...getEvolutionFieldCandidates(item, 'item'),
+    ...getEvolutionFieldCandidates(contextInfo, 'contextInfo'),
+    ...getEvolutionMessageCandidates(message, 'message'),
+    ...getEvolutionFieldCandidates(envelopeKey, 'envelope.key'),
+    ...getEvolutionFieldCandidates(envelope || null, 'envelope'),
+    ...getEvolutionFieldCandidates(envelopeContextInfo, 'envelope.contextInfo'),
+    ...getEvolutionMessageCandidates(envelopeMessage, 'envelope.message'),
   ] as Array<[field: string, value: unknown]>;
 }
 
 function summarizeEvolutionPhoneCandidateFields(item: JsonRecord, envelope?: JsonRecord | null) {
-  return getEvolutionPhoneCandidates(item, envelope)
-    .filter(([, value]) => normalizeOptionalText(value))
-    .map(([field, value]) => `${field}${isEvolutionLidIdentifier(value) ? ':lid' : ''}`);
+  return [...new Set(
+    getEvolutionPhoneCandidates(item, envelope)
+      .filter(([, value]) => normalizeOptionalText(value))
+      .map(([field, value]) => {
+        const normalized = normalizeOptionalText(value);
+        if (!normalized) return field;
+        if (isEvolutionLidIdentifier(normalized)) return `${field}:lid`;
+        if (normalizeEvolutionCustomerPhoneCandidate(normalized)) return `${field}:phone`;
+        if (normalized.includes('@')) return `${field}:jid`;
+        return `${field}:present`;
+      })
+  )];
 }
 
 function resolveEvolutionCustomerPhone(
@@ -1393,6 +1453,12 @@ function resolveEvolutionCustomerPhone(
 
   return null;
 }
+
+type EvolutionExtractionAnalysis = {
+  messages: NormalizedInboundWhatsAppMessage[];
+  supportedMessageCount: number;
+  unresolvedPhoneCount: number;
+};
 
 function extractEvolutionFallbackText(messageNode: unknown) {
   const message = getRecord(messageNode);
@@ -1529,6 +1595,8 @@ function summarizeEvolutionPayloadShape(payload: unknown) {
   const firstMessage = getRecord(messages[0]);
   const firstMessageKey = getRecord(firstMessage?.key);
   const firstMessageContent = getRecord(firstMessage?.message);
+  const firstEnvelope = data ?? firstDataItem ?? root ?? null;
+  const firstCandidateItem = firstMessage ?? firstDataItem ?? data ?? root ?? null;
 
   return {
     rootKeys: root ? Object.keys(root).slice(0, 12) : [],
@@ -1570,6 +1638,109 @@ function summarizeEvolutionPayloadShape(payload: unknown) {
           firstDataItem?.senderName
       )
     ),
+    candidateFields:
+      firstCandidateItem && firstEnvelope
+        ? summarizeEvolutionPhoneCandidateFields(firstCandidateItem, firstEnvelope)
+        : [],
+  };
+}
+
+function analyzeEvolutionMessages(
+  tenantId: number,
+  provider: string,
+  payload: unknown,
+  payloadJson: string
+): EvolutionExtractionAnalysis {
+  const root = getRecord(payload);
+  const candidates = extractEvolutionCandidateContexts(root);
+  const messages: NormalizedInboundWhatsAppMessage[] = [];
+  let supportedMessageCount = 0;
+  let unresolvedPhoneCount = 0;
+
+  for (const { item, envelope } of candidates) {
+    const key = getRecord(item.key);
+    const envelopeKey = getRecord(envelope?.key);
+    const fromMe = toBool(item.fromMe ?? key?.fromMe ?? envelope?.fromMe ?? envelopeKey?.fromMe, false);
+    if (fromMe) continue;
+
+    const messageText =
+      extractTextFromMessageNode(item.message) ||
+      extractTextFromMessageNode(item) ||
+      normalizeOptionalText(item.body) ||
+      normalizeOptionalText(item.text) ||
+      extractTextFromMessageNode(envelope?.message) ||
+      extractTextFromMessageNode(envelope) ||
+      normalizeOptionalText(envelope?.body) ||
+      normalizeOptionalText(envelope?.text) ||
+      extractEvolutionFallbackText(item.message) ||
+      extractEvolutionFallbackText(item) ||
+      extractEvolutionFallbackText(envelope?.message) ||
+      extractEvolutionFallbackText(envelope);
+    if (!messageText) continue;
+
+    supportedMessageCount += 1;
+    const phone = resolveEvolutionCustomerPhone(item, envelope);
+
+    if (!phone) {
+      unresolvedPhoneCount += 1;
+      logInfo('whatsAppInboundService.evolutionPhoneUnresolved', {
+        tenantId,
+        provider,
+        reason: 'customer_phone_unresolved',
+        messageId:
+          normalizeOptionalText(key?.id) ||
+          normalizeOptionalText(item.id) ||
+          normalizeOptionalText(item.messageId) ||
+          normalizeOptionalText(envelopeKey?.id) ||
+          normalizeOptionalText(envelope?.id) ||
+          normalizeOptionalText(envelope?.messageId),
+        text: summarizeText(messageText),
+        candidateFields: summarizeEvolutionPhoneCandidateFields(item, envelope),
+        payloadShape: summarizeEvolutionPayloadShape(payload),
+      });
+
+      continue;
+    }
+
+    messages.push({
+      tenant_id: tenantId,
+      provider,
+      customer_phone: phone,
+      customer_name:
+        normalizeOptionalText(item.pushName) ||
+        normalizeOptionalText(item.senderName) ||
+        normalizeOptionalText(item.notifyName) ||
+        normalizeOptionalText(envelope?.pushName) ||
+        normalizeOptionalText(envelope?.senderName) ||
+        normalizeOptionalText(envelope?.notifyName),
+      message_text: messageText,
+      provider_message_id:
+        normalizeOptionalText(key?.id) ||
+        normalizeOptionalText(item.id) ||
+        normalizeOptionalText(item.messageId) ||
+        normalizeOptionalText(envelopeKey?.id) ||
+        normalizeOptionalText(envelope?.id) ||
+        normalizeOptionalText(envelope?.messageId),
+      created_at: normalizeTimestamp(
+        item.messageTimestamp ??
+          item.timestamp ??
+          item.createdAt ??
+          item.date_time ??
+          envelope?.messageTimestamp ??
+          envelope?.timestamp ??
+          envelope?.createdAt ??
+          envelope?.date_time ??
+          root?.createdAt ??
+          root?.date_time
+      ),
+      payload_json: payloadJson,
+    } satisfies NormalizedInboundWhatsAppMessage);
+  }
+
+  return {
+    messages,
+    supportedMessageCount,
+    unresolvedPhoneCount,
   };
 }
 
@@ -1579,85 +1750,7 @@ function extractEvolutionMessages(
   payload: unknown,
   payloadJson: string
 ): NormalizedInboundWhatsAppMessage[] {
-  const root = getRecord(payload);
-  const candidates = extractEvolutionCandidateContexts(root);
-
-  return candidates
-    .map(({ item, envelope }) => {
-      const key = getRecord(item.key);
-      const envelopeKey = getRecord(envelope?.key);
-      const fromMe = toBool(item.fromMe ?? key?.fromMe ?? envelope?.fromMe ?? envelopeKey?.fromMe, false);
-      if (fromMe) return null;
-
-      const messageText =
-        extractTextFromMessageNode(item.message) ||
-        extractTextFromMessageNode(item) ||
-        normalizeOptionalText(item.body) ||
-        normalizeOptionalText(item.text) ||
-        extractTextFromMessageNode(envelope?.message) ||
-        extractTextFromMessageNode(envelope) ||
-        normalizeOptionalText(envelope?.body) ||
-        normalizeOptionalText(envelope?.text) ||
-        extractEvolutionFallbackText(item.message) ||
-        extractEvolutionFallbackText(item) ||
-        extractEvolutionFallbackText(envelope?.message) ||
-        extractEvolutionFallbackText(envelope);
-      const phone = resolveEvolutionCustomerPhone(item, envelope);
-
-      if (!phone && messageText) {
-        logInfo('whatsAppInboundService.evolutionPhoneUnresolved', {
-          tenantId,
-          provider,
-          reason: 'customer_phone_unresolved',
-          messageId:
-            normalizeOptionalText(key?.id) ||
-            normalizeOptionalText(item.id) ||
-            normalizeOptionalText(item.messageId) ||
-            normalizeOptionalText(envelopeKey?.id) ||
-            normalizeOptionalText(envelope?.id) ||
-            normalizeOptionalText(envelope?.messageId),
-          text: summarizeText(messageText),
-          candidateFields: summarizeEvolutionPhoneCandidateFields(item, envelope),
-        });
-      }
-
-      if (!phone || !messageText) return null;
-
-      return {
-        tenant_id: tenantId,
-        provider,
-        customer_phone: phone,
-        customer_name:
-          normalizeOptionalText(item.pushName) ||
-          normalizeOptionalText(item.senderName) ||
-          normalizeOptionalText(item.notifyName) ||
-          normalizeOptionalText(envelope?.pushName) ||
-          normalizeOptionalText(envelope?.senderName) ||
-          normalizeOptionalText(envelope?.notifyName),
-        message_text: messageText,
-        provider_message_id:
-          normalizeOptionalText(key?.id) ||
-          normalizeOptionalText(item.id) ||
-          normalizeOptionalText(item.messageId) ||
-          normalizeOptionalText(envelopeKey?.id) ||
-          normalizeOptionalText(envelope?.id) ||
-          normalizeOptionalText(envelope?.messageId),
-        created_at: normalizeTimestamp(
-          item.messageTimestamp ??
-            item.timestamp ??
-            item.createdAt ??
-            item.date_time ??
-            envelope?.messageTimestamp ??
-            envelope?.timestamp ??
-            envelope?.createdAt ??
-            envelope?.date_time ??
-            root?.createdAt ??
-            root?.date_time
-        ),
-        payload_json: payloadJson,
-      } satisfies NormalizedInboundWhatsAppMessage;
-    })
-    .filter((item): item is NormalizedInboundWhatsAppMessage => item !== null);
+  return analyzeEvolutionMessages(tenantId, provider, payload, payloadJson).messages;
 }
 
 function extractMetaMessages(
@@ -1948,7 +2041,12 @@ export async function registerInboundWhatsAppMessages(
      WHERE c.id=?`,
     [tenantId]
   );
-  const inboundMessages = extractInboundMessages(tenantId, provider, input.payload);
+  const evolutionAnalysis =
+    provider === 'evolution' || provider === 'evolution_api'
+      ? analyzeEvolutionMessages(tenantId, provider, input.payload, safeJsonStringify(input.payload))
+      : null;
+  const inboundMessages =
+    evolutionAnalysis?.messages ?? extractInboundMessages(tenantId, provider, input.payload);
 
   logInfo('whatsAppInboundService.tenantResolved', {
     tenantId,
@@ -1966,6 +2064,11 @@ export async function registerInboundWhatsAppMessages(
   });
 
   if (inboundMessages.length === 0) {
+    const noMessagesReason =
+      evolutionAnalysis && evolutionAnalysis.supportedMessageCount > 0 && evolutionAnalysis.unresolvedPhoneCount > 0
+        ? 'supported_message_phone_unresolved'
+        : 'no_supported_messages_found';
+
     logInfo('whatsAppInboundService.noSupportedMessages', {
       tenantId,
       routeTenantId: resolvedTenant.routeTenantId,
@@ -1978,11 +2081,13 @@ export async function registerInboundWhatsAppMessages(
         provider === 'evolution' || provider === 'evolution_api'
           ? summarizeEvolutionPayloadShape(input.payload)
           : undefined,
-      reason: 'no_supported_messages_found',
+      supportedMessageCount: evolutionAnalysis?.supportedMessageCount,
+      unresolvedPhoneCount: evolutionAnalysis?.unresolvedPhoneCount,
+      reason: noMessagesReason,
     });
     return {
       accepted: true,
-      reason: 'no_supported_messages_found',
+      reason: noMessagesReason,
       provider,
       savedCount: 0,
       ignoredCount: 0,
