@@ -1485,6 +1485,207 @@ type EvolutionCustomerPhoneResolution = {
   unresolvedReason: EvolutionCustomerPhoneUnresolvedReason | null;
 };
 
+const EVOLUTION_DIAGNOSTIC_NAME_FIELD_KEYS = [
+  'pushName',
+  'notifyName',
+  'verifiedName',
+  'displayName',
+  'senderName',
+] as const;
+
+const EVOLUTION_DIAGNOSTIC_FIELD_KEYS = [
+  ...new Set<string>([...EVOLUTION_PHONE_CANDIDATE_KEYS, ...EVOLUTION_DIAGNOSTIC_NAME_FIELD_KEYS]),
+];
+
+function maskDiagnosticText(rawValue: string | null) {
+  const normalized = normalizeOptionalText(rawValue);
+  if (!normalized) return null;
+  if (normalized.length <= 4) return `${normalized.slice(0, 1)}***`;
+  return `${normalized.slice(0, 2)}***${normalized.slice(-2)}`;
+}
+
+function maskEvolutionDiagnosticValue(value: unknown) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+
+  const [localPart, ...domainParts] = normalized.split('@');
+  const domainPart = domainParts.join('@');
+  const normalizedPhone = normalizeWhatsAppPhone(normalized);
+  const maskedPhone = normalizedPhone ? maskPhone(normalizedPhone) : null;
+
+  if (domainPart) {
+    return `${maskedPhone || maskDiagnosticText(localPart)}@${domainPart}`;
+  }
+
+  if (maskedPhone) return maskedPhone;
+  return maskDiagnosticText(normalized);
+}
+
+function classifyEvolutionDiagnosticValue(
+  value: unknown,
+  configuredInstanceNumbers = new Set<string>()
+) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+
+  if (isEvolutionLidIdentifier(normalized)) {
+    return 'present_lid';
+  }
+
+  const normalizedPhone = normalizeWhatsAppPhone(normalized);
+  if (normalizedPhone && configuredInstanceNumbers.has(normalizedPhone)) {
+    return 'present_instance_number';
+  }
+
+  if (normalizeEvolutionCustomerPhoneCandidate(normalized)) {
+    return 'present_valid_br_phone';
+  }
+
+  return 'present_untrusted_format';
+}
+
+function buildEvolutionDiagnosticEntry(
+  scope: string,
+  path: string,
+  field: string,
+  value: unknown,
+  configuredInstanceNumbers = new Set<string>()
+) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+
+  return {
+    scope,
+    path,
+    field,
+    valueMasked: maskEvolutionDiagnosticValue(normalized),
+    classification: classifyEvolutionDiagnosticValue(normalized, configuredInstanceNumbers),
+  };
+}
+
+function collectEvolutionDiagnosticEntriesFromRecord(
+  record: JsonRecord | null,
+  scope: string,
+  path: string,
+  configuredInstanceNumbers = new Set<string>()
+) {
+  if (!record) return [] as Array<ReturnType<typeof buildEvolutionDiagnosticEntry>>;
+
+  return EVOLUTION_DIAGNOSTIC_FIELD_KEYS
+    .map((field) =>
+      buildEvolutionDiagnosticEntry(
+        scope,
+        path,
+        field,
+        record[field],
+        configuredInstanceNumbers
+      )
+    )
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+}
+
+function summarizeEvolutionUnresolvedPhoneDiagnostic(
+  payload: unknown,
+  configuredInstanceNumbers = new Set<string>()
+) {
+  const root = getRecord(payload);
+  const dataArray = getArray(root?.data);
+  const dataRecord = getRecord(root?.data) || getRecord(dataArray[0]);
+  const contexts = extractEvolutionCandidateContexts(root);
+  const primaryContext = contexts[0] || null;
+  const primaryItem = primaryContext?.item || dataRecord || root || null;
+  const keyRecord =
+    getRecord(primaryItem?.key) || getRecord(dataRecord?.key) || getRecord(root?.key);
+  const messageRecord =
+    getRecord(primaryItem?.message) || getRecord(dataRecord?.message) || getRecord(root?.message);
+  const contextInfoRecords = [
+    { path: 'item.contextInfo', record: getRecord(primaryItem?.contextInfo) },
+    { path: 'message.contextInfo', record: getRecord(messageRecord?.contextInfo) },
+    { path: 'data.contextInfo', record: getRecord(dataRecord?.contextInfo) },
+    { path: 'root.contextInfo', record: getRecord(root?.contextInfo) },
+  ];
+  const messageNestedEntries = messageRecord
+    ? Object.entries(messageRecord).flatMap(([entryKey, entryValue]) => {
+        const entryRecord = getRecord(entryValue);
+        if (!entryRecord) return [];
+
+        return collectEvolutionDiagnosticEntriesFromRecord(
+          entryRecord,
+          'message.*',
+          `message.${entryKey}`,
+          configuredInstanceNumbers
+        );
+      })
+    : [];
+  const contextInfoEntries = contextInfoRecords.flatMap(({ path, record }) =>
+    collectEvolutionDiagnosticEntriesFromRecord(
+      record,
+      'contextInfo',
+      path,
+      configuredInstanceNumbers
+    )
+  );
+  const entries = [
+    ...collectEvolutionDiagnosticEntriesFromRecord(
+      root,
+      'root',
+      'root',
+      configuredInstanceNumbers
+    ),
+    ...collectEvolutionDiagnosticEntriesFromRecord(
+      dataRecord,
+      'data',
+      Array.isArray(root?.data) ? 'data[0]' : 'data',
+      configuredInstanceNumbers
+    ),
+    ...collectEvolutionDiagnosticEntriesFromRecord(
+      keyRecord,
+      'key',
+      keyRecord === getRecord(primaryItem?.key) ? 'item.key' : keyRecord === getRecord(dataRecord?.key) ? 'data.key' : 'root.key',
+      configuredInstanceNumbers
+    ),
+    ...collectEvolutionDiagnosticEntriesFromRecord(
+      messageRecord,
+      'message',
+      messageRecord === getRecord(primaryItem?.message)
+        ? 'item.message'
+        : messageRecord === getRecord(dataRecord?.message)
+          ? 'data.message'
+          : 'root.message',
+      configuredInstanceNumbers
+    ),
+    ...messageNestedEntries,
+    ...contextInfoEntries,
+  ];
+
+  const filterEntries = (predicate: (entry: (typeof entries)[number]) => boolean) =>
+    entries.filter(predicate);
+  const byFieldName = (fieldNames: string[]) =>
+    filterEntries((entry) => fieldNames.includes(entry.field));
+
+  return {
+    configuredInstanceNumbers: Array.from(configuredInstanceNumbers).map((value) =>
+      maskPhone(value)
+    ),
+    scopes: {
+      root: filterEntries((entry) => entry.scope === 'root'),
+      data: filterEntries((entry) => entry.scope === 'data'),
+      key: filterEntries((entry) => entry.scope === 'key'),
+      message: filterEntries((entry) => entry.scope === 'message'),
+      messageNested: filterEntries((entry) => entry.scope === 'message.*'),
+      contextInfo: filterEntries((entry) => entry.scope === 'contextInfo'),
+    },
+    fieldFamilies: {
+      participant: filterEntries((entry) => entry.field.startsWith('participant')),
+      sender: filterEntries((entry) => entry.field.startsWith('sender')),
+      waId: byFieldName(['waId', 'wa_id']),
+      phone: byFieldName(['phone', 'phoneNumber', 'phone_number']),
+      jid: byFieldName(['jid', 'jidAlt', 'remoteJid', 'remoteJidAlt']),
+      displayNames: byFieldName(['pushName', 'notifyName', 'verifiedName', 'displayName']),
+    },
+  };
+}
+
 function getEvolutionFieldCandidates(record: JsonRecord | null, prefix: string) {
   if (!record) return [] as Array<[field: string, value: unknown]>;
 
@@ -2413,6 +2614,7 @@ export async function registerInboundWhatsAppMessages(
      WHERE c.id=?`,
     [tenantId]
   );
+  const configuredInboundInstanceNumbers = resolveConfiguredInboundInstanceNumbers(config);
   const evolutionAnalysis =
     provider === 'evolution' || provider === 'evolution_api'
       ? analyzeEvolutionMessages(
@@ -2420,7 +2622,7 @@ export async function registerInboundWhatsAppMessages(
           provider,
           input.payload,
           safeJsonStringify(input.payload),
-          resolveConfiguredInboundInstanceNumbers(config)
+          configuredInboundInstanceNumbers
         )
       : null;
   const inboundMessages =
@@ -2450,6 +2652,14 @@ export async function registerInboundWhatsAppMessages(
   if (inboundMessages.length === 0) {
     const noMessagesReason =
       resolveEvolutionNoMessagesReason(evolutionAnalysis) || 'no_supported_messages_found';
+    const unresolvedPhoneDiagnostic =
+      (provider === 'evolution' || provider === 'evolution_api') &&
+      noMessagesReason.startsWith('supported_message_phone_unresolved')
+        ? summarizeEvolutionUnresolvedPhoneDiagnostic(
+            input.payload,
+            configuredInboundInstanceNumbers
+          )
+        : undefined;
 
     logInfo('whatsAppInboundService.noSupportedMessages', {
       tenantId,
@@ -2466,6 +2676,7 @@ export async function registerInboundWhatsAppMessages(
       supportedMessageCount: evolutionAnalysis?.supportedMessageCount,
       unresolvedPhoneCount: evolutionAnalysis?.unresolvedPhoneCount,
       unresolvedReasonCounts: evolutionAnalysis?.unresolvedReasonCounts,
+      unresolvedPhoneDiagnostic,
       reason: noMessagesReason,
     });
     return {
