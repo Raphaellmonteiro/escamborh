@@ -35,7 +35,7 @@ import {
 } from '../services/whatsAppEventsService';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
-import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
+import { applyNormalizedBannerSlots, coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import {
   findDeliveryZoneByBairro,
   MENSAGEM_ENTREGA_FORA_DA_AREA,
@@ -159,7 +159,9 @@ function normalizeOptionalEmail(value: unknown): string | null {
 }
 
 function parseDeliveryConfig(rawConfig?: unknown): DeliveryConfig {
-  return coerceDeliveryConfigRow(rawConfig ?? null) as DeliveryConfig;
+  const cfg = coerceDeliveryConfigRow(rawConfig ?? null) as DeliveryConfig & Record<string, any>;
+  applyNormalizedBannerSlots(cfg);
+  return cfg;
 }
 
 function buildPublicPixConfig(
@@ -951,10 +953,30 @@ export function createDeliveryPublicRouter() {
       }
 
       const produtos = await qAll('SELECT * FROM produtos WHERE tenant_id=? AND active=1 ORDER BY COALESCE(ordem,0) ASC, name ASC', [tenant.id]);
-      const produtosComOpcoes = await buildProdutosComOpcoesBatched(tenant.id, produtos);
+      let produtosComOpcoes: any[];
+      try {
+        produtosComOpcoes = await buildProdutosComOpcoesBatched(tenant.id, produtos);
+      } catch (error) {
+        console.warn('[delivery-public] fallback para payload basico de produtos', {
+          tenantId: Number(tenant.id),
+          slug: String(req.params.slug || ''),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        produtosComOpcoes = produtos.map((p) => ({
+          ...p,
+          photo_url: normalizeProductPhotoPublicUrl(p.photo_url),
+          description: p.descricao || null,
+          em_promocao: Number(p.em_promocao || 0),
+          preco_original: p.preco_original == null ? null : Number(p.preco_original),
+          is_combo: Number(p.is_combo || 0) === 1 ? 1 : 0,
+          grupos_opcao: [],
+          variacoes_vendaveis: [],
+          combo_grupos: [],
+        }));
+      }
 
-      const logoPadrao = await resolveTenantLogoPublicUrl(tenant.id);
-      const logoCustom = String(dcfg.cardapio_online_logo_url || '').trim();
+      const logoPadrao = normalizeProductPhotoPublicUrl(await resolveTenantLogoPublicUrl(tenant.id));
+      const logoCustom = normalizeProductPhotoPublicUrl(dcfg.cardapio_online_logo_url);
       const logo_url = logoCustom || logoPadrao;
 
       const categoriasMap: Record<string, any[]> = {};
@@ -965,7 +987,9 @@ export function createDeliveryPublicRouter() {
       }
       const categorias = Object.entries(categoriasMap).map(([nome, itens]) => ({ nome, itens }));
 
-      const cardapioBannerSlots = [...normalizeCardapioOnlineBannerSlots(dcfg.cardapio_online_banner_urls)];
+      const cardapioBannerSlots = normalizeCardapioOnlineBannerSlots(dcfg.cardapio_online_banner_urls).map(
+        (url) => normalizeProductPhotoPublicUrl(url) || ''
+      );
 
       res.json({
         estabelecimento: tenant.nome_estabelecimento,
@@ -992,6 +1016,7 @@ export function createDeliveryPublicRouter() {
           desconto_primeiro_cliente_min_pedido: dcfg.desconto_primeiro_cliente_min_pedido ?? 0,
           zonas_entrega: Array.isArray(dcfg.zonas_entrega) ? dcfg.zonas_entrega : [],
           theme_mode: dcfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium',
+          cardapio_online_logo_url: logoCustom || undefined,
           cardapio_online_banner_urls: cardapioBannerSlots,
           cardapio_banner_slots: cardapioBannerSlots,
         },

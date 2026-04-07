@@ -305,7 +305,9 @@ const DELIVERY_UPLOAD_URL_PREFIX = '/uploads/delivery/';
 const DELIVERY_UPLOAD_DIR = path.join(UPLOADS_ROOT, 'delivery');
 
 function bannerSlotsFromCfg(cfg: Record<string, any>): string[] {
-  return [...normalizeCardapioOnlineBannerSlots(cfg.cardapio_online_banner_urls)];
+  return [...normalizeCardapioOnlineBannerSlots(
+    cfg.cardapio_online_banner_urls != null ? cfg.cardapio_online_banner_urls : cfg.cardapio_banner_slots
+  )];
 }
 
 async function mergeDeliveryConfigJson(tenantId: number, patch: (c: Record<string, any>) => void) {
