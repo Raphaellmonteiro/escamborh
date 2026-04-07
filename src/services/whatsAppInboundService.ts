@@ -2660,6 +2660,9 @@ export async function registerInboundWhatsAppMessages(
             configuredInboundInstanceNumbers
           )
         : undefined;
+    const unresolvedPhoneDiagnosticJson = unresolvedPhoneDiagnostic
+      ? safeJsonStringify(unresolvedPhoneDiagnostic)
+      : undefined;
 
     logInfo('whatsAppInboundService.noSupportedMessages', {
       tenantId,
@@ -2677,6 +2680,7 @@ export async function registerInboundWhatsAppMessages(
       unresolvedPhoneCount: evolutionAnalysis?.unresolvedPhoneCount,
       unresolvedReasonCounts: evolutionAnalysis?.unresolvedReasonCounts,
       unresolvedPhoneDiagnostic,
+      unresolvedPhoneDiagnosticJson,
       reason: noMessagesReason,
     });
     return {
