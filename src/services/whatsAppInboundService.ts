@@ -6,7 +6,10 @@ import {
   MENSAGEM_ENTREGA_FORA_DA_AREA,
   normalizeBairroForZonaMatch,
 } from '../utils/deliveryBairroZona';
-import { sendWhatsAppMessage } from './whatsAppSenderService';
+import {
+  resolveConfiguredWhatsAppNumbersFromProviderConfigJson,
+  sendWhatsAppMessage,
+} from './whatsAppSenderService';
 
 type TenantWhatsAppConfigRow = {
   tenant_id?: number | string;
@@ -1308,18 +1311,6 @@ function isIgnoredEvolutionJid(value: unknown) {
   );
 }
 
-function resolveEvolutionRemotePhone(item: JsonRecord) {
-  const key = getRecord(item.key);
-  const candidates = [key?.remoteJid, item.remoteJid, key?.remoteJidAlt, item.remoteJidAlt];
-
-  for (const candidate of candidates) {
-    const phone = normalizeEvolutionCustomerPhoneCandidate(candidate);
-    if (phone) return phone;
-  }
-
-  return null;
-}
-
 function normalizeEvolutionCustomerPhoneCandidate(value: unknown) {
   const normalized = normalizeOptionalText(value);
   if (!normalized) return null;
@@ -1335,14 +1326,14 @@ function normalizeEvolutionCustomerPhoneCandidate(value: unknown) {
 }
 
 const EVOLUTION_PHONE_CANDIDATE_KEYS = [
-  'remoteJid',
-  'remoteJidAlt',
   'participant',
   'participantAlt',
   'participantPn',
   'participantLid',
   'participantPhone',
   'participantWaId',
+  'participantNumber',
+  'participantNumberId',
   'sender',
   'senderAlt',
   'senderJid',
@@ -1352,11 +1343,20 @@ const EVOLUTION_PHONE_CANDIDATE_KEYS = [
   'senderWaId',
   'senderWid',
   'senderLid',
+  'senderNumberId',
   'from',
   'fromJid',
   'fromPn',
   'fromPhone',
   'fromWaId',
+  'fromNumber',
+  'fromNumberId',
+  'user',
+  'userJid',
+  'userPn',
+  'userPhone',
+  'userWaId',
+  'userWid',
   'phone',
   'phoneNumber',
   'phone_number',
@@ -1364,11 +1364,69 @@ const EVOLUTION_PHONE_CANDIDATE_KEYS = [
   'wa_id',
   'jid',
   'jidAlt',
-  'userJid',
-  'userWid',
   'author',
   'ownerPn',
+  'ownerPhone',
+  'ownerWaId',
+  'remoteJid',
+  'remoteJidAlt',
 ];
+
+const EVOLUTION_NESTED_PHONE_RECORD_KEYS = new Set([
+  'sender',
+  'participant',
+  'from',
+  'author',
+  'contact',
+  'chat',
+  'user',
+  'key',
+]);
+
+const EVOLUTION_PHONE_FIELD_PRIORITIES: Record<string, number> = {
+  participantPn: 0,
+  participantPhone: 0,
+  participantWaId: 0,
+  participantNumber: 0,
+  participantNumberId: 0,
+  senderPn: 1,
+  senderPhone: 1,
+  senderNumber: 1,
+  senderWaId: 1,
+  senderWid: 1,
+  senderNumberId: 1,
+  fromPn: 2,
+  fromPhone: 2,
+  fromWaId: 2,
+  fromNumber: 2,
+  fromNumberId: 2,
+  userPn: 3,
+  userPhone: 3,
+  userWaId: 3,
+  userWid: 3,
+  participant: 4,
+  participantAlt: 4,
+  sender: 4,
+  senderAlt: 4,
+  senderJid: 4,
+  from: 4,
+  fromJid: 4,
+  user: 5,
+  userJid: 5,
+  author: 5,
+  jid: 6,
+  jidAlt: 6,
+  remoteJid: 7,
+  remoteJidAlt: 7,
+  phone: 8,
+  phoneNumber: 8,
+  phone_number: 8,
+  waId: 8,
+  wa_id: 8,
+  ownerPn: 9,
+  ownerPhone: 9,
+  ownerWaId: 9,
+};
 
 function getEvolutionFieldCandidates(record: JsonRecord | null, prefix: string) {
   if (!record) return [] as Array<[field: string, value: unknown]>;
@@ -1404,6 +1462,35 @@ function getEvolutionMessageCandidates(messageNode: unknown, prefix: string) {
   return candidates;
 }
 
+function getEvolutionNestedPhoneCandidates(
+  record: JsonRecord | null,
+  prefix: string,
+  depth = 0
+) {
+  if (!record || depth > 1) return [] as Array<[field: string, value: unknown]>;
+
+  const candidates: Array<[field: string, value: unknown]> = [];
+
+  for (const [entryKey, entryValue] of Object.entries(record)) {
+    const entryRecord = getRecord(entryValue);
+    if (!entryRecord) continue;
+
+    if (EVOLUTION_NESTED_PHONE_RECORD_KEYS.has(entryKey)) {
+      candidates.push(...getEvolutionFieldCandidates(entryRecord, `${prefix}.${entryKey}`));
+      candidates.push(
+        ...getEvolutionFieldCandidates(
+          getRecord(entryRecord.contextInfo),
+          `${prefix}.${entryKey}.contextInfo`
+        )
+      );
+    }
+
+    candidates.push(...getEvolutionNestedPhoneCandidates(entryRecord, `${prefix}.${entryKey}`, depth + 1));
+  }
+
+  return candidates;
+}
+
 function getEvolutionPhoneCandidates(item: JsonRecord, envelope?: JsonRecord | null) {
   const key = getRecord(item.key);
   const contextInfo = getRecord(item.contextInfo);
@@ -1416,12 +1503,19 @@ function getEvolutionPhoneCandidates(item: JsonRecord, envelope?: JsonRecord | n
     ...getEvolutionFieldCandidates(key, 'key'),
     ...getEvolutionFieldCandidates(item, 'item'),
     ...getEvolutionFieldCandidates(contextInfo, 'contextInfo'),
+    ...getEvolutionNestedPhoneCandidates(item, 'item'),
     ...getEvolutionMessageCandidates(message, 'message'),
     ...getEvolutionFieldCandidates(envelopeKey, 'envelope.key'),
     ...getEvolutionFieldCandidates(envelope || null, 'envelope'),
     ...getEvolutionFieldCandidates(envelopeContextInfo, 'envelope.contextInfo'),
+    ...getEvolutionNestedPhoneCandidates(envelope || null, 'envelope'),
     ...getEvolutionMessageCandidates(envelopeMessage, 'envelope.message'),
   ] as Array<[field: string, value: unknown]>;
+}
+
+function getEvolutionPhoneCandidatePriority(field: string) {
+  const baseField = field.split('.').pop() || field;
+  return EVOLUTION_PHONE_FIELD_PRIORITIES[baseField] ?? 50;
 }
 
 function summarizeEvolutionPhoneCandidateFields(item: JsonRecord, envelope?: JsonRecord | null) {
@@ -1441,17 +1535,37 @@ function summarizeEvolutionPhoneCandidateFields(item: JsonRecord, envelope?: Jso
 
 function resolveEvolutionCustomerPhone(
   item: JsonRecord,
-  envelope?: JsonRecord | null
+  envelope?: JsonRecord | null,
+  configuredInstanceNumbers = new Set<string>()
 ) {
-  const remotePhone = resolveEvolutionRemotePhone(item);
-  if (remotePhone) return remotePhone;
+  const blockedConfiguredMatches = new Set<string>();
+  const candidates = getEvolutionPhoneCandidates(item, envelope)
+    .map(([field, value], index) => ({ field, value, index }))
+    .sort((left, right) => {
+      const priorityDiff =
+        getEvolutionPhoneCandidatePriority(left.field) -
+        getEvolutionPhoneCandidatePriority(right.field);
+      return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
+    });
 
-  for (const [, candidate] of getEvolutionPhoneCandidates(item, envelope)) {
-    const phone = normalizeEvolutionCustomerPhoneCandidate(candidate);
-    if (phone) return phone;
+  for (const { value } of candidates) {
+    const phone = normalizeEvolutionCustomerPhoneCandidate(value);
+    if (!phone) continue;
+    if (configuredInstanceNumbers.has(phone)) {
+      blockedConfiguredMatches.add(phone);
+      continue;
+    }
+
+    return {
+      phone,
+      blockedConfiguredMatches: Array.from(blockedConfiguredMatches),
+    };
   }
 
-  return null;
+  return {
+    phone: null,
+    blockedConfiguredMatches: Array.from(blockedConfiguredMatches),
+  };
 }
 
 type EvolutionExtractionAnalysis = {
@@ -1649,7 +1763,8 @@ function analyzeEvolutionMessages(
   tenantId: number,
   provider: string,
   payload: unknown,
-  payloadJson: string
+  payloadJson: string,
+  configuredInstanceNumbers = new Set<string>()
 ): EvolutionExtractionAnalysis {
   const root = getRecord(payload);
   const candidates = extractEvolutionCandidateContexts(root);
@@ -1679,14 +1794,22 @@ function analyzeEvolutionMessages(
     if (!messageText) continue;
 
     supportedMessageCount += 1;
-    const phone = resolveEvolutionCustomerPhone(item, envelope);
+    const phoneResolution = resolveEvolutionCustomerPhone(
+      item,
+      envelope,
+      configuredInstanceNumbers
+    );
+    const phone = phoneResolution.phone;
 
     if (!phone) {
       unresolvedPhoneCount += 1;
       logInfo('whatsAppInboundService.evolutionPhoneUnresolved', {
         tenantId,
         provider,
-        reason: 'customer_phone_unresolved',
+        reason:
+          phoneResolution.blockedConfiguredMatches.length > 0
+            ? 'customer_phone_unresolved_instance_number_blocked'
+            : 'customer_phone_unresolved',
         messageId:
           normalizeOptionalText(key?.id) ||
           normalizeOptionalText(item.id) ||
@@ -1696,6 +1819,9 @@ function analyzeEvolutionMessages(
           normalizeOptionalText(envelope?.messageId),
         text: summarizeText(messageText),
         candidateFields: summarizeEvolutionPhoneCandidateFields(item, envelope),
+        blockedConfiguredRecipients: phoneResolution.blockedConfiguredMatches.map((value) =>
+          maskPhone(value)
+        ),
         payloadShape: summarizeEvolutionPayloadShape(payload),
       });
 
@@ -1748,9 +1874,16 @@ function extractEvolutionMessages(
   tenantId: number,
   provider: string,
   payload: unknown,
-  payloadJson: string
+  payloadJson: string,
+  configuredInstanceNumbers = new Set<string>()
 ): NormalizedInboundWhatsAppMessage[] {
-  return analyzeEvolutionMessages(tenantId, provider, payload, payloadJson).messages;
+  return analyzeEvolutionMessages(
+    tenantId,
+    provider,
+    payload,
+    payloadJson,
+    configuredInstanceNumbers
+  ).messages;
 }
 
 function extractMetaMessages(
@@ -1853,12 +1986,22 @@ function extractGenericMessages(
 function extractInboundMessages(
   tenantId: number,
   provider: string,
-  payload: unknown
+  payload: unknown,
+  providerConfigJson?: string | null
 ): NormalizedInboundWhatsAppMessage[] {
   const payloadJson = safeJsonStringify(payload);
+  const configuredInstanceNumbers = resolveConfiguredWhatsAppNumbersFromProviderConfigJson(
+    providerConfigJson
+  );
 
   if (provider === 'evolution' || provider === 'evolution_api') {
-    return extractEvolutionMessages(tenantId, provider, payload, payloadJson);
+    return extractEvolutionMessages(
+      tenantId,
+      provider,
+      payload,
+      payloadJson,
+      configuredInstanceNumbers
+    );
   }
 
   if (provider === 'meta' || provider === 'meta_cloud_api' || provider === 'whatsapp_cloud_api') {
@@ -2043,10 +2186,17 @@ export async function registerInboundWhatsAppMessages(
   );
   const evolutionAnalysis =
     provider === 'evolution' || provider === 'evolution_api'
-      ? analyzeEvolutionMessages(tenantId, provider, input.payload, safeJsonStringify(input.payload))
+      ? analyzeEvolutionMessages(
+          tenantId,
+          provider,
+          input.payload,
+          safeJsonStringify(input.payload),
+          resolveConfiguredWhatsAppNumbersFromProviderConfigJson(config.provider_config_json)
+        )
       : null;
   const inboundMessages =
-    evolutionAnalysis?.messages ?? extractInboundMessages(tenantId, provider, input.payload);
+    evolutionAnalysis?.messages ??
+    extractInboundMessages(tenantId, provider, input.payload, config.provider_config_json);
 
   logInfo('whatsAppInboundService.tenantResolved', {
     tenantId,

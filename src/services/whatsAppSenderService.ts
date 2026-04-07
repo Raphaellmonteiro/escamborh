@@ -22,6 +22,22 @@ type HttpRequestConfig = {
   body?: Record<string, unknown>;
 };
 
+const CONFIGURED_WHATSAPP_NUMBER_KEYS = [
+  'phone_number',
+  'display_number',
+  'whatsapp_number',
+  'business_phone',
+  'business_phone_number',
+  'sender_number',
+  'sender_phone',
+  'instance_phone',
+  'instance_number',
+  'wa_id',
+  'instance',
+  'instance_name',
+  'instanceName',
+] as const;
+
 function normalizeOptionalText(value: unknown) {
   if (value === undefined || value === null) return null;
   const normalized = String(value).trim();
@@ -166,28 +182,40 @@ function normalizeConfiguredWhatsAppNumber(rawValue: unknown) {
   return tryNormalizeBrazilWhatsAppNumber(normalized);
 }
 
-function resolveConfiguredWhatsAppNumbers(config: ProviderConfigRecord) {
-  const candidates = [
-    config.phone_number,
-    config.display_number,
-    config.whatsapp_number,
-    config.business_phone,
-    config.business_phone_number,
-    config.sender_number,
-    config.sender_phone,
-    config.instance_phone,
-    config.instance_number,
-    config.wa_id,
-    config.instance,
-    config.instance_name,
-    config.instanceName,
-  ];
+function collectConfiguredWhatsAppNumberCandidates(
+  config: ProviderConfigRecord,
+  depth = 0
+): unknown[] {
+  const candidates = CONFIGURED_WHATSAPP_NUMBER_KEYS.map((key) => config[key]);
+  if (depth >= 2) return candidates;
 
+  for (const value of Object.values(config)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    candidates.push(...collectConfiguredWhatsAppNumberCandidates(value as ProviderConfigRecord, depth + 1));
+  }
+
+  return candidates;
+}
+
+function resolveConfiguredWhatsAppNumbers(config: ProviderConfigRecord) {
   return new Set(
-    candidates
+    collectConfiguredWhatsAppNumberCandidates(config)
       .map((candidate) => normalizeConfiguredWhatsAppNumber(candidate))
       .filter((candidate): candidate is string => Boolean(candidate))
   );
+}
+
+export function resolveConfiguredWhatsAppNumbersFromProviderConfigJson(
+  rawValue: string | null | undefined
+) {
+  const raw = normalizeOptionalText(rawValue);
+  if (!raw) return new Set<string>();
+
+  try {
+    return resolveConfiguredWhatsAppNumbers(parseProviderConfigJson(raw));
+  } catch {
+    return new Set<string>();
+  }
 }
 
 function buildUrl(baseUrl: string, endpoint?: string | null) {
