@@ -103,6 +103,17 @@ const HUMAN_HANDOFF_KEYWORDS = [
   'pessoa',
 ] as const;
 
+const BASIC_AUTO_REPLY_INTENTS = new Set<SimpleInboundIntent>([
+  'saudacao',
+  'cardapio',
+  'pix',
+  'pagamento',
+  'entrega',
+  'bairro',
+  'taxa_entrega',
+  'zona_entrega',
+]);
+
 function getRecord(value: unknown): JsonRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as JsonRecord;
@@ -293,6 +304,34 @@ function includesAny(text: string, terms: string[]) {
   return terms.some((term) => text.includes(term));
 }
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasStandaloneKeyword(text: string, keyword: string) {
+  if (!keyword.includes(' ')) {
+    return new RegExp(`(^|[^a-z0-9])${escapeRegex(keyword)}(?=[^a-z0-9]|$)`, 'i').test(text);
+  }
+
+  return text.includes(keyword);
+}
+
+function isBasicAutoReplyIntent(intent: SimpleInboundIntent | null) {
+  return !!intent && BASIC_AUTO_REPLY_INTENTS.has(intent);
+}
+
+function shouldBypassKeywordErroActiveHandoff(input: {
+  activeReason: string | null;
+  currentReason: string | null;
+  intent: SimpleInboundIntent | null;
+}) {
+  return (
+    input.activeReason === 'keyword_erro' &&
+    !input.currentReason &&
+    isBasicAutoReplyIntent(input.intent)
+  );
+}
+
 function parseDateMs(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -306,7 +345,11 @@ function resolveHumanHandoffReason(messageText: string, intent: SimpleInboundInt
   }
 
   const normalized = normalizeTextForMatch(messageText);
-  const matchedKeyword = HUMAN_HANDOFF_KEYWORDS.find((keyword) => normalized.includes(keyword));
+  if (!normalized) return null;
+
+  const matchedKeyword = HUMAN_HANDOFF_KEYWORDS.find((keyword) =>
+    hasStandaloneKeyword(normalized, keyword)
+  );
   return matchedKeyword ? `keyword_${matchedKeyword}` : null;
 }
 
@@ -1049,6 +1092,7 @@ async function processInboundAutoReply(input: {
 }) {
   const intent = classifySimpleIntent(input.message.message_text);
   const handoffReason = resolveHumanHandoffReason(input.message.message_text, intent);
+  const shouldActivateHumanHandoff = Boolean(handoffReason);
 
   logInfo('whatsAppInboundService.message.received', {
     tenantId: input.tenantId,
@@ -1059,11 +1103,11 @@ async function processInboundAutoReply(input: {
     provider: input.message.provider,
   });
 
-  if (handoffReason) {
+  if (shouldActivateHumanHandoff) {
     await activateHumanHandoff({
       tenantId: input.tenantId,
       customerPhone: input.message.customer_phone,
-      reason: handoffReason,
+      reason: handoffReason!,
       inboundMessageId: input.message.id,
     });
 
@@ -1091,7 +1135,26 @@ async function processInboundAutoReply(input: {
     input.message.customer_phone
   );
 
-  if (activeHandoff) {
+  const shouldBypassActiveHandoff =
+    !!activeHandoff &&
+    shouldBypassKeywordErroActiveHandoff({
+      activeReason: activeHandoff.reason,
+      currentReason: handoffReason,
+      intent,
+    });
+
+  if (shouldBypassActiveHandoff) {
+    logInfo('whatsAppInboundService.autoReply.bypassedKeywordErroHandoff', {
+      tenantId: input.tenantId,
+      inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
+      intent,
+      handoffReason: activeHandoff?.reason,
+      handoffCreatedAt: activeHandoff?.createdAt,
+      recipient: maskPhone(input.message.customer_phone),
+    });
+  } else if (activeHandoff) {
     await updateInboundMessageAutomation(input.message.id, {
       intent,
       autoReplyStatus: 'blocked_human_handoff_active',
