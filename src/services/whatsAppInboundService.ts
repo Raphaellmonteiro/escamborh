@@ -1277,6 +1277,123 @@ function extractEvolutionFallbackText(messageNode: unknown) {
   return null;
 }
 
+function extractEvolutionCandidateContexts(root: JsonRecord | null) {
+  if (!root) return [] as Array<{ item: JsonRecord; envelope: JsonRecord | null }>;
+
+  const contexts: Array<{ item: JsonRecord; envelope: JsonRecord | null }> = [];
+
+  const pushMessages = (container: JsonRecord) => {
+    const messages = getArray(container.messages)
+      .map((message) => getRecord(message))
+      .filter((message): message is JsonRecord => message !== null);
+
+    if (messages.length === 0) return false;
+
+    for (const message of messages) {
+      contexts.push({
+        item: message,
+        envelope: container,
+      });
+    }
+
+    return true;
+  };
+
+  const dataCandidates = getArray(root.data)
+    .map((item) => getRecord(item))
+    .filter((item): item is JsonRecord => item !== null);
+
+  if (dataCandidates.length > 0) {
+    for (const candidate of dataCandidates) {
+      if (pushMessages(candidate)) continue;
+
+      contexts.push({
+        item: candidate,
+        envelope: root,
+      });
+    }
+
+    return contexts;
+  }
+
+  const dataRecord = getRecord(root.data);
+  if (dataRecord) {
+    if (pushMessages(dataRecord)) {
+      return contexts;
+    }
+
+    contexts.push({
+      item: dataRecord,
+      envelope: root,
+    });
+    return contexts;
+  }
+
+  if (pushMessages(root)) {
+    return contexts;
+  }
+
+  contexts.push({
+    item: root,
+    envelope: null,
+  });
+
+  return contexts;
+}
+
+function summarizeEvolutionPayloadShape(payload: unknown) {
+  const root = getRecord(payload);
+  const data = getRecord(root?.data);
+  const dataArray = getArray(root?.data);
+  const firstDataItem = getRecord(dataArray[0]);
+  const messages = getArray(data?.messages ?? firstDataItem?.messages ?? root?.messages);
+  const firstMessage = getRecord(messages[0]);
+  const firstMessageKey = getRecord(firstMessage?.key);
+  const firstMessageContent = getRecord(firstMessage?.message);
+
+  return {
+    rootKeys: root ? Object.keys(root).slice(0, 12) : [],
+    dataType: Array.isArray(root?.data) ? 'array' : typeof root?.data,
+    dataKeys: data ? Object.keys(data).slice(0, 12) : [],
+    dataArrayCount: dataArray.length,
+    firstDataItemKeys: firstDataItem ? Object.keys(firstDataItem).slice(0, 12) : [],
+    messagesCount: messages.length,
+    firstMessageKeys: firstMessage ? Object.keys(firstMessage).slice(0, 12) : [],
+    firstMessageKeyKeys: firstMessageKey ? Object.keys(firstMessageKey).slice(0, 12) : [],
+    firstMessageContentKeys: firstMessageContent
+      ? Object.keys(firstMessageContent).slice(0, 12)
+      : [],
+    remoteJid: normalizeOptionalText(
+      firstMessageKey?.remoteJid ??
+        firstMessage?.remoteJid ??
+        getRecord(data?.key)?.remoteJid ??
+        data?.remoteJid ??
+        getRecord(firstDataItem?.key)?.remoteJid ??
+        firstDataItem?.remoteJid
+    ),
+    fromMe: toBool(
+      firstMessage?.fromMe ??
+        firstMessageKey?.fromMe ??
+        data?.fromMe ??
+        getRecord(data?.key)?.fromMe ??
+        firstDataItem?.fromMe ??
+        getRecord(firstDataItem?.key)?.fromMe,
+      false
+    ),
+    pushNamePresent: Boolean(
+      normalizeOptionalText(
+        firstMessage?.pushName ??
+          firstMessage?.senderName ??
+          firstMessage?.notifyName ??
+          data?.pushName ??
+          data?.senderName ??
+          firstDataItem?.pushName ??
+          firstDataItem?.senderName
+      )
+    ),
+  };
+}
+
 function extractEvolutionMessages(
   tenantId: number,
   provider: string,
@@ -1284,24 +1401,23 @@ function extractEvolutionMessages(
   payloadJson: string
 ): NormalizedInboundWhatsAppMessage[] {
   const root = getRecord(payload);
-  const dataCandidates = getArray(root?.data);
-  const candidates =
-    dataCandidates.length > 0
-      ? dataCandidates.map((item) => getRecord(item)).filter(Boolean)
-      : [getRecord(root?.data) || root].filter(Boolean);
+  const candidates = extractEvolutionCandidateContexts(root);
 
   return candidates
-    .map((candidate) => {
-      const item = candidate as JsonRecord;
+    .map(({ item, envelope }) => {
       const key = getRecord(item.key);
-      const fromMe = toBool(item.fromMe ?? key?.fromMe, false);
+      const envelopeKey = getRecord(envelope?.key);
+      const fromMe = toBool(item.fromMe ?? key?.fromMe ?? envelope?.fromMe ?? envelopeKey?.fromMe, false);
       if (fromMe) return null;
 
-      const phone = resolveEvolutionCustomerPhone(item);
+      const phone = resolveEvolutionCustomerPhone(item) || (envelope ? resolveEvolutionCustomerPhone(envelope) : null);
       const messageText =
         extractTextFromMessageNode(item.message) ||
         normalizeOptionalText(item.body) ||
         normalizeOptionalText(item.text) ||
+        extractTextFromMessageNode(envelope?.message) ||
+        normalizeOptionalText(envelope?.body) ||
+        normalizeOptionalText(envelope?.text) ||
         extractEvolutionFallbackText(item.message);
 
       if (!phone || !messageText) return null;
@@ -1313,17 +1429,27 @@ function extractEvolutionMessages(
         customer_name:
           normalizeOptionalText(item.pushName) ||
           normalizeOptionalText(item.senderName) ||
-          normalizeOptionalText(item.notifyName),
+          normalizeOptionalText(item.notifyName) ||
+          normalizeOptionalText(envelope?.pushName) ||
+          normalizeOptionalText(envelope?.senderName) ||
+          normalizeOptionalText(envelope?.notifyName),
         message_text: messageText,
         provider_message_id:
           normalizeOptionalText(key?.id) ||
           normalizeOptionalText(item.id) ||
-          normalizeOptionalText(item.messageId),
+          normalizeOptionalText(item.messageId) ||
+          normalizeOptionalText(envelopeKey?.id) ||
+          normalizeOptionalText(envelope?.id) ||
+          normalizeOptionalText(envelope?.messageId),
         created_at: normalizeTimestamp(
           item.messageTimestamp ??
             item.timestamp ??
             item.createdAt ??
             item.date_time ??
+            envelope?.messageTimestamp ??
+            envelope?.timestamp ??
+            envelope?.createdAt ??
+            envelope?.date_time ??
             root?.createdAt ??
             root?.date_time
         ),
@@ -1647,6 +1773,10 @@ export async function registerInboundWhatsAppMessages(
       provider,
       webhookEventName: eventName,
       payloadEvent: extractPayloadEventName(input.payload),
+      payloadShape:
+        provider === 'evolution' || provider === 'evolution_api'
+          ? summarizeEvolutionPayloadShape(input.payload)
+          : undefined,
       reason: 'no_supported_messages_found',
     });
     return {
