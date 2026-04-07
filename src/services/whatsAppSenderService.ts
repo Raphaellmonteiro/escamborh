@@ -90,44 +90,72 @@ function normalizeHeaders(value: unknown) {
   }, {});
 }
 
+function isLidIdentifier(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return false;
+
+  return normalized.includes('@lid');
+}
+
+function hasTrustedWhatsAppRecipientShape(value: string) {
+  if (isLidIdentifier(value)) return false;
+
+  if (value.includes('@')) {
+    const [localPart, domain] = value.split('@', 2);
+    if (!localPart || !/^[+\d\s().-]+$/.test(localPart)) return false;
+
+    const normalizedDomain = String(domain || '').trim().toLowerCase();
+    return normalizedDomain === 's.whatsapp.net' || normalizedDomain === 'c.us';
+  }
+
+  return /^[+\d\s().-]+$/.test(value);
+}
+
+function normalizeTrustedBrazilDigits(digits: string) {
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    return digits;
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+
+  return null;
+}
+
 function normalizeBrazilWhatsAppNumber(rawValue: unknown) {
-  const digits = String(rawValue ?? '').replace(/\D/g, '');
+  const normalized = normalizeOptionalText(rawValue);
+  if (!normalized) {
+    throw new Error('Telefone do cliente nao encontrado para envio via WhatsApp');
+  }
+  if (isLidIdentifier(normalized)) {
+    throw new Error('Envio bloqueado: recipient derivado de identificador @lid');
+  }
+  if (!hasTrustedWhatsAppRecipientShape(normalized)) {
+    throw new Error('Envio bloqueado: recipient sem numero confiavel para envio via WhatsApp');
+  }
+
+  const digits = normalized.split('@')[0].replace(/\D/g, '');
   if (!digits) {
     throw new Error('Telefone do cliente nao encontrado para envio via WhatsApp');
   }
 
-  if (digits.startsWith('55') && digits.length >= 12) {
-    return digits;
-  }
-
-  if (digits.length === 10 || digits.length === 11) {
-    return `55${digits}`;
-  }
-
-  if (digits.length < 10) {
+  const trustedNumber = normalizeTrustedBrazilDigits(digits);
+  if (!trustedNumber) {
     throw new Error('Telefone do cliente invalido para envio via WhatsApp');
   }
 
-  return digits;
+  return trustedNumber;
 }
 
 function tryNormalizeBrazilWhatsAppNumber(rawValue: unknown) {
-  const digits = String(rawValue ?? '').replace(/\D/g, '');
+  const normalized = normalizeOptionalText(rawValue);
+  if (!normalized || !hasTrustedWhatsAppRecipientShape(normalized)) return null;
+
+  const digits = normalized.split('@')[0].replace(/\D/g, '');
   if (!digits) return null;
 
-  if (digits.startsWith('55') && digits.length >= 12) {
-    return digits;
-  }
-
-  if (digits.length === 10 || digits.length === 11) {
-    return `55${digits}`;
-  }
-
-  if (digits.length < 10) {
-    return null;
-  }
-
-  return digits;
+  return normalizeTrustedBrazilDigits(digits);
 }
 
 function normalizeConfiguredWhatsAppNumber(rawValue: unknown) {

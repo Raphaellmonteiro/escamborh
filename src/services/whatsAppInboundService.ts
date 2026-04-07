@@ -175,6 +175,18 @@ function normalizeWhatsAppPhone(rawValue: unknown) {
   return digits;
 }
 
+function isEvolutionLidIdentifier(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return false;
+
+  return normalized.includes('@lid');
+}
+
+function isTrustedBrazilWhatsAppPhone(value: string | null) {
+  if (!value) return false;
+  return value.startsWith('55') && (value.length === 12 || value.length === 13);
+}
+
 function normalizeTimestamp(value: unknown) {
   if (value === undefined || value === null || value === '') {
     return new Date().toISOString();
@@ -1289,6 +1301,7 @@ function isIgnoredEvolutionJid(value: unknown) {
   if (!normalized) return false;
 
   return (
+    isEvolutionLidIdentifier(normalized) ||
     normalized.endsWith('@g.us') ||
     normalized === 'status@broadcast' ||
     normalized.endsWith('@newsletter')
@@ -1297,32 +1310,84 @@ function isIgnoredEvolutionJid(value: unknown) {
 
 function resolveEvolutionRemotePhone(item: JsonRecord) {
   const key = getRecord(item.key);
-  const remoteJid = normalizeOptionalText(key?.remoteJid ?? item.remoteJid);
-  if (isIgnoredEvolutionJid(remoteJid)) return null;
+  const candidates = [key?.remoteJid, item.remoteJid, key?.remoteJidAlt, item.remoteJidAlt];
 
-  return normalizeWhatsAppPhone(remoteJid);
+  for (const candidate of candidates) {
+    const phone = normalizeEvolutionCustomerPhoneCandidate(candidate);
+    if (phone) return phone;
+  }
+
+  return null;
+}
+
+function normalizeEvolutionCustomerPhoneCandidate(value: unknown) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+  if (isIgnoredEvolutionJid(normalized)) return null;
+
+  const lowered = normalized.toLowerCase();
+  if (lowered.includes('@') && !lowered.endsWith('@s.whatsapp.net') && !lowered.endsWith('@c.us')) {
+    return null;
+  }
+
+  const phone = normalizeWhatsAppPhone(normalized);
+  return isTrustedBrazilWhatsAppPhone(phone) ? phone : null;
+}
+
+function getEvolutionPhoneCandidates(item: JsonRecord, envelope?: JsonRecord | null) {
+  const key = getRecord(item.key);
+  const contextInfo = getRecord(item.contextInfo);
+  const envelopeKey = getRecord(envelope?.key);
+  const envelopeContextInfo = getRecord(envelope?.contextInfo);
+
+  return [
+    ['key.remoteJid', key?.remoteJid],
+    ['item.remoteJid', item.remoteJid],
+    ['key.remoteJidAlt', key?.remoteJidAlt],
+    ['item.remoteJidAlt', item.remoteJidAlt],
+    ['key.participant', key?.participant],
+    ['item.participant', item.participant],
+    ['key.participantAlt', key?.participantAlt],
+    ['item.participantAlt', item.participantAlt],
+    ['key.participantPn', key?.participantPn],
+    ['item.participantPn', item.participantPn],
+    ['contextInfo.participant', contextInfo?.participant],
+    ['contextInfo.participantAlt', contextInfo?.participantAlt],
+    ['contextInfo.participantPn', contextInfo?.participantPn],
+    ['item.senderPn', item.senderPn],
+    ['item.senderPhone', item.senderPhone],
+    ['item.senderWaId', item.senderWaId],
+    ['envelope.key.remoteJid', envelopeKey?.remoteJid],
+    ['envelope.remoteJid', envelope?.remoteJid],
+    ['envelope.key.remoteJidAlt', envelopeKey?.remoteJidAlt],
+    ['envelope.remoteJidAlt', envelope?.remoteJidAlt],
+    ['envelope.key.participant', envelopeKey?.participant],
+    ['envelope.participant', envelope?.participant],
+    ['envelope.key.participantAlt', envelopeKey?.participantAlt],
+    ['envelope.participantAlt', envelope?.participantAlt],
+    ['envelope.key.participantPn', envelopeKey?.participantPn],
+    ['envelope.participantPn', envelope?.participantPn],
+    ['envelope.contextInfo.participant', envelopeContextInfo?.participant],
+    ['envelope.contextInfo.participantAlt', envelopeContextInfo?.participantAlt],
+    ['envelope.contextInfo.participantPn', envelopeContextInfo?.participantPn],
+  ] as Array<[field: string, value: unknown]>;
+}
+
+function summarizeEvolutionPhoneCandidateFields(item: JsonRecord, envelope?: JsonRecord | null) {
+  return getEvolutionPhoneCandidates(item, envelope)
+    .filter(([, value]) => normalizeOptionalText(value))
+    .map(([field, value]) => `${field}${isEvolutionLidIdentifier(value) ? ':lid' : ''}`);
 }
 
 function resolveEvolutionCustomerPhone(
   item: JsonRecord,
-  options?: {
-    strictEnvelopeFallback?: boolean;
-  }
+  envelope?: JsonRecord | null
 ) {
-  const key = getRecord(item.key);
   const remotePhone = resolveEvolutionRemotePhone(item);
   if (remotePhone) return remotePhone;
 
-  const candidates = [
-    item.participant,
-    key?.participant,
-    ...(options?.strictEnvelopeFallback ? [] : [item.sender, item.from]),
-  ];
-
-  for (const candidate of candidates) {
-    if (isIgnoredEvolutionJid(candidate)) continue;
-
-    const phone = normalizeWhatsAppPhone(candidate);
+  for (const [, candidate] of getEvolutionPhoneCandidates(item, envelope)) {
+    const phone = normalizeEvolutionCustomerPhoneCandidate(candidate);
     if (phone) return phone;
   }
 
@@ -1524,13 +1589,6 @@ function extractEvolutionMessages(
       const fromMe = toBool(item.fromMe ?? key?.fromMe ?? envelope?.fromMe ?? envelopeKey?.fromMe, false);
       if (fromMe) return null;
 
-      const phone =
-        resolveEvolutionCustomerPhone(item) ||
-        (envelope
-          ? resolveEvolutionCustomerPhone(envelope, {
-              strictEnvelopeFallback: true,
-            })
-          : null);
       const messageText =
         extractTextFromMessageNode(item.message) ||
         extractTextFromMessageNode(item) ||
@@ -1544,6 +1602,24 @@ function extractEvolutionMessages(
         extractEvolutionFallbackText(item) ||
         extractEvolutionFallbackText(envelope?.message) ||
         extractEvolutionFallbackText(envelope);
+      const phone = resolveEvolutionCustomerPhone(item, envelope);
+
+      if (!phone && messageText) {
+        logInfo('whatsAppInboundService.evolutionPhoneUnresolved', {
+          tenantId,
+          provider,
+          reason: 'customer_phone_unresolved',
+          messageId:
+            normalizeOptionalText(key?.id) ||
+            normalizeOptionalText(item.id) ||
+            normalizeOptionalText(item.messageId) ||
+            normalizeOptionalText(envelopeKey?.id) ||
+            normalizeOptionalText(envelope?.id) ||
+            normalizeOptionalText(envelope?.messageId),
+          text: summarizeText(messageText),
+          candidateFields: summarizeEvolutionPhoneCandidateFields(item, envelope),
+        });
+      }
 
       if (!phone || !messageText) return null;
 
