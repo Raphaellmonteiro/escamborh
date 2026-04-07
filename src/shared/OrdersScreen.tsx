@@ -1042,8 +1042,11 @@ const handleConfirmOrder = async (id: number) => {
                   </div>
 
                   {/* Pipeline progress */}
-                  <div className="mt-3 -mx-1 overflow-x-auto overflow-y-hidden px-1 pb-1 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
-                  <div className="flex min-w-max items-center gap-1 sm:min-w-0">
+                  <p className="mt-3 text-[10px] font-medium text-zinc-400 sm:hidden">
+                    Deslize a trilha para ver todas as etapas
+                  </p>
+                  <div className="mt-1.5 -mx-1 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1.5 touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+                  <div className="flex min-w-max items-center gap-1 pr-1 sm:min-w-0 sm:pr-0">
                     {ORDER_PIPELINE_STEPS.map((step, i) => (
                       <React.Fragment key={step}>
                         <div className="flex flex-col items-center gap-0.5">

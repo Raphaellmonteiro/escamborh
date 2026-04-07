@@ -582,8 +582,8 @@ export default function CentralPedidosScreen({
                 Nenhum pedido corresponde ao filtro selecionado.
               </p>
             )}
-            <div className="-mx-2 overflow-x-auto overflow-y-hidden px-2 pb-1.5 [scrollbar-gutter:stable] sm:mx-0 sm:px-0 sm:pb-2 2xl:-mx-0 2xl:pb-2">
-              <div className="flex min-w-max gap-2 sm:min-w-0 sm:grid sm:grid-cols-2 sm:items-start md:grid-cols-3 lg:grid-cols-3 lg:gap-2.5 xl:grid-cols-4 xl:gap-2.5 2xl:grid-cols-4 2xl:gap-3 min-[1800px]:grid-cols-6">
+            <div className="-mx-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-2 pb-3 touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] sm:mx-0 sm:px-0 sm:pb-2 2xl:-mx-0 2xl:pb-2">
+              <div className="flex min-w-max gap-2 pr-2 sm:min-w-0 sm:grid sm:grid-cols-2 sm:items-start sm:pr-0 md:grid-cols-3 lg:grid-cols-3 lg:gap-2.5 xl:grid-cols-4 xl:gap-2.5 2xl:grid-cols-4 2xl:gap-3 min-[1800px]:grid-cols-6">
                 {COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado').map((col) => {
                   const tone = getColumnTone(col.id);
                   return (
@@ -604,7 +604,7 @@ export default function CentralPedidosScreen({
                         <p className="hidden text-[10px] text-zinc-400 mt-0.5 leading-tight 2xl:block">{col.hint}</p>
                       )}
                     </div>
-                    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-1 sm:p-1.5 2xl:space-y-2 2xl:p-2">
+                    <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-y-contain p-1 sm:p-1.5 2xl:space-y-2 2xl:p-2">
                       {buckets[col.id].length === 0 ? (
                         <div className={`mx-0.5 rounded-lg border border-dashed py-2.5 px-2 text-center text-[10px] leading-snug 2xl:mx-1 2xl:rounded-2xl 2xl:py-5 2xl:px-3 2xl:text-[11px] ${tone.empty}`}>
                           Sem pedidos nesta etapa

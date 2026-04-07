@@ -401,7 +401,26 @@ function classifySimpleIntent(messageText: string): SimpleInboundIntent | null {
     return 'entrega';
   }
 
-  if (includesAny(normalized, ['cardapio', 'menu', 'catalogo', 'catologo', 'catalogo online'])) {
+  if (
+    includesAny(normalized, [
+      'cardapio',
+      'menu',
+      'catalogo',
+      'catologo',
+      'catalogo online',
+      'pedido',
+      'pedir',
+      'comprar',
+      'compra',
+      'lanche',
+      'lanches',
+      'preco',
+      'precos',
+      'valor',
+      'valores',
+      'quanto custa',
+    ])
+  ) {
     return 'cardapio';
   }
 
@@ -464,6 +483,32 @@ function resolvePublicBaseUrl() {
   }
 
   return `http://localhost:${normalizeOptionalText(process.env.PORT) || '3001'}`;
+}
+
+function resolveTenantCardapioUrl(tenant: TenantInboundAutoReplyRow) {
+  const publicBaseUrl = resolvePublicBaseUrl();
+  const slug = normalizeOptionalText(tenant.usuario);
+  const deliveryEnabled = toBool(tenant.delivery_ativo, false);
+
+  return slug && deliveryEnabled
+    ? `${publicBaseUrl}/delivery/${encodeURIComponent(slug)}`
+    : null;
+}
+
+function buildStorefrontAutoReplyMessage(input: {
+  greeting: string;
+  tenant: TenantInboundAutoReplyRow;
+  fallbackMessage?: string;
+}) {
+  const cardapioUrl = resolveTenantCardapioUrl(input.tenant);
+  if (cardapioUrl) {
+    return `${input.greeting} Para pedir, acesse nosso cardapio: ${cardapioUrl}`;
+  }
+
+  return (
+    input.fallbackMessage ||
+    `${input.greeting} Posso te ajudar com pedidos, cardapio e entrega por aqui.`
+  );
 }
 
 function normalizePaymentMethodKey(value: unknown) {
@@ -943,16 +988,19 @@ async function buildAutoReplyMessage(input: {
     normalizeOptionalText(input.tenant.nome_estabelecimento) || 'nossa loja';
   const greeting = getGreeting(input.message.customer_name);
   const paymentMethodsLabel = formatPaymentMethodsList(input.paymentMethods);
-  const publicBaseUrl = resolvePublicBaseUrl();
-  const slug = normalizeOptionalText(input.tenant.usuario);
-  const deliveryEnabled = toBool(input.tenant.delivery_ativo, false);
-  const cardapioUrl =
-    slug && deliveryEnabled ? `${publicBaseUrl}/delivery/${encodeURIComponent(slug)}` : null;
 
   switch (input.intent) {
     case 'saudacao':
-      return `${greeting} Bem-vindo(a) a ${tenantName}. Como podemos ajudar?`;
+      return buildStorefrontAutoReplyMessage({
+        greeting,
+        tenant: input.tenant,
+        fallbackMessage: `${greeting} Bem-vindo(a) a ${tenantName}. Como podemos ajudar?`,
+      });
     case 'entrega':
+      return buildStorefrontAutoReplyMessage({
+        greeting,
+        tenant: input.tenant,
+      });
     case 'bairro':
     case 'taxa_entrega':
     case 'zona_entrega':
@@ -963,9 +1011,11 @@ async function buildAutoReplyMessage(input: {
         messageText: input.message.message_text,
       });
     case 'cardapio':
-      return cardapioUrl
-        ? `${greeting} Nosso cardapio online esta aqui: ${cardapioUrl}`
-        : `${greeting} Nosso cardapio online nao esta disponivel no momento.`;
+      return buildStorefrontAutoReplyMessage({
+        greeting,
+        tenant: input.tenant,
+        fallbackMessage: `${greeting} Nosso cardapio online nao esta disponivel no momento.`,
+      });
     case 'pix':
       return `${greeting} Aceitamos ${paymentMethodsLabel}. Se preferir Pix, podemos seguir por essa forma de pagamento.`;
     case 'pagamento':
@@ -1062,28 +1112,27 @@ async function processInboundAutoReply(input: {
   }
 
   if (!intent) {
-    await updateInboundMessageAutomation(input.message.id, {
-      intent: null,
-      autoReplyStatus: 'ignored_no_intent',
-    });
-
-    logInfo('whatsAppInboundService.autoReply.ignoredNoIntent', {
+    logInfo('whatsAppInboundService.autoReply.fallbackNoIntent', {
       tenantId: input.tenantId,
       inboundMessageId: input.message.id,
       phone: input.message.customer_phone,
       text: summarizeText(input.message.message_text),
       intent: null,
     });
-    return;
   }
 
-  const replyMessage = await buildAutoReplyMessage({
-    intent,
-    tenantId: input.tenantId,
-    tenant: input.tenant,
-    message: input.message,
-    paymentMethods: input.paymentMethods,
-  });
+  const replyMessage = intent
+    ? await buildAutoReplyMessage({
+        intent,
+        tenantId: input.tenantId,
+        tenant: input.tenant,
+        message: input.message,
+        paymentMethods: input.paymentMethods,
+      })
+    : buildStorefrontAutoReplyMessage({
+        greeting: getGreeting(input.message.customer_name),
+        tenant: input.tenant,
+      });
 
   if (!replyMessage) {
     await updateInboundMessageAutomation(input.message.id, {
