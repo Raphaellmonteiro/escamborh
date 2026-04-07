@@ -1525,6 +1525,7 @@ type EvolutionContactLookupResolution = {
     | 'config_unavailable'
     | 'not_found'
     | 'resolved'
+    | 'ambiguous_match_discarded'
     | 'request_failed';
 };
 
@@ -1923,6 +1924,15 @@ function getEvolutionLidCandidates(item: JsonRecord, envelope?: JsonRecord | nul
   ];
 }
 
+const EVOLUTION_CONTACT_LOOKUP_ID_KEYS = [
+  'id',
+  'jid',
+  'remoteJid',
+  'lid',
+  'contactId',
+  'contactJid',
+] as const;
+
 function collectEvolutionLookupPhoneCandidates(
   value: unknown,
   configuredInstanceNumbers = new Set<string>(),
@@ -1960,18 +1970,69 @@ function collectEvolutionLookupPhoneCandidates(
   );
 }
 
-function pickEvolutionLookupPhoneCandidate(
+function collectExactEvolutionContactLookupMatches(
   value: unknown,
+  lid: string,
+  path = 'root',
+  depth = 0
+): Array<{ path: string; record: JsonRecord }> {
+  if (depth > 5 || value === undefined || value === null) return [];
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).flatMap((entry, index) =>
+      collectExactEvolutionContactLookupMatches(entry, lid, `${path}[${index}]`, depth + 1)
+    );
+  }
+
+  const record = getRecord(value);
+  if (!record) return [];
+
+  const hasExactIdMatch = EVOLUTION_CONTACT_LOOKUP_ID_KEYS.some(
+    (key) => normalizeOptionalText(record[key]) === lid
+  );
+  const nestedMatches = Object.entries(record).flatMap(([entryKey, entryValue]) =>
+    collectExactEvolutionContactLookupMatches(entryValue, lid, `${path}.${entryKey}`, depth + 1)
+  );
+
+  return hasExactIdMatch ? [{ path, record }, ...nestedMatches] : nestedMatches;
+}
+
+function resolveExactEvolutionLookupPhoneCandidate(
+  value: unknown,
+  lid: string,
   configuredInstanceNumbers = new Set<string>()
 ) {
-  const candidates = collectEvolutionLookupPhoneCandidates(value, configuredInstanceNumbers);
-  if (candidates.length === 0) return null;
+  const exactMatches = collectExactEvolutionContactLookupMatches(value, lid);
+  if (exactMatches.length !== 1) {
+    return {
+      status: exactMatches.length > 1 ? 'ambiguous_match_discarded' : 'not_found',
+      candidate: null,
+    } as const;
+  }
 
-  return candidates.sort((left, right) => {
-    const leftField = left.path.split('.').pop()?.replace(/\[\d+\]$/, '') || left.path;
-    const rightField = right.path.split('.').pop()?.replace(/\[\d+\]$/, '') || right.path;
-    return getEvolutionPhoneCandidatePriority(leftField) - getEvolutionPhoneCandidatePriority(rightField);
-  })[0];
+  const [match] = exactMatches;
+  const phoneCandidates = [
+    ...new Map(
+      collectEvolutionLookupPhoneCandidates(match.record, configuredInstanceNumbers).map(
+        (candidate) => [candidate.phone, candidate]
+      )
+    ).values(),
+  ];
+
+  if (phoneCandidates.length !== 1) {
+    return {
+      status: phoneCandidates.length > 1 ? 'ambiguous_match_discarded' : 'not_found',
+      candidate: null,
+    } as const;
+  }
+
+  return {
+    status: 'resolved',
+    candidate: {
+      path: `${match.path}.${phoneCandidates[0].path.replace(/^root\./, '')}`.replace(/\.root\./g, '.'),
+      phone: phoneCandidates[0].phone,
+    },
+  } as const;
 }
 
 async function tryResolveEvolutionPhoneFromContactLookup(
@@ -2042,16 +2103,17 @@ async function tryResolveEvolutionPhoneFromContactLookup(
       };
     }
 
-    const resolvedCandidate = pickEvolutionLookupPhoneCandidate(
+    const resolvedCandidate = resolveExactEvolutionLookupPhoneCandidate(
       responseBody,
+      lid,
       configuredInstanceNumbers
     );
 
     return {
       lid,
-      phone: resolvedCandidate?.phone || null,
-      sourcePath: resolvedCandidate?.path || null,
-      lookupStatus: resolvedCandidate ? 'resolved' : 'not_found',
+      phone: resolvedCandidate.candidate?.phone || null,
+      sourcePath: resolvedCandidate.candidate?.path || null,
+      lookupStatus: resolvedCandidate.status,
     };
   } catch {
     return {
