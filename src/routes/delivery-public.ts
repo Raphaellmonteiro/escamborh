@@ -99,6 +99,7 @@ type DeliveryConfig = {
   cardapio_online_logo_url?: string;
   /** Até 4 URLs de banner do topo (`/uploads/delivery/...`), índices 0–3. */
   cardapio_online_banner_urls?: string[];
+  cardapio_banner_slots?: string[] | Record<string, string> | string;
 };
 
 type DeliveryAddressRecord = {
@@ -162,6 +163,10 @@ function parseDeliveryConfig(rawConfig?: unknown): DeliveryConfig {
   const cfg = coerceDeliveryConfigRow(rawConfig ?? null) as DeliveryConfig & Record<string, any>;
   applyNormalizedBannerSlots(cfg);
   return cfg;
+}
+
+function normalizeDeliveryPublicMediaUrl(raw: unknown): string | null {
+  return normalizeProductPhotoPublicUrl(raw);
 }
 
 function buildPublicPixConfig(
@@ -975,9 +980,10 @@ export function createDeliveryPublicRouter() {
         }));
       }
 
-      const logoPadrao = normalizeProductPhotoPublicUrl(await resolveTenantLogoPublicUrl(tenant.id));
-      const logoCustom = normalizeProductPhotoPublicUrl(dcfg.cardapio_online_logo_url);
+      const logoPadrao = normalizeDeliveryPublicMediaUrl(await resolveTenantLogoPublicUrl(tenant.id));
+      const logoCustom = normalizeDeliveryPublicMediaUrl(dcfg.cardapio_online_logo_url);
       const logo_url = logoCustom || logoPadrao;
+      const cardapioOnlineLogoUrl = logoCustom || undefined;
 
       const categoriasMap: Record<string, any[]> = {};
       for (const p of produtosComOpcoes) {
@@ -987,8 +993,10 @@ export function createDeliveryPublicRouter() {
       }
       const categorias = Object.entries(categoriasMap).map(([nome, itens]) => ({ nome, itens }));
 
-      const cardapioBannerSlots = normalizeCardapioOnlineBannerSlots(dcfg.cardapio_online_banner_urls).map(
-        (url) => normalizeProductPhotoPublicUrl(url) || ''
+      const cardapioBannerSlots = normalizeCardapioOnlineBannerSlots(
+        dcfg.cardapio_online_banner_urls != null ? dcfg.cardapio_online_banner_urls : dcfg.cardapio_banner_slots
+      ).map(
+        (url) => normalizeDeliveryPublicMediaUrl(url) || ''
       );
 
       res.json({
@@ -1016,7 +1024,7 @@ export function createDeliveryPublicRouter() {
           desconto_primeiro_cliente_min_pedido: dcfg.desconto_primeiro_cliente_min_pedido ?? 0,
           zonas_entrega: Array.isArray(dcfg.zonas_entrega) ? dcfg.zonas_entrega : [],
           theme_mode: dcfg.theme_mode === 'light_red' ? 'light_red' : 'dark_premium',
-          cardapio_online_logo_url: logoCustom || undefined,
+          cardapio_online_logo_url: cardapioOnlineLogoUrl,
           cardapio_online_banner_urls: cardapioBannerSlots,
           cardapio_banner_slots: cardapioBannerSlots,
         },

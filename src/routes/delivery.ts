@@ -467,7 +467,17 @@ export function createDeliveryRouter() {
         [req.tenantId]
       );
       const existing = coerceDeliveryConfigRow(row?.delivery_config ?? null);
-      const merged = mergeDeliveryConfigClientPut(existing, rest && typeof rest === 'object' && !Array.isArray(rest) ? rest : {});
+      const restConfig =
+        rest && typeof rest === 'object' && !Array.isArray(rest)
+          ? { ...(rest as Record<string, any>) }
+          : {};
+      if (
+        !Object.prototype.hasOwnProperty.call(restConfig, 'cardapio_online_banner_urls') &&
+        Object.prototype.hasOwnProperty.call(restConfig, 'cardapio_banner_slots')
+      ) {
+        restConfig.cardapio_online_banner_urls = restConfig.cardapio_banner_slots;
+      }
+      const merged = mergeDeliveryConfigClientPut(existing, restConfig);
       if (forbidClientSuppliedLocalUploadImageUrls()) {
         if (isClientSuppliedLocalUploadImageUrl(merged.cardapio_online_logo_url)) {
           return res.status(400).json({
@@ -476,7 +486,7 @@ export function createDeliveryRouter() {
               'cardapio_online_logo_url não pode apontar para /uploads. Use o upload em Cardápio visual ou uma URL HTTPS externa.',
           });
         }
-        const bannerSlots = [...normalizeCardapioOnlineBannerSlots(merged.cardapio_online_banner_urls)];
+        const bannerSlots = bannerSlotsFromCfg(merged);
         for (let i = 0; i < bannerSlots.length; i++) {
           if (isClientSuppliedLocalUploadImageUrl(bannerSlots[i])) {
             return res.status(400).json({
