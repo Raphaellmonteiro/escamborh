@@ -65,6 +65,7 @@ interface Motoboy { id: number; nome: string; cargo: string; }
 interface DeliveryConfig {
   ativo: boolean; taxa_entrega?: number; pedido_minimo?: number;
   tempo_preparo?: number; whatsapp?: string; pix_chave?: string;
+  cardapio_link_curto?: string;
   pix_nome?: string; pix_cidade?: string; pix_payload_estatico?: string;
   desconto_pix?: number; horario_abertura?: string; horario_fechamento?: string;
   payment_provider?: string;
@@ -2640,6 +2641,14 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">WhatsApp do restaurante</label>
                 <input value={cfg.whatsapp||''} onChange={e=>setCfg(c=>({...c,whatsapp:e.target.value}))}
                   placeholder="55119XXXXXXXX" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Link curto do cardápio</label>
+                <input value={cfg.cardapio_link_curto||''} onChange={e=>setCfg(c=>({...c,cardapio_link_curto:e.target.value}))}
+                  placeholder="https://bit.ly/4t1mNgi" className="w-full px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  Opcional. Quando existir e for válido, o auto reply do WhatsApp usa este link no lugar de <span className="font-mono">/delivery/{slug || 'slug'}</span>.
+                </p>
               </div>
             </div>
           )}

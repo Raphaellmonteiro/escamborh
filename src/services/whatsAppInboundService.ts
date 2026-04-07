@@ -545,12 +545,35 @@ function resolvePublicBaseUrl() {
   return `http://localhost:${normalizeOptionalText(process.env.PORT) || '3001'}`;
 }
 
+function normalizeOptionalHttpUrl(value: unknown) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function resolveTenantCardapioUrl(tenant: TenantInboundAutoReplyRow) {
   const publicBaseUrl = resolvePublicBaseUrl();
-  const slug = normalizeOptionalText(tenant.usuario);
   const deliveryEnabled = toBool(tenant.delivery_ativo, false);
+  if (!deliveryEnabled) return null;
 
-  return slug && deliveryEnabled
+  const deliveryConfig = parseDeliveryConfig(tenant.delivery_config);
+  const shortCardapioUrl = normalizeOptionalHttpUrl(deliveryConfig.cardapio_link_curto);
+  if (shortCardapioUrl) {
+    return shortCardapioUrl;
+  }
+
+  const slug = normalizeOptionalText(tenant.usuario);
+
+  return slug
     ? `${publicBaseUrl}/delivery/${encodeURIComponent(slug)}`
     : null;
 }

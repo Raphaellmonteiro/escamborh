@@ -478,6 +478,9 @@ export function createDeliveryRouter() {
         restConfig.cardapio_online_banner_urls = restConfig.cardapio_banner_slots;
       }
       const merged = mergeDeliveryConfigClientPut(existing, restConfig);
+      const normalizedCardapioShortLink = normalizeOptionalText(merged.cardapio_link_curto);
+      if (normalizedCardapioShortLink) merged.cardapio_link_curto = normalizedCardapioShortLink;
+      else delete merged.cardapio_link_curto;
       if (forbidClientSuppliedLocalUploadImageUrls()) {
         if (isClientSuppliedLocalUploadImageUrl(merged.cardapio_online_logo_url)) {
           return res.status(400).json({
