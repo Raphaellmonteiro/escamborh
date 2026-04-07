@@ -40,6 +40,7 @@ type OrderStatusLookupRow = {
 };
 
 type JsonRecord = Record<string, unknown>;
+type ProviderConfigRecord = Record<string, unknown>;
 
 type SimpleInboundIntent =
   | 'saudacao'
@@ -1339,6 +1340,36 @@ function resolveConfiguredInboundInstanceNumbers(config?: TenantWhatsAppConfigRo
   return configuredInstanceNumbers;
 }
 
+function parseProviderConfigRecord(rawValue: string | null | undefined) {
+  const raw = normalizeOptionalText(rawValue);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as ProviderConfigRecord;
+  } catch {
+    return null;
+  }
+}
+
+function getProviderConfigText(config: ProviderConfigRecord | null, keys: string[]) {
+  if (!config) return null;
+
+  for (const key of keys) {
+    const value = normalizeOptionalText(config[key]);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function buildProviderUrl(baseUrl: string, endpoint: string) {
+  const safeBaseUrl = baseUrl.replace(/\/+$/, '');
+  const safeEndpoint = endpoint.replace(/^\/+/, '');
+  return `${safeBaseUrl}/${safeEndpoint}`;
+}
+
 const EVOLUTION_PHONE_CANDIDATE_KEYS = [
   'participant',
   'participantAlt',
@@ -1483,6 +1514,18 @@ type EvolutionCustomerPhoneResolution = {
   blockedConfiguredMatches: EvolutionPhoneFieldMatch[];
   discardedWeakEnvelopeMatches: EvolutionPhoneFieldMatch[];
   unresolvedReason: EvolutionCustomerPhoneUnresolvedReason | null;
+};
+
+type EvolutionContactLookupResolution = {
+  lid: string | null;
+  phone: string | null;
+  sourcePath: string | null;
+  lookupStatus:
+    | 'not_attempted'
+    | 'config_unavailable'
+    | 'not_found'
+    | 'resolved'
+    | 'request_failed';
 };
 
 const EVOLUTION_DIAGNOSTIC_NAME_FIELD_KEYS = [
@@ -1863,6 +1906,163 @@ function summarizeEvolutionPhoneResolutionCandidates(
   ];
 }
 
+function getEvolutionLidCandidates(item: JsonRecord, envelope?: JsonRecord | null) {
+  return [
+    ...new Set(
+      getEvolutionPhoneCandidates(item, envelope)
+        .map(([field, value], index) => ({ field, value, index }))
+        .sort((left, right) => {
+          const priorityDiff =
+            getEvolutionPhoneCandidatePriority(left.field) -
+            getEvolutionPhoneCandidatePriority(right.field);
+          return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
+        })
+        .map(({ value }) => normalizeOptionalText(value))
+        .filter((value): value is string => Boolean(value) && isEvolutionLidIdentifier(value))
+    ),
+  ];
+}
+
+function collectEvolutionLookupPhoneCandidates(
+  value: unknown,
+  configuredInstanceNumbers = new Set<string>(),
+  path = 'root',
+  depth = 0
+): Array<{ path: string; phone: string }> {
+  if (depth > 5 || value === undefined || value === null) return [];
+
+  const directPhone = normalizeEvolutionCustomerPhoneCandidate(value);
+  if (directPhone && !configuredInstanceNumbers.has(directPhone)) {
+    return [{ path, phone: directPhone }];
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).flatMap((entry, index) =>
+      collectEvolutionLookupPhoneCandidates(
+        entry,
+        configuredInstanceNumbers,
+        `${path}[${index}]`,
+        depth + 1
+      )
+    );
+  }
+
+  const record = getRecord(value);
+  if (!record) return [];
+
+  return Object.entries(record).flatMap(([entryKey, entryValue]) =>
+    collectEvolutionLookupPhoneCandidates(
+      entryValue,
+      configuredInstanceNumbers,
+      `${path}.${entryKey}`,
+      depth + 1
+    )
+  );
+}
+
+function pickEvolutionLookupPhoneCandidate(
+  value: unknown,
+  configuredInstanceNumbers = new Set<string>()
+) {
+  const candidates = collectEvolutionLookupPhoneCandidates(value, configuredInstanceNumbers);
+  if (candidates.length === 0) return null;
+
+  return candidates.sort((left, right) => {
+    const leftField = left.path.split('.').pop()?.replace(/\[\d+\]$/, '') || left.path;
+    const rightField = right.path.split('.').pop()?.replace(/\[\d+\]$/, '') || right.path;
+    return getEvolutionPhoneCandidatePriority(leftField) - getEvolutionPhoneCandidatePriority(rightField);
+  })[0];
+}
+
+async function tryResolveEvolutionPhoneFromContactLookup(
+  item: JsonRecord,
+  envelope: JsonRecord | null | undefined,
+  providerConfigJson: string | null | undefined,
+  configuredInstanceNumbers = new Set<string>()
+): Promise<EvolutionContactLookupResolution> {
+  const lid = getEvolutionLidCandidates(item, envelope)[0] || null;
+  if (!lid) {
+    return {
+      lid: null,
+      phone: null,
+      sourcePath: null,
+      lookupStatus: 'not_attempted',
+    };
+  }
+
+  const providerConfig = parseProviderConfigRecord(providerConfigJson);
+  const baseUrl = getProviderConfigText(providerConfig, [
+    'base_url',
+    'baseUrl',
+    'url',
+    'api_url',
+    'endpoint_url',
+  ]);
+  const instanceName = getProviderConfigText(providerConfig, [
+    'instance',
+    'instance_name',
+    'instanceName',
+  ]);
+  const apiKey = getProviderConfigText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']);
+
+  if (!baseUrl || !instanceName || !apiKey) {
+    return {
+      lid,
+      phone: null,
+      sourcePath: null,
+      lookupStatus: 'config_unavailable',
+    };
+  }
+
+  try {
+    const response = await fetch(
+      buildProviderUrl(baseUrl, `chat/findContacts/${encodeURIComponent(instanceName)}`),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: safeJsonStringify({
+          where: {
+            id: lid,
+          },
+        }),
+      }
+    );
+    const rawBody = await response.text();
+    const responseBody = rawBody ? JSON.parse(rawBody) : null;
+
+    if (!response.ok) {
+      return {
+        lid,
+        phone: null,
+        sourcePath: null,
+        lookupStatus: 'request_failed',
+      };
+    }
+
+    const resolvedCandidate = pickEvolutionLookupPhoneCandidate(
+      responseBody,
+      configuredInstanceNumbers
+    );
+
+    return {
+      lid,
+      phone: resolvedCandidate?.phone || null,
+      sourcePath: resolvedCandidate?.path || null,
+      lookupStatus: resolvedCandidate ? 'resolved' : 'not_found',
+    };
+  } catch {
+    return {
+      lid,
+      phone: null,
+      sourcePath: null,
+      lookupStatus: 'request_failed',
+    };
+  }
+}
+
 function resolveEvolutionCustomerPhone(
   item: JsonRecord,
   envelope?: JsonRecord | null,
@@ -2176,13 +2376,14 @@ function summarizeEvolutionPayloadShape(payload: unknown) {
   };
 }
 
-function analyzeEvolutionMessages(
+async function analyzeEvolutionMessages(
   tenantId: number,
   provider: string,
   payload: unknown,
   payloadJson: string,
+  providerConfigJson: string | null | undefined,
   configuredInstanceNumbers = new Set<string>()
-): EvolutionExtractionAnalysis {
+): Promise<EvolutionExtractionAnalysis> {
   const root = getRecord(payload);
   const candidates = extractEvolutionCandidateContexts(root);
   const messages: NormalizedInboundWhatsAppMessage[] = [];
@@ -2191,6 +2392,7 @@ function analyzeEvolutionMessages(
   const unresolvedReasonCounts: Partial<
     Record<EvolutionCustomerPhoneUnresolvedReason, number>
   > = {};
+  const contactLookupCache = new Map<string, Promise<EvolutionContactLookupResolution>>();
 
   for (const { item, envelope } of candidates) {
     const key = getRecord(item.key);
@@ -2220,7 +2422,27 @@ function analyzeEvolutionMessages(
       envelope,
       configuredInstanceNumbers
     );
-    const phone = phoneResolution.phone;
+    let phone = phoneResolution.phone;
+    let contactLookupResolution: EvolutionContactLookupResolution | null = null;
+
+    if (!phone) {
+      const lid = getEvolutionLidCandidates(item, envelope)[0] || null;
+      if (lid) {
+        const cachedLookup =
+          contactLookupCache.get(lid) ||
+          tryResolveEvolutionPhoneFromContactLookup(
+            item,
+            envelope,
+            providerConfigJson,
+            configuredInstanceNumbers
+          );
+        contactLookupCache.set(lid, cachedLookup);
+        contactLookupResolution = await cachedLookup;
+        if (contactLookupResolution.phone) {
+          phone = contactLookupResolution.phone;
+        }
+      }
+    }
 
     if (!phone) {
       unresolvedPhoneCount += 1;
@@ -2254,6 +2476,15 @@ function analyzeEvolutionMessages(
         discardedWeakEnvelopeCandidates: phoneResolution.discardedWeakEnvelopeMatches.map(
           ({ field, phone: discardedPhone }) => `${field}:${maskPhone(discardedPhone)}`
         ),
+        auxiliaryContactLookup:
+          contactLookupResolution && contactLookupResolution.lookupStatus !== 'not_attempted'
+            ? {
+                lid: maskEvolutionDiagnosticValue(contactLookupResolution.lid),
+                phoneMasked: maskPhone(contactLookupResolution.phone),
+                sourcePath: contactLookupResolution.sourcePath,
+                status: contactLookupResolution.lookupStatus,
+              }
+            : undefined,
         configuredInstanceNumbers: Array.from(configuredInstanceNumbers).map((value) =>
           maskPhone(value)
         ),
@@ -2261,6 +2492,24 @@ function analyzeEvolutionMessages(
       });
 
       continue;
+    }
+
+    if (contactLookupResolution?.phone) {
+      logInfo('whatsAppInboundService.evolutionPhoneResolvedByContactLookup', {
+        tenantId,
+        provider,
+        resolvedCustomerName: customerName,
+        messageId:
+          normalizeOptionalText(key?.id) ||
+          normalizeOptionalText(item.id) ||
+          normalizeOptionalText(item.messageId) ||
+          normalizeOptionalText(envelopeKey?.id) ||
+          normalizeOptionalText(envelope?.id) ||
+          normalizeOptionalText(envelope?.messageId),
+        lid: maskEvolutionDiagnosticValue(contactLookupResolution.lid),
+        phoneMasked: maskPhone(contactLookupResolution.phone),
+        sourcePath: contactLookupResolution.sourcePath,
+      });
     }
 
     messages.push({
@@ -2305,15 +2554,46 @@ function extractEvolutionMessages(
   provider: string,
   payload: unknown,
   payloadJson: string,
+  providerConfigJson: string | null | undefined,
   configuredInstanceNumbers = new Set<string>()
-): NormalizedInboundWhatsAppMessage[] {
+): Promise<NormalizedInboundWhatsAppMessage[]> {
   return analyzeEvolutionMessages(
     tenantId,
     provider,
     payload,
     payloadJson,
+    providerConfigJson,
     configuredInstanceNumbers
-  ).messages;
+  ).then((analysis) => analysis.messages);
+}
+
+async function extractInboundMessages(
+  tenantId: number,
+  provider: string,
+  payload: unknown,
+  providerConfigJson?: string | null
+): Promise<NormalizedInboundWhatsAppMessage[]> {
+  const payloadJson = safeJsonStringify(payload);
+  const configuredInstanceNumbers = resolveConfiguredWhatsAppNumbersFromProviderConfigJson(
+    providerConfigJson
+  );
+
+  if (provider === 'evolution' || provider === 'evolution_api') {
+    return extractEvolutionMessages(
+      tenantId,
+      provider,
+      payload,
+      payloadJson,
+      providerConfigJson,
+      configuredInstanceNumbers
+    );
+  }
+
+  if (provider === 'meta' || provider === 'meta_cloud_api' || provider === 'whatsapp_cloud_api') {
+    return Promise.resolve(extractMetaMessages(tenantId, provider, payload, payloadJson));
+  }
+
+  return Promise.resolve(extractGenericMessages(tenantId, provider, payload, payloadJson));
 }
 
 function extractMetaMessages(
@@ -2411,34 +2691,6 @@ function extractGenericMessages(
       payload_json: payloadJson,
     },
   ];
-}
-
-function extractInboundMessages(
-  tenantId: number,
-  provider: string,
-  payload: unknown,
-  providerConfigJson?: string | null
-): NormalizedInboundWhatsAppMessage[] {
-  const payloadJson = safeJsonStringify(payload);
-  const configuredInstanceNumbers = resolveConfiguredWhatsAppNumbersFromProviderConfigJson(
-    providerConfigJson
-  );
-
-  if (provider === 'evolution' || provider === 'evolution_api') {
-    return extractEvolutionMessages(
-      tenantId,
-      provider,
-      payload,
-      payloadJson,
-      configuredInstanceNumbers
-    );
-  }
-
-  if (provider === 'meta' || provider === 'meta_cloud_api' || provider === 'whatsapp_cloud_api') {
-    return extractMetaMessages(tenantId, provider, payload, payloadJson);
-  }
-
-  return extractGenericMessages(tenantId, provider, payload, payloadJson);
 }
 
 async function insertInboundMessage(message: NormalizedInboundWhatsAppMessage) {
@@ -2617,22 +2869,23 @@ export async function registerInboundWhatsAppMessages(
   const configuredInboundInstanceNumbers = resolveConfiguredInboundInstanceNumbers(config);
   const evolutionAnalysis =
     provider === 'evolution' || provider === 'evolution_api'
-      ? analyzeEvolutionMessages(
+      ? await analyzeEvolutionMessages(
           tenantId,
           provider,
           input.payload,
           safeJsonStringify(input.payload),
+          config.provider_config_json,
           configuredInboundInstanceNumbers
         )
       : null;
   const inboundMessages =
     evolutionAnalysis?.messages ??
-    extractInboundMessages(
+    (await extractInboundMessages(
       tenantId,
       provider,
       input.payload,
       config.provider_config_json
-    );
+    ));
 
   logInfo('whatsAppInboundService.tenantResolved', {
     tenantId,
