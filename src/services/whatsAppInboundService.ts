@@ -1291,8 +1291,7 @@ function isIgnoredEvolutionJid(value: unknown) {
   return (
     normalized.endsWith('@g.us') ||
     normalized === 'status@broadcast' ||
-    normalized.endsWith('@newsletter') ||
-    normalized.endsWith('@lid')
+    normalized.endsWith('@newsletter')
   );
 }
 
@@ -1350,6 +1349,27 @@ function extractEvolutionFallbackText(messageNode: unknown) {
   return null;
 }
 
+function hasEvolutionDirectMessageShape(value: JsonRecord | null) {
+  if (!value) return false;
+
+  return Boolean(
+    getRecord(value.key) ||
+      getRecord(value.message) ||
+      normalizeOptionalText(
+        value.remoteJid ??
+          value.participant ??
+          value.sender ??
+          value.from ??
+          value.id ??
+          value.messageId
+      ) ||
+      normalizeOptionalText(value.body) ||
+      normalizeOptionalText(value.text) ||
+      extractTextFromMessageNode(value) ||
+      extractEvolutionFallbackText(value)
+  );
+}
+
 function extractEvolutionCandidateContexts(root: JsonRecord | null) {
   if (!root) return [] as Array<{ item: JsonRecord; envelope: JsonRecord | null }>;
 
@@ -1379,6 +1399,13 @@ function extractEvolutionCandidateContexts(root: JsonRecord | null) {
   if (dataCandidates.length > 0) {
     for (const candidate of dataCandidates) {
       if (pushMessages(candidate)) continue;
+      if (hasEvolutionDirectMessageShape(candidate)) {
+        contexts.push({
+          item: candidate,
+          envelope: root,
+        });
+        continue;
+      }
 
       contexts.push({
         item: candidate,
@@ -1394,6 +1421,13 @@ function extractEvolutionCandidateContexts(root: JsonRecord | null) {
     if (pushMessages(dataRecord)) {
       return contexts;
     }
+    if (hasEvolutionDirectMessageShape(dataRecord)) {
+      contexts.push({
+        item: dataRecord,
+        envelope: root,
+      });
+      return contexts;
+    }
 
     contexts.push({
       item: dataRecord,
@@ -1403,6 +1437,13 @@ function extractEvolutionCandidateContexts(root: JsonRecord | null) {
   }
 
   if (pushMessages(root)) {
+    return contexts;
+  }
+  if (hasEvolutionDirectMessageShape(root)) {
+    contexts.push({
+      item: root,
+      envelope: null,
+    });
     return contexts;
   }
 
@@ -1492,12 +1533,17 @@ function extractEvolutionMessages(
           : null);
       const messageText =
         extractTextFromMessageNode(item.message) ||
+        extractTextFromMessageNode(item) ||
         normalizeOptionalText(item.body) ||
         normalizeOptionalText(item.text) ||
         extractTextFromMessageNode(envelope?.message) ||
+        extractTextFromMessageNode(envelope) ||
         normalizeOptionalText(envelope?.body) ||
         normalizeOptionalText(envelope?.text) ||
-        extractEvolutionFallbackText(item.message);
+        extractEvolutionFallbackText(item.message) ||
+        extractEvolutionFallbackText(item) ||
+        extractEvolutionFallbackText(envelope?.message) ||
+        extractEvolutionFallbackText(envelope);
 
       if (!phone || !messageText) return null;
 
