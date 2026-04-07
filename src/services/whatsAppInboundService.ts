@@ -16,6 +16,7 @@ type TenantWhatsAppConfigRow = {
   whatsapp_enabled?: number | boolean | string | null;
   provider?: string | null;
   provider_config_json?: string | null;
+  whatsapp_number?: string | null;
 };
 
 type TenantInboundAutoReplyRow = {
@@ -1325,6 +1326,19 @@ function normalizeEvolutionCustomerPhoneCandidate(value: unknown) {
   return isTrustedBrazilWhatsAppPhone(phone) ? phone : null;
 }
 
+function resolveConfiguredInboundInstanceNumbers(config?: TenantWhatsAppConfigRow | null) {
+  const configuredInstanceNumbers = resolveConfiguredWhatsAppNumbersFromProviderConfigJson(
+    config?.provider_config_json
+  );
+  const configuredWhatsAppNumber = normalizeWhatsAppPhone(config?.whatsapp_number);
+
+  if (configuredWhatsAppNumber) {
+    configuredInstanceNumbers.add(configuredWhatsAppNumber);
+  }
+
+  return configuredInstanceNumbers;
+}
+
 const EVOLUTION_PHONE_CANDIDATE_KEYS = [
   'participant',
   'participantAlt',
@@ -1428,6 +1442,49 @@ const EVOLUTION_PHONE_FIELD_PRIORITIES: Record<string, number> = {
   ownerWaId: 9,
 };
 
+const EVOLUTION_SCOPED_PHONE_FIELD_PRIORITIES: Record<
+  string,
+  { phoneLike: number; jidLike: number }
+> = {
+  participant: { phoneLike: 0, jidLike: 4 },
+  participantAlt: { phoneLike: 0, jidLike: 4 },
+  sender: { phoneLike: 1, jidLike: 4 },
+  senderAlt: { phoneLike: 1, jidLike: 4 },
+  from: { phoneLike: 2, jidLike: 4 },
+  user: { phoneLike: 3, jidLike: 5 },
+  author: { phoneLike: 3, jidLike: 5 },
+  contact: { phoneLike: 4, jidLike: 6 },
+};
+
+const EVOLUTION_GENERIC_PHONE_LIKE_FIELDS = new Set([
+  'phone',
+  'phoneNumber',
+  'phone_number',
+  'waId',
+  'wa_id',
+]);
+
+const EVOLUTION_GENERIC_JID_LIKE_FIELDS = new Set(['jid', 'jidAlt']);
+
+type EvolutionCustomerPhoneUnresolvedReason =
+  | 'customer_phone_unresolved_instance_number_blocked'
+  | 'customer_phone_unresolved_weak_envelope_candidate_discarded'
+  | 'customer_phone_unresolved_only_ignored_jids'
+  | 'customer_phone_unresolved_no_candidate_fields'
+  | 'customer_phone_unresolved_no_trusted_candidate';
+
+type EvolutionPhoneFieldMatch = {
+  field: string;
+  phone: string;
+};
+
+type EvolutionCustomerPhoneResolution = {
+  phone: string | null;
+  blockedConfiguredMatches: EvolutionPhoneFieldMatch[];
+  discardedWeakEnvelopeMatches: EvolutionPhoneFieldMatch[];
+  unresolvedReason: EvolutionCustomerPhoneUnresolvedReason | null;
+};
+
 function getEvolutionFieldCandidates(record: JsonRecord | null, prefix: string) {
   if (!record) return [] as Array<[field: string, value: unknown]>;
 
@@ -1514,8 +1571,43 @@ function getEvolutionPhoneCandidates(item: JsonRecord, envelope?: JsonRecord | n
 }
 
 function getEvolutionPhoneCandidatePriority(field: string) {
-  const baseField = field.split('.').pop() || field;
+  const segments = field.split('.');
+  const baseField = segments[segments.length - 1] || field;
+  const parentField = segments.length > 1 ? segments[segments.length - 2] : null;
+
+  if (parentField) {
+    const scopedPriorities = EVOLUTION_SCOPED_PHONE_FIELD_PRIORITIES[parentField];
+    if (scopedPriorities) {
+      if (EVOLUTION_GENERIC_PHONE_LIKE_FIELDS.has(baseField)) {
+        return scopedPriorities.phoneLike;
+      }
+      if (EVOLUTION_GENERIC_JID_LIKE_FIELDS.has(baseField)) {
+        return scopedPriorities.jidLike;
+      }
+    }
+  }
+
   return EVOLUTION_PHONE_FIELD_PRIORITIES[baseField] ?? 50;
+}
+
+function isWeakEvolutionEnvelopePhoneCandidate(field: string) {
+  return (
+    field.startsWith('envelope.') &&
+    !field.startsWith('envelope.key.') &&
+    !field.startsWith('envelope.message.') &&
+    !field.startsWith('envelope.contextInfo.')
+  );
+}
+
+function resolveEvolutionCustomerName(item: JsonRecord, envelope?: JsonRecord | null) {
+  return (
+    normalizeOptionalText(item.pushName) ||
+    normalizeOptionalText(item.senderName) ||
+    normalizeOptionalText(item.notifyName) ||
+    normalizeOptionalText(envelope?.pushName) ||
+    normalizeOptionalText(envelope?.senderName) ||
+    normalizeOptionalText(envelope?.notifyName)
+  );
 }
 
 function summarizeEvolutionPhoneCandidateFields(item: JsonRecord, envelope?: JsonRecord | null) {
@@ -1533,12 +1625,52 @@ function summarizeEvolutionPhoneCandidateFields(item: JsonRecord, envelope?: Jso
   )];
 }
 
-function resolveEvolutionCustomerPhone(
+function summarizeEvolutionPhoneResolutionCandidates(
   item: JsonRecord,
   envelope?: JsonRecord | null,
   configuredInstanceNumbers = new Set<string>()
 ) {
-  const blockedConfiguredMatches = new Set<string>();
+  return [
+    ...new Set(
+      getEvolutionPhoneCandidates(item, envelope)
+        .map(([field, value], index) => ({ field, value, index }))
+        .sort((left, right) => {
+          const priorityDiff =
+            getEvolutionPhoneCandidatePriority(left.field) -
+            getEvolutionPhoneCandidatePriority(right.field);
+          return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
+        })
+        .map(({ field, value }) => {
+          const normalized = normalizeOptionalText(value);
+          if (!normalized) return null;
+          if (isEvolutionLidIdentifier(normalized)) return `${field}:lid`;
+          if (isIgnoredEvolutionJid(normalized)) return `${field}:ignored_jid`;
+
+          const phone = normalizeEvolutionCustomerPhoneCandidate(normalized);
+          if (phone && configuredInstanceNumbers.has(phone)) {
+            return `${field}:configured_instance`;
+          }
+          if (phone && isWeakEvolutionEnvelopePhoneCandidate(field)) {
+            return `${field}:weak_envelope_phone`;
+          }
+          if (phone) return `${field}:phone`;
+          if (normalized.includes('@')) return `${field}:jid`;
+          return `${field}:present`;
+        })
+        .filter((value): value is string => Boolean(value))
+    ),
+  ];
+}
+
+function resolveEvolutionCustomerPhone(
+  item: JsonRecord,
+  envelope?: JsonRecord | null,
+  configuredInstanceNumbers = new Set<string>()
+): EvolutionCustomerPhoneResolution {
+  const blockedConfiguredMatches = new Map<string, string>();
+  const discardedWeakEnvelopeMatches = new Map<string, string>();
+  let presentCandidateCount = 0;
+  let ignoredJidCandidateCount = 0;
   const candidates = getEvolutionPhoneCandidates(item, envelope)
     .map(([field, value], index) => ({ field, value, index }))
     .sort((left, right) => {
@@ -1548,23 +1680,71 @@ function resolveEvolutionCustomerPhone(
       return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
     });
 
-  for (const { value } of candidates) {
+  for (const { field, value } of candidates) {
+    const normalized = normalizeOptionalText(value);
+    if (!normalized) continue;
+
+    presentCandidateCount += 1;
+    if (isIgnoredEvolutionJid(normalized)) {
+      ignoredJidCandidateCount += 1;
+      continue;
+    }
+
     const phone = normalizeEvolutionCustomerPhoneCandidate(value);
     if (!phone) continue;
     if (configuredInstanceNumbers.has(phone)) {
-      blockedConfiguredMatches.add(phone);
+      blockedConfiguredMatches.set(field, phone);
+      continue;
+    }
+    if (isWeakEvolutionEnvelopePhoneCandidate(field)) {
+      discardedWeakEnvelopeMatches.set(field, phone);
       continue;
     }
 
     return {
       phone,
-      blockedConfiguredMatches: Array.from(blockedConfiguredMatches),
+      blockedConfiguredMatches: Array.from(blockedConfiguredMatches, ([fieldName, blockedPhone]) => ({
+        field: fieldName,
+        phone: blockedPhone,
+      })),
+      discardedWeakEnvelopeMatches: Array.from(
+        discardedWeakEnvelopeMatches,
+        ([fieldName, discardedPhone]) => ({
+          field: fieldName,
+          phone: discardedPhone,
+        })
+      ),
+      unresolvedReason: null,
     };
+  }
+
+  let unresolvedReason: EvolutionCustomerPhoneUnresolvedReason;
+  if (blockedConfiguredMatches.size > 0) {
+    unresolvedReason = 'customer_phone_unresolved_instance_number_blocked';
+  } else if (discardedWeakEnvelopeMatches.size > 0) {
+    unresolvedReason = 'customer_phone_unresolved_weak_envelope_candidate_discarded';
+  } else if (presentCandidateCount === 0) {
+    unresolvedReason = 'customer_phone_unresolved_no_candidate_fields';
+  } else if (ignoredJidCandidateCount === presentCandidateCount) {
+    unresolvedReason = 'customer_phone_unresolved_only_ignored_jids';
+  } else {
+    unresolvedReason = 'customer_phone_unresolved_no_trusted_candidate';
   }
 
   return {
     phone: null,
-    blockedConfiguredMatches: Array.from(blockedConfiguredMatches),
+    blockedConfiguredMatches: Array.from(blockedConfiguredMatches, ([fieldName, blockedPhone]) => ({
+      field: fieldName,
+      phone: blockedPhone,
+    })),
+    discardedWeakEnvelopeMatches: Array.from(
+      discardedWeakEnvelopeMatches,
+      ([fieldName, discardedPhone]) => ({
+        field: fieldName,
+        phone: discardedPhone,
+      })
+    ),
+    unresolvedReason,
   };
 }
 
@@ -1572,7 +1752,43 @@ type EvolutionExtractionAnalysis = {
   messages: NormalizedInboundWhatsAppMessage[];
   supportedMessageCount: number;
   unresolvedPhoneCount: number;
+  unresolvedReasonCounts: Partial<Record<EvolutionCustomerPhoneUnresolvedReason, number>>;
 };
+
+function mapEvolutionUnresolvedReasonToInboundReason(
+  reason: EvolutionCustomerPhoneUnresolvedReason
+) {
+  switch (reason) {
+    case 'customer_phone_unresolved_instance_number_blocked':
+      return 'supported_message_phone_unresolved_instance_number_blocked';
+    case 'customer_phone_unresolved_weak_envelope_candidate_discarded':
+      return 'supported_message_phone_unresolved_weak_envelope_candidate_discarded';
+    case 'customer_phone_unresolved_only_ignored_jids':
+      return 'supported_message_phone_unresolved_only_ignored_jids';
+    case 'customer_phone_unresolved_no_candidate_fields':
+      return 'supported_message_phone_unresolved_no_candidate_fields';
+    case 'customer_phone_unresolved_no_trusted_candidate':
+    default:
+      return 'supported_message_phone_unresolved_no_trusted_candidate';
+  }
+}
+
+function resolveEvolutionNoMessagesReason(analysis: EvolutionExtractionAnalysis | null) {
+  if (!analysis || analysis.supportedMessageCount === 0 || analysis.unresolvedPhoneCount === 0) {
+    return null;
+  }
+
+  const unresolvedReasons = Object.entries(analysis.unresolvedReasonCounts).filter(
+    ([, count]) => Number(count) > 0
+  );
+  if (unresolvedReasons.length !== 1) {
+    return 'supported_message_phone_unresolved';
+  }
+
+  return mapEvolutionUnresolvedReasonToInboundReason(
+    unresolvedReasons[0][0] as EvolutionCustomerPhoneUnresolvedReason
+  );
+}
 
 function extractEvolutionFallbackText(messageNode: unknown) {
   const message = getRecord(messageNode);
@@ -1771,6 +1987,9 @@ function analyzeEvolutionMessages(
   const messages: NormalizedInboundWhatsAppMessage[] = [];
   let supportedMessageCount = 0;
   let unresolvedPhoneCount = 0;
+  const unresolvedReasonCounts: Partial<
+    Record<EvolutionCustomerPhoneUnresolvedReason, number>
+  > = {};
 
   for (const { item, envelope } of candidates) {
     const key = getRecord(item.key);
@@ -1794,6 +2013,7 @@ function analyzeEvolutionMessages(
     if (!messageText) continue;
 
     supportedMessageCount += 1;
+    const customerName = resolveEvolutionCustomerName(item, envelope);
     const phoneResolution = resolveEvolutionCustomerPhone(
       item,
       envelope,
@@ -1803,13 +2023,16 @@ function analyzeEvolutionMessages(
 
     if (!phone) {
       unresolvedPhoneCount += 1;
+      if (phoneResolution.unresolvedReason) {
+        unresolvedReasonCounts[phoneResolution.unresolvedReason] =
+          (unresolvedReasonCounts[phoneResolution.unresolvedReason] || 0) + 1;
+      }
       logInfo('whatsAppInboundService.evolutionPhoneUnresolved', {
         tenantId,
         provider,
-        reason:
-          phoneResolution.blockedConfiguredMatches.length > 0
-            ? 'customer_phone_unresolved_instance_number_blocked'
-            : 'customer_phone_unresolved',
+        reason: phoneResolution.unresolvedReason || 'customer_phone_unresolved',
+        resolvedCustomerName: customerName,
+        customerPhoneResolved: false,
         messageId:
           normalizeOptionalText(key?.id) ||
           normalizeOptionalText(item.id) ||
@@ -1819,7 +2042,18 @@ function analyzeEvolutionMessages(
           normalizeOptionalText(envelope?.messageId),
         text: summarizeText(messageText),
         candidateFields: summarizeEvolutionPhoneCandidateFields(item, envelope),
-        blockedConfiguredRecipients: phoneResolution.blockedConfiguredMatches.map((value) =>
+        candidateResolution: summarizeEvolutionPhoneResolutionCandidates(
+          item,
+          envelope,
+          configuredInstanceNumbers
+        ),
+        blockedInstanceNumberCandidates: phoneResolution.blockedConfiguredMatches.map(
+          ({ field, phone: blockedPhone }) => `${field}:${maskPhone(blockedPhone)}`
+        ),
+        discardedWeakEnvelopeCandidates: phoneResolution.discardedWeakEnvelopeMatches.map(
+          ({ field, phone: discardedPhone }) => `${field}:${maskPhone(discardedPhone)}`
+        ),
+        configuredInstanceNumbers: Array.from(configuredInstanceNumbers).map((value) =>
           maskPhone(value)
         ),
         payloadShape: summarizeEvolutionPayloadShape(payload),
@@ -1832,13 +2066,7 @@ function analyzeEvolutionMessages(
       tenant_id: tenantId,
       provider,
       customer_phone: phone,
-      customer_name:
-        normalizeOptionalText(item.pushName) ||
-        normalizeOptionalText(item.senderName) ||
-        normalizeOptionalText(item.notifyName) ||
-        normalizeOptionalText(envelope?.pushName) ||
-        normalizeOptionalText(envelope?.senderName) ||
-        normalizeOptionalText(envelope?.notifyName),
+      customer_name: customerName,
       message_text: messageText,
       provider_message_id:
         normalizeOptionalText(key?.id) ||
@@ -1867,6 +2095,7 @@ function analyzeEvolutionMessages(
     messages,
     supportedMessageCount,
     unresolvedPhoneCount,
+    unresolvedReasonCounts,
   };
 }
 
@@ -2097,7 +2326,7 @@ export async function registerInboundWhatsAppMessages(
   }
 
   const config = await q1<TenantWhatsAppConfigRow>(
-    `SELECT tenant_id, whatsapp_enabled, provider, provider_config_json
+    `SELECT tenant_id, whatsapp_enabled, provider, provider_config_json, whatsapp_number
      FROM tenant_whatsapp_config
      WHERE tenant_id=?`,
     [tenantId]
@@ -2191,12 +2420,17 @@ export async function registerInboundWhatsAppMessages(
           provider,
           input.payload,
           safeJsonStringify(input.payload),
-          resolveConfiguredWhatsAppNumbersFromProviderConfigJson(config.provider_config_json)
+          resolveConfiguredInboundInstanceNumbers(config)
         )
       : null;
   const inboundMessages =
     evolutionAnalysis?.messages ??
-    extractInboundMessages(tenantId, provider, input.payload, config.provider_config_json);
+    extractInboundMessages(
+      tenantId,
+      provider,
+      input.payload,
+      config.provider_config_json
+    );
 
   logInfo('whatsAppInboundService.tenantResolved', {
     tenantId,
@@ -2215,9 +2449,7 @@ export async function registerInboundWhatsAppMessages(
 
   if (inboundMessages.length === 0) {
     const noMessagesReason =
-      evolutionAnalysis && evolutionAnalysis.supportedMessageCount > 0 && evolutionAnalysis.unresolvedPhoneCount > 0
-        ? 'supported_message_phone_unresolved'
-        : 'no_supported_messages_found';
+      resolveEvolutionNoMessagesReason(evolutionAnalysis) || 'no_supported_messages_found';
 
     logInfo('whatsAppInboundService.noSupportedMessages', {
       tenantId,
@@ -2233,6 +2465,7 @@ export async function registerInboundWhatsAppMessages(
           : undefined,
       supportedMessageCount: evolutionAnalysis?.supportedMessageCount,
       unresolvedPhoneCount: evolutionAnalysis?.unresolvedPhoneCount,
+      unresolvedReasonCounts: evolutionAnalysis?.unresolvedReasonCounts,
       reason: noMessagesReason,
     });
     return {
