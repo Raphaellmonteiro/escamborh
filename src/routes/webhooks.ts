@@ -1,13 +1,103 @@
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
 import { registerInboundWhatsAppMessages } from '../services/whatsAppInboundService';
 import { logError, logInfo } from '../utils/logger';
 import { createWhatsAppWebhookRouter } from './webhooks/whatsappWebhook';
 
+type ForwardWhatsAppInboundInput = {
+  tenantId: number | string;
+  payload: unknown;
+  webhookEventName?: string | null;
+  path: string;
+  method: string;
+  source: 'primary_route' | 'legacy_evolution_adapter';
+  instance?: string | null;
+};
+
+function normalizeWebhookEventName(eventName: unknown) {
+  if (typeof eventName !== 'string') {
+    return null;
+  }
+
+  const normalized = eventName.trim().toLowerCase();
+  return normalized || null;
+}
+
+function extractPayloadEventName(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+
+  const payloadRecord = payload as Record<string, unknown>;
+  return payloadRecord.event ?? payloadRecord.type ?? null;
+}
+
+function forwardToCentralWhatsAppInbound(
+  input: ForwardWhatsAppInboundInput
+) {
+  const eventName = normalizeWebhookEventName(input.webhookEventName);
+
+  logInfo('webhooks.whatsappInbound.received', {
+    path: input.path,
+    method: input.method,
+    source: input.source,
+    tenantId: input.tenantId,
+    eventName,
+    instance: input.instance ?? null,
+    payloadEvent: extractPayloadEventName(input.payload),
+  });
+
+  void registerInboundWhatsAppMessages({
+    tenantId: input.tenantId,
+    payload: input.payload,
+    webhookEventName: eventName,
+  })
+    .then((result) => {
+      logInfo('webhooks.whatsappInbound.result', {
+        path: input.path,
+        method: input.method,
+        source: input.source,
+        tenantId: input.tenantId,
+        eventName,
+        instance: input.instance ?? null,
+        provider: result.provider,
+        accepted: result.accepted,
+        reason: result.reason,
+        savedCount: result.savedCount,
+        ignoredCount: result.ignoredCount,
+      });
+    })
+    .catch((error) => {
+      logError('webhooks.whatsappInbound', error, {
+        path: input.path,
+        method: input.method,
+        source: input.source,
+        tenantId: input.tenantId,
+        eventName,
+        instance: input.instance ?? null,
+      });
+    });
+}
+
 export function createWebhooksRouter() {
   const router = Router();
 
-  router.use('/whatsapp', createWhatsAppWebhookRouter());
+  router.use(
+    '/whatsapp',
+    createWhatsAppWebhookRouter({
+      forwardToPrimaryInbound: ({ tenantId, payload, webhookEventName, path, method, instance }) => {
+        forwardToCentralWhatsAppInbound({
+          tenantId,
+          payload,
+          webhookEventName,
+          path,
+          method,
+          source: 'legacy_evolution_adapter',
+          instance,
+        });
+      },
+    })
+  );
 
   // Webhook publico: Mercado Pago nao envia o JWT interno do sistema.
   router.post(
@@ -45,53 +135,19 @@ export function createWebhooksRouter() {
     }
   );
 
-  const handleInbound = (req: any, res: any) => {
-    const payload = req.body;
-    const tenantId = req.params.tenantId;
-    const eventName =
-      typeof req.params?.eventName === 'string' && req.params.eventName.trim()
-        ? req.params.eventName.trim().toLowerCase()
-        : null;
-
-    logInfo('webhooks.whatsappInbound.received', {
-      path: req.originalUrl,
-      method: req.method,
-      tenantId,
-      eventName,
-      payloadEvent:
-        payload && typeof payload === 'object' && !Array.isArray(payload)
-          ? (payload as Record<string, unknown>).event ?? null
-          : null,
-    });
-
+  // Ponto central do inbound de WhatsApp no FlowPDV.
+  // Trilha principal: Evolution webhook -> /api/webhooks/whatsapp/inbound/:tenantId/:eventName? -> registerInboundWhatsAppMessages()
+  const handleInbound = (req: Request, res: Response) => {
     res.status(200).json({ received: true });
 
-    void registerInboundWhatsAppMessages({
-      tenantId,
-      payload,
-      webhookEventName: eventName,
-    })
-      .then((result) => {
-        logInfo('webhooks.whatsappInbound.result', {
-          path: req.originalUrl,
-          method: req.method,
-          tenantId,
-          eventName,
-          provider: result.provider,
-          accepted: result.accepted,
-          reason: result.reason,
-          savedCount: result.savedCount,
-          ignoredCount: result.ignoredCount,
-        });
-      })
-      .catch((error) => {
-        logError('webhooks.whatsappInbound', error, {
-          path: req.originalUrl,
-          method: req.method,
-          tenantId,
-          eventName,
-        });
-      });
+    forwardToCentralWhatsAppInbound({
+      tenantId: req.params.tenantId,
+      payload: req.body,
+      webhookEventName: req.params.eventName,
+      path: req.originalUrl,
+      method: req.method,
+      source: 'primary_route',
+    });
   };
 
   router.post('/whatsapp/inbound/:tenantId', handleInbound);

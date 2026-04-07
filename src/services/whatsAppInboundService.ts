@@ -1,4 +1,5 @@
 import { q1, qRun, qAll } from '../db';
+import { getInstanceByName } from '../repositories/whatsappRepository';
 import { logError, logInfo } from '../utils/logger';
 import {
   findDeliveryZoneByBairro,
@@ -90,6 +91,7 @@ export type RegisterInboundWhatsAppMessagesResult = {
 };
 
 const HUMAN_HANDOFF_TTL_HOURS = 4;
+const EVOLUTION_SUPPORTED_INBOUND_EVENTS = new Set(['messages.upsert', 'message.upsert']);
 
 const HUMAN_HANDOFF_KEYWORDS = [
   'cancelar',
@@ -224,6 +226,67 @@ function summarizeText(value: unknown, maxLength = 180) {
 function extractPayloadEventName(payload: unknown) {
   const root = getRecord(payload);
   return normalizeOptionalText(root?.event ?? root?.type ?? root?.webhookType);
+}
+
+function normalizeWebhookEventName(value: unknown) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return null;
+
+  return normalized
+    .toLowerCase()
+    .replace(/[\s/_-]+/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.|\.$/g, '');
+}
+
+function resolveInboundEventName(webhookEventName: unknown, payload: unknown) {
+  return (
+    normalizeWebhookEventName(webhookEventName) ||
+    normalizeWebhookEventName(extractPayloadEventName(payload))
+  );
+}
+
+function isSupportedEvolutionInboundEvent(eventName: string | null) {
+  return !eventName || EVOLUTION_SUPPORTED_INBOUND_EVENTS.has(eventName);
+}
+
+function resolveTenantIdFromInstanceName(instanceName: string) {
+  const match = /^tenant_(\d+)_/i.exec(instanceName);
+  if (!match) return null;
+
+  const parsed = Number(match[1]);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function resolveTenantContext(
+  routeTenantIdValue: number | string,
+  payload: unknown
+) {
+  const routeTenantId = parsePositiveInt(routeTenantIdValue);
+  const root = getRecord(payload);
+  const instance = normalizeOptionalText(root?.instance);
+  const instanceRecord = instance ? await getInstanceByName(instance).catch(() => null) : null;
+  const payloadTenantId = instance
+    ? instanceRecord?.tenantId ?? resolveTenantIdFromInstanceName(instance)
+    : null;
+
+  if (routeTenantId && payloadTenantId && routeTenantId !== payloadTenantId) {
+    return {
+      tenantId: null,
+      routeTenantId,
+      payloadTenantId,
+      instance,
+      conflict: true,
+    };
+  }
+
+  return {
+    tenantId: routeTenantId ?? payloadTenantId,
+    routeTenantId,
+    payloadTenantId,
+    instance,
+    conflict: false,
+  };
 }
 
 function includesAny(text: string, terms: string[]) {
@@ -1109,6 +1172,62 @@ function extractTextFromMessageNode(value: unknown): string | null {
   );
 }
 
+function isIgnoredEvolutionJid(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return false;
+
+  return (
+    normalized.endsWith('@g.us') ||
+    normalized === 'status@broadcast' ||
+    normalized.endsWith('@newsletter') ||
+    normalized.endsWith('@lid')
+  );
+}
+
+function resolveEvolutionCustomerPhone(item: JsonRecord) {
+  const key = getRecord(item.key);
+  const remoteJid = normalizeOptionalText(key?.remoteJid ?? item.remoteJid);
+  if (isIgnoredEvolutionJid(remoteJid)) return null;
+
+  const candidates = [
+    item.sender,
+    item.from,
+    item.participant,
+    key?.participant,
+    key?.remoteJid,
+    item.remoteJid,
+  ];
+
+  for (const candidate of candidates) {
+    if (isIgnoredEvolutionJid(candidate)) continue;
+
+    const phone = normalizeWhatsAppPhone(candidate);
+    if (phone) return phone;
+  }
+
+  return null;
+}
+
+function extractEvolutionFallbackText(messageNode: unknown) {
+  const message = getRecord(messageNode);
+  if (!message) return null;
+
+  if (getRecord(message.imageMessage)) return '[imagem recebida]';
+  if (getRecord(message.videoMessage)) return '[video recebido]';
+  if (getRecord(message.documentMessage)) return '[documento recebido]';
+  if (getRecord(message.audioMessage)) return '[audio recebido]';
+  if (getRecord(message.stickerMessage)) return '[figurinha recebida]';
+  if (getRecord(message.locationMessage) || getRecord(message.liveLocationMessage)) {
+    return '[localizacao recebida]';
+  }
+  if (getRecord(message.contactMessage) || getRecord(message.contactsArrayMessage)) {
+    return '[contato recebido]';
+  }
+  if (normalizeOptionalText(message.mediaUrl)) return '[midia recebida]';
+
+  return null;
+}
+
 function extractEvolutionMessages(
   tenantId: number,
   provider: string,
@@ -1129,13 +1248,12 @@ function extractEvolutionMessages(
       const fromMe = toBool(item.fromMe ?? key?.fromMe, false);
       if (fromMe) return null;
 
-      const phone = normalizeWhatsAppPhone(
-        key?.remoteJid ?? item.remoteJid ?? item.sender ?? item.from ?? item.participant
-      );
+      const phone = resolveEvolutionCustomerPhone(item);
       const messageText =
         extractTextFromMessageNode(item.message) ||
         normalizeOptionalText(item.body) ||
-        normalizeOptionalText(item.text);
+        normalizeOptionalText(item.text) ||
+        extractEvolutionFallbackText(item.message);
 
       if (!phone || !messageText) return null;
 
@@ -1149,9 +1267,16 @@ function extractEvolutionMessages(
           normalizeOptionalText(item.notifyName),
         message_text: messageText,
         provider_message_id:
-          normalizeOptionalText(key?.id) || normalizeOptionalText(item.id),
+          normalizeOptionalText(key?.id) ||
+          normalizeOptionalText(item.id) ||
+          normalizeOptionalText(item.messageId),
         created_at: normalizeTimestamp(
-          item.messageTimestamp ?? item.timestamp ?? item.createdAt ?? root?.createdAt
+          item.messageTimestamp ??
+            item.timestamp ??
+            item.createdAt ??
+            item.date_time ??
+            root?.createdAt ??
+            root?.date_time
         ),
         payload_json: payloadJson,
       } satisfies NormalizedInboundWhatsAppMessage;
@@ -1313,12 +1438,39 @@ async function insertInboundMessage(message: NormalizedInboundWhatsAppMessage) {
 export async function registerInboundWhatsAppMessages(
   input: RegisterInboundWhatsAppMessagesInput
 ): Promise<RegisterInboundWhatsAppMessagesResult> {
-  const tenantId = parsePositiveInt(input.tenantId);
+  const resolvedTenant = await resolveTenantContext(input.tenantId, input.payload);
+  const tenantId = resolvedTenant.tenantId;
+  const eventName = resolveInboundEventName(input.webhookEventName, input.payload);
+
+  if (resolvedTenant.conflict) {
+    logInfo('whatsAppInboundService.tenantResolved', {
+      tenantId: input.tenantId,
+      resolvedTenantId: null,
+      routeTenantId: resolvedTenant.routeTenantId,
+      payloadTenantId: resolvedTenant.payloadTenantId,
+      instance: resolvedTenant.instance,
+      webhookEventName: eventName,
+      payloadEvent: extractPayloadEventName(input.payload),
+      accepted: false,
+      reason: 'tenant_id_conflict',
+    });
+    return {
+      accepted: false,
+      reason: 'tenant_id_conflict',
+      provider: null,
+      savedCount: 0,
+      ignoredCount: 0,
+    };
+  }
+
   if (!tenantId) {
     logInfo('whatsAppInboundService.tenantResolved', {
       tenantId: input.tenantId,
       resolvedTenantId: null,
-      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      routeTenantId: resolvedTenant.routeTenantId,
+      payloadTenantId: resolvedTenant.payloadTenantId,
+      instance: resolvedTenant.instance,
+      webhookEventName: eventName,
       payloadEvent: extractPayloadEventName(input.payload),
       accepted: false,
       reason: 'invalid_tenant_id',
@@ -1343,7 +1495,10 @@ export async function registerInboundWhatsAppMessages(
     logInfo('whatsAppInboundService.tenantResolved', {
       tenantId,
       resolvedTenantId: tenantId,
-      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      routeTenantId: resolvedTenant.routeTenantId,
+      payloadTenantId: resolvedTenant.payloadTenantId,
+      instance: resolvedTenant.instance,
+      webhookEventName: eventName,
       payloadEvent: extractPayloadEventName(input.payload),
       accepted: false,
       reason: 'tenant_whatsapp_config_not_found',
@@ -1361,7 +1516,10 @@ export async function registerInboundWhatsAppMessages(
     logInfo('whatsAppInboundService.tenantResolved', {
       tenantId,
       resolvedTenantId: tenantId,
-      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      routeTenantId: resolvedTenant.routeTenantId,
+      payloadTenantId: resolvedTenant.payloadTenantId,
+      instance: resolvedTenant.instance,
+      webhookEventName: eventName,
       payloadEvent: extractPayloadEventName(input.payload),
       provider: normalizeProviderName(config.provider),
       providerConfigPresent: Boolean(normalizeOptionalText(config.provider_config_json)),
@@ -1378,6 +1536,29 @@ export async function registerInboundWhatsAppMessages(
   }
 
   const provider = normalizeProviderName(config.provider) || 'generic_http';
+  if (
+    (provider === 'evolution' || provider === 'evolution_api') &&
+    !isSupportedEvolutionInboundEvent(eventName)
+  ) {
+    logInfo('whatsAppInboundService.eventIgnored', {
+      tenantId,
+      routeTenantId: resolvedTenant.routeTenantId,
+      payloadTenantId: resolvedTenant.payloadTenantId,
+      instance: resolvedTenant.instance,
+      webhookEventName: eventName,
+      payloadEvent: extractPayloadEventName(input.payload),
+      provider,
+      reason: 'unsupported_evolution_event',
+    });
+    return {
+      accepted: true,
+      reason: 'unsupported_evolution_event',
+      provider,
+      savedCount: 0,
+      ignoredCount: 0,
+    };
+  }
+
   const tenant = await q1<TenantInboundAutoReplyRow>(
     `SELECT c.id,
             c.usuario,
@@ -1396,7 +1577,10 @@ export async function registerInboundWhatsAppMessages(
   logInfo('whatsAppInboundService.tenantResolved', {
     tenantId,
     resolvedTenantId: tenantId,
-    webhookEventName: normalizeOptionalText(input.webhookEventName),
+    routeTenantId: resolvedTenant.routeTenantId,
+    payloadTenantId: resolvedTenant.payloadTenantId,
+    instance: resolvedTenant.instance,
+    webhookEventName: eventName,
     payloadEvent: extractPayloadEventName(input.payload),
     provider,
     providerConfigPresent: Boolean(normalizeOptionalText(config.provider_config_json)),
@@ -1408,8 +1592,11 @@ export async function registerInboundWhatsAppMessages(
   if (inboundMessages.length === 0) {
     logInfo('whatsAppInboundService.noSupportedMessages', {
       tenantId,
+      routeTenantId: resolvedTenant.routeTenantId,
+      payloadTenantId: resolvedTenant.payloadTenantId,
+      instance: resolvedTenant.instance,
       provider,
-      webhookEventName: normalizeOptionalText(input.webhookEventName),
+      webhookEventName: eventName,
       payloadEvent: extractPayloadEventName(input.payload),
       reason: 'no_supported_messages_found',
     });
