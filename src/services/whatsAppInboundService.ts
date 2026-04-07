@@ -1296,18 +1296,28 @@ function isIgnoredEvolutionJid(value: unknown) {
   );
 }
 
-function resolveEvolutionCustomerPhone(item: JsonRecord) {
+function resolveEvolutionRemotePhone(item: JsonRecord) {
   const key = getRecord(item.key);
   const remoteJid = normalizeOptionalText(key?.remoteJid ?? item.remoteJid);
   if (isIgnoredEvolutionJid(remoteJid)) return null;
 
+  return normalizeWhatsAppPhone(remoteJid);
+}
+
+function resolveEvolutionCustomerPhone(
+  item: JsonRecord,
+  options?: {
+    strictEnvelopeFallback?: boolean;
+  }
+) {
+  const key = getRecord(item.key);
+  const remotePhone = resolveEvolutionRemotePhone(item);
+  if (remotePhone) return remotePhone;
+
   const candidates = [
-    item.sender,
-    item.from,
     item.participant,
     key?.participant,
-    key?.remoteJid,
-    item.remoteJid,
+    ...(options?.strictEnvelopeFallback ? [] : [item.sender, item.from]),
   ];
 
   for (const candidate of candidates) {
@@ -1473,7 +1483,13 @@ function extractEvolutionMessages(
       const fromMe = toBool(item.fromMe ?? key?.fromMe ?? envelope?.fromMe ?? envelopeKey?.fromMe, false);
       if (fromMe) return null;
 
-      const phone = resolveEvolutionCustomerPhone(item) || (envelope ? resolveEvolutionCustomerPhone(envelope) : null);
+      const phone =
+        resolveEvolutionCustomerPhone(item) ||
+        (envelope
+          ? resolveEvolutionCustomerPhone(envelope, {
+              strictEnvelopeFallback: true,
+            })
+          : null);
       const messageText =
         extractTextFromMessageNode(item.message) ||
         normalizeOptionalText(item.body) ||

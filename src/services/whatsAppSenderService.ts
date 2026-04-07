@@ -111,6 +111,57 @@ function normalizeBrazilWhatsAppNumber(rawValue: unknown) {
   return digits;
 }
 
+function tryNormalizeBrazilWhatsAppNumber(rawValue: unknown) {
+  const digits = String(rawValue ?? '').replace(/\D/g, '');
+  if (!digits) return null;
+
+  if (digits.startsWith('55') && digits.length >= 12) {
+    return digits;
+  }
+
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+
+  if (digits.length < 10) {
+    return null;
+  }
+
+  return digits;
+}
+
+function normalizeConfiguredWhatsAppNumber(rawValue: unknown) {
+  const normalized = normalizeOptionalText(rawValue);
+  if (!normalized) return null;
+  if (!/^[+\d\s().-]+(?:@[a-z0-9.-]+)?$/i.test(normalized)) return null;
+
+  return tryNormalizeBrazilWhatsAppNumber(normalized);
+}
+
+function resolveConfiguredWhatsAppNumbers(config: ProviderConfigRecord) {
+  const candidates = [
+    config.phone_number,
+    config.display_number,
+    config.whatsapp_number,
+    config.business_phone,
+    config.business_phone_number,
+    config.sender_number,
+    config.sender_phone,
+    config.instance_phone,
+    config.instance_number,
+    config.wa_id,
+    config.instance,
+    config.instance_name,
+    config.instanceName,
+  ];
+
+  return new Set(
+    candidates
+      .map((candidate) => normalizeConfiguredWhatsAppNumber(candidate))
+      .filter((candidate): candidate is string => Boolean(candidate))
+  );
+}
+
 function buildUrl(baseUrl: string, endpoint?: string | null) {
   const safeBaseUrl = baseUrl.replace(/\/+$/, '');
   const safeEndpoint = String(endpoint || '').trim();
@@ -240,6 +291,12 @@ export async function sendWhatsAppMessage(
   const provider = normalizeProviderName(input.provider) || 'generic_http';
   const config = parseProviderConfigJson(input.providerConfigJson);
   const recipient = normalizeBrazilWhatsAppNumber(input.to);
+  const configuredWhatsAppNumbers = resolveConfiguredWhatsAppNumbers(config);
+
+  if (configuredWhatsAppNumbers.has(recipient)) {
+    throw new Error('Envio bloqueado: recipient igual ao numero da instancia configurada');
+  }
+
   const requestConfig = resolveHttpRequestConfig(provider, config, recipient, input.message);
 
   const response = await fetch(requestConfig.url, {
