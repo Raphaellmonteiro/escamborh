@@ -88,8 +88,8 @@ export default function LoginScreen({
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
           <div className="h-[3px] w-full bg-zinc-900" />
           <div className="p-7">
-            <h2 className="text-base font-bold text-zinc-900 mb-0.5">Entrar no sistema</h2>
-            <p className="text-xs text-zinc-400 mb-6">Usuário e senha para acessar o FlowPDV</p>
+            <h2 className="text-base font-bold text-zinc-900 mb-0.5">Entrar na operação</h2>
+            <p className="text-xs text-zinc-400 mb-6">Use seu usuário e senha para acessar o FlowPDV da sua operação de food service.</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Usuário */}
@@ -186,6 +186,18 @@ export default function LoginScreen({
             </svg>
             Painel Admin
           </a>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white/70 p-4 text-center">
+          <p className="text-xs font-semibold text-zinc-700">Ainda não usa o FlowPDV na sua operação?</p>
+          <p className="mt-1 text-[11px] text-zinc-500">Solicite seu acesso para organizar pedidos, caixa, cozinha e delivery no mesmo sistema.</p>
+          <button
+            type="button"
+            onClick={onShowSolicitacao}
+            className="mt-3 inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-700"
+          >
+            Solicitar acesso para food service
+          </button>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-zinc-400">

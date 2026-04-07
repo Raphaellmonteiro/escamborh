@@ -85,6 +85,70 @@ function readStoredPlanFeatures(): PlanFeature[] {
   }
 }
 
+type PublicMeta = {
+  title: string;
+  description: string;
+};
+
+function setDocumentMeta(name: string, content: string, attr: 'name' | 'property' = 'name') {
+  let el = document.head.querySelector(`meta[${attr}="${name}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, name);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+}
+
+function getPublicMeta(path: string): PublicMeta {
+  if (path === '/login') {
+    return {
+      title: 'Entrar no FlowPDV | Acesso da operação',
+      description: 'Acesse o FlowPDV para operar caixa, pedidos, cozinha, mesas e delivery da sua operação de food service.',
+    };
+  }
+  if (path === '/privacidade') {
+    return {
+      title: 'Política de Privacidade | FlowPDV',
+      description: 'Consulte a política de privacidade do FlowPDV e as informações aplicáveis à operação da plataforma.',
+    };
+  }
+  if (path === '/termos') {
+    return {
+      title: 'Termos de Uso | FlowPDV',
+      description: 'Consulte os termos de uso do FlowPDV para estabelecimentos e usuários autorizados.',
+    };
+  }
+  if (/^\/delivery\/[^/]+\/pedido\/\d+$/.test(path)) {
+    return {
+      title: 'Acompanhe seu pedido | FlowPDV',
+      description: 'Acompanhe o andamento do seu pedido online em tempo real.',
+    };
+  }
+  if (/^\/delivery\/[^/]+$/.test(path)) {
+    return {
+      title: 'Cardápio online e pedidos | FlowPDV',
+      description: 'Peça online com cardápio digital, retirada ou delivery direto pelo FlowPDV.',
+    };
+  }
+  if (/^\/display\/[^/]+$/.test(path)) {
+    return {
+      title: 'Painel de pedidos | FlowPDV',
+      description: 'Acompanhe a chamada e o andamento dos pedidos em tempo real.',
+    };
+  }
+  if (/^\/mesa\/[^/]+\/[^/]+$/.test(path)) {
+    return {
+      title: 'Mesa digital | FlowPDV',
+      description: 'Acompanhe e interaja com o pedido da sua mesa.',
+    };
+  }
+  return {
+    title: 'FlowPDV | PDV para Food Service',
+    description: 'PDV para food service com pedidos, delivery, cardápio online, cozinha/KDS, mesas e estoque no mesmo sistema.',
+  };
+}
+
 export default function App() {
   const OPERATIONAL_ALERT_SOUND_KEY = 'flowpdv_operational_alert_sound';
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -258,18 +322,30 @@ export default function App() {
   // Rastreamento público: /delivery/:slug/pedido/:id
   const trackingMatch  = path.match(/^\/delivery\/([^/]+)\/pedido\/(\d+)$/);
 
-  // ── Títulos por rota ──────────────────────────────────────────────────────────
-  if (isAdmin)          document.title = 'Admin — FlowPDV';
-  else if (kdsSlug)     document.title = 'Tela de Pedidos — FlowPDV';
-  else if (bookingSlug) document.title = 'Agendamento Online — FlowPDV';
-  else if (isPonto)     document.title = 'Sistema de Ponto — FlowPDV';
-  else if (displayMatch)  document.title = 'Painel do Salão — FlowPDV';
-  else if (mesaMatch)     document.title = 'Sua Mesa — FlowPDV';
-  else if (trackingMatch) document.title = 'Acompanhar Pedido Online — FlowPDV';
-  else if (deliveryMatch) document.title = 'Peça Online — FlowPDV';
-  else if (path === '/privacidade') document.title = 'Política de Privacidade — FlowPDV';
-  else if (path === '/termos') document.title = 'Termos de Uso — FlowPDV';
-  else                    document.title = 'FlowPDV';
+  useEffect(() => {
+    const meta = getPublicMeta(path);
+    if (isAdmin) {
+      document.title = 'Admin — FlowPDV';
+      return;
+    }
+    if (kdsSlug) {
+      document.title = 'Tela de Pedidos — FlowPDV';
+      return;
+    }
+    if (bookingSlug) {
+      document.title = 'Página pública indisponível — FlowPDV';
+      return;
+    }
+    if (isPonto) {
+      document.title = 'Sistema de Ponto — FlowPDV';
+      return;
+    }
+
+    document.title = meta.title;
+    setDocumentMeta('description', meta.description);
+    setDocumentMeta('og:title', meta.title, 'property');
+    setDocumentMeta('og:description', meta.description, 'property');
+  }, [path, isAdmin, kdsSlug, bookingSlug, isPonto]);
 
   const segmentoOperacional = getOperationalSegment(estabelecimentoSegmento);
   const segCfg = getSegCfg(segmentoOperacional);
@@ -403,7 +479,7 @@ React.useEffect(() => {
     );
   }
 
-  // ── Site público de agendamento ──────────────────────────────────────────────
+  // ── Rota pública legada desativada ───────────────────────────────────────────
   if (bookingSlug) return <SegmentDisabledNotice />;
   if (kdsSlug) {
     return (
@@ -1201,9 +1277,9 @@ function SegmentDisabledNotice() {
         <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-zinc-100 flex items-center justify-center text-3xl">
           🍽️
         </div>
-        <h1 className="text-2xl font-black text-zinc-900">Agendamento indisponivel</h1>
+        <h1 className="text-2xl font-black text-zinc-900">Página pública indisponível</h1>
         <p className="mt-3 text-sm leading-6 text-zinc-500">
-          Esta pagina publica de agendamento nao esta disponivel nesta versao do FlowPDV.
+          Este link público não está disponível nesta versão do FlowPDV para operações de food service.
         </p>
         <a
           href="/"

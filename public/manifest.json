@@ -1,7 +1,7 @@
 {
-  "name": "FlowPDV — Gestão de Negócios",
+  "name": "FlowPDV — PDV para Food Service",
   "short_name": "FlowPDV",
-  "description": "Sistema de gestão e ponto de venda para pequenos e médios negócios brasileiros",
+  "description": "PDV para food service com pedidos, delivery, cardápio online, cozinha, mesas e estoque.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080c14",
@@ -16,6 +16,6 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["business", "productivity", "utilities"],
+  "categories": ["business", "food", "productivity"],
   "screenshots": []
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ACTIVE_SEGMENT_OPTIONS } from '../config/segmentos';
 
@@ -20,31 +20,27 @@ const SEGMENTS: Segment[] = ACTIVE_SEGMENT_OPTIONS.map((segment) => ({
 
 const FEATURES: Feature[] = [
   { icon: '🛒', name: 'PDV de balcão & mesa', span2: true,
-    desc: 'Venda rápida com busca, carrinho, descontos e Pix, cartão e dinheiro. Mesas e comandas quando o segmento pede. Tablet, celular ou PC — sem instalar app.' },
+    desc: 'Venda rápida para balcão, mesas e retirada com busca, carrinho, descontos e recebimento em Pix, cartão e dinheiro.' },
   { icon: '📱', name: 'Cardápio online & delivery',
-    desc: 'Loja pública com seu slug, pedidos delivery e retirada, acompanhamento e operação integrada ao balcão.' },
+    desc: 'Cardápio online com link e QR Code para delivery e retirada, com pedidos caindo direto na operação.' },
   { icon: '👨‍🍳', name: 'Pedidos, KDS e central',
     desc: 'Fila de produção, status em tempo real e quadro de pedidos para não perder nada no rush.' },
   { icon: '💰', name: 'Caixa & financeiro',
     desc: 'Abertura e fechamento, sangria e suprimento, visão do dia e integração com a rotina do caixa.' },
   { icon: '📦', name: 'Estoque & insumos',
     desc: 'Baixa na venda, mínimos, movimentações e controle alinhado ao cardápio e à cozinha.' },
-  { icon: '👥', name: 'RH, ponto facial & permissões',
-    desc: 'Cargos e acesso por módulo; quiosque com reconhecimento facial (e PIN) e espelho de ponto; logs de ações sensíveis para auditoria.' },
   { icon: '📊', name: 'Dashboard & relatórios',
     desc: 'Vendas, ticket médio, itens fortes e tendências — leitura rápida para decisão no dia a dia.' },
   { icon: '🤖', name: 'FlowAI & alertas',
     desc: 'Avisos inteligentes sobre estoque, vendas e operação; central de notificações no painel.' },
-  { icon: '📄', name: 'Fiscal & recibos',
-    desc: 'Recibo, PDF e térmica 58/80mm; suporte a XML NF-e / NFS-e conforme sua operação.' },
 ];
 
 const DIFFERENTIALS: Differential[] = [
-  { num: '01', title: 'Feito para bar e cozinha',    desc: 'Perfis para restaurante, hamburgueria, lanchonete, bar e adega — telas e fluxos pensados para alimentação e bebidas, não para varejo genérico.' },
-  { num: '02', title: 'SaaS no navegador',          desc: 'Multi-tenant: cada cliente com dados e ambiente isolados. Sem instalação; atualizações contínuas.' },
-  { num: '03', title: 'NF-e / NFS-e no fluxo',      desc: 'Exportação fiscal em XML integrada à operação, no padrão brasileiro.' },
-  { num: '04', title: 'Operação + cardápio digital', desc: 'Do pedido no balcão ou online até a cozinha e o caixa — um único sistema.' },
-  { num: '05', title: 'RM Tecnologia, suporte BR',  desc: 'Produto e atendimento em português, focado em estabelecimentos do Brasil.' },
+  { num: '01', title: 'Feito para food service', desc: 'Fluxos pensados para restaurante, hamburgueria, lanchonete, bar e adega, sem cara de varejo genérico.' },
+  { num: '02', title: 'PDV, cozinha e delivery juntos', desc: 'O pedido do balcão, da mesa ou do cardápio online segue no mesmo fluxo até a produção e o caixa.' },
+  { num: '03', title: 'Operação pronta para o rush', desc: 'Central de pedidos, KDS, mesas, retirada e delivery organizados para acompanhar picos com mais controle.' },
+  { num: '04', title: 'Configuração por segmento', desc: 'Os blocos e a linguagem acompanham a operação de cada casa, de restaurante a adega.' },
+  { num: '05', title: 'RM Tecnologia, suporte BR', desc: 'Produto e atendimento em português, focados na rotina de operações brasileiras de food service.' },
 ];
 
 const AI_ALERTS: AIAlert[] = [
@@ -105,6 +101,41 @@ const CSS = `
     .lp-seg-grid  { grid-template-columns: 1fr 1fr !important; }
     .lp-section { padding: 56px 5%; }
   }
+  @media (max-width: 720px) {
+    .lp-nav {
+      height: auto !important;
+      padding: 12px 5% !important;
+      align-items: flex-start !important;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .lp-nav-brand {
+      flex: 1 1 auto;
+      min-width: 0;
+      align-items: flex-start !important;
+      flex-wrap: wrap;
+      gap: 8px !important;
+    }
+    .lp-nav-brand-main {
+      font-size: 1.05rem !important;
+    }
+    .lp-nav-badge {
+      font-size: 0.56rem !important;
+      padding: 3px 6px !important;
+    }
+    .lp-nav-actions {
+      width: 100%;
+      justify-content: space-between;
+      gap: 10px !important;
+    }
+    .lp-nav-link {
+      font-size: 0.82rem !important;
+    }
+    .lp-nav-cta {
+      padding: 8px 14px !important;
+      font-size: 0.82rem !important;
+    }
+  }
 `;
 
 /* ─── componente principal ───────────────────────────────────────── */
@@ -137,23 +168,25 @@ export default function LandingPage({
   return (
     <div className="lp-root">
       {/* ── NAV ─────────────────────────────────────────────────── */}
-      <nav style={{
+      <nav className="lp-nav" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 5%', background: 'rgba(9,9,11,0.88)', backdropFilter: 'blur(20px)',
         borderBottom: '1px solid rgba(255,255,255,0.07)',
       }}>
-        <div className="lp-font-display" style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
-          Flow<span style={{ background: 'linear-gradient(135deg,#34d399,#22d3ee)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>PDV</span>
-          <span style={{ fontSize: '0.62rem', fontFamily: 'DM Sans, sans-serif', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#71717a', border: '1px solid rgba(63,63,70,0.9)', padding: '3px 8px', borderRadius: 4 }}>
+        <div className="lp-nav-brand lp-font-display" style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="lp-nav-brand-main">
+            Flow<span style={{ background: 'linear-gradient(135deg,#34d399,#22d3ee)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>PDV</span>
+          </div>
+          <span className="lp-nav-badge" style={{ fontSize: '0.62rem', fontFamily: 'DM Sans, sans-serif', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#71717a', border: '1px solid rgba(63,63,70,0.9)', padding: '3px 8px', borderRadius: 4 }}>
             RM Tecnologia
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <button onClick={goToLogin} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#a1a1aa', fontFamily: 'DM Sans, sans-serif' }}>
+        <div className="lp-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <button className="lp-nav-link" onClick={goToLogin} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#a1a1aa', fontFamily: 'DM Sans, sans-serif' }}>
             Entrar
           </button>
-          <button onClick={goToSolicitar} style={{
+          <button className="lp-nav-cta" onClick={goToSolicitar} style={{
             background: 'linear-gradient(135deg,#2563eb,#059669)', color: '#fff',
             border: 'none', borderRadius: 8, padding: '8px 20px', fontWeight: 600,
             fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
@@ -181,7 +214,7 @@ export default function LandingPage({
                 fontSize: '0.78rem', color: '#6ee7b7', letterSpacing: '0.04em', fontWeight: 500,
               }}>
                 <span style={{ width: 20, height: 20, background: 'linear-gradient(135deg,#059669,#2563eb)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', flexShrink: 0 }}>✦</span>
-                Alimentação & bebidas · SaaS Brasil
+                Software para food service no Brasil
               </div>
             </motion.div>
 
@@ -192,7 +225,7 @@ export default function LandingPage({
             </motion.h1>
 
             <motion.p variants={fadeUp} style={{ fontSize: '1.05rem', color: '#a1a1aa', lineHeight: 1.7, maxWidth: 540, marginBottom: '1.75rem', fontWeight: 300 }}>
-              <strong style={{ color: '#fafafa', fontWeight: 500 }}>FlowPDV</strong> é o painel operacional para restaurantes, hamburguerias, lanchonetes, bares e adegas: <strong style={{ color: '#fafafa', fontWeight: 500 }}>balcão, cardápio online, pedidos, caixa, estoque, RH e ponto com facial</strong> — multi-tenant, em tempo real, no navegador.
+              <strong style={{ color: '#fafafa', fontWeight: 500 }}>FlowPDV</strong> ajuda restaurantes, hamburguerias, lanchonetes, bares e adegas a vender e operar melhor com <strong style={{ color: '#fafafa', fontWeight: 500 }}>PDV, pedidos, delivery, cardápio online com link e QR Code, cozinha/KDS, mesas e estoque</strong> no mesmo sistema.
             </motion.p>
 
             <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -221,7 +254,7 @@ export default function LandingPage({
             </motion.div>
 
             <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1.4rem', marginTop: '1.75rem', flexWrap: 'wrap' }}>
-              {['✓ 7 dias grátis','✓ Sem cartão','✓ Multi-tenant seguro','✓ Tablet e celular'].map(t => (
+              {['✓ 7 dias grátis','✓ Sem cartão','✓ Link e QR Code','✓ Tablet e celular'].map(t => (
                 <span key={t} style={{ fontSize: '0.8rem', color: '#71717a', display: 'flex', alignItems: 'center', gap: 5 }}>{t}</span>
               ))}
             </motion.div>
@@ -283,11 +316,11 @@ export default function LandingPage({
                 <span style={{ display: 'block', width: 20, height: 1, background: '#34d399' }} />Segmentos atendidos
               </div>
               <h2 className="lp-font-display" style={{ fontSize: 'clamp(1.9rem,4vw,2.6rem)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.025em', marginBottom: '0.75rem' }}>
-                Do salão à adega,{' '}
+                Do balcão à adega,{' '}
                 <span style={{ background: 'linear-gradient(135deg,#34d399,#38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>no mesmo produto</span>
               </h2>
               <p style={{ fontSize: '1rem', color: '#a1a1aa', maxWidth: 560, lineHeight: 1.7, fontWeight: 300, marginBottom: '2.5rem' }}>
-                Cardápio, cozinha, caixa e estoque falam a língua do seu segmento — mesas e KDS quando faz sentido, adega com foco em bebidas, fast food no ritmo do balcão.
+                PDV, cozinha, delivery e estoque falam a língua do seu segmento, com mesas quando faz sentido, adega com foco em bebidas e fast food no ritmo do balcão.
               </p>
             </motion.div>
             <motion.div className="lp-seg-grid" variants={stagger} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
@@ -325,7 +358,7 @@ export default function LandingPage({
                 <span style={{ background: 'linear-gradient(135deg,#34d399,#38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>sem lacunas</span>
               </h2>
               <p style={{ fontSize: '1rem', color: '#a1a1aa', maxWidth: 580, lineHeight: 1.7, fontWeight: 300, marginBottom: '2.5rem' }}>
-                O que você usa no dia a dia no FlowPDV — cardápio público, pedidos, ponto com facial e alertas — descrito de forma direta.
+                Os blocos centrais da operação: PDV, cardápio online, KDS, pedidos, caixa, estoque e relatórios para o dia a dia do food service.
               </p>
             </motion.div>
             <motion.div className="lp-feat-grid" variants={stagger} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18 }}>
@@ -365,7 +398,7 @@ export default function LandingPage({
                 <span style={{ background: 'linear-gradient(135deg,#34d399,#38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>FlowPDV</span>?
               </h2>
               <p style={{ fontSize: '1rem', color: '#a1a1aa', lineHeight: 1.7, fontWeight: 300, marginBottom: '2rem' }}>
-                Especialização em food service e bebidas, com isolamento por cliente e stack pensada para operação brasileira.
+                Especialização em food service e bebidas, com fluxo pensado para a operação brasileira.
               </p>
             </motion.div>
             <motion.ul variants={stagger} style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -388,7 +421,7 @@ export default function LandingPage({
             style={{ background: '#18181b', border: '1px solid rgba(39,39,42,0.95)', borderRadius: 20, padding: 32, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg,#10b981,#2563eb)' }} />
             <div className="lp-font-display" style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>🤖 FlowAI</div>
-            <div style={{ fontSize: '0.82rem', color: '#a1a1aa', marginBottom: 20 }}>Alertas e insights a partir dos seus dados — estoque, vendas, caixa e rotina do salão, com avisos na central do sistema.</div>
+            <div style={{ fontSize: '0.82rem', color: '#a1a1aa', marginBottom: 20 }}>Alertas e insights a partir dos seus dados de estoque, vendas, caixa e rotina da operação, com avisos na central do sistema.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {AI_ALERTS.map((a, i) => (
                 <motion.div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(39,39,42,0.9)', borderRadius: 10, padding: '11px 14px', fontSize: '0.8rem', color: '#a1a1aa', display: 'flex', alignItems: 'flex-start', gap: 10 }}
@@ -408,15 +441,15 @@ export default function LandingPage({
         <motion.div className="lp-inner" initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-80px' }} variants={stagger} style={{ maxWidth: 700, position: 'relative', zIndex: 1 }}>
           <motion.div variants={fadeUp}>
             <span style={{ display: 'inline-block', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(52,211,153,0.28)', borderRadius: 100, padding: '6px 16px', fontSize: '0.78rem', color: '#6ee7b7', fontWeight: 500, letterSpacing: '0.05em', marginBottom: 20 }}>
-              ✦ 7 dias grátis · sem cartão · ambiente dedicado por cliente
+              ✦ 7 dias grátis · sem cartão · implantação acompanhada
             </span>
           </motion.div>
           <motion.h2 variants={fadeUp} className="lp-font-display" style={{ fontSize: 'clamp(1.9rem,4vw,2.6rem)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.025em', marginBottom: '0.75rem' }}>
             Pronto para{' '}
-            <span style={{ background: 'linear-gradient(135deg,#34d399,#38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>profissionalizar a operação</span>?
+            <span style={{ background: 'linear-gradient(135deg,#34d399,#38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>organizar o food service da sua operação</span>?
           </motion.h2>
           <motion.p variants={fadeUp} style={{ fontSize: '1rem', color: '#a1a1aa', lineHeight: 1.7, fontWeight: 300, marginBottom: '1.75rem' }}>
-            Teste o FlowPDV no seu restaurante, bar ou lanchonete. PDV, delivery, cozinha e equipe no mesmo painel — multi-tenant, em português.
+            Teste o FlowPDV na sua operação de food service. PDV, cardápio online, cozinha, delivery e estoque no mesmo sistema.
           </motion.p>
           <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <motion.button whileHover={{ scale: 1.03, y: -2 }} whileTap={{ scale: 0.97 }}
@@ -428,7 +461,7 @@ export default function LandingPage({
                 border: 'none', cursor: 'pointer', boxShadow: '0 4px 28px rgba(37,99,235,.42)',
                 fontFamily: 'DM Sans, sans-serif',
               }}>
-              Solicitar acesso grátis
+              Solicitar acesso para food service
             </motion.button>
           </motion.div>
           <motion.p variants={fadeUp} style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '1.2rem' }}>
