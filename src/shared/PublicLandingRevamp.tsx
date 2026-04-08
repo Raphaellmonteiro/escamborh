@@ -76,24 +76,24 @@ const FEATURE_TONE_STYLES: Record<
   { color: string; background: string; border: string }
 > = {
   emerald: {
-    color: '#86efac',
-    background: 'rgba(16,185,129,0.12)',
-    border: '1px solid rgba(52,211,153,0.18)',
+    color: '#b7f7d6',
+    background: 'linear-gradient(180deg, rgba(8,60,46,0.72) 0%, rgba(6,36,29,0.82) 100%)',
+    border: '1px solid rgba(52,211,153,0.22)',
   },
   sky: {
-    color: '#7dd3fc',
-    background: 'rgba(37,99,235,0.12)',
-    border: '1px solid rgba(96,165,250,0.18)',
+    color: '#d4eeff',
+    background: 'linear-gradient(180deg, rgba(9,52,77,0.7) 0%, rgba(7,33,54,0.82) 100%)',
+    border: '1px solid rgba(56,189,248,0.22)',
   },
   amber: {
-    color: '#fde68a',
-    background: 'rgba(245,158,11,0.12)',
-    border: '1px solid rgba(245,158,11,0.18)',
+    color: '#fbe3a1',
+    background: 'linear-gradient(180deg, rgba(74,44,12,0.74) 0%, rgba(50,28,8,0.84) 100%)',
+    border: '1px solid rgba(245,158,11,0.22)',
   },
   violet: {
-    color: '#ddd6fe',
-    background: 'rgba(124,58,237,0.12)',
-    border: '1px solid rgba(167,139,250,0.18)',
+    color: '#f6d1df',
+    background: 'linear-gradient(180deg, rgba(74,28,49,0.72) 0%, rgba(45,17,33,0.82) 100%)',
+    border: '1px solid rgba(244,114,182,0.2)',
   },
 };
 
@@ -254,35 +254,109 @@ const CSS = `
   .lp-root * { box-sizing: border-box; }
   .lp-root {
     font-family: 'DM Sans', system-ui, sans-serif;
+    --lp-text-main: #f8fafc;
+    --lp-text-soft: #d7e3ee;
+    --lp-text-muted: #8ea0b5;
+    --lp-border-soft: rgba(148, 163, 184, 0.14);
+    --lp-border-strong: rgba(148, 163, 184, 0.22);
+    --lp-surface-1: rgba(12, 19, 30, 0.88);
+    --lp-surface-2: rgba(8, 13, 22, 0.96);
+    --lp-warm: #f59e0b;
+    --lp-warm-strong: #ea580c;
+    --lp-fresh: #34d399;
+    --lp-cool: #38bdf8;
     color: #f8fafc;
     min-height: 100vh;
     overflow-x: hidden;
     position: relative;
     background:
-      radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 32%),
-      radial-gradient(circle at 85% 10%, rgba(16, 185, 129, 0.14), transparent 28%),
-      linear-gradient(180deg, #05070b 0%, #09111a 48%, #05070b 100%);
+      radial-gradient(circle at 14% 0%, rgba(249, 115, 22, 0.18), transparent 24%),
+      radial-gradient(circle at 82% 10%, rgba(16, 185, 129, 0.13), transparent 28%),
+      radial-gradient(circle at 50% 86%, rgba(56, 189, 248, 0.1), transparent 34%),
+      linear-gradient(180deg, #05070b 0%, #0a1018 46%, #05070b 100%);
   }
   .lp-root::before {
     content: '';
     position: fixed;
     inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
-    opacity: 0.4;
+    opacity: 0.24;
+    mix-blend-mode: screen;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .lp-root::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(5, 7, 11, 0) 0%, rgba(5, 7, 11, 0.12) 42%, rgba(5, 7, 11, 0.38) 100%);
     pointer-events: none;
     z-index: 0;
   }
   .lp-font-display { font-family: 'Syne', system-ui, sans-serif; }
   .lp-gradient-text {
-    background: linear-gradient(135deg, #34d399 0%, #38bdf8 100%);
+    background: linear-gradient(135deg, #f7c968 0%, #f59e0b 28%, #34d399 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
+  .lp-balance { text-wrap: balance; }
   @keyframes lp-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.82)} }
   .lp-live-dot { animation: lp-pulse 2s infinite; }
-  .lp-section { padding: 96px 5%; position: relative; z-index: 1; }
-  .lp-inner { max-width: 1180px; margin: 0 auto; }
+  .lp-section { padding: 110px 5.25%; position: relative; z-index: 1; }
+  .lp-section-hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding-top: 148px;
+    padding-bottom: 88px;
+  }
+  .lp-section-band {
+    background: linear-gradient(180deg, rgba(10, 16, 24, 0.58) 0%, rgba(10, 16, 24, 0.18) 100%);
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  }
+  .lp-section-compact { padding-top: 26px; }
+  .lp-inner { max-width: 1220px; margin: 0 auto; }
+  .lp-section-heading { margin-bottom: 34px; max-width: 760px; }
+  .lp-hero-title {
+    font-size: clamp(2.95rem, 6.35vw, 5rem);
+    line-height: 0.98;
+    letter-spacing: -0.065em;
+    font-weight: 800;
+    margin: 22px 0 20px;
+    max-width: 11.5ch;
+    text-shadow: 0 20px 44px rgba(2, 6, 23, 0.32);
+  }
+  .lp-section-title {
+    font-size: clamp(2.08rem, 4.2vw, 3.18rem);
+    font-weight: 800;
+    letter-spacing: -0.055em;
+    line-height: 1.03;
+    margin: 0 0 14px;
+    max-width: 13ch;
+  }
+  .lp-copy-lg {
+    margin: 0;
+    max-width: 660px;
+    font-size: 1.02rem;
+    line-height: 1.8;
+    color: var(--lp-text-soft);
+  }
+  .lp-copy-sm {
+    margin: 0;
+    max-width: 700px;
+    font-size: 0.87rem;
+    line-height: 1.76;
+    color: var(--lp-text-muted);
+  }
+  .lp-hero-note {
+    margin-top: 24px;
+    max-width: 700px;
+    color: var(--lp-text-muted);
+    font-size: 0.86rem;
+    line-height: 1.76;
+  }
   .lp-nav {
     position: fixed;
     inset: 0 0 auto 0;
@@ -290,56 +364,82 @@ const CSS = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 14px 5%;
-    background: rgba(5, 10, 15, 0.72);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-    backdrop-filter: blur(18px);
+    gap: 18px;
+    padding: 16px 5.25%;
+    background: rgba(6, 10, 16, 0.72);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.22);
+    backdrop-filter: blur(20px);
   }
-  .lp-nav-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .lp-nav-actions { display: flex; align-items: center; gap: 12px; }
+  .lp-nav-brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .lp-brand-pill {
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #98a8bb;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(10, 15, 23, 0.54);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .lp-nav-actions { display: flex; align-items: center; gap: 10px; }
   .lp-nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: 1px solid transparent;
     background: transparent;
-    border: none;
+    font-family: 'DM Sans', system-ui, sans-serif;
     color: #cbd5e1;
     font-size: 0.9rem;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
+    transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
   }
   .lp-surface {
     background:
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 28%),
-      linear-gradient(180deg, rgba(10, 18, 30, 0.88) 0%, rgba(7, 13, 24, 0.92) 100%);
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 26px;
-    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.42);
-    backdrop-filter: blur(18px);
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.09), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.08), transparent 24%),
+      linear-gradient(180deg, rgba(12, 19, 30, 0.9) 0%, rgba(8, 13, 22, 0.96) 100%);
+    border: 1px solid var(--lp-border-strong);
+    border-radius: 28px;
+    box-shadow: 0 30px 72px rgba(2, 6, 23, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
   }
   .lp-surface-soft {
-    background: rgba(15, 23, 42, 0.58);
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    border-radius: 18px;
-    backdrop-filter: blur(14px);
+    background: linear-gradient(180deg, rgba(16, 24, 36, 0.74) 0%, rgba(11, 18, 28, 0.82) 100%);
+    border: 1px solid var(--lp-border-soft);
+    border-radius: 22px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(16px);
+    transition: transform .22s ease, border-color .22s ease;
   }
   .lp-chip,
   .lp-chip-muted {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 14px;
+    padding: 9px 15px;
     border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 500;
+    font-size: 0.79rem;
+    font-weight: 600;
   }
   .lp-chip {
-    border: 1px solid rgba(96, 165, 250, 0.22);
-    background: rgba(8, 15, 28, 0.6);
-    color: #dbeafe;
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    background: linear-gradient(180deg, rgba(40, 24, 10, 0.68) 0%, rgba(18, 22, 33, 0.62) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    color: #fef3c7;
   }
   .lp-chip-muted {
     border: 1px solid rgba(148, 163, 184, 0.14);
-    background: rgba(15, 23, 42, 0.48);
-    color: #cbd5e1;
+    background: rgba(12, 18, 28, 0.62);
+    color: #d9e3ec;
   }
   .lp-button-primary,
   .lp-button-secondary {
@@ -347,51 +447,79 @@ const CSS = `
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 14px 24px;
-    border-radius: 14px;
-    font-size: 0.95rem;
-    font-weight: 600;
+    min-height: 54px;
+    padding: 15px 26px;
+    border-radius: 16px;
+    font-size: 0.96rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     cursor: pointer;
     transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background-color .18s ease;
     font-family: 'DM Sans', system-ui, sans-serif;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
   }
   .lp-button-primary {
     color: #fff;
-    border: none;
-    background: linear-gradient(135deg, #2563eb 0%, #059669 100%);
-    box-shadow: 0 18px 40px rgba(37, 99, 235, 0.28);
+    border: 1px solid rgba(245, 158, 11, 0.18);
+    background: linear-gradient(135deg, #f59e0b 0%, #ea580c 40%, #0f766e 100%);
+    box-shadow: 0 20px 44px rgba(234, 88, 12, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+  .lp-button-primary::after,
+  .lp-button-secondary::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: -1;
+  }
+  .lp-button-primary::after {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 42%);
   }
   .lp-button-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 22px 44px rgba(37, 99, 235, 0.34);
+    transform: translateY(-2px);
+    box-shadow: 0 24px 48px rgba(234, 88, 12, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
   .lp-button-secondary {
-    color: #e2e8f0;
+    color: #eef6fb;
     border: 1px solid rgba(148, 163, 184, 0.18);
-    background: rgba(8, 15, 28, 0.52);
+    background: linear-gradient(180deg, rgba(14, 22, 33, 0.82) 0%, rgba(9, 14, 22, 0.92) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .lp-button-secondary::after {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 55%);
   }
   .lp-button-secondary:hover,
   .lp-nav-link:hover {
     color: #fff;
-    border-color: rgba(96, 165, 250, 0.24);
+    border-color: rgba(245, 158, 11, 0.22);
+    background: rgba(18, 27, 39, 0.9);
+  }
+  .lp-button-primary:focus-visible,
+  .lp-button-secondary:focus-visible,
+  .lp-nav-link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
   }
   .lp-overline {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #86efac;
-    font-size: 0.74rem;
+    color: #f8c963;
+    font-size: 0.72rem;
     font-weight: 600;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
   }
   .lp-overline::before {
     content: '';
-    width: 20px;
+    width: 26px;
     height: 1px;
-    background: rgba(52, 211, 153, 0.88);
+    background: linear-gradient(90deg, rgba(251, 191, 36, 0.92), rgba(52, 211, 153, 0.5));
   }
-  .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) 440px; gap: 56px; align-items: center; }
+  .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1.02fr) 470px; gap: 64px; align-items: center; }
   .lp-hero-panel { padding: 28px; position: relative; overflow: hidden; }
   .lp-hero-panel::after {
     content: '';
@@ -406,7 +534,7 @@ const CSS = `
   .lp-meta-row { display: flex; flex-wrap: wrap; gap: 12px; }
   .lp-point-list {
     display: grid;
-    gap: 12px;
+    gap: 14px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -414,10 +542,10 @@ const CSS = `
   .lp-point-item {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    color: #dbe4f0;
-    font-size: 0.92rem;
-    line-height: 1.6;
+    gap: 13px;
+    color: var(--lp-text-soft);
+    font-size: 0.96rem;
+    line-height: 1.64;
   }
   .lp-kpi-grid,
   .lp-proof-grid,
@@ -426,22 +554,23 @@ const CSS = `
   .lp-diff-grid,
   .lp-alert-grid {
     display: grid;
-    gap: 18px;
+    gap: 20px;
   }
   .lp-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 24px 0; }
   .lp-kpi-card {
-    padding: 16px;
-    border-radius: 18px;
-    background: rgba(15, 23, 42, 0.7);
+    padding: 18px;
+    border-radius: 20px;
+    background: rgba(16, 24, 36, 0.74);
     border: 1px solid rgba(148, 163, 184, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
-  .lp-stack { display: grid; gap: 12px; }
+  .lp-stack { display: grid; gap: 14px; }
   .lp-stack-card {
     display: flex;
     gap: 14px;
     align-items: flex-start;
-    padding: 15px 16px;
-    border-radius: 18px;
+    padding: 16px 18px;
+    border-radius: 20px;
     background: rgba(15, 23, 42, 0.62);
     border: 1px solid rgba(148, 163, 184, 0.12);
   }
@@ -451,25 +580,36 @@ const CSS = `
   .lp-segment-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .lp-diff-grid { grid-template-columns: minmax(0, 1fr) 420px; align-items: center; }
   .lp-alert-grid { margin-top: 20px; }
-  .lp-hero-panel-rich { padding: 0; overflow: visible; background: transparent; border: none; box-shadow: none; }
-  .lp-system-stage { position: relative; min-height: 620px; display: flex; align-items: center; justify-content: center; }
+  .lp-hero-panel-rich { padding: 0; overflow: visible; background: transparent; border: none; box-shadow: none; position: relative; }
+  .lp-system-stage { position: relative; min-height: 660px; display: flex; align-items: center; justify-content: center; }
+  .lp-system-stage::before {
+    content: '';
+    position: absolute;
+    inset: 76px 34px 56px;
+    border-radius: 34px;
+    background:
+      radial-gradient(circle at top left, rgba(249, 115, 22, 0.12), transparent 42%),
+      radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.1), transparent 42%);
+    filter: blur(12px);
+    pointer-events: none;
+  }
   .lp-window-shell {
     width: 100%;
     position: relative;
     overflow: hidden;
-    background: linear-gradient(180deg, rgba(8,15,28,0.94) 0%, rgba(5,10,18,0.98) 100%);
+    background: linear-gradient(180deg, rgba(9, 15, 24, 0.94) 0%, rgba(7, 11, 20, 0.98) 100%);
     border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 28px;
-    box-shadow: 0 26px 70px rgba(2, 6, 23, 0.46);
+    border-radius: 32px;
+    box-shadow: 0 34px 82px rgba(2, 6, 23, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
   .lp-window-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    padding: 14px 18px;
+    padding: 16px 20px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-    background: linear-gradient(180deg, rgba(15,23,42,0.8) 0%, rgba(8,15,28,0.64) 100%);
+    background: linear-gradient(180deg, rgba(17, 24, 39, 0.86) 0%, rgba(10, 15, 24, 0.72) 100%);
   }
   .lp-window-dots { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .lp-window-dots span {
@@ -480,7 +620,7 @@ const CSS = `
   }
   .lp-window-meta { min-width: 0; flex: 1; }
   .lp-window-title { font-size: 0.9rem; font-weight: 600; color: #f8fafc; }
-  .lp-window-subtitle { margin-top: 2px; font-size: 0.76rem; color: #64748b; }
+  .lp-window-subtitle { margin-top: 2px; font-size: 0.76rem; color: var(--lp-text-muted); }
   .lp-status-pill {
     display: inline-flex;
     align-items: center;
@@ -489,20 +629,21 @@ const CSS = `
     border-radius: 999px;
     font-size: 0.76rem;
     font-weight: 600;
-    border: 1px solid rgba(52, 211, 153, 0.18);
-    background: rgba(16, 185, 129, 0.1);
-    color: #a7f3d0;
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    background: rgba(105, 58, 13, 0.22);
+    color: #fde68a;
   }
-  .lp-window-body { padding: 18px; display: grid; gap: 14px; }
-  .lp-hero-cockpit { display: grid; grid-template-columns: minmax(0, 1.38fr) 200px; gap: 14px; }
+  .lp-window-body { padding: 20px; display: grid; gap: 16px; }
+  .lp-hero-cockpit { display: grid; grid-template-columns: minmax(0, 1.38fr) 208px; gap: 14px; }
   .lp-preview-panel,
   .lp-mini-card,
   .lp-feature-visual,
   .lp-alert-card-rich {
-    padding: 14px;
-    border-radius: 18px;
-    background: rgba(15, 23, 42, 0.68);
+    padding: 15px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(16, 24, 36, 0.78) 0%, rgba(10, 16, 26, 0.84) 100%);
     border: 1px solid rgba(148, 163, 184, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
   .lp-mini-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .lp-preview-kpi-label,
@@ -510,16 +651,17 @@ const CSS = `
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: #64748b;
+    color: #7f93aa;
+    font-weight: 600;
   }
   .lp-preview-kpi-value {
     margin-top: 8px;
     font-family: 'Syne', system-ui, sans-serif;
-    font-size: 1.14rem;
+    font-size: 1.18rem;
     font-weight: 700;
     letter-spacing: -0.04em;
   }
-  .lp-preview-kpi-detail { margin-top: 4px; font-size: 0.76rem; color: #86efac; }
+  .lp-preview-kpi-detail { margin-top: 4px; font-size: 0.76rem; color: #b9f2d7; }
   .lp-order-board,
   .lp-preview-board,
   .lp-kds-grid { display: grid; gap: 10px; }
@@ -529,8 +671,8 @@ const CSS = `
   .lp-order-column,
   .lp-preview-column {
     padding: 12px;
-    border-radius: 18px;
-    background: rgba(15, 23, 42, 0.56);
+    border-radius: 20px;
+    background: rgba(14, 22, 34, 0.62);
     border: 1px solid rgba(148, 163, 184, 0.1);
   }
   .lp-order-column-head,
@@ -552,9 +694,9 @@ const CSS = `
     align-items: center;
     justify-content: center;
     font-size: 0.72rem;
-    color: #dbeafe;
-    background: rgba(37, 99, 235, 0.16);
-    border: 1px solid rgba(96, 165, 250, 0.18);
+    color: #fef3c7;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.18);
   }
   .lp-order-stack,
   .lp-feature-bullets,
@@ -566,8 +708,9 @@ const CSS = `
   .lp-table-card-rich {
     padding: 10px;
     border-radius: 14px;
-    background: rgba(8, 15, 28, 0.7);
+    background: rgba(8, 15, 28, 0.74);
     border: 1px solid rgba(148, 163, 184, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
   .lp-order-ticket strong,
   .lp-preview-ticket strong,
@@ -586,17 +729,17 @@ const CSS = `
   .lp-channel-row span,
   .lp-top-item-row span { font-size: 0.74rem; color: #94a3b8; }
   .lp-floating-card { position: absolute; z-index: 3; }
-  .lp-floating-phone { left: -20px; bottom: 12px; width: 214px; }
-  .lp-floating-kds { right: -12px; top: 48px; width: 236px; }
+  .lp-floating-phone { left: -14px; bottom: 16px; width: 218px; }
+  .lp-floating-kds { right: -8px; top: 56px; width: 238px; }
   .lp-phone-shell,
   .lp-kds-shell {
     border: 1px solid rgba(148, 163, 184, 0.16);
-    box-shadow: 0 20px 52px rgba(2, 6, 23, 0.44);
+    box-shadow: 0 24px 54px rgba(2, 6, 23, 0.44);
   }
   .lp-phone-shell {
     padding: 12px;
     border-radius: 32px;
-    background: linear-gradient(180deg, rgba(8,15,28,0.96) 0%, rgba(15,23,42,0.94) 100%);
+    background: linear-gradient(180deg, rgba(8, 15, 28, 0.96) 0%, rgba(15, 23, 42, 0.94) 100%);
   }
   .lp-phone-notch {
     width: 92px;
@@ -615,7 +758,7 @@ const CSS = `
   .lp-phone-banner {
     padding: 12px;
     border-radius: 16px;
-    background: linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(37,99,235,0.16) 100%);
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, rgba(16, 185, 129, 0.14) 100%);
     border: 1px solid rgba(148, 163, 184, 0.12);
   }
   .lp-phone-banner strong { display: block; font-size: 0.88rem; color: #fef3c7; }
@@ -642,19 +785,36 @@ const CSS = `
   .lp-kds-ticket {
     padding: 12px;
     border-radius: 16px;
-    background: rgba(8, 15, 28, 0.76);
+    background: rgba(8, 15, 28, 0.8);
     border: 1px solid rgba(148, 163, 184, 0.12);
   }
   .lp-kds-ticket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 0.76rem; font-weight: 600; color: #f8fafc; }
   .lp-kds-ticket-time { color: #fde68a; font-size: 0.7rem; }
   .lp-kds-ticket ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; color: #94a3b8; font-size: 0.72rem; line-height: 1.45; }
-  .lp-feature-card { padding: 0 !important; overflow: hidden; }
-  .lp-feature-visual { border-radius: 0; border: none; border-bottom: 1px solid rgba(148, 163, 184, 0.1); background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 30%), linear-gradient(180deg, rgba(8,15,28,0.86) 0%, rgba(8,15,28,0.72) 100%); }
-  .lp-feature-body { padding: 22px; }
-  .lp-feature-title-row { display: flex; align-items: flex-start; gap: 14px; margin-top: 18px; }
+  .lp-feature-card { padding: 0 !important; overflow: hidden; height: 100%; }
+  .lp-feature-visual {
+    min-height: 208px;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    background:
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.1), transparent 34%),
+      linear-gradient(180deg, rgba(8, 15, 28, 0.88) 0%, rgba(8, 15, 28, 0.74) 100%);
+  }
+  .lp-feature-body { padding: 24px 24px 26px; }
+  .lp-feature-title-row { display: flex; align-items: flex-start; gap: 16px; margin-top: 18px; }
   .lp-feature-title-row h3 { margin: 6px 0 10px; font-family: 'Syne', system-ui, sans-serif; font-size: 1.08rem; line-height: 1.12; letter-spacing: -0.04em; }
-  .lp-feature-desc { margin: 0; color: #94a3b8; font-size: 0.88rem; line-height: 1.65; }
-  .lp-tone-icon { width: 48px; height: 48px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .lp-feature-desc { margin: 0; color: #a8b8c8; font-size: 0.9rem; line-height: 1.72; }
+  .lp-tone-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
   .lp-pos-layout { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(190px, 0.92fr); gap: 12px; }
   .lp-pos-products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
   .lp-cart-line,
@@ -670,25 +830,44 @@ const CSS = `
   .lp-table-grid-rich { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
   .lp-stock-progress { width: 84px; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(51, 65, 85, 0.72); }
   .lp-stock-progress span,
-  .lp-channel-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #34d399 0%, #38bdf8 100%); }
+  .lp-channel-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f59e0b 0%, #34d399 100%); }
   .lp-channel-bar { flex: 1; height: 8px; border-radius: 999px; overflow: hidden; background: rgba(51, 65, 85, 0.72); }
   .lp-dashboard-grid-rich { display: grid; gap: 14px; }
-  .lp-dashboard-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .lp-dashboard-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .lp-dashboard-split { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(220px, 0.96fr); gap: 14px; }
+  .lp-cta-shell {
+    padding: 44px clamp(24px, 5vw, 46px);
+    text-align: center;
+    background:
+      radial-gradient(circle at top center, rgba(245, 158, 11, 0.18), transparent 32%),
+      radial-gradient(circle at 82% 16%, rgba(16, 185, 129, 0.12), transparent 28%),
+      linear-gradient(180deg, rgba(9, 15, 24, 0.98) 0%, rgba(7, 12, 20, 1) 100%);
+  }
   .lp-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
-    padding: 28px 5%;
+    padding: 34px 5.25% 40px;
     position: relative;
     z-index: 1;
-    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+  }
+  .lp-footer-link {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 500;
+    transition: color .18s ease;
+  }
+  .lp-footer-link:hover {
+    color: #fff;
   }
   @media (max-width: 1100px) {
     .lp-hero-grid,
     .lp-diff-grid { grid-template-columns: 1fr; }
+    .lp-hero-grid { gap: 48px; }
     .lp-hero-panel {
       max-width: 720px;
       width: 100%;
@@ -701,6 +880,8 @@ const CSS = `
       padding: 0 10px 18px;
     }
     .lp-segment-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .lp-section-title,
+    .lp-section-heading { max-width: none; }
   }
   @media (max-width: 900px) {
     .lp-proof-grid,
@@ -711,7 +892,12 @@ const CSS = `
     .lp-pos-layout,
     .lp-dashboard-split { grid-template-columns: 1fr; }
     .lp-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .lp-section { padding: 78px 5%; }
+    .lp-section { padding: 86px 5.25%; }
+    .lp-section-hero {
+      min-height: auto;
+      padding-top: 136px;
+      padding-bottom: 78px;
+    }
   }
   @media (max-width: 720px) {
     .lp-nav {
@@ -723,6 +909,7 @@ const CSS = `
       justify-content: space-between;
     }
     .lp-nav-brand { flex-wrap: wrap; }
+    .lp-hero-title { max-width: none; }
     .lp-floating-card {
       position: static;
       width: 100%;
@@ -736,13 +923,18 @@ const CSS = `
     .lp-kds-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 640px) {
-    .lp-section { padding: 60px 5%; }
+    .lp-section { padding: 68px 5.25%; }
+    .lp-section-hero {
+      padding-top: 124px;
+      padding-bottom: 64px;
+    }
     .lp-hero-actions {
       flex-direction: column;
       align-items: stretch;
     }
     .lp-button-primary,
-    .lp-button-secondary { width: 100%; }
+    .lp-button-secondary,
+    .lp-nav-link { width: 100%; }
     .lp-kpi-grid,
     .lp-proof-grid,
     .lp-feature-grid,
@@ -759,6 +951,7 @@ const CSS = `
       flex-direction: column;
       align-items: flex-start;
     }
+    .lp-brand-pill { padding-inline: 10px; }
   }
 `;
 
@@ -1334,36 +1527,22 @@ export default function PublicLandingRevamp({
           <div style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.03em' }}>
             Flow<span className="lp-gradient-text">PDV</span>
           </div>
-          <span
-            style={{
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: '#64748b',
-              border: '1px solid rgba(148,163,184,0.16)',
-              padding: '4px 10px',
-              borderRadius: 999,
-            }}
-          >
+          <span className="lp-brand-pill">
             RM Tecnologia
           </span>
         </div>
 
         <div className="lp-nav-actions">
-          <button className="lp-nav-link" onClick={goToLogin}>
+          <button type="button" className="lp-nav-link" onClick={goToLogin}>
             Entrar
           </button>
-          <button className="lp-button-primary" onClick={goToSolicitar}>
+          <button type="button" className="lp-button-primary" onClick={goToSolicitar}>
             Solicitar teste
           </button>
         </div>
       </nav>
 
-      <section
-        className="lp-section"
-        style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', paddingTop: 128, paddingBottom: 48 }}
-      >
+      <section className="lp-section lp-section-hero">
         <div className="lp-inner lp-hero-grid">
           <motion.div initial="hidden" animate="visible" variants={stagger}>
             <motion.div variants={fadeUp}>
@@ -1375,29 +1554,12 @@ export default function PublicLandingRevamp({
 
             <motion.h1
               variants={fadeUp}
-              className="lp-font-display"
-              style={{
-                fontSize: 'clamp(2.7rem, 6vw, 4.7rem)',
-                lineHeight: 1.03,
-                letterSpacing: '-0.05em',
-                fontWeight: 800,
-                margin: '20px 0 18px',
-                maxWidth: 760,
-              }}
+              className="lp-font-display lp-hero-title lp-balance"
             >
               Pedido, produção e caixa no mesmo ritmo do seu <span className="lp-gradient-text">food service</span>.
             </motion.h1>
 
-            <motion.p
-              variants={fadeUp}
-              style={{
-                fontSize: '1.06rem',
-                lineHeight: 1.72,
-                color: '#cbd5e1',
-                maxWidth: 640,
-                margin: '0 0 26px',
-              }}
-            >
+            <motion.p variants={fadeUp} className="lp-copy-lg" style={{ marginBottom: 28 }}>
               O FlowPDV centraliza PDV, cardápio online, delivery, mesas, retirada, estoque e relatórios
               para operações de comida que precisam vender com mais controle no dia a dia.
             </motion.p>
@@ -1445,16 +1607,7 @@ export default function PublicLandingRevamp({
               ))}
             </motion.div>
 
-            <motion.p
-              variants={fadeUp}
-              style={{
-                marginTop: 22,
-                maxWidth: 700,
-                color: '#94a3b8',
-                fontSize: '0.86rem',
-                lineHeight: 1.7,
-              }}
-            >
+            <motion.p variants={fadeUp} className="lp-hero-note">
               Atende hoje restaurante, hamburgueria/lanchonete, bar, adega, padaria/café, buffet por comanda e food truck.
             </motion.p>
           </motion.div>
@@ -1478,24 +1631,14 @@ export default function PublicLandingRevamp({
             viewport={{ once: true, margin: '-80px' }}
             variants={stagger}
           >
-            <motion.div variants={fadeUp} style={{ marginBottom: 26 }}>
+            <motion.div variants={fadeUp} className="lp-section-heading">
               <div className="lp-overline" style={{ marginBottom: 16 }}>
                 Módulos principais
               </div>
-              <h2
-                className="lp-font-display"
-                style={{
-                  fontSize: 'clamp(2rem, 4vw, 3rem)',
-                  fontWeight: 800,
-                  letterSpacing: '-0.04em',
-                  lineHeight: 1.08,
-                  margin: '0 0 12px',
-                  maxWidth: 700,
-                }}
-              >
+              <h2 className="lp-font-display lp-section-title lp-balance">
                 O que o sistema já coloca <span className="lp-gradient-text">no mesmo fluxo</span>.
               </h2>
-              <p style={{ maxWidth: 640, fontSize: '1rem', lineHeight: 1.7, color: '#94a3b8', margin: 0 }}>
+              <p className="lp-copy-lg">
                 Sem promessa vaga: estes são os blocos centrais que o FlowPDV entrega hoje para a operação de comida.
               </p>
             </motion.div>
@@ -1512,10 +1655,10 @@ export default function PublicLandingRevamp({
                     className={`lp-surface lp-feature-card ${wide ? 'lp-feature-wide' : ''}`}
                     style={{
                       background: wide
-                        ? 'linear-gradient(135deg, rgba(15,23,42,0.94) 0%, rgba(6,95,70,0.22) 100%)'
+                        ? 'linear-gradient(135deg, rgba(15,23,42,0.94) 0%, rgba(93,52,18,0.24) 46%, rgba(6,95,70,0.18) 100%)'
                         : undefined,
                     }}
-                    whileHover={{ y: -4, borderColor: 'rgba(52,211,153,0.24)' }}
+                    whileHover={{ y: -4, borderColor: 'rgba(245,158,11,0.24)' }}
                   >
                     <div className="lp-feature-visual">{renderFeatureVisual(index)}</div>
                     <div className="lp-feature-body">
@@ -1560,15 +1703,7 @@ export default function PublicLandingRevamp({
         </div>
       </section>
 
-      <section
-        className="lp-section"
-        id="lp-segmentos"
-        style={{
-          background: 'linear-gradient(180deg, rgba(8,15,28,0.28) 0%, rgba(8,15,28,0.1) 100%)',
-          borderTop: '1px solid rgba(148,163,184,0.08)',
-          borderBottom: '1px solid rgba(148,163,184,0.08)',
-        }}
-      >
+      <section className="lp-section lp-section-band" id="lp-segmentos">
         <div className="lp-inner">
           <motion.div
             initial="hidden"
@@ -1576,24 +1711,14 @@ export default function PublicLandingRevamp({
             viewport={{ once: true, margin: '-80px' }}
             variants={stagger}
           >
-            <motion.div variants={fadeUp} style={{ marginBottom: 26 }}>
+            <motion.div variants={fadeUp} className="lp-section-heading">
               <div className="lp-overline" style={{ marginBottom: 16 }}>
                 Segmentos atendidos
               </div>
-              <h2
-                className="lp-font-display"
-                style={{
-                  fontSize: 'clamp(2rem, 4vw, 3rem)',
-                  fontWeight: 800,
-                  letterSpacing: '-0.04em',
-                  lineHeight: 1.08,
-                  margin: '0 0 12px',
-                  maxWidth: 720,
-                }}
-              >
+              <h2 className="lp-font-display lp-section-title lp-balance" style={{ maxWidth: '12.8ch' }}>
                 Onde o FlowPDV já se encaixa <span className="lp-gradient-text">com clareza hoje</span>.
               </h2>
-              <p style={{ maxWidth: 640, fontSize: '1rem', lineHeight: 1.7, color: '#94a3b8', margin: 0 }}>
+              <p className="lp-copy-lg">
                 O posicionamento fica mais forte quando a landing mostra aderência real ao food service e evita vender fluxo que o produto ainda não cobre.
               </p>
             </motion.div>
@@ -1605,7 +1730,7 @@ export default function PublicLandingRevamp({
                   variants={fadeUp}
                   className="lp-surface"
                   style={{ padding: 22 }}
-                  whileHover={{ y: -4, borderColor: 'rgba(96,165,250,0.24)' }}
+                  whileHover={{ y: -4, borderColor: 'rgba(245,158,11,0.22)' }}
                 >
                   <span
                     style={{
@@ -1615,9 +1740,9 @@ export default function PublicLandingRevamp({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#c4b5fd',
-                      background: 'rgba(15,23,42,0.82)',
-                      border: '1px solid rgba(148,163,184,0.14)',
+                      color: '#f8d38a',
+                      background: 'linear-gradient(180deg, rgba(74,44,12,0.7) 0%, rgba(36,24,12,0.88) 100%)',
+                      border: '1px solid rgba(245,158,11,0.18)',
                       marginBottom: 14,
                     }}
                   >
@@ -1626,7 +1751,7 @@ export default function PublicLandingRevamp({
                   <div className="lp-font-display" style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}>
                     {label}
                   </div>
-                  <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.85rem', lineHeight: 1.62 }}>{description}</p>
+                  <p style={{ margin: 0, color: '#a8b8c8', fontSize: '0.85rem', lineHeight: 1.68 }}>{description}</p>
                 </motion.div>
               ))}
             </motion.div>
@@ -1653,7 +1778,7 @@ export default function PublicLandingRevamp({
                   <div className="lp-font-display" style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}>
                     Transparência comercial
                   </div>
-                  <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.65 }}>
+                  <p style={{ margin: 0, color: '#d7e3ee', fontSize: '0.9rem', lineHeight: 1.7 }}>
                     {PUBLIC_SEGMENT_NOTE}
                   </p>
                 </div>
@@ -1671,24 +1796,14 @@ export default function PublicLandingRevamp({
             viewport={{ once: true, margin: '-80px' }}
             variants={stagger}
           >
-            <motion.div variants={fadeUp} style={{ marginBottom: 24 }}>
+            <motion.div variants={fadeUp} className="lp-section-heading" style={{ marginBottom: 28 }}>
               <div className="lp-overline" style={{ marginBottom: 16 }}>
                 Valor percebido
               </div>
-              <h2
-                className="lp-font-display"
-                style={{
-                  fontSize: 'clamp(2rem, 4vw, 3rem)',
-                  fontWeight: 800,
-                  letterSpacing: '-0.04em',
-                  lineHeight: 1.08,
-                  margin: '0 0 12px',
-                  maxWidth: 620,
-                }}
-              >
+              <h2 className="lp-font-display lp-section-title lp-balance" style={{ maxWidth: '11.5ch' }}>
                 Por que a operação sente valor <span className="lp-gradient-text">mais rápido</span>.
               </h2>
-              <p style={{ maxWidth: 580, fontSize: '1rem', lineHeight: 1.7, color: '#94a3b8', margin: 0 }}>
+              <p className="lp-copy-lg" style={{ maxWidth: 580 }}>
                 O ganho comercial fica mais claro quando o sistema junta rotinas que normalmente estariam espalhadas.
               </p>
             </motion.div>
@@ -1714,8 +1829,8 @@ export default function PublicLandingRevamp({
                       <BadgeCheck size={17} />
                     </span>
                     <div>
-                      <div style={{ fontSize: '0.96rem', fontWeight: 600, color: '#f8fafc', marginBottom: 6 }}>{title}</div>
-                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.65 }}>{description}</p>
+                      <div style={{ fontSize: '0.98rem', fontWeight: 600, color: '#f8fafc', marginBottom: 6 }}>{title}</div>
+                      <p style={{ margin: 0, color: '#a8b8c8', fontSize: '0.87rem', lineHeight: 1.7 }}>{description}</p>
                     </div>
                   </div>
                 </motion.div>
@@ -1734,20 +1849,14 @@ export default function PublicLandingRevamp({
         </div>
       </section>
 
-      <section className="lp-section" style={{ paddingTop: 16 }}>
+      <section className="lp-section lp-section-compact">
         <div className="lp-inner">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: '-80px' }}
             variants={stagger}
-            className="lp-surface"
-            style={{
-              padding: '40px clamp(24px, 5vw, 44px)',
-              textAlign: 'center',
-              background:
-                'radial-gradient(circle at top center, rgba(56,189,248,0.16), transparent 34%), linear-gradient(180deg, rgba(8,15,28,0.96) 0%, rgba(7,13,24,0.98) 100%)',
-            }}
+            className="lp-surface lp-cta-shell"
           >
             <motion.div variants={fadeUp}>
               <span className="lp-chip">
@@ -1758,29 +1867,13 @@ export default function PublicLandingRevamp({
 
             <motion.h2
               variants={fadeUp}
-              className="lp-font-display"
-              style={{
-                fontSize: 'clamp(2rem, 4vw, 3rem)',
-                fontWeight: 800,
-                letterSpacing: '-0.04em',
-                lineHeight: 1.08,
-                margin: '20px auto 12px',
-                maxWidth: 760,
-              }}
+              className="lp-font-display lp-section-title lp-balance"
+              style={{ margin: '20px auto 12px', maxWidth: '14ch' }}
             >
               Quer ver o FlowPDV funcionando na sua <span className="lp-gradient-text">operação de comida</span>?
             </motion.h2>
 
-            <motion.p
-              variants={fadeUp}
-              style={{
-                maxWidth: 680,
-                margin: '0 auto 26px',
-                fontSize: '1rem',
-                lineHeight: 1.72,
-                color: '#94a3b8',
-              }}
-            >
+            <motion.p variants={fadeUp} className="lp-copy-lg" style={{ maxWidth: 680, margin: '0 auto 28px' }}>
               Solicite o teste para avaliar PDV, cardápio online, cozinha, delivery, mesas, retirada,
               estoque e caixa no mesmo sistema.
             </motion.p>
@@ -1795,7 +1888,7 @@ export default function PublicLandingRevamp({
               </button>
             </motion.div>
 
-            <motion.p variants={fadeUp} style={{ margin: '18px 0 0', color: '#64748b', fontSize: '0.82rem' }}>
+            <motion.p variants={fadeUp} className="lp-copy-sm" style={{ margin: '18px auto 0', maxWidth: 460 }}>
               Após o trial, planos mensais. A RM Tecnologia acompanha a implantação.
             </motion.p>
           </motion.div>
@@ -1812,23 +1905,17 @@ export default function PublicLandingRevamp({
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <a href="/privacidade" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '0.84rem', fontWeight: 500 }}>
+          <a href="/privacidade" className="lp-footer-link">
             Privacidade
           </a>
-          <a href="/termos" style={{ color: '#cbd5e1', textDecoration: 'none', fontSize: '0.84rem', fontWeight: 500 }}>
+          <a href="/termos" className="lp-footer-link">
             Termos de uso
           </a>
           <button
+            type="button"
             onClick={goToSolicitar}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#7dd3fc',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-              fontFamily: 'DM Sans, system-ui, sans-serif',
-            }}
+            className="lp-footer-link"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7dd3fc', fontFamily: 'DM Sans, system-ui, sans-serif' }}
           >
             Solicitar teste
           </button>
