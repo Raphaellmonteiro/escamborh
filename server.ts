@@ -159,39 +159,49 @@ app.use((err: any, _req: any, res: any, next: any) => {
 // ── Controle de migrations ────────────────────────────────────────────────────
 function shouldRunMigrationsOnBoot(): boolean {
   const v = String(process.env.RUN_MIGRATIONS_ON_BOOT ?? '').trim().toLowerCase();
+  if (v === 'true' || v === '1' || v === 'yes') return true;
   if (v === 'false' || v === '0' || v === 'no') return false;
-  return true;
+  return process.env.NODE_ENV !== 'production';
 }
 
 // 🔥 NOVO: retry resiliente
-async function runMigrationsWithRetry(retries = 5) {
+async function runMigrationsWithRetry(retries = 5): Promise<boolean> {
   for (let i = 0; i < retries; i++) {
     try {
       console.log(`🔄 Rodando migrations (tentativa ${i + 1})...`);
       await runMigrations();
       console.log('✅ Migrations executadas com sucesso');
-      return;
+      return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`❌ Tentativa ${i + 1} falhou:`, msg);
       if (err instanceof Error && err.stack) console.error(err.stack);
 
       if (i === retries - 1) {
-        console.error(
-          '❌ Falha definitiva nas migrations — o servidor não será iniciado (banco inconsistente).'
-        );
-        process.exit(1);
+        console.error('❌ Falha definitiva nas migrations.');
+        return false;
       }
 
       await new Promise((res) => setTimeout(res, 3000));
     }
   }
+
+  return false;
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   if (shouldRunMigrationsOnBoot()) {
-    await runMigrationsWithRetry();
+    const migrationsOk = await runMigrationsWithRetry();
+    if (!migrationsOk) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error(
+          '⚠️  Produção: servidor seguirá sem aplicar migrations no boot. Rode `npm run migrate` após corrigir o banco.'
+        );
+      } else {
+        throw new Error('Falha nas migrations de boot.');
+      }
+    }
   } else {
     console.warn(
       '⚠️  RUN_MIGRATIONS_ON_BOOT desligado — o servidor sobe sem migrar.'
