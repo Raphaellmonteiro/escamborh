@@ -59,6 +59,30 @@ interface HeroMetric {
   detail: string;
 }
 
+interface HeroTimelineEntry {
+  time: string;
+  title: string;
+  detail: string;
+  tone: FeatureTone;
+}
+
+interface HeroFlowColumn {
+  title: string;
+  count: string;
+  items: Array<{
+    code: string;
+    title: string;
+    detail: string;
+  }>;
+}
+
+interface HeroChannel {
+  label: string;
+  value: string;
+  detail: string;
+  width: string;
+}
+
 interface DashboardSignal {
   label: string;
   value: string;
@@ -132,6 +156,81 @@ const HERO_METRICS: HeroMetric[] = [
   { label: 'Pedidos em preparo', value: '14', detail: 'salão, retirada e delivery' },
   { label: 'Ticket médio', value: 'R$ 48,20', detail: 'mês atual' },
   { label: 'Caixa', value: 'Aberto', detail: 'desde 08:00' },
+];
+
+const HERO_TIMELINE: HeroTimelineEntry[] = [
+  {
+    time: '19:05',
+    title: 'Rush de balcao acelerando',
+    detail: '+4 pedidos novos em 8 min',
+    tone: 'amber',
+  },
+  {
+    time: '19:18',
+    title: 'Retirada alinhada',
+    detail: '2 pedidos agendados confirmados',
+    tone: 'sky',
+  },
+  {
+    time: '19:26',
+    title: 'Cozinha estabilizada',
+    detail: 'fila principal em 14 itens',
+    tone: 'emerald',
+  },
+];
+
+const HERO_FLOW_COLUMNS: HeroFlowColumn[] = [
+  {
+    title: 'Entrada',
+    count: '08',
+    items: [
+      { code: '#1842', title: 'Mesa 08', detail: '2 pratos executivos' },
+      { code: '#1843', title: 'Retirada', detail: '1 combo smash house' },
+    ],
+  },
+  {
+    title: 'Preparo',
+    count: '04',
+    items: [
+      { code: '#1839', title: 'Balcao', detail: '3 burgers + 2 fritas' },
+      { code: '#1840', title: 'Delivery', detail: 'pizza grande + refri 2L' },
+    ],
+  },
+  {
+    title: 'Saida',
+    count: '02',
+    items: [
+      { code: '#1834', title: 'Motoboy', detail: 'saiu ha 6 min' },
+      { code: '#1836', title: 'Mesa 03', detail: 'pronto para servir' },
+    ],
+  },
+];
+
+const HERO_CHANNELS: HeroChannel[] = [
+  {
+    label: 'Balcao',
+    value: '23 atendimentos',
+    detail: 'caixa 01 puxando o pico',
+    width: '78%',
+  },
+  {
+    label: 'Mesas',
+    value: '11 abertas',
+    detail: 'salao com giro constante',
+    width: '63%',
+  },
+  {
+    label: 'Retirada',
+    value: '6 agendados',
+    detail: 'fluxo concentrado ate 21:30',
+    width: '47%',
+  },
+  {
+    label: 'Delivery',
+    value: '5 em rota',
+    detail: 'bairro Centro liderando agora',
+    width: '69%',
+  },
 ];
 
 const FEATURES: Feature[] = [
@@ -519,7 +618,7 @@ const CSS = `
     height: 1px;
     background: linear-gradient(90deg, rgba(251, 191, 36, 0.92), rgba(52, 211, 153, 0.5));
   }
-  .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1.02fr) 470px; gap: 64px; align-items: center; }
+  .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(540px, 590px); gap: 72px; align-items: center; }
   .lp-hero-panel { padding: 28px; position: relative; overflow: hidden; }
   .lp-hero-panel::after {
     content: '';
@@ -580,17 +679,28 @@ const CSS = `
   .lp-segment-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .lp-diff-grid { grid-template-columns: minmax(0, 1fr) 420px; align-items: center; }
   .lp-alert-grid { margin-top: 20px; }
-  .lp-hero-panel-rich { padding: 0; overflow: visible; background: transparent; border: none; box-shadow: none; position: relative; }
-  .lp-system-stage { position: relative; min-height: 660px; display: flex; align-items: center; justify-content: center; }
+  .lp-hero-panel-rich {
+    width: 100%;
+    max-width: 590px;
+    margin-left: auto;
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    position: relative;
+  }
+  .lp-system-stage { position: relative; }
   .lp-system-stage::before {
     content: '';
     position: absolute;
-    inset: 76px 34px 56px;
-    border-radius: 34px;
+    inset: 42px 18px 18px;
+    border-radius: 38px;
     background:
-      radial-gradient(circle at top left, rgba(249, 115, 22, 0.12), transparent 42%),
-      radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.1), transparent 42%);
-    filter: blur(12px);
+      radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), transparent 42%),
+      radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.12), transparent 42%);
+    filter: blur(24px);
+    opacity: 0.9;
     pointer-events: none;
   }
   .lp-window-shell {
@@ -599,7 +709,7 @@ const CSS = `
     overflow: hidden;
     background: linear-gradient(180deg, rgba(9, 15, 24, 0.94) 0%, rgba(7, 11, 20, 0.98) 100%);
     border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 32px;
+    border-radius: 34px;
     box-shadow: 0 34px 82px rgba(2, 6, 23, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
   .lp-window-bar {
@@ -633,14 +743,17 @@ const CSS = `
     background: rgba(105, 58, 13, 0.22);
     color: #fde68a;
   }
-  .lp-window-body { padding: 20px; display: grid; gap: 16px; }
-  .lp-hero-cockpit { display: grid; grid-template-columns: minmax(0, 1.38fr) 208px; gap: 14px; }
+  .lp-window-body { padding: 22px; display: grid; gap: 16px; }
+  .lp-window-body-hero { gap: 18px; }
+  .lp-hero-cockpit { display: grid; grid-template-columns: minmax(0, 1.18fr) 220px; gap: 16px; align-items: start; }
+  .lp-hero-primary-stack,
+  .lp-hero-rail-stack { display: grid; gap: 16px; }
   .lp-preview-panel,
   .lp-mini-card,
   .lp-feature-visual,
   .lp-alert-card-rich {
-    padding: 15px;
-    border-radius: 20px;
+    padding: 16px;
+    border-radius: 22px;
     background: linear-gradient(180deg, rgba(16, 24, 36, 0.78) 0%, rgba(10, 16, 26, 0.84) 100%);
     border: 1px solid rgba(148, 163, 184, 0.12);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -662,6 +775,114 @@ const CSS = `
     letter-spacing: -0.04em;
   }
   .lp-preview-kpi-detail { margin-top: 4px; font-size: 0.76rem; color: #b9f2d7; }
+  .lp-hero-summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .lp-hero-summary-title {
+    margin-top: 8px;
+    font-family: 'Syne', system-ui, sans-serif;
+    font-size: 1.18rem;
+    line-height: 1.04;
+    letter-spacing: -0.04em;
+    color: #f8fafc;
+  }
+  .lp-hero-summary-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    background: rgba(8, 47, 73, 0.32);
+    color: #d4eeff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .lp-hero-summary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 132px;
+    gap: 12px;
+    align-items: start;
+  }
+  .lp-hero-summary-text {
+    margin: 0;
+    color: #d7e3ee;
+    font-size: 0.84rem;
+    line-height: 1.72;
+  }
+  .lp-hero-goal-card {
+    padding: 14px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(13, 21, 33, 0.92) 0%, rgba(9, 15, 25, 0.98) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    display: grid;
+    gap: 8px;
+  }
+  .lp-hero-goal-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(51, 65, 85, 0.72);
+  }
+  .lp-hero-goal-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #f59e0b 0%, #34d399 100%);
+  }
+  .lp-hero-goal-note {
+    font-size: 0.72rem;
+    line-height: 1.55;
+    color: #94a3b8;
+  }
+  .lp-hero-timeline {
+    margin-top: 14px;
+    display: grid;
+    gap: 10px;
+  }
+  .lp-hero-timeline-row {
+    display: grid;
+    grid-template-columns: 44px 10px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: rgba(8, 15, 28, 0.62);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+  }
+  .lp-hero-timeline-time {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #f8c963;
+    letter-spacing: 0.04em;
+  }
+  .lp-hero-timeline-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 6px rgba(15, 23, 42, 0.34);
+  }
+  .lp-hero-timeline-body strong,
+  .lp-hero-timeline-body span {
+    display: block;
+  }
+  .lp-hero-timeline-body strong {
+    font-size: 0.77rem;
+    color: #f8fafc;
+    font-weight: 600;
+  }
+  .lp-hero-timeline-body span {
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    line-height: 1.45;
+  }
   .lp-order-board,
   .lp-preview-board,
   .lp-kds-grid { display: grid; gap: 10px; }
@@ -703,6 +924,7 @@ const CSS = `
   .lp-side-list,
   .lp-stock-list,
   .lp-dashboard-alerts { display: grid; gap: 10px; }
+  .lp-hero-order-board { margin-top: 14px; }
   .lp-order-ticket,
   .lp-preview-ticket,
   .lp-table-card-rich {
@@ -728,6 +950,54 @@ const CSS = `
   .lp-stock-item-row span,
   .lp-channel-row span,
   .lp-top-item-row span { font-size: 0.74rem; color: #94a3b8; }
+  .lp-hero-channel-stack { margin-top: 14px; display: grid; gap: 10px; }
+  .lp-hero-channel-card {
+    padding: 12px;
+    border-radius: 18px;
+    background: rgba(8, 15, 28, 0.64);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+  }
+  .lp-hero-channel-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .lp-hero-channel-top strong {
+    font-size: 0.79rem;
+    color: #f8fafc;
+    font-weight: 600;
+  }
+  .lp-hero-channel-top span {
+    font-size: 0.72rem;
+    color: #cbd5e1;
+  }
+  .lp-hero-channel-bar {
+    width: 100%;
+    height: 7px;
+    margin-top: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(51, 65, 85, 0.72);
+  }
+  .lp-hero-channel-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #38bdf8 0%, #34d399 100%);
+  }
+  .lp-hero-channel-meta {
+    margin-top: 8px;
+    font-size: 0.71rem;
+    color: #94a3b8;
+    line-height: 1.45;
+  }
+  .lp-hero-menu-note {
+    margin-top: 12px;
+    font-size: 0.72rem;
+    line-height: 1.55;
+    color: #cbd5e1;
+  }
   .lp-floating-card { position: absolute; z-index: 3; }
   .lp-floating-phone { left: -14px; bottom: 16px; width: 218px; }
   .lp-floating-kds { right: -8px; top: 56px; width: 238px; }
@@ -879,6 +1149,10 @@ const CSS = `
       margin: 0 auto;
       padding: 0 10px 18px;
     }
+    .lp-hero-panel-rich {
+      max-width: 760px;
+      margin: 0 auto;
+    }
     .lp-segment-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .lp-section-title,
     .lp-section-heading { max-width: none; }
@@ -889,6 +1163,7 @@ const CSS = `
     .lp-feature-wide { grid-column: span 2; }
     .lp-segment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lp-hero-cockpit,
+    .lp-hero-summary-grid,
     .lp-pos-layout,
     .lp-dashboard-split { grid-template-columns: 1fr; }
     .lp-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -966,8 +1241,8 @@ function HeroSystemPreview() {
             <span />
           </div>
           <div className="lp-window-meta">
-            <div className="lp-window-title">FlowPDV / Operacao de hoje</div>
-            <div className="lp-window-subtitle">dashboard, pedidos, mesas, delivery e caixa</div>
+            <div className="lp-window-title">FlowPDV / Operacao central</div>
+            <div className="lp-window-subtitle">pedidos, canais e caixa em uma unica leitura</div>
           </div>
           <span className="lp-status-pill">
             <span
@@ -984,48 +1259,72 @@ function HeroSystemPreview() {
           </span>
         </div>
 
-        <div className="lp-window-body">
+        <div className="lp-window-body lp-window-body-hero">
+          <div className="lp-dashboard-metrics">
+            {HERO_METRICS.map((metric) => (
+              <div key={metric.label} className="lp-mini-card">
+                <div className="lp-preview-kpi-label">{metric.label}</div>
+                <div className="lp-preview-kpi-value">{metric.value}</div>
+                <div className="lp-preview-kpi-detail">{metric.detail}</div>
+              </div>
+            ))}
+          </div>
+
           <div className="lp-hero-cockpit">
-            <div className="lp-dashboard-grid-rich">
-              <div className="lp-mini-card-grid">
-                {HERO_METRICS.map((metric) => (
-                  <div key={metric.label} className="lp-mini-card">
-                    <div className="lp-preview-kpi-label">{metric.label}</div>
-                    <div className="lp-preview-kpi-value">{metric.value}</div>
-                    <div className="lp-preview-kpi-detail">{metric.detail}</div>
+            <div className="lp-hero-primary-stack">
+              <div className="lp-preview-panel">
+                <div className="lp-hero-summary-head">
+                  <div>
+                    <div className="lp-preview-label">Operacao de hoje</div>
+                    <div className="lp-hero-summary-title">Uma tela para ler o turno e agir rapido</div>
                   </div>
-                ))}
+                  <span className="lp-hero-summary-badge">turno noite</span>
+                </div>
+
+                <div className="lp-hero-summary-grid">
+                  <div>
+                    <p className="lp-hero-summary-text">
+                      Balcao, mesas, retirada e delivery entram no mesmo fluxo e seguem para cozinha, saida
+                      e caixa sem repasse manual entre telas.
+                    </p>
+
+                    <div className="lp-hero-timeline">
+                      {HERO_TIMELINE.map((entry) => (
+                        <div key={entry.time} className="lp-hero-timeline-row">
+                          <span className="lp-hero-timeline-time">{entry.time}</span>
+                          <span
+                            className="lp-hero-timeline-dot"
+                            style={{ background: FEATURE_TONE_STYLES[entry.tone].color }}
+                          />
+                          <div className="lp-hero-timeline-body">
+                            <strong>{entry.title}</strong>
+                            <span>{entry.detail}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="lp-hero-goal-card">
+                    <div className="lp-preview-kpi-label">Meta do turno</div>
+                    <div className="lp-preview-kpi-value">73%</div>
+                    <div className="lp-preview-kpi-detail">R$ 3.840 de R$ 5.200</div>
+                    <div className="lp-hero-goal-bar">
+                      <span style={{ width: '73%' }} />
+                    </div>
+                    <div className="lp-hero-goal-note">pico entre 19h e 21h sustentando o ritmo</div>
+                  </div>
+                </div>
               </div>
 
               <div className="lp-preview-panel">
-                <div className="lp-preview-label">Fluxo operacional</div>
-                <div className="lp-order-board" style={{ marginTop: 12 }}>
-                  {[
-                    {
-                      title: 'Entrada',
-                      count: '08',
-                      items: [
-                        { code: '#1842', title: 'Mesa 08', detail: '2 pratos executivos' },
-                        { code: '#1843', title: 'Retirada', detail: '1 combo smash house' },
-                      ],
-                    },
-                    {
-                      title: 'Producao',
-                      count: '04',
-                      items: [
-                        { code: '#1839', title: 'Balcao', detail: '3 burgers + 2 fritas' },
-                        { code: '#1840', title: 'Delivery', detail: 'pizza grande + refri 2L' },
-                      ],
-                    },
-                    {
-                      title: 'Saida',
-                      count: '02',
-                      items: [
-                        { code: '#1834', title: 'Motoboy', detail: 'saiu ha 6 min' },
-                        { code: '#1836', title: 'Mesa 03', detail: 'pronto para servir' },
-                      ],
-                    },
-                  ].map((column) => (
+                <div className="lp-preview-topline">
+                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Pedidos em movimento</strong>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>entrada, preparo e saida</span>
+                </div>
+
+                <div className="lp-order-board lp-hero-order-board">
+                  {HERO_FLOW_COLUMNS.map((column) => (
                     <div key={column.title} className="lp-order-column">
                       <div className="lp-order-column-head">
                         <span>{column.title}</span>
@@ -1046,118 +1345,75 @@ function HeroSystemPreview() {
               </div>
             </div>
 
-            <div className="lp-dashboard-grid-rich">
+            <div className="lp-hero-rail-stack">
               <div className="lp-preview-panel">
-                <div className="lp-preview-label">Canais ativos</div>
-                <div className="lp-side-list" style={{ marginTop: 12 }}>
-                  {[
-                    { label: 'Balcao', value: '23 atendimentos' },
-                    { label: 'Mesas', value: '11 comandas abertas' },
-                    { label: 'Retirada', value: '6 pedidos agendados' },
-                    { label: 'Delivery', value: '5 em rota agora' },
-                  ].map((item) => (
-                    <div key={item.label} className="lp-channel-row">
+                <div className="lp-preview-topline">
+                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Canais conectados</strong>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>atendimento em curso</span>
+                </div>
+
+                <div className="lp-hero-channel-stack">
+                  {HERO_CHANNELS.map((item) => (
+                    <div key={item.label} className="lp-hero-channel-card">
+                      <div className="lp-hero-channel-top">
+                        <strong>{item.label}</strong>
+                        <span>{item.value}</span>
+                      </div>
+                      <div className="lp-hero-channel-bar">
+                        <span style={{ width: item.width }} />
+                      </div>
+                      <div className="lp-hero-channel-meta">{item.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="lp-preview-panel">
+                <div className="lp-preview-topline">
+                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Cardapio conectado</strong>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>link proprio e QR Code</span>
+                </div>
+
+                <div className="lp-phone-banner" style={{ marginTop: 14 }}>
+                  <strong>Flow Burgers no ar</strong>
+                  <span>retirada em 25 min com pedido entrando direto na operacao</span>
+                </div>
+
+                <div className="lp-preview-chip-row" style={{ marginTop: 12 }}>
+                  {['Smash', 'Combos', 'Bebidas'].map((item) => (
+                    <span key={item} className="lp-preview-chip">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="lp-stock-list" style={{ marginTop: 12 }}>
+                  {TOP_ITEMS.slice(0, 2).map((item) => (
+                    <div key={item.label} className="lp-top-item-row">
                       <strong>{item.label}</strong>
                       <span>{item.value}</span>
                     </div>
                   ))}
                 </div>
+
+                <div className="lp-hero-menu-note">pedido do cliente cai no painel sem repasse manual.</div>
               </div>
 
               <div className="lp-preview-panel">
-                <div className="lp-preview-label">Estoque critico</div>
-                <div className="lp-stock-list">
-                  {[
-                    { label: 'Pao brioche', value: 'baixo', width: '28%' },
-                    { label: 'Blend 120g', value: 'ok', width: '74%' },
-                    { label: 'Batata palito', value: 'atencao', width: '42%' },
-                  ].map((item) => (
-                    <div key={item.label} className="lp-stock-item-row">
-                      <div style={{ display: 'grid', gap: 6, flex: 1 }}>
-                        <strong>{item.label}</strong>
-                        <span>{item.value}</span>
-                      </div>
-                      <div className="lp-stock-progress">
-                        <span style={{ width: item.width }} />
-                      </div>
+                <div className="lp-preview-topline">
+                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Alertas do turno</strong>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>leitura rapida</span>
+                </div>
+
+                <div className="lp-dashboard-alerts" style={{ marginTop: 14 }}>
+                  {ALERTS.slice(0, 2).map((alert) => (
+                    <div key={alert.title} className="lp-alert-card-rich">
+                      <strong>{alert.title}</strong>
+                      <span>{alert.description}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="lp-floating-card lp-floating-phone">
-        <div className="lp-phone-shell">
-          <div className="lp-phone-notch" />
-          <div className="lp-phone-screen">
-            <div className="lp-preview-topline" style={{ marginBottom: 12 }}>
-              <strong style={{ fontSize: '0.86rem', color: '#f8fafc' }}>Cardapio online</strong>
-              <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>retirada + delivery</span>
-            </div>
-            <div className="lp-phone-banner">
-              <strong>Combo smash + frita</strong>
-              <span>mais pedido nas ultimas 48h</span>
-            </div>
-            <div className="lp-preview-chip-row" style={{ margin: '12px 0' }}>
-              {['Burgers', 'Pizzas', 'Bebidas'].map((item) => (
-                <span key={item} className="lp-preview-chip">
-                  {item}
-                </span>
-              ))}
-            </div>
-            <div className="lp-order-ticket">
-              <strong>Smash house</strong>
-              <span>pao brioche, blend 120g, cheddar e molho da casa</span>
-            </div>
-            <button
-              style={{
-                width: '100%',
-                marginTop: 10,
-                padding: '10px 12px',
-                borderRadius: 14,
-                border: 'none',
-                background: 'linear-gradient(135deg, #2563eb 0%, #059669 100%)',
-                color: '#fff',
-                fontSize: '0.76rem',
-                fontWeight: 700,
-                fontFamily: 'DM Sans, system-ui, sans-serif',
-              }}
-            >
-              Adicionar ao pedido
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="lp-floating-card lp-floating-kds">
-        <div className="lp-kds-shell">
-          <div className="lp-preview-topline" style={{ marginBottom: 12 }}>
-            <strong style={{ fontSize: '0.86rem', color: '#f8fafc' }}>Cozinha / KDS</strong>
-            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>fila em preparo</span>
-          </div>
-          <div className="lp-kds-grid">
-            <div className="lp-kds-ticket">
-              <div className="lp-kds-ticket-head">
-                <span>#1840 Delivery</span>
-                <span className="lp-kds-ticket-time">09 min</span>
-              </div>
-              <ul>
-                <li>1 pizza calabresa grande</li>
-                <li>1 refri 2L</li>
-              </ul>
-            </div>
-            <div className="lp-kds-ticket">
-              <div className="lp-kds-ticket-head">
-                <span>#1842 Mesa 08</span>
-                <span className="lp-kds-ticket-time">05 min</span>
-              </div>
-              <ul>
-                <li>2 pratos executivos</li>
-                <li>1 suco natural</li>
-              </ul>
             </div>
           </div>
         </div>
