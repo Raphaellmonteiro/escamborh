@@ -104,7 +104,7 @@ function getPublicMeta(path: string): PublicMeta {
   if (path === '/login') {
     return {
       title: 'Entrar no FlowPDV | Acesso da operação',
-      description: 'Acesse o FlowPDV para operar caixa, pedidos, cozinha, mesas e delivery da sua operação de food service.',
+      description: 'Acesse o FlowPDV para operar caixa, pedidos, cozinha, mesas, retirada e delivery da sua operação de food service.',
     };
   }
   if (path === '/privacidade') {
@@ -145,7 +145,7 @@ function getPublicMeta(path: string): PublicMeta {
   }
   return {
     title: 'FlowPDV | PDV para Food Service',
-    description: 'PDV para food service com pedidos, delivery, cardápio online, cozinha/KDS, mesas e estoque no mesmo sistema.',
+    description: 'Sistema para food service com PDV, pedidos, delivery, cardápio online, cozinha/KDS, mesas, retirada e estoque para restaurantes, lanchonetes, bares, adegas, padarias/cafés, buffet por comanda e food trucks.',
   };
 }
 

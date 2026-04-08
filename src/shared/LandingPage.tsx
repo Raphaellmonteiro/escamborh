@@ -1,26 +1,26 @@
 import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ACTIVE_SEGMENT_OPTIONS } from '../config/segmentos';
+import { PUBLIC_SEGMENT_NOTE, PUBLIC_SEGMENT_OPTIONS } from '../config/publicSegments';
 
 const WA_NUMBER = '5500000000000'; // ← substitua pelo número real
 const WA_LINK   = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20FlowPDV`;
 
 /* ─── tipos internos ─────────────────────────────────────────────── */
-interface Segment { icon: string; label: string; available: boolean; }
+interface Segment { icon: string; label: string; description: string; }
 interface Feature { icon: string; name: string; desc: string; span2?: boolean; }
 interface Differential { num: string; title: string; desc: string; }
 interface AIAlert { icon: string; text: string; }
 
 /* ─── dados ──────────────────────────────────────────────────────── */
-const SEGMENTS: Segment[] = ACTIVE_SEGMENT_OPTIONS.map((segment) => ({
+const SEGMENTS: Segment[] = PUBLIC_SEGMENT_OPTIONS.map((segment) => ({
   icon: segment.icon,
   label: segment.label,
-  available: true,
+  description: segment.description,
 }));
 
 const FEATURES: Feature[] = [
-  { icon: '🛒', name: 'PDV de balcão & mesa', span2: true,
-    desc: 'Venda rápida para balcão, mesas e retirada com busca, carrinho, descontos e recebimento em Pix, cartão e dinheiro.' },
+  { icon: '🛒', name: 'PDV de balcão, mesa e retirada', span2: true,
+    desc: 'Venda rápida para balcão, retirada e, quando a operação usa salão, também mesas/comandas com busca, carrinho, descontos e recebimento em Pix, cartão e dinheiro.' },
   { icon: '📱', name: 'Cardápio online & delivery',
     desc: 'Cardápio online com link e QR Code para delivery e retirada, com pedidos caindo direto na operação.' },
   { icon: '👨‍🍳', name: 'Pedidos, KDS e central',
@@ -36,10 +36,10 @@ const FEATURES: Feature[] = [
 ];
 
 const DIFFERENTIALS: Differential[] = [
-  { num: '01', title: 'Feito para food service', desc: 'Fluxos pensados para restaurante, hamburgueria, lanchonete, bar e adega, sem cara de varejo genérico.' },
+  { num: '01', title: 'Feito para operação de comida', desc: 'Fluxos pensados para restaurante, hamburgueria, lanchonete, bar, adega, padaria/café, buffet por comanda e food truck, sem cara de sistema genérico.' },
   { num: '02', title: 'PDV, cozinha e delivery juntos', desc: 'O pedido do balcão, da mesa ou do cardápio online segue no mesmo fluxo até a produção e o caixa.' },
   { num: '03', title: 'Operação pronta para o rush', desc: 'Central de pedidos, KDS, mesas, retirada e delivery organizados para acompanhar picos com mais controle.' },
-  { num: '04', title: 'Configuração por segmento', desc: 'Os blocos e a linguagem acompanham a operação de cada casa, de restaurante a adega.' },
+  { num: '04', title: 'Segmentos comunicados com clareza', desc: 'A entrada pública mostra onde o FlowPDV já encaixa hoje, sem prometer fluxo que dependa de balança ou adaptações fora do produto.' },
   { num: '05', title: 'RM Tecnologia, suporte BR', desc: 'Produto e atendimento em português, focados na rotina de operações brasileiras de food service.' },
 ];
 
@@ -225,7 +225,7 @@ export default function LandingPage({
             </motion.h1>
 
             <motion.p variants={fadeUp} style={{ fontSize: '1.05rem', color: '#a1a1aa', lineHeight: 1.7, maxWidth: 540, marginBottom: '1.75rem', fontWeight: 300 }}>
-              <strong style={{ color: '#fafafa', fontWeight: 500 }}>FlowPDV</strong> ajuda restaurantes, hamburguerias, lanchonetes, bares e adegas a vender e operar melhor com <strong style={{ color: '#fafafa', fontWeight: 500 }}>PDV, pedidos, delivery, cardápio online com link e QR Code, cozinha/KDS, mesas e estoque</strong> no mesmo sistema.
+              <strong style={{ color: '#fafafa', fontWeight: 500 }}>FlowPDV</strong> ajuda operações como restaurante, hamburgueria, lanchonete, bar, adega, padaria/café, buffet por comanda e food truck a vender e operar melhor com <strong style={{ color: '#fafafa', fontWeight: 500 }}>PDV, pedidos, delivery, cardápio online com link e QR Code, cozinha/KDS, mesas, retirada e estoque</strong> no mesmo sistema.
             </motion.p>
 
             <motion.div variants={fadeUp} style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -316,11 +316,11 @@ export default function LandingPage({
                 <span style={{ display: 'block', width: 20, height: 1, background: '#34d399' }} />Segmentos atendidos
               </div>
               <h2 className="lp-font-display" style={{ fontSize: 'clamp(1.9rem,4vw,2.6rem)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.025em', marginBottom: '0.75rem' }}>
-                Do balcão à adega,{' '}
+                Operações de comida{' '}
                 <span style={{ background: 'linear-gradient(135deg,#34d399,#38bdf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>no mesmo produto</span>
               </h2>
               <p style={{ fontSize: '1rem', color: '#a1a1aa', maxWidth: 560, lineHeight: 1.7, fontWeight: 300, marginBottom: '2.5rem' }}>
-                PDV, cozinha, delivery e estoque falam a língua do seu segmento, com mesas quando faz sentido, adega com foco em bebidas e fast food no ritmo do balcão.
+                O FlowPDV comunica com clareza onde já atende hoje: restaurante, balcão rápido, bar, adega, padaria/café, buffet por comanda e food truck, sempre dentro de fluxos reais de food service.
               </p>
             </motion.div>
             <motion.div className="lp-seg-grid" variants={stagger} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
@@ -330,16 +330,12 @@ export default function LandingPage({
                   whileHover={{ borderColor: 'rgba(52,211,153,0.35)', y: -3 }}>
                   <span style={{ fontSize: '1.75rem', marginBottom: 10, display: 'block' }}>{s.icon}</span>
                   <div className="lp-font-display" style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fafafa', marginBottom: 6 }}>{s.label}</div>
-                  <span style={{
-                    display: 'inline-block', marginTop: 8, fontSize: '0.63rem', padding: '2px 8px', borderRadius: 4, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-                    ...(s.available
-                      ? { background: 'rgba(16,185,129,0.12)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.2)' }
-                      : { background: 'rgba(234,179,8,0.10)', color: '#fde68a',  border: '1px solid rgba(234,179,8,0.2)'  }),
-                  }}>
-                    {s.available ? 'Disponível' : 'Em breve'}
-                  </span>
+                  <div style={{ fontSize: '0.8rem', color: '#a1a1aa', lineHeight: 1.55 }}>{s.description}</div>
                 </motion.div>
               ))}
+            </motion.div>
+            <motion.div variants={fadeUp} style={{ marginTop: 18, maxWidth: 780, borderRadius: 14, padding: '14px 16px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#fcd34d', fontSize: '0.82rem', lineHeight: 1.6 }}>
+              <strong style={{ color: '#fde68a' }}>Importante:</strong> {PUBLIC_SEGMENT_NOTE}
             </motion.div>
           </motion.div>
         </div>

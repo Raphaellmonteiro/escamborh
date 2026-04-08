@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2 } from 'lucide-react';
-import { ACTIVE_SEGMENT_OPTIONS } from '../../config/segmentos';
+import { PUBLIC_SEGMENT_NOTE, PUBLIC_SEGMENT_OPTIONS } from '../../config/publicSegments';
 
 // ── Segmentos disponíveis ─────────────────────────────────────────────────────
-const SEGMENTOS_ATIVOS = ACTIVE_SEGMENT_OPTIONS;
+const SEGMENTOS_ATIVOS = PUBLIC_SEGMENT_OPTIONS;
 
 // ── Máscaras ──────────────────────────────────────────────────────────────────
 function maskCNPJ(v: string) {
@@ -98,7 +98,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
               <div className="min-w-0 pr-2">
                 <h2 className="text-lg font-black text-white sm:text-xl">Solicitar teste do FlowPDV</h2>
                 <p className="mt-0.5 text-[11px] sm:text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>
-                  Teste o FlowPDV por 7 dias na sua operação de food service
+                  Teste o FlowPDV por 7 dias na sua operação de comida
                 </p>
               </div>
               <button onClick={handleClose} className="mt-0.5 shrink-0 rounded-lg p-1.5 transition-colors hover:bg-white/10">
@@ -157,6 +157,9 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                       </button>
                     ))}
                   </div>
+                  <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(148,163,184,0.72)' }}>
+                    {PUBLIC_SEGMENT_NOTE}
+                  </p>
                 </div>
 
                 {/* Nome do Estabelecimento */}
@@ -167,7 +170,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                   </label>
                   <input required value={form.nome_estabelecimento}
                     onChange={e => set('nome_estabelecimento', e.target.value)}
-                    placeholder="Ex: Restaurante da Sônia"
+                    placeholder="Ex: Sabor da Praça"
                     className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none transition-all"
                     style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
                   <p className="text-[10px] mt-1" style={{ color: 'rgba(100,116,139,0.6)' }}>

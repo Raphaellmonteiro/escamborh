@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ACTIVE_SEGMENT_OPTIONS } from '../../config/segmentos';
+import { PUBLIC_SEGMENT_VALUES } from '../../config/publicSegments';
 import {
   MAX_CITY,
   MAX_DOCUMENTO_RAW,
@@ -11,8 +11,6 @@ import {
   zBrazilPhoneDigits,
   zEmailRequired,
 } from '../brFields';
-
-const SEGMENTO_VALUES = ACTIVE_SEGMENT_OPTIONS.map((s) => s.value) as [string, ...string[]];
 
 const documentoTipoEnum = z.enum(['CNPJ', 'CPF']);
 
@@ -40,7 +38,7 @@ export const solicitarAcessoBodySchema = z
     cidade: z.string().trim().min(1, 'Cidade é obrigatória').max(MAX_CITY, 'Cidade muito longa'),
     segmento: z.preprocess(
       (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-      z.enum(SEGMENTO_VALUES, { message: 'Segmento indisponível no momento.' }).optional()
+      z.enum(PUBLIC_SEGMENT_VALUES, { message: 'Segmento indisponível no momento.' }).optional()
     ),
   })
   .superRefine((data, ctx) => {

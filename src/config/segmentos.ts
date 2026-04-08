@@ -23,9 +23,17 @@ const SEGMENT_ALIASES: Record<string, string> = {
   Restaurante: 'Restaurante/Food',
   'Restaurante/Food': 'Restaurante/Food',
   'Fast Food': 'Fast Food',
+  'Hamburgueria / Lanchonete': 'Fast Food',
   Bar: 'Bar/Pub',
+  'Bar & Pub': 'Bar/Pub',
   'Bar/Pub': 'Bar/Pub',
   Adega: 'Adega',
+  'Adega de Bebidas': 'Adega',
+  'Padaria/Café': 'Fast Food',
+  'Padaria/Cafe': 'Fast Food',
+  'Buffet/Self-service': 'Restaurante/Food',
+  'Buffet / Self-service': 'Restaurante/Food',
+  'Food Truck': 'Fast Food',
 };
 
 const ACTIVE_SEGMENTS = new Set(['Restaurante/Food', 'Fast Food', 'Bar/Pub', 'Adega']);
