@@ -169,19 +169,19 @@ const HERO_METRICS: HeroMetric[] = [
 const HERO_TIMELINE: HeroTimelineEntry[] = [
   {
     time: '19:05',
-    title: 'Rush de balcao acelerando',
-    detail: '+4 pedidos novos em 8 min',
+    title: 'Rush no balcao',
+    detail: '+4 pedidos em 8 min',
     tone: 'amber',
   },
   {
     time: '19:18',
-    title: 'Retirada alinhada',
-    detail: '2 pedidos agendados confirmados',
+    title: 'Retirada em dia',
+    detail: '2 agendados confirmados',
     tone: 'sky',
   },
   {
     time: '19:26',
-    title: 'Cozinha estabilizada',
+    title: 'Cozinha no ritmo',
     detail: 'fila principal em 14 itens',
     tone: 'emerald',
   },
@@ -850,8 +850,8 @@ const CSS = `
   }
   .lp-hero-summary-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
     align-items: start;
   }
   .lp-hero-summary-text {
@@ -861,12 +861,14 @@ const CSS = `
     line-height: 1.72;
   }
   .lp-hero-goal-card {
+    width: min(100%, 220px);
     padding: 14px;
     border-radius: 18px;
     background: linear-gradient(180deg, rgba(13, 21, 33, 0.92) 0%, rgba(9, 15, 25, 0.98) 100%);
     border: 1px solid rgba(148, 163, 184, 0.1);
     display: grid;
     gap: 8px;
+    justify-self: end;
   }
   .lp-hero-goal-bar {
     width: 100%;
@@ -893,13 +895,19 @@ const CSS = `
   }
   .lp-hero-timeline-row {
     display: grid;
-    grid-template-columns: 44px 10px minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+    grid-template-columns: 58px minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    padding: 12px 14px;
     border-radius: 16px;
     background: rgba(8, 15, 28, 0.62);
     border: 1px solid rgba(148, 163, 184, 0.08);
+  }
+  .lp-hero-timeline-meta {
+    display: grid;
+    justify-items: start;
+    gap: 8px;
+    padding-top: 2px;
   }
   .lp-hero-timeline-time {
     font-size: 0.7rem;
@@ -917,16 +925,24 @@ const CSS = `
   .lp-hero-timeline-body span {
     display: block;
   }
+  .lp-hero-timeline-body {
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+  }
   .lp-hero-timeline-body strong {
-    font-size: 0.77rem;
+    font-size: 0.81rem;
     color: #f8fafc;
     font-weight: 600;
+    line-height: 1.3;
+    text-wrap: pretty;
+    word-break: normal;
   }
   .lp-hero-timeline-body span {
-    margin-top: 4px;
     font-size: 0.72rem;
     color: #94a3b8;
-    line-height: 1.45;
+    line-height: 1.5;
+    text-wrap: pretty;
   }
   .lp-order-board,
   .lp-preview-board,
@@ -1352,6 +1368,10 @@ const CSS = `
     .lp-hero-summary-grid,
     .lp-pos-layout,
     .lp-dashboard-split { grid-template-columns: 1fr; }
+    .lp-hero-goal-card {
+      width: 100%;
+      justify-self: stretch;
+    }
     .lp-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lp-section { padding: 86px 5.25%; }
     .lp-section-hero {
@@ -1479,11 +1499,13 @@ function HeroSystemPreview() {
                     <div className="lp-hero-timeline">
                       {HERO_TIMELINE.map((entry) => (
                         <div key={entry.time} className="lp-hero-timeline-row">
-                          <span className="lp-hero-timeline-time">{entry.time}</span>
-                          <span
-                            className="lp-hero-timeline-dot"
-                            style={{ background: FEATURE_TONE_STYLES[entry.tone].color }}
-                          />
+                          <div className="lp-hero-timeline-meta">
+                            <span className="lp-hero-timeline-time">{entry.time}</span>
+                            <span
+                              className="lp-hero-timeline-dot"
+                              style={{ background: FEATURE_TONE_STYLES[entry.tone].color }}
+                            />
+                          </div>
                           <div className="lp-hero-timeline-body">
                             <strong>{entry.title}</strong>
                             <span>{entry.detail}</span>
