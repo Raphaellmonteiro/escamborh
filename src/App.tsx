@@ -144,8 +144,8 @@ function getPublicMeta(path: string): PublicMeta {
     };
   }
   return {
-    title: 'FlowPDV | PDV para Food Service',
-    description: 'Sistema para food service com PDV, pedidos, delivery, cardápio online, cozinha/KDS, mesas, retirada e estoque para restaurantes, lanchonetes, bares, adegas, padarias/cafés, buffet por comanda e food trucks.',
+    title: 'FlowPDV | PDV, cozinha e delivery para food service',
+    description: 'Sistema para food service que integra PDV, pedidos, cozinha, cardápio online, delivery, mesas, retirada, caixa, estoque e relatórios na mesma operação.',
   };
 }
 
