@@ -95,29 +95,37 @@ interface FeaturePreviewMeta {
   tone: FeatureTone;
 }
 
+interface VisualStory {
+  eyebrow: string;
+  title: string;
+  detail: string;
+  caption: string;
+  image: string;
+}
+
 const FEATURE_TONE_STYLES: Record<
   FeatureTone,
   { color: string; background: string; border: string }
 > = {
   emerald: {
-    color: '#b7f7d6',
-    background: 'linear-gradient(180deg, rgba(8,60,46,0.72) 0%, rgba(6,36,29,0.82) 100%)',
-    border: '1px solid rgba(52,211,153,0.22)',
+    color: '#d7e7df',
+    background: 'linear-gradient(180deg, rgba(29,45,45,0.74) 0%, rgba(19,30,31,0.84) 100%)',
+    border: '1px solid rgba(129,160,153,0.22)',
   },
   sky: {
-    color: '#d4eeff',
-    background: 'linear-gradient(180deg, rgba(9,52,77,0.7) 0%, rgba(7,33,54,0.82) 100%)',
-    border: '1px solid rgba(56,189,248,0.22)',
+    color: '#d8e7f2',
+    background: 'linear-gradient(180deg, rgba(26,42,58,0.72) 0%, rgba(18,29,42,0.84) 100%)',
+    border: '1px solid rgba(116,154,182,0.22)',
   },
   amber: {
-    color: '#fbe3a1',
-    background: 'linear-gradient(180deg, rgba(74,44,12,0.74) 0%, rgba(50,28,8,0.84) 100%)',
-    border: '1px solid rgba(245,158,11,0.22)',
+    color: '#edd5c2',
+    background: 'linear-gradient(180deg, rgba(72,45,34,0.76) 0%, rgba(47,28,23,0.86) 100%)',
+    border: '1px solid rgba(199,138,108,0.22)',
   },
   violet: {
-    color: '#f6d1df',
-    background: 'linear-gradient(180deg, rgba(74,28,49,0.72) 0%, rgba(45,17,33,0.82) 100%)',
-    border: '1px solid rgba(244,114,182,0.2)',
+    color: '#e8d8e6',
+    background: 'linear-gradient(180deg, rgba(56,35,45,0.74) 0%, rgba(38,22,32,0.84) 100%)',
+    border: '1px solid rgba(164,128,156,0.22)',
   },
 };
 
@@ -347,32 +355,69 @@ const TOP_ITEMS = [
   { label: 'Pizza calabresa', value: '11 vendas' },
 ];
 
+const HERO_PRODUCT_VISUAL = {
+  image: '/landing/hero-burger-plated.png',
+  eyebrow: 'Apresentacao comercial',
+  title: 'Produto real ajuda o cardapio a vender melhor',
+  detail: 'Hamburgueria, retirada e salao ganham mais apelo quando a landing mistura software com imagem de verdade.',
+};
+
+const PHONE_PRODUCT_VISUAL = {
+  image: '/landing/cardapio-burger-close.jpeg',
+  label: 'mais pedido hoje',
+};
+
+const VISUAL_STORIES: VisualStory[] = [
+  {
+    eyebrow: 'Hamburgueria',
+    title: 'Combo, salao e retirada no mesmo ritmo do rush',
+    detail: 'A apresentacao fica mais crivel quando o sistema aparece junto de produto real, pronto para vender.',
+    caption: 'pedido no balcao, QR Code e giro no jantar',
+    image: '/landing/hero-burger-plated.png',
+  },
+  {
+    eyebrow: 'Restaurante e pratos',
+    title: 'Producao por etapa para prato executivo, grelha e cozinha',
+    detail: 'O visual aproxima a proposta da pratica de quem precisa coordenar preparo, saida e tempo de mesa.',
+    caption: 'cozinha organizada para servico a la carte',
+    image: '/landing/restaurante-skewers.png',
+  },
+  {
+    eyebrow: 'Petiscos e conveniencia',
+    title: 'Itens de giro rapido com apresentacao mais apetitiva',
+    detail: 'Fotos bem usadas reforcam mix, combos e decisao de compra sem transformar a landing em galeria.',
+    caption: 'petisco, combo e venda por impulso no atendimento',
+    image: '/landing/petisco-fries.jpeg',
+  },
+];
+
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
 
   .lp-root * { box-sizing: border-box; }
   .lp-root {
     font-family: 'DM Sans', system-ui, sans-serif;
-    --lp-text-main: #f8fafc;
-    --lp-text-soft: #d7e3ee;
-    --lp-text-muted: #8ea0b5;
+    --lp-text-main: #f5f7fa;
+    --lp-text-soft: #d5dce6;
+    --lp-text-muted: #93a0ae;
     --lp-border-soft: rgba(148, 163, 184, 0.14);
     --lp-border-strong: rgba(148, 163, 184, 0.22);
-    --lp-surface-1: rgba(12, 19, 30, 0.88);
-    --lp-surface-2: rgba(8, 13, 22, 0.96);
-    --lp-warm: #f59e0b;
-    --lp-warm-strong: #ea580c;
-    --lp-fresh: #34d399;
-    --lp-cool: #38bdf8;
-    color: #f8fafc;
+    --lp-surface-1: rgba(14, 18, 25, 0.9);
+    --lp-surface-2: rgba(9, 12, 18, 0.96);
+    --lp-accent: #c78a6c;
+    --lp-accent-strong: #9c604f;
+    --lp-accent-soft: #e7cbb4;
+    --lp-cool: #7ea3b9;
+    --lp-cool-strong: #4f6981;
+    color: var(--lp-text-main);
     min-height: 100vh;
     overflow-x: hidden;
     position: relative;
     background:
-      radial-gradient(circle at 14% 0%, rgba(249, 115, 22, 0.18), transparent 24%),
-      radial-gradient(circle at 82% 10%, rgba(16, 185, 129, 0.13), transparent 28%),
-      radial-gradient(circle at 50% 86%, rgba(56, 189, 248, 0.1), transparent 34%),
-      linear-gradient(180deg, #05070b 0%, #0a1018 46%, #05070b 100%);
+      radial-gradient(circle at 14% 0%, rgba(156, 96, 79, 0.22), transparent 24%),
+      radial-gradient(circle at 82% 10%, rgba(79, 105, 129, 0.18), transparent 28%),
+      radial-gradient(circle at 50% 86%, rgba(199, 138, 108, 0.1), transparent 34%),
+      linear-gradient(180deg, #06080c 0%, #0b1119 46%, #06080c 100%);
   }
   .lp-root::before {
     content: '';
@@ -392,9 +437,9 @@ const CSS = `
     pointer-events: none;
     z-index: 0;
   }
-  .lp-font-display { font-family: 'Syne', system-ui, sans-serif; }
+  .lp-font-display { font-family: 'Manrope', system-ui, sans-serif; }
   .lp-gradient-text {
-    background: linear-gradient(135deg, #f7c968 0%, #f59e0b 28%, #34d399 100%);
+    background: linear-gradient(135deg, #f1d8c4 0%, #c78a6c 42%, #7ea3b9 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -419,34 +464,34 @@ const CSS = `
   .lp-inner { max-width: 1220px; margin: 0 auto; }
   .lp-section-heading { margin-bottom: 34px; max-width: 760px; }
   .lp-hero-title {
-    font-size: clamp(2.95rem, 6.35vw, 5rem);
-    line-height: 0.98;
-    letter-spacing: -0.065em;
+    font-size: clamp(2.85rem, 5.85vw, 4.72rem);
+    line-height: 1.01;
+    letter-spacing: -0.055em;
     font-weight: 800;
     margin: 22px 0 20px;
-    max-width: 11.5ch;
-    text-shadow: 0 20px 44px rgba(2, 6, 23, 0.32);
+    max-width: 12ch;
+    text-shadow: 0 18px 38px rgba(2, 6, 23, 0.22);
   }
   .lp-section-title {
-    font-size: clamp(2.08rem, 4.2vw, 3.18rem);
+    font-size: clamp(1.98rem, 3.8vw, 3rem);
     font-weight: 800;
-    letter-spacing: -0.055em;
-    line-height: 1.03;
+    letter-spacing: -0.045em;
+    line-height: 1.08;
     margin: 0 0 14px;
-    max-width: 13ch;
+    max-width: 14ch;
   }
   .lp-copy-lg {
     margin: 0;
     max-width: 660px;
     font-size: 1.02rem;
-    line-height: 1.8;
+    line-height: 1.74;
     color: var(--lp-text-soft);
   }
   .lp-copy-sm {
     margin: 0;
     max-width: 700px;
     font-size: 0.87rem;
-    line-height: 1.76;
+    line-height: 1.7;
     color: var(--lp-text-muted);
   }
   .lp-hero-note {
@@ -502,9 +547,9 @@ const CSS = `
   }
   .lp-surface {
     background:
-      radial-gradient(circle at top right, rgba(249, 115, 22, 0.09), transparent 30%),
-      radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.08), transparent 24%),
-      linear-gradient(180deg, rgba(12, 19, 30, 0.9) 0%, rgba(8, 13, 22, 0.96) 100%);
+      radial-gradient(circle at top right, rgba(199, 138, 108, 0.09), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(79, 105, 129, 0.09), transparent 24%),
+      linear-gradient(180deg, rgba(13, 18, 27, 0.92) 0%, rgba(8, 12, 18, 0.98) 100%);
     border: 1px solid var(--lp-border-strong);
     border-radius: 28px;
     box-shadow: 0 30px 72px rgba(2, 6, 23, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -512,7 +557,7 @@ const CSS = `
     transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
   }
   .lp-surface-soft {
-    background: linear-gradient(180deg, rgba(16, 24, 36, 0.74) 0%, rgba(11, 18, 28, 0.82) 100%);
+    background: linear-gradient(180deg, rgba(16, 22, 32, 0.78) 0%, rgba(11, 16, 25, 0.86) 100%);
     border: 1px solid var(--lp-border-soft);
     border-radius: 22px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
@@ -530,15 +575,15 @@ const CSS = `
     font-weight: 600;
   }
   .lp-chip {
-    border: 1px solid rgba(245, 158, 11, 0.22);
-    background: linear-gradient(180deg, rgba(40, 24, 10, 0.68) 0%, rgba(18, 22, 33, 0.62) 100%);
+    border: 1px solid rgba(199, 138, 108, 0.28);
+    background: linear-gradient(180deg, rgba(45, 28, 24, 0.78) 0%, rgba(18, 22, 33, 0.68) 100%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    color: #fef3c7;
+    color: #f0d7c4;
   }
   .lp-chip-muted {
     border: 1px solid rgba(148, 163, 184, 0.14);
-    background: rgba(12, 18, 28, 0.62);
-    color: #d9e3ec;
+    background: rgba(12, 18, 28, 0.72);
+    color: #d9e1ea;
   }
   .lp-button-primary,
   .lp-button-secondary {
@@ -561,9 +606,9 @@ const CSS = `
   }
   .lp-button-primary {
     color: #fff;
-    border: 1px solid rgba(245, 158, 11, 0.18);
-    background: linear-gradient(135deg, #f59e0b 0%, #ea580c 40%, #0f766e 100%);
-    box-shadow: 0 20px 44px rgba(234, 88, 12, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(199, 138, 108, 0.22);
+    background: linear-gradient(135deg, #c78a6c 0%, #9c604f 44%, #4f6981 100%);
+    box-shadow: 0 20px 44px rgba(89, 55, 47, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.16);
   }
   .lp-button-primary::after,
   .lp-button-secondary::after {
@@ -579,7 +624,7 @@ const CSS = `
   }
   .lp-button-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 24px 48px rgba(234, 88, 12, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: 0 24px 48px rgba(89, 55, 47, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
   .lp-button-secondary {
     color: #eef6fb;
@@ -593,20 +638,20 @@ const CSS = `
   .lp-button-secondary:hover,
   .lp-nav-link:hover {
     color: #fff;
-    border-color: rgba(245, 158, 11, 0.22);
+    border-color: rgba(199, 138, 108, 0.22);
     background: rgba(18, 27, 39, 0.9);
   }
   .lp-button-primary:focus-visible,
   .lp-button-secondary:focus-visible,
   .lp-nav-link:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+    box-shadow: 0 0 0 3px rgba(199, 138, 108, 0.16);
   }
   .lp-overline {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #f8c963;
+    color: #d7b7a2;
     font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.14em;
@@ -616,7 +661,7 @@ const CSS = `
     content: '';
     width: 26px;
     height: 1px;
-    background: linear-gradient(90deg, rgba(251, 191, 36, 0.92), rgba(52, 211, 153, 0.5));
+    background: linear-gradient(90deg, rgba(199, 138, 108, 0.92), rgba(126, 163, 185, 0.56));
   }
   .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(540px, 590px); gap: 72px; align-items: center; }
   .lp-hero-panel { padding: 28px; position: relative; overflow: hidden; }
@@ -626,7 +671,7 @@ const CSS = `
     inset: auto -60px -120px auto;
     width: 240px;
     height: 240px;
-    background: radial-gradient(circle, rgba(52, 211, 153, 0.16) 0%, transparent 72%);
+    background: radial-gradient(circle, rgba(126, 163, 185, 0.16) 0%, transparent 72%);
     pointer-events: none;
   }
   .lp-hero-actions,
@@ -697,8 +742,8 @@ const CSS = `
     inset: 42px 18px 18px;
     border-radius: 38px;
     background:
-      radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), transparent 42%),
-      radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.12), transparent 42%);
+      radial-gradient(circle at top left, rgba(199, 138, 108, 0.16), transparent 42%),
+      radial-gradient(circle at bottom right, rgba(126, 163, 185, 0.12), transparent 42%);
     filter: blur(24px);
     opacity: 0.9;
     pointer-events: none;
@@ -707,7 +752,7 @@ const CSS = `
     width: 100%;
     position: relative;
     overflow: hidden;
-    background: linear-gradient(180deg, rgba(9, 15, 24, 0.94) 0%, rgba(7, 11, 20, 0.98) 100%);
+    background: linear-gradient(180deg, rgba(11, 16, 24, 0.96) 0%, rgba(7, 10, 16, 0.99) 100%);
     border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 34px;
     box-shadow: 0 34px 82px rgba(2, 6, 23, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -739,9 +784,9 @@ const CSS = `
     border-radius: 999px;
     font-size: 0.76rem;
     font-weight: 600;
-    border: 1px solid rgba(245, 158, 11, 0.22);
-    background: rgba(105, 58, 13, 0.22);
-    color: #fde68a;
+    border: 1px solid rgba(199, 138, 108, 0.24);
+    background: rgba(78, 46, 38, 0.28);
+    color: #efd4c0;
   }
   .lp-window-body { padding: 22px; display: grid; gap: 16px; }
   .lp-window-body-hero { gap: 18px; }
@@ -754,7 +799,7 @@ const CSS = `
   .lp-alert-card-rich {
     padding: 16px;
     border-radius: 22px;
-    background: linear-gradient(180deg, rgba(16, 24, 36, 0.78) 0%, rgba(10, 16, 26, 0.84) 100%);
+    background: linear-gradient(180deg, rgba(15, 22, 33, 0.8) 0%, rgba(10, 15, 24, 0.88) 100%);
     border: 1px solid rgba(148, 163, 184, 0.12);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
@@ -769,12 +814,12 @@ const CSS = `
   }
   .lp-preview-kpi-value {
     margin-top: 8px;
-    font-family: 'Syne', system-ui, sans-serif;
+    font-family: 'Manrope', system-ui, sans-serif;
     font-size: 1.18rem;
     font-weight: 700;
     letter-spacing: -0.04em;
   }
-  .lp-preview-kpi-detail { margin-top: 4px; font-size: 0.76rem; color: #b9f2d7; }
+  .lp-preview-kpi-detail { margin-top: 4px; font-size: 0.76rem; color: #c9d9e5; }
   .lp-hero-summary-head {
     display: flex;
     align-items: flex-start;
@@ -784,10 +829,10 @@ const CSS = `
   }
   .lp-hero-summary-title {
     margin-top: 8px;
-    font-family: 'Syne', system-ui, sans-serif;
+    font-family: 'Manrope', system-ui, sans-serif;
     font-size: 1.18rem;
-    line-height: 1.04;
-    letter-spacing: -0.04em;
+    line-height: 1.08;
+    letter-spacing: -0.035em;
     color: #f8fafc;
   }
   .lp-hero-summary-badge {
@@ -796,9 +841,9 @@ const CSS = `
     justify-content: center;
     padding: 8px 12px;
     border-radius: 999px;
-    border: 1px solid rgba(56, 189, 248, 0.18);
-    background: rgba(8, 47, 73, 0.32);
-    color: #d4eeff;
+    border: 1px solid rgba(126, 163, 185, 0.18);
+    background: rgba(26, 42, 58, 0.38);
+    color: #d8e7f2;
     font-size: 0.72rem;
     font-weight: 600;
     white-space: nowrap;
@@ -834,7 +879,7 @@ const CSS = `
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #f59e0b 0%, #34d399 100%);
+    background: linear-gradient(90deg, #c78a6c 0%, #7ea3b9 100%);
   }
   .lp-hero-goal-note {
     font-size: 0.72rem;
@@ -859,7 +904,7 @@ const CSS = `
   .lp-hero-timeline-time {
     font-size: 0.7rem;
     font-weight: 600;
-    color: #f8c963;
+    color: #d7b7a2;
     letter-spacing: 0.04em;
   }
   .lp-hero-timeline-dot {
@@ -915,9 +960,9 @@ const CSS = `
     align-items: center;
     justify-content: center;
     font-size: 0.72rem;
-    color: #fef3c7;
-    background: rgba(245, 158, 11, 0.12);
-    border: 1px solid rgba(245, 158, 11, 0.18);
+    color: #f0d7c4;
+    background: rgba(199, 138, 108, 0.12);
+    border: 1px solid rgba(199, 138, 108, 0.2);
   }
   .lp-order-stack,
   .lp-feature-bullets,
@@ -984,7 +1029,7 @@ const CSS = `
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #38bdf8 0%, #34d399 100%);
+    background: linear-gradient(90deg, #7ea3b9 0%, #c78a6c 100%);
   }
   .lp-hero-channel-meta {
     margin-top: 8px;
@@ -1009,7 +1054,7 @@ const CSS = `
   .lp-phone-shell {
     padding: 12px;
     border-radius: 32px;
-    background: linear-gradient(180deg, rgba(8, 15, 28, 0.96) 0%, rgba(15, 23, 42, 0.94) 100%);
+    background: linear-gradient(180deg, rgba(9, 15, 24, 0.96) 0%, rgba(13, 20, 32, 0.94) 100%);
   }
   .lp-phone-notch {
     width: 92px;
@@ -1028,11 +1073,42 @@ const CSS = `
   .lp-phone-banner {
     padding: 12px;
     border-radius: 16px;
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, rgba(16, 185, 129, 0.14) 100%);
+    background: linear-gradient(135deg, rgba(199, 138, 108, 0.22) 0%, rgba(79, 105, 129, 0.14) 100%);
     border: 1px solid rgba(148, 163, 184, 0.12);
   }
-  .lp-phone-banner strong { display: block; font-size: 0.88rem; color: #fef3c7; }
+  .lp-phone-banner strong { display: block; font-size: 0.88rem; color: #f1d8c4; }
   .lp-phone-banner span { display: block; margin-top: 4px; font-size: 0.72rem; color: #cbd5e1; }
+  .lp-phone-product-shot {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 12px;
+    border-radius: 18px;
+    min-height: 132px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(8, 15, 28, 0.7);
+  }
+  .lp-phone-product-shot img {
+    width: 100%;
+    height: 132px;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.92) contrast(1.02);
+  }
+  .lp-phone-shot-tag {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 10px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #f7efe8;
+    background: rgba(12, 18, 28, 0.74);
+    border: 1px solid rgba(199, 138, 108, 0.22);
+    backdrop-filter: blur(12px);
+  }
   .lp-preview-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
   .lp-preview-chip,
   .lp-feature-pill,
@@ -1043,7 +1119,7 @@ const CSS = `
     padding: 7px 10px;
     border-radius: 999px;
     font-size: 0.72rem;
-    color: #cbd5e1;
+    color: #d6dfe8;
     background: rgba(15, 23, 42, 0.62);
     border: 1px solid rgba(148, 163, 184, 0.12);
   }
@@ -1059,7 +1135,7 @@ const CSS = `
     border: 1px solid rgba(148, 163, 184, 0.12);
   }
   .lp-kds-ticket-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 0.76rem; font-weight: 600; color: #f8fafc; }
-  .lp-kds-ticket-time { color: #fde68a; font-size: 0.7rem; }
+  .lp-kds-ticket-time { color: #e8c7b0; font-size: 0.7rem; }
   .lp-kds-ticket ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; color: #94a3b8; font-size: 0.72rem; line-height: 1.45; }
   .lp-feature-card { padding: 0 !important; overflow: hidden; height: 100%; }
   .lp-feature-visual {
@@ -1068,12 +1144,12 @@ const CSS = `
     border: none;
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
     background:
-      radial-gradient(circle at top right, rgba(249, 115, 22, 0.1), transparent 34%),
+      radial-gradient(circle at top right, rgba(199, 138, 108, 0.12), transparent 34%),
       linear-gradient(180deg, rgba(8, 15, 28, 0.88) 0%, rgba(8, 15, 28, 0.74) 100%);
   }
   .lp-feature-body { padding: 24px 24px 26px; }
   .lp-feature-title-row { display: flex; align-items: flex-start; gap: 16px; margin-top: 18px; }
-  .lp-feature-title-row h3 { margin: 6px 0 10px; font-family: 'Syne', system-ui, sans-serif; font-size: 1.08rem; line-height: 1.12; letter-spacing: -0.04em; }
+  .lp-feature-title-row h3 { margin: 6px 0 10px; font-family: 'Manrope', system-ui, sans-serif; font-size: 1.08rem; line-height: 1.16; letter-spacing: -0.035em; }
   .lp-feature-desc { margin: 0; color: #a8b8c8; font-size: 0.9rem; line-height: 1.72; }
   .lp-tone-icon {
     width: 50px;
@@ -1100,17 +1176,126 @@ const CSS = `
   .lp-table-grid-rich { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
   .lp-stock-progress { width: 84px; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(51, 65, 85, 0.72); }
   .lp-stock-progress span,
-  .lp-channel-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f59e0b 0%, #34d399 100%); }
+  .lp-channel-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #c78a6c 0%, #7ea3b9 100%); }
   .lp-channel-bar { flex: 1; height: 8px; border-radius: 999px; overflow: hidden; background: rgba(51, 65, 85, 0.72); }
   .lp-dashboard-grid-rich { display: grid; gap: 14px; }
   .lp-dashboard-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .lp-dashboard-split { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(220px, 0.96fr); gap: 14px; }
+  .lp-hero-photo-card,
+  .lp-food-story-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: 0 26px 58px rgba(2, 6, 23, 0.28);
+  }
+  .lp-hero-photo-card {
+    min-height: 236px;
+    border-radius: 24px;
+    background: rgba(10, 15, 24, 0.86);
+  }
+  .lp-hero-photo-image,
+  .lp-food-story-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.9) contrast(1.02);
+  }
+  .lp-hero-photo-overlay,
+  .lp-food-story-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(8, 12, 18, 0.08) 0%, rgba(8, 12, 18, 0.36) 38%, rgba(8, 12, 18, 0.92) 100%);
+  }
+  .lp-hero-photo-body {
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 1;
+    display: grid;
+    gap: 8px;
+    padding: 18px;
+  }
+  .lp-hero-photo-label,
+  .lp-food-story-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 7px 10px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #f3dfd1;
+    background: rgba(12, 18, 28, 0.72);
+    border: 1px solid rgba(199, 138, 108, 0.22);
+    backdrop-filter: blur(14px);
+  }
+  .lp-hero-photo-title {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 1.02rem;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    color: #f7f7f8;
+    font-weight: 700;
+  }
+  .lp-hero-photo-detail {
+    font-size: 0.78rem;
+    line-height: 1.58;
+    color: #d5dce6;
+  }
+  .lp-food-story-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .lp-food-story-card {
+    min-height: 360px;
+    border-radius: 28px;
+    transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease;
+    background: rgba(10, 15, 24, 0.84);
+  }
+  .lp-food-story-card:hover {
+    border-color: rgba(199, 138, 108, 0.32);
+    box-shadow: 0 30px 64px rgba(2, 6, 23, 0.34);
+  }
+  .lp-food-story-body {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 22px;
+  }
+  .lp-food-story-title {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 1.18rem;
+    font-weight: 800;
+    line-height: 1.16;
+    letter-spacing: -0.035em;
+    color: #f6f7f9;
+  }
+  .lp-food-story-detail {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.68;
+    color: #d4dce6;
+  }
+  .lp-food-story-caption {
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: #a6b2bf;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
   .lp-cta-shell {
     padding: 44px clamp(24px, 5vw, 46px);
     text-align: center;
     background:
-      radial-gradient(circle at top center, rgba(245, 158, 11, 0.18), transparent 32%),
-      radial-gradient(circle at 82% 16%, rgba(16, 185, 129, 0.12), transparent 28%),
+      radial-gradient(circle at top center, rgba(199, 138, 108, 0.2), transparent 32%),
+      radial-gradient(circle at 82% 16%, rgba(126, 163, 185, 0.12), transparent 28%),
       linear-gradient(180deg, rgba(9, 15, 24, 0.98) 0%, rgba(7, 12, 20, 1) 100%);
   }
   .lp-footer {
@@ -1132,7 +1317,7 @@ const CSS = `
     transition: color .18s ease;
   }
   .lp-footer-link:hover {
-    color: #fff;
+    color: #f2ded0;
   }
   @media (max-width: 1100px) {
     .lp-hero-grid,
@@ -1162,6 +1347,7 @@ const CSS = `
     .lp-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lp-feature-wide { grid-column: span 2; }
     .lp-segment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lp-food-story-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lp-hero-cockpit,
     .lp-hero-summary-grid,
     .lp-pos-layout,
@@ -1214,10 +1400,12 @@ const CSS = `
     .lp-proof-grid,
     .lp-feature-grid,
     .lp-segment-grid,
+    .lp-food-story-grid,
     .lp-dashboard-metrics,
     .lp-table-grid-rich,
     .lp-mini-card-grid { grid-template-columns: 1fr; }
     .lp-feature-wide { grid-column: span 1; }
+    .lp-food-story-card { min-height: 320px; }
     .lp-meta-row {
       flex-direction: column;
       align-items: flex-start;
@@ -1242,7 +1430,7 @@ function HeroSystemPreview() {
           </div>
           <div className="lp-window-meta">
             <div className="lp-window-title">FlowPDV / Operacao central</div>
-            <div className="lp-window-subtitle">pedidos, canais e caixa em uma unica leitura</div>
+            <div className="lp-window-subtitle">pedidos, canais, cozinha e caixa na mesma leitura</div>
           </div>
           <span className="lp-status-pill">
             <span
@@ -1252,7 +1440,7 @@ function HeroSystemPreview() {
                 height: 8,
                 borderRadius: '50%',
                 display: 'inline-block',
-                background: '#34d399',
+                background: '#7ea3b9',
               }}
             />
             Ao vivo
@@ -1368,41 +1556,25 @@ function HeroSystemPreview() {
                 </div>
               </div>
 
-              <div className="lp-preview-panel">
-                <div className="lp-preview-topline">
-                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Cardapio conectado</strong>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>link proprio e QR Code</span>
+              <div className="lp-hero-photo-card">
+                <img
+                  src={HERO_PRODUCT_VISUAL.image}
+                  alt="Hamburguer servido em prato com fritas"
+                  className="lp-hero-photo-image"
+                  loading="lazy"
+                />
+                <div className="lp-hero-photo-overlay" />
+                <div className="lp-hero-photo-body">
+                  <span className="lp-hero-photo-label">{HERO_PRODUCT_VISUAL.eyebrow}</span>
+                  <strong className="lp-hero-photo-title">{HERO_PRODUCT_VISUAL.title}</strong>
+                  <span className="lp-hero-photo-detail">{HERO_PRODUCT_VISUAL.detail}</span>
                 </div>
-
-                <div className="lp-phone-banner" style={{ marginTop: 14 }}>
-                  <strong>Flow Burgers no ar</strong>
-                  <span>retirada em 25 min com pedido entrando direto na operacao</span>
-                </div>
-
-                <div className="lp-preview-chip-row" style={{ marginTop: 12 }}>
-                  {['Smash', 'Combos', 'Bebidas'].map((item) => (
-                    <span key={item} className="lp-preview-chip">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="lp-stock-list" style={{ marginTop: 12 }}>
-                  {TOP_ITEMS.slice(0, 2).map((item) => (
-                    <div key={item.label} className="lp-top-item-row">
-                      <strong>{item.label}</strong>
-                      <span>{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="lp-hero-menu-note">pedido do cliente cai no painel sem repasse manual.</div>
               </div>
 
               <div className="lp-preview-panel">
                 <div className="lp-preview-topline">
-                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Alertas do turno</strong>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>leitura rapida</span>
+                  <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Leitura do turno</strong>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>acoes que pedem resposta</span>
                 </div>
 
                 <div className="lp-dashboard-alerts" style={{ marginTop: 14 }}>
@@ -1486,6 +1658,14 @@ function renderFeatureVisual(index: number) {
           <div className="lp-preview-topline" style={{ marginBottom: 12 }}>
             <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>Flow Burgers</strong>
             <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>retirada em 25 min</span>
+          </div>
+          <div className="lp-phone-product-shot">
+            <img
+              src={PHONE_PRODUCT_VISUAL.image}
+              alt="Hamburguer artesanal para cardapio digital"
+              loading="lazy"
+            />
+            <span className="lp-phone-shot-tag">{PHONE_PRODUCT_VISUAL.label}</span>
           </div>
           <div className="lp-phone-banner">
             <strong>Peca no celular</strong>
@@ -1812,12 +1992,12 @@ export default function PublicLandingRevamp({
               variants={fadeUp}
               className="lp-font-display lp-hero-title lp-balance"
             >
-              Pedido, produção e caixa no mesmo ritmo do seu <span className="lp-gradient-text">food service</span>.
+              Atendimento, produção e caixa conectados na rotina do seu <span className="lp-gradient-text">food service</span>.
             </motion.h1>
 
             <motion.p variants={fadeUp} className="lp-copy-lg" style={{ marginBottom: 28 }}>
-              O FlowPDV centraliza PDV, cardápio online, delivery, mesas, retirada, estoque e relatórios
-              para operações de comida que precisam vender com mais controle no dia a dia.
+              O FlowPDV reúne PDV, cardápio online, delivery, mesas, retirada, estoque e relatórios
+              em uma operação pensada para restaurante, hamburgueria, pratos executivos e serviço por comanda.
             </motion.p>
 
             <motion.ul variants={stagger} className="lp-point-list" style={{ marginBottom: 30 }}>
@@ -1832,9 +2012,9 @@ export default function PublicLandingRevamp({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      background: 'rgba(16,185,129,0.12)',
-                      border: '1px solid rgba(52,211,153,0.2)',
-                      color: '#86efac',
+                      background: 'rgba(199,138,108,0.12)',
+                      border: '1px solid rgba(199,138,108,0.22)',
+                      color: '#f0d7c4',
                     }}
                   >
                     <BadgeCheck size={16} />
@@ -1864,7 +2044,7 @@ export default function PublicLandingRevamp({
             </motion.div>
 
             <motion.p variants={fadeUp} className="lp-hero-note">
-              Atende hoje restaurante, hamburgueria/lanchonete, bar, adega, padaria/café, buffet por comanda e food truck.
+              Atende hoje restaurante, hamburgueria/lanchonete, bar, adega, padaria/cafe, buffet por comanda e food truck.
             </motion.p>
           </motion.div>
 
@@ -1875,6 +2055,55 @@ export default function PublicLandingRevamp({
             className="lp-hero-panel-rich"
           >
             <HeroSystemPreview />
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="lp-section lp-section-band">
+        <div className="lp-inner">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+            variants={stagger}
+          >
+            <motion.div variants={fadeUp} className="lp-section-heading" style={{ maxWidth: 720 }}>
+              <div className="lp-overline" style={{ marginBottom: 16 }}>
+                Operação na prática
+              </div>
+              <h2 className="lp-font-display lp-section-title lp-balance" style={{ maxWidth: '13ch' }}>
+                Software para venda e salão com <span className="lp-gradient-text">contexto visual real</span>.
+              </h2>
+              <p className="lp-copy-lg" style={{ maxWidth: 690 }}>
+                Em vez de depender só de mockup, a landing agora usa imagens reais de produto onde elas reforçam a leitura comercial de restaurante,
+                hamburgueria e operações com pratos e petiscos.
+              </p>
+            </motion.div>
+
+            <motion.div className="lp-food-story-grid" variants={stagger}>
+              {VISUAL_STORIES.map((story) => (
+                <motion.article
+                  key={story.title}
+                  variants={fadeUp}
+                  className="lp-food-story-card"
+                  whileHover={{ y: -4 }}
+                >
+                  <img
+                    src={story.image}
+                    alt={story.title}
+                    className="lp-food-story-image"
+                    loading="lazy"
+                  />
+                  <div className="lp-food-story-overlay" />
+                  <div className="lp-food-story-body">
+                    <span className="lp-food-story-eyebrow">{story.eyebrow}</span>
+                    <div className="lp-food-story-title">{story.title}</div>
+                    <p className="lp-food-story-detail">{story.detail}</p>
+                    <span className="lp-food-story-caption">{story.caption}</span>
+                  </div>
+                </motion.article>
+              ))}
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -1892,10 +2121,10 @@ export default function PublicLandingRevamp({
                 Módulos principais
               </div>
               <h2 className="lp-font-display lp-section-title lp-balance">
-                O que o sistema já coloca <span className="lp-gradient-text">no mesmo fluxo</span>.
+                Os módulos que sustentam a <span className="lp-gradient-text">operação em um só sistema</span>.
               </h2>
               <p className="lp-copy-lg">
-                Sem promessa vaga: estes são os blocos centrais que o FlowPDV entrega hoje para a operação de comida.
+                Sem promessa vaga: estes são os blocos que o FlowPDV já conecta hoje para venda, produção e gestão do food service.
               </p>
             </motion.div>
 
@@ -1911,10 +2140,10 @@ export default function PublicLandingRevamp({
                     className={`lp-surface lp-feature-card ${wide ? 'lp-feature-wide' : ''}`}
                     style={{
                       background: wide
-                        ? 'linear-gradient(135deg, rgba(15,23,42,0.94) 0%, rgba(93,52,18,0.24) 46%, rgba(6,95,70,0.18) 100%)'
+                        ? 'linear-gradient(135deg, rgba(15,23,42,0.94) 0%, rgba(91,57,46,0.24) 46%, rgba(79,105,129,0.18) 100%)'
                         : undefined,
                     }}
-                    whileHover={{ y: -4, borderColor: 'rgba(245,158,11,0.24)' }}
+                    whileHover={{ y: -4, borderColor: 'rgba(199,138,108,0.24)' }}
                   >
                     <div className="lp-feature-visual">{renderFeatureVisual(index)}</div>
                     <div className="lp-feature-body">
@@ -1972,10 +2201,10 @@ export default function PublicLandingRevamp({
                 Segmentos atendidos
               </div>
               <h2 className="lp-font-display lp-section-title lp-balance" style={{ maxWidth: '12.8ch' }}>
-                Onde o FlowPDV já se encaixa <span className="lp-gradient-text">com clareza hoje</span>.
+                Onde o FlowPDV já opera com <span className="lp-gradient-text">aderência real</span>.
               </h2>
               <p className="lp-copy-lg">
-                O posicionamento fica mais forte quando a landing mostra aderência real ao food service e evita vender fluxo que o produto ainda não cobre.
+                O posicionamento fica mais forte quando a landing mostra com clareza o tipo de operação que o produto cobre hoje.
               </p>
             </motion.div>
 
@@ -1986,7 +2215,7 @@ export default function PublicLandingRevamp({
                   variants={fadeUp}
                   className="lp-surface"
                   style={{ padding: 22 }}
-                  whileHover={{ y: -4, borderColor: 'rgba(245,158,11,0.22)' }}
+                  whileHover={{ y: -4, borderColor: 'rgba(199,138,108,0.22)' }}
                 >
                   <span
                     style={{
@@ -1996,9 +2225,9 @@ export default function PublicLandingRevamp({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#f8d38a',
-                      background: 'linear-gradient(180deg, rgba(74,44,12,0.7) 0%, rgba(36,24,12,0.88) 100%)',
-                      border: '1px solid rgba(245,158,11,0.18)',
+                      color: '#f0d7c4',
+                      background: 'linear-gradient(180deg, rgba(72,45,34,0.78) 0%, rgba(30,24,25,0.92) 100%)',
+                      border: '1px solid rgba(199,138,108,0.22)',
                       marginBottom: 14,
                     }}
                   >
@@ -2023,9 +2252,9 @@ export default function PublicLandingRevamp({
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    color: '#fde68a',
-                    background: 'rgba(245,158,11,0.12)',
-                    border: '1px solid rgba(245,158,11,0.18)',
+                    color: '#e8d7cb',
+                    background: 'rgba(199,138,108,0.12)',
+                    border: '1px solid rgba(199,138,108,0.2)',
                   }}
                 >
                   <ShieldCheck size={19} />
@@ -2057,10 +2286,10 @@ export default function PublicLandingRevamp({
                 Valor percebido
               </div>
               <h2 className="lp-font-display lp-section-title lp-balance" style={{ maxWidth: '11.5ch' }}>
-                Por que a operação sente valor <span className="lp-gradient-text">mais rápido</span>.
+                Por que o valor aparece <span className="lp-gradient-text">mais rápido na operação</span>.
               </h2>
               <p className="lp-copy-lg" style={{ maxWidth: 580 }}>
-                O ganho comercial fica mais claro quando o sistema junta rotinas que normalmente estariam espalhadas.
+                A percepção comercial melhora quando frente de atendimento, cozinha, delivery e caixa deixam de depender de repasse manual.
               </p>
             </motion.div>
 
@@ -2077,9 +2306,9 @@ export default function PublicLandingRevamp({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#86efac',
-                        background: 'rgba(16,185,129,0.12)',
-                        border: '1px solid rgba(52,211,153,0.18)',
+                        color: '#d8e7f2',
+                        background: 'rgba(79,105,129,0.18)',
+                        border: '1px solid rgba(126,163,185,0.2)',
                       }}
                     >
                       <BadgeCheck size={17} />
@@ -2126,12 +2355,12 @@ export default function PublicLandingRevamp({
               className="lp-font-display lp-section-title lp-balance"
               style={{ margin: '20px auto 12px', maxWidth: '14ch' }}
             >
-              Quer ver o FlowPDV funcionando na sua <span className="lp-gradient-text">operação de comida</span>?
+              Veja o FlowPDV aplicado à sua <span className="lp-gradient-text">operação de comida</span>.
             </motion.h2>
 
             <motion.p variants={fadeUp} className="lp-copy-lg" style={{ maxWidth: 680, margin: '0 auto 28px' }}>
               Solicite o teste para avaliar PDV, cardápio online, cozinha, delivery, mesas, retirada,
-              estoque e caixa no mesmo sistema.
+              estoque e caixa em um fluxo único.
             </motion.p>
 
             <motion.div variants={fadeUp} className="lp-hero-actions" style={{ justifyContent: 'center' }}>
@@ -2171,7 +2400,7 @@ export default function PublicLandingRevamp({
             type="button"
             onClick={goToSolicitar}
             className="lp-footer-link"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#7dd3fc', fontFamily: 'DM Sans, system-ui, sans-serif' }}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9bb7c8', fontFamily: 'DM Sans, system-ui, sans-serif' }}
           >
             Solicitar teste
           </button>
