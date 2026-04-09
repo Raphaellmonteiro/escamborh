@@ -153,7 +153,7 @@ export default function App() {
   const OPERATIONAL_ALERT_SOUND_KEY = 'flowpdv_operational_alert_sound';
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [estabelecimentoSegmento, setEstabelecimentoSegmento] = useState('Restaurante/Food');
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery'>('pos')
+  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery' | 'whatsapp-ia'>('pos')
   const [floatPos, setFloatPos]   = React.useState(() => {
     const saved = localStorage.getItem('orders_float_pos');
     return saved ? JSON.parse(saved) : { x: window.innerWidth - 80, y: window.innerHeight - 120 };
@@ -201,7 +201,12 @@ export default function App() {
     if (!Array.isArray(userPermissoes)) return false;
     return userPermissoes.includes(tab);
   };
-  const normalizeAccessFeature = (tab: string): string => (tab === 'central' ? 'orders' : tab);
+  const normalizeAccessFeature = (tab: string): string => {
+    if (tab === 'central') return 'orders';
+    // Enquanto o modulo nao tem permissao/plano proprios, reaproveita o gate atual de delivery.
+    if (tab === 'whatsapp-ia') return 'delivery';
+    return tab;
+  };
   const planAllows = (tab: string): boolean => {
     const feature = normalizeAccessFeature(tab);
     if (!isKnownPlanFeature(feature)) return true;
@@ -271,6 +276,10 @@ export default function App() {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
         setActiveTab('estoque');
+      } else if (nav === 'whatsapp-ia' && canAccess('whatsapp-ia')) {
+        localStorage.removeItem('flowpdv_initial_nav_tab');
+        sessionStorage.removeItem('flowpdv_initial_nav_tab');
+        setActiveTab('whatsapp-ia');
       } else if (nav === 'orders' && canAccess('orders')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
@@ -941,6 +950,9 @@ const handleAuth = async (e: React.FormEvent) => {
               <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon="🍽️" label="Mesas" />
             )}
             {canAccess('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon="📖" label={segCfg.labelSidebarProdutos} />}
+            {canAccess('whatsapp-ia') && permiteDelivery && (
+              <NavItem active={activeTab === 'whatsapp-ia'} onClick={() => handleTabChange('whatsapp-ia')} icon="💬" label="WhatsApp IA" />
+            )}
             {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon="📦"  label="Estoque" />}
           </>); })()}
           {canAccess('nfse') && (
@@ -1120,6 +1132,14 @@ const handleAuth = async (e: React.FormEvent) => {
                 estabelecimentoNome={estabelecimentoNome}
                 logoUrl={logoUrl}
                 deliverySlug={slugAtual}
+              />
+            )}
+            {activeTab === 'whatsapp-ia' && canAccess('whatsapp-ia') && permiteDelivery && (
+              <DeliveryScreen
+                token={token}
+                hasMotoboyFeature={tenantHasMotoboyFeature}
+                slug={slugAtual}
+                mode="whatsapp-ia"
               />
             )}
             {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}

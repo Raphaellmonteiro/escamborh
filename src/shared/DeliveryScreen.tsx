@@ -267,6 +267,9 @@ const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
 const deliverySecondaryButtonActiveClass = 'bg-zinc-900 dark:bg-zinc-700 text-white';
 const deliverySecondaryButtonInactiveClass =
   'bg-zinc-50 border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-700 dark:hover:border-zinc-600';
+type DeliveryRootTab = 'balcao' | 'painel' | 'clientes' | 'motoboys' | 'relatorio' | 'config';
+type DeliveryConfigSection = 'loja' | 'zonas' | 'cupons' | 'evolution';
+type DeliveryScreenMode = 'default' | 'whatsapp-ia';
 
 /** Atalho: não embute lista de balcão — envia para a tela Operação (Central) com filtro Balcão. */
 function DeliveryBalcaoCentralShortcut({ onOpen }: { onOpen: () => void }) {
@@ -294,14 +297,17 @@ export default function DeliveryScreen({
   hasMotoboyFeature = true,
   slug,
   onOpenCentralBalcao,
+  mode = 'default',
 }: {
   token: string;
   hasMotoboyFeature?: boolean;
   slug?: string;
   /** Abre a aba Operação com filtro Balcão (sessionStorage + navegação). */
   onOpenCentralBalcao?: () => void;
+  mode?: DeliveryScreenMode;
 }) {
-  const [tab, setTab] = useState<'balcao' | 'painel' | 'clientes' | 'motoboys' | 'relatorio' | 'config'>('painel');
+  const isWhatsAppIAMode = mode === 'whatsapp-ia';
+  const [tab, setTab] = useState<DeliveryRootTab>(isWhatsAppIAMode ? 'config' : 'painel');
   useEffect(() => {
     if (!hasMotoboyFeature && tab === 'motoboys') {
       setTab('painel');
@@ -316,13 +322,13 @@ export default function DeliveryScreen({
           titleClassName="flex items-center gap-2 flex-wrap"
           title={
             <>
-              <Bike size={24} className="shrink-0" />
-              Delivery
+              {isWhatsAppIAMode ? <Zap size={24} className="shrink-0" /> : <Bike size={24} className="shrink-0" />}
+              {isWhatsAppIAMode ? 'WhatsApp IA' : 'Delivery'}
             </>
           }
-          subtitle="Canal delivery, clientes, motoboys e configurações"
+          subtitle={isWhatsAppIAMode ? 'Canal dedicado da IA, configuracao do provider e webhook inbound' : 'Canal delivery, clientes, motoboys e configuracoes'}
           actions={
-            slug ? (
+            !isWhatsAppIAMode && slug ? (
               <a
                 href={`/delivery/${slug}`}
                 target="_blank"
@@ -335,36 +341,42 @@ export default function DeliveryScreen({
           }
         />
 
-        {/* Tabs — mobile: scroll horizontal, toque confortável; desktop: inline */}
-        <div className="flex bg-fp-card border border-fp-border rounded-xl p-1 gap-0.5 w-full sm:w-fit overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-pl-1 scroll-pr-1 sm:scroll-pl-0 sm:scroll-pr-0 [-webkit-overflow-scrolling:touch]">
-          {([
-            { key:'painel',    label:'Painel',          icon:<Package size={14}/> },
-            { key:'balcao',    label:'Balcão',          icon:<LayoutGrid size={14}/> },
-            { key:'clientes',  label:'Clientes',        icon:<Users size={14}/> },
-            { key:'motoboys',  label:'Motoboys',        icon:<Truck size={14}/> },
-            { key:'relatorio', label:'Relatório',       icon:<BarChart2 size={14}/> },
-            { key:'config',    label:'Configurações',  icon:<Settings size={14}/> },
-          ] as const).map(t => {
-            if (t.key === 'motoboys' && !hasMotoboyFeature) return null;
-            return (
-              <button key={t.key} type="button" onClick={() => setTab(t.key)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${tab===t.key?'bg-zinc-900 text-white dark:bg-zinc-800':'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'}`}>
-                {t.icon}{t.label}
-              </button>
-            );
-          })}
-        </div>
+        {isWhatsAppIAMode ? (
+          <TabConfig token={token} slug={slug} initialSection="evolution" standaloneSection="evolution" />
+        ) : (
+          <>
+            {/* Tabs — mobile: scroll horizontal, toque confortável; desktop: inline */}
+            <div className="flex bg-fp-card border border-fp-border rounded-xl p-1 gap-0.5 w-full sm:w-fit overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-pl-1 scroll-pr-1 sm:scroll-pl-0 sm:scroll-pr-0 [-webkit-overflow-scrolling:touch]">
+              {([
+                { key:'painel',    label:'Painel',          icon:<Package size={14}/> },
+                { key:'balcao',    label:'Balcão',          icon:<LayoutGrid size={14}/> },
+                { key:'clientes',  label:'Clientes',        icon:<Users size={14}/> },
+                { key:'motoboys',  label:'Motoboys',        icon:<Truck size={14}/> },
+                { key:'relatorio', label:'Relatório',       icon:<BarChart2 size={14}/> },
+                { key:'config',    label:'Configurações',  icon:<Settings size={14}/> },
+              ] as const).map(t => {
+                if (t.key === 'motoboys' && !hasMotoboyFeature) return null;
+                return (
+                  <button key={t.key} type="button" onClick={() => setTab(t.key)}
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${tab===t.key?'bg-zinc-900 text-white dark:bg-zinc-800':'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'}`}>
+                    {t.icon}{t.label}
+                  </button>
+                );
+              })}
+            </div>
 
-        {tab === 'balcao'    && (
-          <DeliveryBalcaoCentralShortcut
-            onOpen={() => onOpenCentralBalcao?.()}
-          />
+            {tab === 'balcao'    && (
+              <DeliveryBalcaoCentralShortcut
+                onOpen={() => onOpenCentralBalcao?.()}
+              />
+            )}
+            {tab === 'painel'    && <TabPainel token={token} hasMotoboyFeature={hasMotoboyFeature} />}
+            {tab === 'clientes'  && <TabClientes token={token} />}
+            {tab === 'motoboys'  && hasMotoboyFeature && <TabMotoboys token={token} />}
+            {tab === 'relatorio' && <TabRelatorio token={token} />}
+            {tab === 'config'    && <TabConfig   token={token} slug={slug} />}
+          </>
         )}
-        {tab === 'painel'    && <TabPainel token={token} hasMotoboyFeature={hasMotoboyFeature} />}
-        {tab === 'clientes'  && <TabClientes token={token} />}
-        {tab === 'motoboys'  && hasMotoboyFeature && <TabMotoboys token={token} />}
-        {tab === 'relatorio' && <TabRelatorio token={token} />}
-        {tab === 'config'    && <TabConfig   token={token} slug={slug} />}
       </div>
     </motion.div>
   );
@@ -1871,14 +1883,25 @@ function TabRelatorio({ token }: { token: string }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA CONFIG — zonas, cupons, evolution API, opções gerais
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabConfig({ token, slug }: { token: string; slug?: string }) {
+function TabConfig({
+  token,
+  slug,
+  initialSection = 'loja',
+  standaloneSection = null,
+}: {
+  token: string;
+  slug?: string;
+  initialSection?: DeliveryConfigSection;
+  standaloneSection?: DeliveryConfigSection | null;
+}) {
   const [cfg, setCfg]         = useState<DeliveryConfig>({ ativo: false });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
-  const [activeSection, setActiveSection] = useState<'loja'|'zonas'|'cupons'|'evolution'>('loja');
+  const [activeSection, setActiveSection] = useState<DeliveryConfigSection>(standaloneSection ?? initialSection);
   type LojaSubTab = 'operacao' | 'entrega' | 'financeiro' | 'pagamentos' | 'comunicacao' | 'aparencia';
   const [lojaSub, setLojaSub] = useState<LojaSubTab>('operacao');
+  const hasStandaloneSection = standaloneSection != null;
 
   // Cupons
   const [cupons, setCupons]     = useState<Cupom[]>([]);
@@ -2238,12 +2261,14 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
   return (
     <div className="space-y-5 max-w-2xl">
       {/* Seções principais */}
-      <div className="flex gap-2 flex-wrap">
-        <SectionBtn k="loja"      label="Loja"        icon={<Settings size={14}/>}/>
-        <SectionBtn k="zonas"     label="Zonas"       icon={<Map size={14}/>}/>
-        <SectionBtn k="cupons"    label="Cupons"      icon={<Tag size={14}/>}/>
-        <SectionBtn k="evolution" label="WhatsApp IA" icon={<Zap size={14}/>}/>
-      </div>
+      {!hasStandaloneSection && (
+        <div className="flex gap-2 flex-wrap">
+          <SectionBtn k="loja"      label="Loja"        icon={<Settings size={14}/>}/>
+          <SectionBtn k="zonas"     label="Zonas"       icon={<Map size={14}/>}/>
+          <SectionBtn k="cupons"    label="Cupons"      icon={<Tag size={14}/>}/>
+          <SectionBtn k="evolution" label="WhatsApp IA" icon={<Zap size={14}/>}/>
+        </div>
+      )}
 
       {/* ── LOJA (subdomínios) ───────────────────────────────────── */}
       {activeSection === 'loja' && (
@@ -2928,37 +2953,37 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
       {/* ── EVOLUTION API (WhatsApp automático) ─────────────────── */}
       {activeSection === 'evolution' && (
-        <div className="bg-white border border-zinc-200 rounded-2xl p-6 space-y-5">
+        <div className="bg-fp-card border border-fp-border rounded-2xl p-6 space-y-5">
           <div>
-            <h3 className="text-base font-black text-zinc-900 flex items-center gap-2"><Zap size={16}/>WhatsApp automático</h3>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Quando um pedido chega, a mensagem é enviada automaticamente ao WhatsApp do restaurante via <strong>Evolution API</strong> (open source, gratuito).
+            <h3 className="text-base font-black text-fptext-primary flex items-center gap-2"><Zap size={16}/>WhatsApp IA</h3>
+            <p className="text-xs text-fptext-muted mt-0.5">
+              Canal dedicado para envio e recebimento automatizado via <strong>Evolution API</strong>.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Provider ativo</p>
-              <p className="mt-1 text-sm font-black text-zinc-900">{whatsappProviderLabel}</p>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Provider ativo</p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappProviderLabel}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Numero usado pela IA</p>
-              <p className="mt-1 text-sm font-black text-zinc-900">{whatsappAiNumber || 'Nao informado'}</p>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Numero usado pela IA</p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappAiNumber || 'Nao informado'}</p>
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Instancia ativa</p>
-              <p className="mt-1 text-sm font-black text-zinc-900">{whatsappAiInstance || 'Nao informada'}</p>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Instancia ativa</p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappAiInstance || 'Nao informada'}</p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-xs text-cyan-900">
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-xs text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
             <p className="font-bold">Envio e recebimento usam a mesma configuracao</p>
             <p className="mt-1">
               O numero e a instancia informados abaixo ficam vinculados ao tenant e serao usados pela IA tanto para enviar mensagens quanto para receber o inbound deste tenant.
             </p>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1 dark:bg-amber-500/10 dark:border-amber-500/30 dark:text-amber-100">
             <p className="font-bold">Como configurar a Evolution API:</p>
             <p>1. Instale: <code className="bg-amber-100 px-1 rounded">docker run -d evolutionapi/evolution-api</code></p>
             <p>2. Acesse o painel e crie uma instância com seu número</p>
@@ -2970,69 +2995,69 @@ function TabConfig({ token, slug }: { token: string; slug?: string }) {
 
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">URL da API</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">URL da API</label>
               <input value={cfg.evolution_url||''} onChange={e=>setCfg(c=>({...c,evolution_url:e.target.value}))}
                 placeholder="https://api.meuservidor.com"
-                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Token (apikey)</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Token (apikey)</label>
               <input type="password" value={cfg.evolution_token||''} onChange={e=>setCfg(c=>({...c,evolution_token:e.target.value}))}
                 placeholder="seu-token-aqui"
-                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Nome da instância</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Nome da instância</label>
               <input value={cfg.evolution_instance||''} onChange={e=>setCfg(c=>({...c,evolution_instance:e.target.value}))}
                 placeholder="meu-restaurante"
-                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Numero do WhatsApp da IA</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Numero do WhatsApp da IA</label>
               <input value={cfg.evolution_phone_number||''} onChange={e=>setCfg(c=>({...c,evolution_phone_number:e.target.value}))}
                 placeholder="5511999999999"
-                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
-              <p className="mt-1 text-[11px] text-zinc-500">
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
+              <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                 Numero exibido como canal ativo deste tenant. Se ficar vazio, o sistema usa o WhatsApp geral da loja apenas como fallback visual.
               </p>
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Identificador do canal</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Identificador do canal</label>
               <input value={cfg.evolution_channel_id||''} onChange={e=>setCfg(c=>({...c,evolution_channel_id:e.target.value}))}
                 placeholder={cfg.evolution_instance||'meu-restaurante'}
-                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
-              <p className="mt-1 text-[11px] text-zinc-500">
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
+              <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                 Opcional. Se ficar vazio, o sistema usa o nome da instancia como identificador do canal.
               </p>
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Webhook inbound do tenant</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Webhook inbound do tenant</label>
               <input value={whatsappInboundWebhookPath} readOnly
-                className="w-full px-3 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-sm text-zinc-600 focus:outline-none"/>
-              <p className="mt-1 text-[11px] text-zinc-500">
+                className="w-full px-3 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-sm text-zinc-600 focus:outline-none dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-300"/>
+              <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                 Configure este caminho no provider para que a IA receba mensagens neste mesmo tenant.
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
             <p><strong>Canal atual:</strong> {whatsappProviderLabel} {whatsappAiNumber ? `- ${whatsappAiNumber}` : ''} {whatsappAiInstance ? `- instancia ${whatsappAiInstance}` : ''}</p>
             <p className="mt-1"><strong>Channel ID:</strong> {whatsappChannelIdentifier || 'Nao informado'}</p>
           </div>
 
           {!whatsappConfigured && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl">
-              <AlertCircle size={14} className="text-zinc-500"/>
-              <p className="text-xs font-bold text-zinc-700">
+            <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl dark:bg-zinc-900/40 dark:border-zinc-700">
+              <AlertCircle size={14} className="text-zinc-500 dark:text-zinc-400"/>
+              <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">
                 Preencha URL, token e instancia para ativar o canal do tenant. O numero exibivel e o webhook acima ajudam a identificar o canal correto.
               </p>
             </div>
           )}
 
           {cfg.evolution_url && cfg.evolution_token && cfg.evolution_instance && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl dark:bg-emerald-500/10 dark:border-emerald-500/30">
               <Check size={14} className="text-emerald-600"/>
-              <p className="text-xs font-bold text-emerald-700">Evolution API configurada. Mensagens serão enviadas automaticamente.</p>
+              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-200">Evolution API configurada. Mensagens serão enviadas automaticamente.</p>
             </div>
           )}
         </div>
