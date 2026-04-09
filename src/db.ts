@@ -199,8 +199,32 @@ export async function runMigrations() {
       );
       CREATE TABLE IF NOT EXISTS system_logs (
         id SERIAL PRIMARY KEY,
-        tenant_id INTEGER NOT NULL, usuario_nome TEXT NOT NULL,
+        tenant_id INTEGER, usuario_nome TEXT NOT NULL,
         cargo TEXT DEFAULT 'dono', acao TEXT NOT NULL, detalhes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS admin_audit_events (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER,
+        scope_type TEXT,
+        scope_id TEXT,
+        actor_type TEXT NOT NULL DEFAULT 'platform_admin',
+        actor_id TEXT,
+        actor_name TEXT NOT NULL DEFAULT 'Admin',
+        actor_role TEXT NOT NULL DEFAULT 'admin',
+        action TEXT NOT NULL,
+        legacy_action TEXT NOT NULL,
+        entity_type TEXT,
+        entity_id TEXT,
+        reason TEXT,
+        request_id TEXT,
+        session_fingerprint TEXT,
+        request_method TEXT,
+        request_path TEXT,
+        summary TEXT,
+        metadata_json JSONB,
+        before_json JSONB,
+        after_json JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS pedido_eventos (
@@ -406,6 +430,11 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+      ALTER TABLE system_logs ALTER COLUMN tenant_id DROP NOT NULL;
+      ALTER TABLE admin_audit_events ALTER COLUMN tenant_id DROP NOT NULL;
+      ALTER TABLE admin_audit_events ADD COLUMN IF NOT EXISTS scope_type TEXT;
+      ALTER TABLE admin_audit_events ADD COLUMN IF NOT EXISTS scope_id TEXT;
+
       ALTER TABLE clientes ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE clientes ALTER COLUMN senha_admin DROP DEFAULT;
       ALTER TABLE clientes ALTER COLUMN senha_caixa DROP DEFAULT;
@@ -745,6 +774,12 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_despesas_tenant_date     ON despesas(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_estoque_mov_tenant_date  ON estoque_movimentacoes(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_system_logs_tenant_date  ON system_logs(tenant_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_events_tenant_date ON admin_audit_events(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_events_tenant_action_date ON admin_audit_events(tenant_id, action, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_events_request_id ON admin_audit_events(request_id);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_events_tenant_entity_date ON admin_audit_events(tenant_id, entity_type, entity_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_events_tenant_session_date ON admin_audit_events(tenant_id, session_fingerprint, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_events_scope_date ON admin_audit_events(scope_type, scope_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_pedido_eventos_pedido    ON pedido_eventos(pedido_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_pedido_eventos_tenant    ON pedido_eventos(tenant_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_itens_pedido_tenant      ON itens_pedido(tenant_id, order_id);
