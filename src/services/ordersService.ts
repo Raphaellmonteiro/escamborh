@@ -37,6 +37,7 @@ import { parseAutomationFromDeliveryConfigJson, shouldAutoPrintForBalcaoOrder } 
 import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService';
 import { createPixPayment } from './paymentsService';
 import { touchStoreCustomerPurchase } from './storeCustomerService';
+import { tenantHasInventoryFeature } from './tenantPlan';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import { validateAuthoritativeComboSelections } from './productComboValidation';
@@ -814,8 +815,13 @@ async function processStockDeduction(
   client: PoolClient,
   items: NormalizedOrderItem[],
   tenantId: TenantId,
-  orderId: number
+  orderId: number,
+  inventoryEnabled: boolean
 ) {
+  if (!inventoryEnabled) {
+    return;
+  }
+
   for (const item of items) {
     await adjustStockForItem(client, item, tenantId, 'saida', true, orderId);
   }
@@ -878,7 +884,8 @@ async function restoreStockForOrder(
   client: PoolClient,
   orderId: number,
   tenantId: TenantId,
-  entryContext: 'delete' | 'cancel' = 'delete'
+  entryContext: 'delete' | 'cancel' = 'delete',
+  inventoryEnabled = true
 ) {
   const restoredFromMovements = await restoreStockFromRecordedMovements(
     client,
@@ -887,7 +894,7 @@ async function restoreStockForOrder(
     entryContext
   );
 
-  if (restoredFromMovements) {
+  if (restoredFromMovements || !inventoryEnabled) {
     return;
   }
 
@@ -1130,10 +1137,11 @@ function buildOrderFilters(filters: GetOrdersFilters) {
 export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
   ensureTenantId(tenantId);
 
-    const input = await normalizeCreateOrderInput(data, tenantId);
+  const input = await normalizeCreateOrderInput(data, tenantId);
 
   try {
     await ensureProductsExist(input.items, tenantId);
+    const inventoryEnabled = await tenantHasInventoryFeature(tenantId);
 
     const result = await withTx(async (client) => {
       const { nextNumber, orderNumber } = await generateOrderNumber(client, tenantId);
@@ -1184,7 +1192,7 @@ export async function createOrder(data: CreateOrderInput, tenantId: TenantId) {
       );
 
       await insertOrderItems(client, orderId, input.items, tenantId);
-      await processStockDeduction(client, input.items, tenantId, orderId);
+      await processStockDeduction(client, input.items, tenantId, orderId, inventoryEnabled);
       await savePayments(client, orderId, input.payments, tenantId);
       await createOrderEvent(client, {
         pedidoId: orderId,
@@ -1322,6 +1330,8 @@ export async function cancelOrder(input: CancelOrderInput) {
       invalidMessage: 'Subsenha invÃ¡lida',
     });
 
+    const inventoryEnabled = await tenantHasInventoryFeature(input.tenantId);
+
     const updatedOrder = await withTx(async (client) => {
       const order = await txQ1<OrderRow>(
         client,
@@ -1341,7 +1351,7 @@ export async function cancelOrder(input: CancelOrderInput) {
       } 
 
       if (shouldRestoreStock) {
-        await restoreStockForOrder(client, orderId, input.tenantId, 'cancel');
+        await restoreStockForOrder(client, orderId, input.tenantId, 'cancel', inventoryEnabled);
       }
 
       await txRun(
@@ -1418,6 +1428,8 @@ export async function deleteOrder(input: DeleteOrderInput) {
       invalidMessage: 'Subsenha inválida',
     });
 
+    const inventoryEnabled = await tenantHasInventoryFeature(input.tenantId);
+
     await withTx(async (client) => {
       const order = await txQ1<{ id: number }>(
         client,
@@ -1429,7 +1441,7 @@ export async function deleteOrder(input: DeleteOrderInput) {
         throw new AppError('Pedido não encontrado', 404);
       }
 
-      await restoreStockForOrder(client, orderId, input.tenantId);
+      await restoreStockForOrder(client, orderId, input.tenantId, 'delete', inventoryEnabled);
 
       await txRun(client, 'DELETE FROM pagamentos WHERE order_id=?', [orderId]);
       await txRun(client, 'DELETE FROM itens_pedido WHERE order_id=?', [orderId]);

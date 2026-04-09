@@ -169,6 +169,10 @@ export async function tenantHasFeature(tenantId: number | string, feature: PlanF
   return features.includes(feature);
 }
 
+export async function tenantHasInventoryFeature(tenantId: number | string): Promise<boolean> {
+  return tenantHasFeature(tenantId, 'estoque');
+}
+
 export async function getTenantFeaturesBySlug(slug: string): Promise<PlanFeature[] | null> {
   const tenant = await q1<TenantPlanRow>(
     'SELECT id, plano, trial_inicio, trial_fim, vencimento FROM clientes WHERE usuario=? AND status=?',

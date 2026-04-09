@@ -19,6 +19,7 @@ import { addItemToMesaComanda } from '../services/ordersService';
 import { buildKitchenReceiptHtml, filterKitchenPreparationItems } from '../services/kitchenPrintService';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { runAutomatedKitchenPrintForMesa } from '../services/operationalAutomationService';
+import { tenantHasInventoryFeature } from '../services/tenantPlan';
 import { notifyTenantOrderStreams } from '../sse';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 
@@ -174,6 +175,8 @@ async function ajustarEstoque(
   motivo: string,
   variationId?: number | null
 ) {
+  if (!(await tenantHasInventoryFeature(tenantId))) return;
+
   const prod = await q1('SELECT * FROM produtos WHERE id=? AND tenant_id=?', [productId, tenantId]);
   if (!prod) return;
   const tipo = qtd > 0 ? 'saida' : 'entrada';
@@ -985,6 +988,5 @@ export function createMesasRouter() {
 
   return router;
 }
-
 
 

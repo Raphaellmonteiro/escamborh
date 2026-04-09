@@ -1388,9 +1388,13 @@ export function createAdminRouter() {
         return rows;
       });
       const count = updatedRows.length;
-      return { users_affected: updatedRows.length };
+      return { users_affected: count };
+      /*
 
         `Sessões invalidadas para todos os usuários do tenant (${count} afetados). Motivo: ${reason}`,
+    },
+
+      */
     },
 
     async force_pix_check({ req, tenantId, payload, reason }) {

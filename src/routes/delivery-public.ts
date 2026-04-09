@@ -16,7 +16,7 @@ import {
 import { type PlanFeature } from '../config/planFeatures';
 import { resolveProductInventoryTargets } from '../services/stockIdentification';
 import { serializeOrderItemSelecoes } from '../services/ordersService';
-import { getTenantFeaturesBySlug } from '../services/tenantPlan';
+import { getTenantFeaturesBySlug, tenantHasInventoryFeature } from '../services/tenantPlan';
 import { AppError, isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
 import { sendInternalError } from '../utils/internalServerError';
@@ -1564,6 +1564,7 @@ export function createDeliveryPublicRouter() {
 
       const initialOrderStatus =
         canalPedido === 'delivery' && automation.delivery_auto_accept_orders ? 'Pedido Recebido' : 'Criado';
+      const inventoryEnabled = await tenantHasInventoryFeature(tenant.id);
 
       const result = await withTx(async (client) => {
         const n = await txQ1(client, 'SELECT COUNT(*) as c FROM pedidos WHERE tenant_id=? AND order_number LIKE ?', [tenant.id, `${prefix}-%`]);
@@ -1615,26 +1616,28 @@ export function createDeliveryPublicRouter() {
                 selecoesJson,
               ]
             );
-            const resolution = await resolveProductInventoryTargets({
-              client,
-              tenantId: tenant.id,
-              productId: item.product_id,
-              variationId: item.variation_id ?? null,
-            });
-            if (resolution && resolution.targets.length > 0) {
-              for (const target of resolution.targets) {
-                const qtd = Number(target.quantityMultiplier) * Number(item.quantity);
-                await txRun(client, 'UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [qtd, target.ingredientId, tenant.id]);
-                await txRun(client, "INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,'saida',?,'Venda delivery automatica',?)", [target.ingredientId, qtd, tenant.id]);
-              }
-            } else {
-              console.warn('[delivery-estoque] Pedido autorizado sem baixa de estoque - produto sem vinculo', {
+            if (inventoryEnabled) {
+              const resolution = await resolveProductInventoryTargets({
+                client,
                 tenantId: tenant.id,
-                orderId,
                 productId: item.product_id,
                 variationId: item.variation_id ?? null,
-                productName: resolution?.product?.name ?? '?',
               });
+              if (resolution && resolution.targets.length > 0) {
+                for (const target of resolution.targets) {
+                  const qtd = Number(target.quantityMultiplier) * Number(item.quantity);
+                  await txRun(client, 'UPDATE ingredientes SET estoque_atual=GREATEST(0,estoque_atual-?) WHERE id=? AND tenant_id=?', [qtd, target.ingredientId, tenant.id]);
+                  await txRun(client, "INSERT INTO estoque_movimentacoes (ingrediente_id,tipo,quantidade,motivo,tenant_id) VALUES (?,'saida',?,'Venda delivery automatica',?)", [target.ingredientId, qtd, tenant.id]);
+                }
+              } else {
+                console.warn('[delivery-estoque] Pedido autorizado sem baixa de estoque - produto sem vinculo', {
+                  tenantId: tenant.id,
+                  orderId,
+                  productId: item.product_id,
+                  variationId: item.variation_id ?? null,
+                  productName: resolution?.product?.name ?? '?',
+                });
+              }
             }
           }
 
