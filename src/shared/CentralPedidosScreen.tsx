@@ -1,4 +1,4 @@
-import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree, ChefHat } from 'lucide-react';
 import type { Order } from '../types';
@@ -171,6 +171,20 @@ function getMesaReference(order: Order) {
   return mesaMatch ? mesaMatch[1] : null;
 }
 
+function getCompactOrderItemsSummary(order: Order) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (items.length === 0) return null;
+
+  const summary = items.slice(0, 2).map((item) => {
+    const label = String(item.name || (item as { product_name?: string }).product_name || 'Item').trim() || 'Item';
+    const quantity = Math.max(1, Number(item.quantity || 0));
+    return `${quantity}x ${label}`;
+  });
+  const remaining = items.length - summary.length;
+
+  return remaining > 0 ? `${summary.join(', ')} +${remaining} itens` : summary.join(', ');
+}
+
 function paymentMetodoUpper(tipo: string): string {
   const k = String(tipo || '').trim().toLowerCase();
   if (k === 'dinheiro') return 'DINHEIRO';
@@ -337,6 +351,19 @@ const QUICK_FILTERS: { id: CentralQuickFilter; label: string }[] = [
   { id: 'sem_motoboy', label: 'Sem motoboy' },
 ];
 
+const CENTRAL_MOBILE_BOARD_BREAKPOINT = 1024;
+const CENTRAL_BOARD_GESTURE_LOCK_THRESHOLD = 6;
+const CENTRAL_BOARD_DRAG_THRESHOLD = 12;
+
+type CentralBoardTouchState = {
+  active: boolean;
+  startX: number;
+  startY: number;
+  startScrollLeft: number;
+  axis: 'x' | 'y' | null;
+  suppressClick: boolean;
+};
+
 export default function CentralPedidosScreen({
   token,
   segmento,
@@ -356,6 +383,18 @@ export default function CentralPedidosScreen({
   const [motoboys, setMotoboys] = useState<Array<{ id: number; nome: string }>>([]);
   const [showClosed, setShowClosed] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
+  const [boardCanScrollLeft, setBoardCanScrollLeft] = useState(false);
+  const [boardCanScrollRight, setBoardCanScrollRight] = useState(false);
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const boardTouchStateRef = useRef<CentralBoardTouchState>({
+    active: false,
+    startX: 0,
+    startY: 0,
+    startScrollLeft: 0,
+    axis: null,
+    suppressClick: false,
+  });
+  const boardSuppressClickTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -461,6 +500,151 @@ export default function CentralPedidosScreen({
     }),
     [filtered, segCfg.statusConcluido, hasMotoboyFeature]
   );
+  const visibleColumns = useMemo(
+    () => COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado'),
+    [showClosed]
+  );
+
+  const updateBoardScrollState = useCallback(() => {
+    const node = boardScrollRef.current;
+    if (!node) {
+      setBoardCanScrollLeft(false);
+      setBoardCanScrollRight(false);
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
+    const nextCanScrollLeft = node.scrollLeft > 8;
+    const nextCanScrollRight = maxScrollLeft - node.scrollLeft > 8;
+
+    setBoardCanScrollLeft((current) => (current === nextCanScrollLeft ? current : nextCanScrollLeft));
+    setBoardCanScrollRight((current) => (current === nextCanScrollRight ? current : nextCanScrollRight));
+  }, []);
+
+  const clearBoardSuppressClick = useCallback(() => {
+    if (boardSuppressClickTimeoutRef.current != null) {
+      window.clearTimeout(boardSuppressClickTimeoutRef.current);
+      boardSuppressClickTimeoutRef.current = null;
+    }
+    boardTouchStateRef.current.suppressClick = false;
+  }, []);
+
+  useEffect(() => () => {
+    if (boardSuppressClickTimeoutRef.current != null) {
+      window.clearTimeout(boardSuppressClickTimeoutRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const node = boardScrollRef.current;
+    if (!node) return;
+
+    const syncBoardScrollState = () => updateBoardScrollState();
+    const frameId = window.requestAnimationFrame(syncBoardScrollState);
+
+    node.addEventListener('scroll', syncBoardScrollState, { passive: true });
+    window.addEventListener('resize', syncBoardScrollState);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      node.removeEventListener('scroll', syncBoardScrollState);
+      window.removeEventListener('resize', syncBoardScrollState);
+    };
+  }, [updateBoardScrollState, visibleColumns.length, filtered.length, orders.length]);
+
+  useEffect(() => {
+    const node = boardScrollRef.current;
+    if (!node) return;
+
+    const isMobileBoardScrollable = () =>
+      window.innerWidth < CENTRAL_MOBILE_BOARD_BREAKPOINT &&
+      node.scrollWidth > node.clientWidth + 8;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (!isMobileBoardScrollable()) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      clearBoardSuppressClick();
+      boardTouchStateRef.current.active = true;
+      boardTouchStateRef.current.startX = touch.clientX;
+      boardTouchStateRef.current.startY = touch.clientY;
+      boardTouchStateRef.current.startScrollLeft = node.scrollLeft;
+      boardTouchStateRef.current.axis = null;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const state = boardTouchStateRef.current;
+      if (!state.active || !isMobileBoardScrollable()) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - state.startX;
+      const deltaY = touch.clientY - state.startY;
+
+      if (!state.axis) {
+        if (
+          Math.abs(deltaX) < CENTRAL_BOARD_GESTURE_LOCK_THRESHOLD &&
+          Math.abs(deltaY) < CENTRAL_BOARD_GESTURE_LOCK_THRESHOLD
+        ) {
+          return;
+        }
+        state.axis = Math.abs(deltaX) > Math.abs(deltaY) ? 'x' : 'y';
+      }
+
+      if (state.axis !== 'x') return;
+
+      if (Math.abs(deltaX) > CENTRAL_BOARD_DRAG_THRESHOLD) {
+        state.suppressClick = true;
+      }
+
+      event.preventDefault();
+      node.scrollLeft = state.startScrollLeft - deltaX;
+      updateBoardScrollState();
+    };
+
+    const handleTouchEnd = () => {
+      const state = boardTouchStateRef.current;
+      state.active = false;
+      state.axis = null;
+
+      if (!state.suppressClick) return;
+
+      if (boardSuppressClickTimeoutRef.current != null) {
+        window.clearTimeout(boardSuppressClickTimeoutRef.current);
+      }
+
+      boardSuppressClickTimeoutRef.current = window.setTimeout(() => {
+        boardTouchStateRef.current.suppressClick = false;
+        boardSuppressClickTimeoutRef.current = null;
+      }, 220);
+    };
+
+    const handleClickCapture = (event: MouseEvent) => {
+      if (!boardTouchStateRef.current.suppressClick) return;
+      event.preventDefault();
+      event.stopPropagation();
+      clearBoardSuppressClick();
+    };
+
+    node.addEventListener('touchstart', handleTouchStart, { passive: true });
+    node.addEventListener('touchmove', handleTouchMove, { passive: false });
+    node.addEventListener('touchend', handleTouchEnd, { passive: true });
+    node.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    node.addEventListener('click', handleClickCapture, true);
+
+    return () => {
+      node.removeEventListener('touchstart', handleTouchStart);
+      node.removeEventListener('touchmove', handleTouchMove);
+      node.removeEventListener('touchend', handleTouchEnd);
+      node.removeEventListener('touchcancel', handleTouchEnd);
+      node.removeEventListener('click', handleClickCapture, true);
+    };
+  }, [clearBoardSuppressClick, updateBoardScrollState, visibleColumns.length, filtered.length, orders.length]);
+
+  const showBoardSwipeHint = boardCanScrollRight && !boardCanScrollLeft;
+  const hasHorizontalOverflow = boardCanScrollLeft || boardCanScrollRight;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-zinc-50 dark:bg-zinc-950">
@@ -489,7 +673,7 @@ export default function CentralPedidosScreen({
             <Button
               type="button"
               variant="secondary"
-              className="!min-h-[34px] !px-2.5 !py-1.5 !text-[11px] 2xl:!min-h-[40px] 2xl:!px-3 2xl:!py-2 2xl:!text-xs"
+              className="!min-h-[36px] sm:!min-h-[34px] !px-2.5 !py-1.5 !text-[11px] 2xl:!min-h-[40px] 2xl:!px-3 2xl:!py-2 2xl:!text-xs"
               onClick={() => void fetchOrders()}
               disabled={loading}
             >
@@ -499,63 +683,67 @@ export default function CentralPedidosScreen({
           }
         />
 
-        <div className="mt-2 flex flex-wrap gap-1 sm:mt-2.5 sm:gap-1.5 2xl:mt-3 2xl:gap-2">
-          {FILTERS.map((f) => (
+        <div className="-mx-2 mt-2 overflow-x-auto px-2 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <div className="flex min-w-max gap-1 sm:min-w-0 sm:flex-wrap sm:gap-1.5 2xl:gap-2">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setChannelFilter(f.id)}
+                className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide min-h-[36px] sm:min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3.5 2xl:py-2 2xl:text-xs transition-colors ${
+                  channelFilter === f.id
+                    ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                    : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
             <button
-              key={f.id}
               type="button"
-              onClick={() => setChannelFilter(f.id)}
-              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3.5 2xl:py-2 2xl:text-xs transition-colors ${
-                channelFilter === f.id
+              onClick={() => setShowClosed((current) => !current)}
+              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
+                showClosed
                   ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                  : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
+              title={showClosed ? 'Ocultar pedidos encerrados' : 'Mostrar pedidos encerrados'}
             >
-              {f.label}
+              {showClosed ? 'Ocultar encerrados' : `Encerrados (${buckets.encerrado.length})`}
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setShowClosed((current) => !current)}
-            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
-              showClosed
-                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-            }`}
-            title={showClosed ? 'Ocultar pedidos encerrados' : 'Mostrar pedidos encerrados'}
-          >
-            {showClosed ? 'Ocultar encerrados' : `Encerrados (${buckets.encerrado.length})`}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCompactMode((current) => !current)}
-            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
-              compactMode
-                ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-            }`}
-            title={compactMode ? 'Voltar ao modo normal' : 'Reduzir altura dos cards'}
-          >
-            {compactMode ? 'Compacto' : 'Compactar'}
-          </button>
+            <button
+              type="button"
+              onClick={() => setCompactMode((current) => !current)}
+              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
+                compactMode
+                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                  : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title={compactMode ? 'Voltar ao modo normal' : 'Reduzir altura dos cards'}
+            >
+              {compactMode ? 'Compacto' : 'Compactar'}
+            </button>
+          </div>
         </div>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:mt-2 sm:gap-1.5 2xl:mt-3 2xl:gap-2">
-          <span className={`${adminSectionEyebrowClass} text-[10px] 2xl:text-xs`}>Filtros</span>
-          {quickFilters.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setQuickFilter(f.id)}
-              className={`min-h-[34px] rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors sm:min-h-0 sm:py-1 2xl:min-h-0 2xl:px-3 2xl:py-1.5 2xl:text-xs ${
-                quickFilter === f.id
-                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                  : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="-mx-2 mt-1.5 overflow-x-auto px-2 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] sm:mx-0 sm:mt-2 sm:overflow-visible sm:px-0 sm:pb-0 2xl:mt-3">
+          <div className="flex min-w-max items-center gap-1 sm:min-w-0 sm:flex-wrap sm:gap-1.5 2xl:gap-2">
+            <span className={`${adminSectionEyebrowClass} shrink-0 text-[10px] 2xl:text-xs`}>Filtros</span>
+            {quickFilters.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setQuickFilter(f.id)}
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold min-h-[36px] transition-colors sm:min-h-0 sm:py-1 2xl:min-h-0 2xl:px-3 2xl:py-1.5 2xl:text-xs ${
+                  quickFilter === f.id
+                    ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                    : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -582,56 +770,79 @@ export default function CentralPedidosScreen({
                 Nenhum pedido corresponde ao filtro selecionado.
               </p>
             )}
-            <div className="px-0.5 text-[10px] font-medium text-zinc-400 lg:hidden">
-              Deslize lateralmente para ver as próximas colunas
-            </div>
-            <div className="-mx-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-2 pb-3 touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] sm:pb-3 lg:mx-0 lg:px-0 lg:pb-2 2xl:-mx-0 2xl:pb-2">
-              <div className="flex min-w-max items-start gap-2 pr-3 lg:min-w-0 lg:grid lg:grid-cols-3 lg:gap-2.5 lg:pr-0 xl:grid-cols-4 xl:gap-2.5 2xl:grid-cols-4 2xl:gap-3 min-[1800px]:grid-cols-6">
-                {COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado').map((col) => {
-                  const tone = getColumnTone(col.id);
-                  return (
+            <div className="relative">
+              <div className={`px-0.5 text-[10px] font-medium text-zinc-400 transition-opacity lg:hidden ${showBoardSwipeHint ? 'opacity-100' : 'opacity-0'}`}>
+                Deslize pela lista para acessar as próximas colunas
+              </div>
+              {hasHorizontalOverflow && (
+                <>
                   <div
-                    key={col.id}
-                    className={`flex w-[min(calc(100vw-1.5rem),272px)] flex-shrink-0 flex-col rounded-xl border shadow-sm shadow-zinc-950/[0.02] min-h-[min(260px,46vh)] max-h-none sm:w-[280px] md:w-[296px] lg:w-auto lg:min-h-[min(300px,50vh)] lg:max-h-[min(640px,70vh)] 2xl:rounded-2xl 2xl:min-h-[min(420px,62vh)] 2xl:max-h-[min(720px,78vh)] ${tone.shell}`}
-                  >
-                    <div className={`shrink-0 px-2 py-1.5 2xl:px-3 2xl:py-2.5 ${tone.header}`}>
-                      <div className="flex items-center justify-between gap-1.5 2xl:gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 2xl:text-[11px]">
-                          {col.title}
-                        </span>
-                        <span className={`text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-md 2xl:text-[10px] 2xl:px-2 2xl:rounded-lg ${tone.count}`}>
-                          {buckets[col.id].length}
-                        </span>
-                      </div>
-                      {col.hint && (
-                        <p className="hidden text-[10px] text-zinc-400 mt-0.5 leading-tight 2xl:block">{col.hint}</p>
-                      )}
-                    </div>
-                    <div className="min-h-0 flex-1 space-y-1 p-1 sm:p-1.5 lg:overflow-y-auto lg:overscroll-y-contain 2xl:space-y-2 2xl:p-2">
-                      {buckets[col.id].length === 0 ? (
-                        <div className={`mx-0.5 rounded-lg border border-dashed py-2.5 px-2 text-center text-[10px] leading-snug 2xl:mx-1 2xl:rounded-2xl 2xl:py-5 2xl:px-3 2xl:text-[11px] ${tone.empty}`}>
-                          Sem pedidos nesta etapa
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-7 bg-gradient-to-r from-zinc-50 via-zinc-50/90 to-transparent transition-opacity dark:from-zinc-950 dark:via-zinc-950/90 lg:hidden ${boardCanScrollLeft ? 'opacity-100' : 'opacity-0'}`}
+                  />
+                  <div
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-9 bg-gradient-to-l from-zinc-50 via-zinc-50/95 to-transparent transition-opacity dark:from-zinc-950 dark:via-zinc-950/95 lg:hidden ${boardCanScrollRight ? 'opacity-100' : 'opacity-0'}`}
+                  />
+                </>
+              )}
+              {showBoardSwipeHint && (
+                <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-full border border-zinc-200/80 bg-white/92 px-2.5 py-1 text-[10px] font-semibold text-zinc-500 shadow-sm backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/88 dark:text-zinc-300 lg:hidden">
+                  Arraste o quadro
+                </div>
+              )}
+              <div
+                ref={boardScrollRef}
+                className="-mx-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-2 pb-3 touch-pan-y [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] scroll-smooth snap-x snap-proximity scroll-px-2 sm:pb-3 lg:mx-0 lg:px-0 lg:pb-2 lg:touch-auto lg:snap-none 2xl:-mx-0 2xl:pb-2"
+              >
+                <div className="flex min-w-max items-start gap-2 pr-3 lg:min-w-0 lg:grid lg:grid-cols-3 lg:gap-2.5 lg:pr-0 xl:grid-cols-4 xl:gap-2.5 2xl:grid-cols-4 2xl:gap-3 min-[1800px]:grid-cols-6">
+                  {visibleColumns.map((col) => {
+                    const tone = getColumnTone(col.id);
+                    return (
+                      <div
+                        key={col.id}
+                        className={`snap-start flex w-[min(calc(100vw-1.5rem),272px)] flex-shrink-0 flex-col rounded-xl border shadow-sm shadow-zinc-950/[0.02] min-h-[min(260px,46vh)] max-h-none sm:w-[280px] md:w-[296px] lg:w-auto lg:min-h-[min(300px,50vh)] lg:max-h-[min(640px,70vh)] 2xl:rounded-2xl 2xl:min-h-[min(420px,62vh)] 2xl:max-h-[min(720px,78vh)] ${tone.shell}`}
+                      >
+                        <div className={`shrink-0 px-2 py-1.5 2xl:px-3 2xl:py-2.5 ${tone.header}`}>
+                          <div className="flex items-center justify-between gap-1.5 2xl:gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 2xl:text-[11px]">
+                              {col.title}
+                            </span>
+                            <span className={`text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-md 2xl:text-[10px] 2xl:px-2 2xl:rounded-lg ${tone.count}`}>
+                              {buckets[col.id].length}
+                            </span>
+                          </div>
+                          {col.hint && (
+                            <p className="hidden text-[10px] text-zinc-400 mt-0.5 leading-tight 2xl:block">{col.hint}</p>
+                          )}
                         </div>
-                      ) : (
-                        buckets[col.id].map((order) => (
-                          <Fragment key={order.id}>
-                            <OrderCard
-                              order={order}
-                              columnId={col.id}
-                              token={token}
-                              segmentFinalStatus={segCfg.statusConcluido}
-                              motoboys={motoboys}
-                              hasMotoboyFeature={hasMotoboyFeature}
-                              compactMode={compactMode}
-                              onOpenDetail={() => setDetail(order)}
-                              onActionDone={() => void fetchOrders()}
-                            />
-                          </Fragment>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )})}
+                        <div className="min-h-0 flex-1 space-y-1 p-1 sm:space-y-1 sm:p-1.5 lg:overflow-y-auto lg:overscroll-y-contain 2xl:space-y-2 2xl:p-2">
+                          {buckets[col.id].length === 0 ? (
+                            <div className={`mx-0.5 rounded-lg border border-dashed py-2.5 px-2 text-center text-[10px] leading-snug 2xl:mx-1 2xl:rounded-2xl 2xl:py-5 2xl:px-3 2xl:text-[11px] ${tone.empty}`}>
+                              Sem pedidos nesta etapa
+                            </div>
+                          ) : (
+                            buckets[col.id].map((order) => (
+                              <Fragment key={order.id}>
+                                <OrderCard
+                                  order={order}
+                                  columnId={col.id}
+                                  token={token}
+                                  segmentFinalStatus={segCfg.statusConcluido}
+                                  motoboys={motoboys}
+                                  hasMotoboyFeature={hasMotoboyFeature}
+                                  compactMode={compactMode}
+                                  onOpenDetail={() => setDetail(order)}
+                                  onActionDone={() => void fetchOrders()}
+                                />
+                              </Fragment>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </>
@@ -685,7 +896,10 @@ function OrderCard({
   const ageMinutes = getOrderAgeMinutes(order);
   const hasItemCustomization = orderHasAnyItemCustomization(order);
   const hasAutomationBadges = orderHasAutomationBadges(order);
+  const compactItemsSummary = getCompactOrderItemsSummary(order);
+  const compactOriginLabel = mesaReference ? `Mesa ${mesaReference}` : badge.label;
   const statusRaw = String(order.status || '').trim() || '—';
+  const compactStatusLabel = columnId === 'a_confirmar' ? 'Aguardando confirmacao' : statusRaw;
   const paymentPendingLabel = Number(order.payment_total_paid || 0) > 0
     ? 'Pagamento parcial'
     : String(order.pagamento_tipo || '').trim().toLowerCase() === 'pix'
@@ -764,21 +978,21 @@ function OrderCard({
   };
 
   return (
-    <Card className={`!shadow-none !rounded-xl 2xl:!rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+    <Card className={`!shadow-none !rounded-lg sm:!rounded-xl 2xl:!rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
       urgent
         ? 'ring-1 ring-red-200/80 border-red-200 dark:ring-red-500/20 dark:border-red-500/30'
         : 'hover:border-zinc-300 dark:hover:border-zinc-600'
     }`}>
-      <div className={compactMode ? 'p-2.5' : 'p-2.5 sm:p-3 2xl:p-3.5'}>
+      <div className={compactMode ? 'p-2 sm:p-2.5' : 'p-2.5 sm:p-3 2xl:p-3.5'}>
         <button
           type="button"
           onClick={onOpenDetail}
-          className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50"
+          className="w-full rounded-lg text-left transition-colors active:bg-zinc-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:active:bg-zinc-800/40 sm:rounded-xl"
         >
           {compactMode ? (
             <>
-              {(urgent || paymentPending || withoutMotoboy || isQrPending || hasItemCustomization || hasAutomationBadges) && (
-                <div className="mb-1.5 flex flex-wrap gap-1">
+              {(urgent || paymentPending || withoutMotoboy || hasItemCustomization || hasAutomationBadges) && (
+                <div className="mb-1 flex flex-wrap gap-0.5 sm:mb-1.5 sm:gap-1">
                   {urgent && (
                     <StatusChip variant="error" size="sm">
                       {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
@@ -798,15 +1012,6 @@ function OrderCard({
                       Sem motoboy
                     </StatusChip>
                   )}
-                  {isQrPending && mesaReference && (
-                    <StatusChip
-                      size="sm"
-                      icon={QrCode}
-                      toneClassName="border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200"
-                    >
-                      Mesa {mesaReference}
-                    </StatusChip>
-                  )}
                   {hasItemCustomization && (
                     <StatusChip
                       size="sm"
@@ -820,49 +1025,60 @@ function OrderCard({
                 </div>
               )}
 
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start justify-between gap-2 sm:gap-2.5">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="min-w-0 truncate text-[12px] font-black leading-tight tracking-tight text-zinc-900 dark:text-zinc-100">
-                      {getOrderNumberLine(order)}
-                    </p>
-                    <StatusChip rounded="md" size="sm" toneClassName={badge.className} emphasis="bold" className="shrink-0">
-                      {badge.label}
-                    </StatusChip>
-                  </div>
-                  <p className="mt-0.5 truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                  <p className="truncate text-[12px] font-black leading-tight tracking-tight text-zinc-900 dark:text-zinc-100">
                     {getClienteLine(order)}
                   </p>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1">
+                    <StatusChip
+                      rounded="md"
+                      size="sm"
+                      toneClassName={badge.className}
+                      emphasis="bold"
+                      className="max-w-[96px] shrink-0 overflow-hidden sm:max-w-[120px]"
+                    >
+                      <span className="truncate">{compactOriginLabel}</span>
+                    </StatusChip>
+                    <p className="min-w-0 truncate text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                      {getOrderNumberLine(order)}
+                    </p>
+                  </div>
+                  {compactItemsSummary && (
+                    <p className="mt-1 line-clamp-1 text-[10px] font-medium leading-tight text-zinc-600 dark:text-zinc-300 sm:hidden">
+                      {compactItemsSummary}
+                    </p>
+                  )}
                 </div>
                 <div className="shrink-0 text-right">
                   <StatusChip
                     size="sm"
                     toneClassName={elapsed.tone}
-                    className="tabular-nums gap-1"
+                    className="tabular-nums gap-1 px-1.5 py-0.5"
                     uppercase={false}
                   >
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${elapsed.dot}`} />
                     {elapsed.label}
                   </StatusChip>
-                  <p className="mt-1 text-[14px] font-black tabular-nums text-zinc-900 dark:text-zinc-50">
+                  <p className="mt-0.5 text-[13px] font-black tabular-nums text-zinc-900 dark:text-zinc-50 sm:mt-1 sm:text-[14px]">
                     {formatMoney(order.total_amount)}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-1.5 flex items-center gap-1.5">
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:flex-nowrap">
                 <StatusChip
                   rounded="lg"
                   size="sm"
                   toneClassName={statusTone}
-                  className="min-w-0 inline-flex max-w-full flex-1 px-2 py-0.5 leading-tight"
-                  title={statusRaw}
+                  className="min-w-0 inline-flex max-w-full flex-1 overflow-hidden px-1.5 py-0.5 leading-tight sm:px-2"
+                  title={compactStatusLabel}
                 >
                   <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação' : statusRaw}</span>
                 </StatusChip>
                 {paymentBadge && (
-                  <StatusChip rounded="md" size="sm" toneClassName={paymentBadge.className} emphasis="semibold" className="shrink-0">
-                    {paymentBadge.label}
+                  <StatusChip rounded="md" size="sm" toneClassName={paymentBadge.className} emphasis="semibold" className="max-w-full shrink-0 overflow-hidden sm:max-w-[46%]">
+                    <span className="truncate">{paymentBadge.label}</span>
                   </StatusChip>
                 )}
               </div>
@@ -982,13 +1198,13 @@ function OrderCard({
 
         {(canConfirmPayment || canPrintCupom || canPrintProducao || canPrintProof || canCentralOpenMaps(order) || canCentralNotifyCustomer(order) || primary) && (
           <div
-            className={`${compactMode ? 'mt-2 pt-2 space-y-1.5' : 'mt-3 pt-3 space-y-2'} border-t border-zinc-100 dark:border-zinc-800`}
+            className={`${compactMode ? 'mt-1.5 pt-1.5 space-y-1' : 'mt-3 pt-3 space-y-2'} border-t border-zinc-100 dark:border-zinc-800`}
             onClick={(e) => e.stopPropagation()}
           >
             {compactMode && !needsMotoboy ? (
               <div className="flex items-center gap-1.5">
                 {(canConfirmPayment || canPrintCupom || canPrintProducao || canPrintProof || mapsUrl || notifyUrl) && (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {canConfirmPayment && (
                       <button
                         type="button"
@@ -1066,7 +1282,7 @@ function OrderCard({
                     type="button"
                     variant="primary"
                     disabled={busy || bloqueadoMotoboy}
-                    className="!min-h-[44px] lg:!min-h-[34px] !py-2 lg:!py-1.5 !px-3 !text-[11px] !font-black shadow-sm flex-1"
+                    className="!min-h-[40px] sm:!min-h-[44px] lg:!min-h-[34px] !py-1.5 sm:!py-2 lg:!py-1.5 !px-2.5 sm:!px-3 !text-[10px] sm:!text-[11px] !font-black shadow-sm flex-1"
                     onClick={() => void handlePrimary()}
                   >
                     <ChevronRight size={13} className={busy ? 'animate-pulse' : ''} />
@@ -1157,7 +1373,7 @@ function OrderCard({
               <select
                 value={motoboyId}
                 onChange={(e) => setMotoboyId(e.target.value ? Number(e.target.value) : '')}
-                className={`w-full text-xs px-2.5 ${compactMode ? 'py-1.5 min-h-[36px]' : 'py-2 min-h-[40px]'} rounded-xl border bg-white dark:bg-zinc-800 dark:border-zinc-700 ${
+                className={`w-full text-xs px-2.5 ${compactMode ? 'py-1.5 min-h-[38px] sm:py-1.5 sm:min-h-[36px]' : 'py-2 min-h-[40px]'} rounded-xl border bg-white dark:bg-zinc-800 dark:border-zinc-700 ${
                   bloqueadoMotoboy ? 'border-amber-400 dark:border-amber-500/50 bg-amber-50 dark:bg-amber-500/10' : ''
                 }`}
               >
@@ -1180,7 +1396,7 @@ function OrderCard({
                 type="button"
                 variant="primary"
                 disabled={busy || bloqueadoMotoboy}
-                className={`${compactMode ? '!min-h-[38px] !py-2' : '!min-h-[42px] !py-2.5'} !w-full !text-xs !font-black shadow-sm`}
+                className={`${compactMode ? '!min-h-[40px] !py-1.5 sm:!min-h-[38px] sm:!py-2' : '!min-h-[42px] !py-2.5'} !w-full !text-xs !font-black shadow-sm`}
                 onClick={() => void handlePrimary()}
               >
                 <ChevronRight size={14} className={busy ? 'animate-pulse' : ''} />
@@ -1211,6 +1427,7 @@ function OrderDetailModal({
 }) {
   const badge = channelBadgeMeta(order);
   const pag = getPagamentoLine(order);
+  const items = Array.isArray(order.items) ? order.items : [];
   const [busyPayment, setBusyPayment] = useState(false);
   const [busyPrint, setBusyPrint] = useState<'cupom' | 'comprovante' | 'producao' | null>(null);
   const canConfirmPayment = canCentralConfirmPayment(order);
@@ -1253,7 +1470,7 @@ function OrderDetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <motion.div
@@ -1261,22 +1478,27 @@ function OrderDetailModal({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 24, opacity: 0 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-        className="flex max-h-[min(92dvh,100svh)] w-full min-h-0 flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 sm:max-w-lg sm:rounded-2xl sm:pb-0"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Detalhes do pedido ${getOrderNumberLine(order)}`}
+        className="flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden bg-white px-[env(safe-area-inset-left)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] shadow-2xl dark:bg-zinc-900 sm:h-auto sm:max-h-[min(92dvh,100svh)] sm:max-w-lg sm:rounded-2xl sm:border sm:border-zinc-200 sm:px-0 sm:pb-0 sm:pt-0 dark:sm:border-zinc-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 px-4 py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Pedido</p>
-            <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 truncate">{getOrderNumberLine(order)}</p>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${badge.className}`}>
+        <div className="shrink-0 border-b border-zinc-100 bg-white/95 px-4 py-3.5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 sm:px-4 sm:py-4">
+          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-200 dark:bg-zinc-700 sm:hidden" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Pedido</p>
+              <p className="truncate text-lg font-black text-zinc-900 dark:text-zinc-100">{getOrderNumberLine(order)}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5 sm:gap-2">
+              <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold ${badge.className}`}>
                 {badge.label}
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600">
+              <span className="rounded-lg border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
                 {String(order.status || '—')}
               </span>
               {orderHasAnyItemCustomization(order) && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
+                <span className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
                   <ListTree size={12} />
                   Itens personalizados
                 </span>
@@ -1286,15 +1508,16 @@ function OrderDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             aria-label="Fechar"
           >
             <X size={20} />
           </button>
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
-          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3 sm:space-y-4 sm:px-4 sm:py-4">
+          <div className="grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950/40 sm:grid-cols-2">
             <div>
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Cliente</p>
               <p className="font-semibold text-zinc-900 dark:text-zinc-100 break-words">{getClienteLine(order)}</p>
@@ -1314,13 +1537,13 @@ function OrderDetailModal({
           </div>
 
           {pag && (
-            <div>
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Pagamento</p>
               <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{pag}</p>
             </div>
           )}
 
-          <div>
+          <div className="hidden sm:block">
             <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Ações operacionais</p>
             <div className="grid gap-2 sm:grid-cols-2">
               <Button
@@ -1385,9 +1608,14 @@ function OrderDetailModal({
 
           {/* Itens — mesma lista que OrdersScreen usa em conceito */}
           <div>
-            <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Itens</p>
-            <ul className="space-y-3">
-              {(order.items || []).map((it, idx) => {
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase text-zinc-400">Itens</p>
+              <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                {items.length} {items.length === 1 ? 'item' : 'itens'}
+              </span>
+            </div>
+            <ul className="space-y-2.5 sm:space-y-3">
+              {items.map((it, idx) => {
                 const label = it.name || (it as { product_name?: string }).product_name || 'Item';
                 const ext = it as {
                   observation?: string | null;
@@ -1404,7 +1632,7 @@ function OrderDetailModal({
                 return (
                   <li
                     key={`${it.product_id}-${idx}`}
-                    className="border-b border-zinc-100 dark:border-zinc-800 pb-3 last:border-0 last:pb-0"
+                    className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-950/30"
                   >
                     <div className="flex justify-between gap-3 text-sm">
                       <span className="text-zinc-700 dark:text-zinc-300 min-w-0 font-semibold">
@@ -1433,17 +1661,82 @@ function OrderDetailModal({
                 );
               })}
             </ul>
-            {(order.items || []).length === 0 && (
+            {items.length === 0 && (
               <p className="text-sm text-zinc-400">Sem itens na lista.</p>
             )}
           </div>
 
           {order.observation && String(order.observation).trim() && (
-            <div>
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
               <p className="text-[10px] font-bold text-zinc-400 uppercase">Observação</p>
               <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">{order.observation}</p>
             </div>
           )}
+        </div>
+
+        <div className="shrink-0 border-t border-zinc-100 bg-white/95 px-3 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 sm:hidden">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Acoes operacionais</p>
+          <div className="grid gap-2">
+            {canConfirmPayment && (
+              <Button
+                type="button"
+                variant="success"
+                className="!min-h-[48px] !justify-center !px-3 !text-sm"
+                onClick={() => void handleConfirmPayment()}
+                disabled={busyPayment}
+              >
+                <BadgeCheck size={14} className={busyPayment ? 'animate-pulse' : ''} />
+                Confirmar pagamento
+              </Button>
+            )}
+            <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="!min-h-[46px] !justify-start !px-3 !text-xs"
+                onClick={() => void handlePrint('cupom')}
+                disabled={busyPrint !== null}
+              >
+                <Printer size={14} className={busyPrint === 'cupom' ? 'animate-pulse' : ''} />
+                Imprimir cupom
+              </Button>
+              {canPrintProducaoModal && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!min-h-[46px] !justify-start !px-3 !text-xs border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                  onClick={() => void handlePrint('producao')}
+                  disabled={busyPrint !== null}
+                >
+                  <ChefHat size={14} className={busyPrint === 'producao' ? 'animate-pulse' : ''} />
+                  Producao
+                </Button>
+              )}
+              {canPrintProof && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!min-h-[46px] !justify-start !px-3 !text-xs"
+                  onClick={() => void handlePrint('comprovante')}
+                  disabled={busyPrint !== null}
+                >
+                  <ReceiptText size={14} className={busyPrint === 'comprovante' ? 'animate-pulse' : ''} />
+                  Comprovante
+                </Button>
+              )}
+              {canWhatsAppCliente && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!min-h-[46px] !justify-start !px-3 !text-xs"
+                  onClick={openClienteWhatsApp}
+                >
+                  <MessageCircle size={14} />
+                  WhatsApp
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </motion.div>
     </motion.div>
