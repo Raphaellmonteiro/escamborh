@@ -1,4 +1,5 @@
 // src/routes/delivery-public.ts - rotas publicas sem autenticacao de tenant
+import type { PoolClient } from 'pg';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
@@ -57,6 +58,48 @@ import {
 
 const TZ = 'America/Sao_Paulo';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
+type DeliveryPublicOrderEventInput = {
+  pedidoId: number;
+  tenantId: number;
+  tipo: string;
+  statusAnterior?: string | null;
+  statusNovo?: string | null;
+  valor?: number;
+  motivo?: string | null;
+  estoqueReposto?: boolean;
+  payload?: Record<string, unknown>;
+  usuarioId?: number;
+};
+
+function buildDeliveryPublicOrderEventParams(input: DeliveryPublicOrderEventInput) {
+  return [
+    input.pedidoId,
+    input.tenantId,
+    input.tipo,
+    input.statusAnterior || null,
+    input.statusNovo || null,
+    Number(input.valor || 0),
+    input.motivo || null,
+    input.estoqueReposto ? 1 : 0,
+    input.payload ? JSON.stringify(input.payload) : null,
+    input.usuarioId || null,
+  ];
+}
+
+async function insertDeliveryPublicOrderEventTx(
+  client: PoolClient,
+  input: DeliveryPublicOrderEventInput
+) {
+  await txRun(
+    client,
+    `INSERT INTO pedido_eventos
+      (pedido_id,tenant_id,tipo,status_anterior,status_novo,valor,motivo,estoque_reposto,payload,usuario_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    buildDeliveryPublicOrderEventParams(input)
+  );
+}
+
 type DeliveryZone = { nome: string; taxa: number };
 type OrderChannel = 'delivery' | 'retirada';
 type FirstCustomerDiscountType = 'percentual' | 'fixo' | 'frete_gratis';
@@ -1655,6 +1698,21 @@ export function createDeliveryPublicRouter() {
             [clienteId, tenant.id]
           );
         }
+
+        await insertDeliveryPublicOrderEventTx(client, {
+          pedidoId: Number(orderId),
+          tenantId: Number(tenant.id),
+          tipo: 'CRIACAO',
+          statusNovo: initialOrderStatus,
+          valor: totalFinal,
+          payload: {
+            origem: 'routes.deliveryPublic.createOrder',
+            canal: canalPedido,
+            tipo_retirada: tipoRetirada,
+            auto_accept:
+              canalPedido === 'delivery' && Boolean(automation.delivery_auto_accept_orders),
+          },
+        });
 
         return { orderId, orderNumber };
       });

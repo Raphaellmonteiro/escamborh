@@ -1,4 +1,5 @@
 // src/routes/delivery.ts — rotas autenticadas do painel delivery
+import type { PoolClient } from 'pg';
 import { Router, Request } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -27,6 +28,7 @@ import {
 } from '../services/whatsAppEventsService';
 import { isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
+import { getDeliveryNextStatus } from '../utils/deliveryStatusNext';
 import { getCustomerLoyaltyTier } from '../services/customerLoyaltyTier';
 import { buildValidOrderSqlClause } from '../services/orderValiditySql';
 import {
@@ -57,6 +59,14 @@ import {
 const TZ = 'America/Sao_Paulo';
 const MANUAL_DELIVERY_TOTAL_TOLERANCE = 0.01;
 const MANUAL_ORDER_NUMBER_RETRY_MAX = 5;
+const DELIVERY_FLOW_STATUSES = new Set([
+  'Criado',
+  'Pedido Recebido',
+  'Em Preparo',
+  'Pronto para Entrega',
+  'Saiu para Entrega',
+  'Entregue',
+]);
 
 function isPgUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
@@ -87,6 +97,53 @@ function normalizePaymentProvider(value: unknown) {
   if (!normalized) return null;
   if (normalized === 'mercadopago') return 'mercado_pago';
   return normalized;
+}
+
+type DeliveryOrderEventInput = {
+  pedidoId: number;
+  tenantId: number;
+  tipo: string;
+  statusAnterior?: string | null;
+  statusNovo?: string | null;
+  valor?: number;
+  motivo?: string | null;
+  estoqueReposto?: boolean;
+  payload?: Record<string, unknown>;
+  usuarioId?: number;
+};
+
+function buildDeliveryOrderEventParams(input: DeliveryOrderEventInput) {
+  return [
+    input.pedidoId,
+    input.tenantId,
+    input.tipo,
+    input.statusAnterior || null,
+    input.statusNovo || null,
+    Number(input.valor || 0),
+    input.motivo || null,
+    input.estoqueReposto ? 1 : 0,
+    input.payload ? JSON.stringify(input.payload) : null,
+    input.usuarioId || null,
+  ];
+}
+
+async function insertDeliveryOrderEventTx(client: PoolClient, input: DeliveryOrderEventInput) {
+  await txRun(
+    client,
+    `INSERT INTO pedido_eventos
+      (pedido_id,tenant_id,tipo,status_anterior,status_novo,valor,motivo,estoque_reposto,payload,usuario_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    buildDeliveryOrderEventParams(input)
+  );
+}
+
+async function insertDeliveryOrderEvent(input: DeliveryOrderEventInput) {
+  await qRun(
+    `INSERT INTO pedido_eventos
+      (pedido_id,tenant_id,tipo,status_anterior,status_novo,valor,motivo,estoque_reposto,payload,usuario_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    buildDeliveryOrderEventParams(input)
+  );
 }
 
 type TenantWhatsAppConfigSyncRow = {
@@ -854,31 +911,63 @@ router.get('/pedidos', async (req: Request, res) => {
 
       const previousStatus = String(order.status || '').trim();
       const { status, motoboy_id } = req.body;
+      const nextStatus = String(status || '').trim();
       const requiresMotoboy = await tenantHasFeature(req.tenantId, 'funcionarios');
       const normalizedMotoboyId = motoboy_id == null || motoboy_id === ''
         ? null
         : Number(motoboy_id);
 
+      if (!nextStatus) {
+        return res.status(400).json({ error: 'Status obrigatorio' });
+      }
+
+      if (!DELIVERY_FLOW_STATUSES.has(nextStatus)) {
+        return res.status(400).json({ error: 'Status de delivery invalido' });
+      }
+
+      const expectedNextStatus = getDeliveryNextStatus(previousStatus);
+      if (nextStatus !== previousStatus && expectedNextStatus !== nextStatus) {
+        return res.status(400).json({
+          error: expectedNextStatus
+            ? `Transicao invalida. Proximo status esperado: ${expectedNextStatus}`
+            : 'Pedido ja esta encerrado no fluxo de delivery',
+        });
+      }
+
       if (
         requiresMotoboy &&
-        status === 'Saiu para Entrega' &&
+        nextStatus === 'Saiu para Entrega' &&
         (!Number.isInteger(normalizedMotoboyId) || normalizedMotoboyId <= 0)
       ) {
         return res.status(400).json({ error: 'Motoboy é obrigatório para enviar o pedido para entrega' });
       }
 
       const updates: string[] = ['status=?'];
-      const params: any[] = [status];
+      const params: any[] = [nextStatus];
       if (Number.isInteger(normalizedMotoboyId) && normalizedMotoboyId > 0) {
         updates.push('motoboy_id=?');
         params.push(normalizedMotoboyId);
       }
-      if (status === 'Saiu para Entrega') { updates.push('saiu_entrega_at=NOW()'); }
-      if (status === 'Entregue')          { updates.push('entregue_at=NOW()'); }
+      if (nextStatus === 'Saiu para Entrega') { updates.push('saiu_entrega_at=NOW()'); }
+      if (nextStatus === 'Entregue')          { updates.push('entregue_at=NOW()'); }
       params.push(req.params.id, req.tenantId);
       await qRun(`UPDATE pedidos SET ${updates.join(',')} WHERE id=? AND tenant_id=?`, params);
-      const nextStatus = String(status || '').trim();
       if (previousStatus !== nextStatus) {
+        await insertDeliveryOrderEvent({
+          pedidoId: Number(req.params.id),
+          tenantId: Number(req.tenantId),
+          tipo: 'STATUS',
+          statusAnterior: previousStatus,
+          statusNovo: nextStatus,
+          payload: {
+            origem: 'routes.delivery.patchStatus',
+            motoboy_id:
+              Number.isInteger(normalizedMotoboyId) && normalizedMotoboyId > 0
+                ? normalizedMotoboyId
+                : null,
+          },
+          usuarioId: (req as Request & { user?: { id?: number } }).user?.id,
+        });
         await emitWhatsAppOrderStatusEvent({
           tenantId: req.tenantId,
           orderId: req.params.id,
@@ -1274,6 +1363,17 @@ router.get('/clientes', async (req: Request, res) => {
                 [oid, item.product_id, item.quantity, 'Delivery', item.price_at_time, tenantId, variationIdForDb, lineObs, selecoesJson]
               );
             }
+            await insertDeliveryOrderEventTx(client, {
+              pedidoId: Number(oid),
+              tenantId,
+              tipo: 'CRIACAO',
+              statusNovo: 'Pedido Recebido',
+              valor: serverTotal,
+              payload: {
+                origem: 'routes.delivery.createOrder',
+                canal: 'delivery',
+              },
+            });
             return { orderId: Number(oid), orderNumber: ordNum };
           });
           orderId = r.orderId;
