@@ -579,6 +579,31 @@ export async function runMigrations() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_whatsapp_chatbot_config (
+        tenant_id INTEGER NOT NULL,
+        chatbot_enabled INTEGER NOT NULL DEFAULT 0,
+        provider TEXT NOT NULL DEFAULT 'groq',
+        model TEXT,
+        system_prompt TEXT,
+        provider_config_json TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS chatbot_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'groq';
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS model TEXT;
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS system_prompt TEXT;
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS provider_config_json TEXT;
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE tenant_whatsapp_chatbot_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_whatsapp_chatbot_config_tenant
+        ON tenant_whatsapp_chatbot_config (tenant_id);
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS whatsapp_inbound_messages (
         id SERIAL PRIMARY KEY,
         tenant_id INTEGER NOT NULL,
