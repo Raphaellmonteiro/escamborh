@@ -10,6 +10,7 @@ import {
   resolveConfiguredWhatsAppNumbersFromProviderConfigJson,
   sendWhatsAppMessage,
 } from './whatsAppSenderService';
+import { whatsAppChatbotService } from './whatsAppChatbotService';
 
 type TenantWhatsAppConfigRow = {
   tenant_id?: number | string;
@@ -1212,6 +1213,110 @@ async function processInboundAutoReply(input: {
       recipient: maskPhone(input.message.customer_phone),
     });
     return;
+  }
+
+  let chatbotReplyMessage: string | null = null;
+  let chatbotReplySource: 'keyword' | 'groq' | 'none' = 'none';
+  let chatbotReason: string | null = null;
+
+  try {
+    const chatbotResult = await whatsAppChatbotService.processChatbotMessage({
+      tenantId: input.tenantId,
+      messageText: input.message.message_text,
+      customerName: input.message.customer_name,
+      customerPhone: input.message.customer_phone,
+      allowAiFallback: true,
+      paymentMethods: input.paymentMethods,
+    });
+
+    chatbotReplyMessage = normalizeOptionalText(chatbotResult.replyText);
+    chatbotReplySource = chatbotResult.replySource;
+    chatbotReason = chatbotResult.reason;
+  } catch (error) {
+    logError('whatsAppInboundService.chatbot.process', error, {
+      tenantId: input.tenantId,
+      inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
+      intent,
+      provider: normalizeProviderName(input.config.provider),
+      recipient: maskPhone(input.message.customer_phone),
+    });
+  }
+
+  if (chatbotReplyMessage) {
+    try {
+      const sendResult = await sendWhatsAppMessage({
+        provider: input.config.provider || null,
+        providerConfigJson: input.config.provider_config_json || null,
+        to: input.message.customer_phone,
+        message: chatbotReplyMessage,
+      });
+
+      await updateInboundMessageAutomation(input.message.id, {
+        intent,
+        autoReplyText: chatbotReplyMessage,
+        autoReplyStatus: 'sent',
+        autoReplyProvider: sendResult.provider,
+        autoReplyExternalId: sendResult.externalId,
+        autoReplyError: null,
+        markAttempted: true,
+        markSent: true,
+      });
+
+      logInfo('whatsAppInboundService.chatbot.sent', {
+        tenantId: input.tenantId,
+        inboundMessageId: input.message.id,
+        phone: input.message.customer_phone,
+        text: summarizeText(input.message.message_text),
+        intent,
+        chatbotReplySource,
+        chatbotReason,
+        provider: sendResult.provider,
+        recipient: maskPhone(input.message.customer_phone),
+      });
+
+      return;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await updateInboundMessageAutomation(input.message.id, {
+        intent,
+        autoReplyText: chatbotReplyMessage,
+        autoReplyStatus: 'error',
+        autoReplyProvider: normalizeProviderName(input.config.provider),
+        autoReplyExternalId: null,
+        autoReplyError: errorMessage,
+        markAttempted: true,
+        markSent: false,
+      });
+
+      logError('whatsAppInboundService.chatbot.send', error, {
+        tenantId: input.tenantId,
+        inboundMessageId: input.message.id,
+        phone: input.message.customer_phone,
+        text: summarizeText(input.message.message_text),
+        intent,
+        chatbotReplySource,
+        chatbotReason,
+        provider: normalizeProviderName(input.config.provider),
+        recipient: maskPhone(input.message.customer_phone),
+      });
+      return;
+    }
+  }
+
+  if (!chatbotReplyMessage && chatbotReason && chatbotReason !== 'chatbot_not_configured' && chatbotReason !== 'chatbot_disabled') {
+    logInfo('whatsAppInboundService.chatbot.noReply', {
+      tenantId: input.tenantId,
+      inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
+      intent,
+      chatbotReplySource,
+      chatbotReason,
+      recipient: maskPhone(input.message.customer_phone),
+    });
   }
 
   if (!intent) {
