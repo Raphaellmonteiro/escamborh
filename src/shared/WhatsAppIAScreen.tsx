@@ -27,8 +27,8 @@ export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps)
               WhatsApp IA
             </>
           }
-          subtitle="Configuracao do chatbot Groq por tenant, sem abrir escopo para inbound ou operacao do canal."
-          meta={<span className={adminScreenMetaHintClass}>Etapa 1D focada apenas no painel de configuracao</span>}
+          subtitle="Configuracao do chatbot Groq por tenant, alinhada ao contrato atual do modulo WhatsApp IA."
+          meta={<span className={adminScreenMetaHintClass}>Painel administrativo conectado ao contrato atual de /api/whatsapp/ai</span>}
         />
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
@@ -36,21 +36,22 @@ export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps)
             <p className={adminSectionEyebrowClass}>Modulo</p>
             <h2 className="mt-2 text-lg font-black text-fptext-primary">Configuracao dedicada do chatbot</h2>
             <p className="mt-2 text-sm leading-relaxed text-fptext-muted">
-              Esta tela agora consome o backend de chatbot ja existente e concentra a configuracao do provider,
-              modelo e prompt por tenant, sem mexer na entrada de mensagens do WhatsApp.
+              Esta tela consome o contrato atual do chatbot e concentra provider, modelo, prompt e credenciais
+              por tenant. O inbound e a operacao do canal seguem nas trilhas proprias do modulo WhatsApp.
             </p>
           </section>
 
           <aside className={`${adminOpsSurfaceCardClass} p-4 sm:p-5`}>
-            <p className={adminSectionEyebrowClass}>Escopo</p>
-            <h2 className="mt-2 text-lg font-black text-fptext-primary">Entrega pequena e segura</h2>
+            <p className={adminSectionEyebrowClass}>Contrato atual</p>
+            <h2 className="mt-2 text-lg font-black text-fptext-primary">Recorte deste painel</h2>
             <div className="mt-4 space-y-3">
               <div className={`${adminOpsInsetPanelClass} flex items-start gap-3 p-3`}>
                 <Bot size={16} className="mt-0.5 shrink-0 text-fptext-muted" />
                 <div>
-                  <p className="text-sm font-bold text-fptext-primary">Incluido agora</p>
+                  <p className="text-sm font-bold text-fptext-primary">Configurado aqui</p>
                   <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-                    Painel de configuracao, leitura via <code>GET /api/whatsapp/ai</code> e salvamento via <code>PUT /api/whatsapp/ai</code>.
+                    Leitura via <code>GET /api/whatsapp/ai</code> e salvamento via <code>PUT /api/whatsapp/ai</code> da configuracao
+                    de provider, modelo, prompt e credenciais do chatbot.
                   </p>
                 </div>
               </div>
@@ -58,9 +59,10 @@ export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps)
               <div className={`${adminOpsInsetPanelClass} flex items-start gap-3 p-3`}>
                 <MessageCircle size={16} className="mt-0.5 shrink-0 text-fptext-muted" />
                 <div>
-                  <p className="text-sm font-bold text-fptext-primary">Fica para depois</p>
+                  <p className="text-sm font-bold text-fptext-primary">Operado em outras trilhas</p>
                   <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-                    Inbound, fila de atendimento, visao de conversas e demais fluxos operacionais do WhatsApp IA.
+                    Inbound, visao de conversas, roteamento e atendimento humano continuam no backend e nas telas
+                    operacionais do modulo, sem configuracao adicional nesta pagina.
                   </p>
                 </div>
               </div>

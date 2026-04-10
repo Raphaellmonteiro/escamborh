@@ -529,8 +529,8 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
               Chatbot Groq
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-fptext-muted">
-              Esta etapa habilita apenas a configuracao do chatbot por tenant. O inbound e a operacao do canal
-              continuam fora do escopo desta entrega.
+              Este painel administra a configuracao do chatbot por tenant no modulo WhatsApp IA. Inbound,
+              roteamento de conversas e atendimento humano seguem nas rotas e telas operacionais correspondentes.
             </p>
           </div>
 
@@ -791,10 +791,10 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
             <div className={`${adminOpsInsetPanelClass} flex items-start gap-3 p-3`}>
               <MessageSquareText size={16} className="mt-0.5 shrink-0 text-fptext-muted" />
               <div className="min-w-0">
-                <p className="text-sm font-bold text-fptext-primary">Escopo desta etapa</p>
+                <p className="text-sm font-bold text-fptext-primary">Neste painel</p>
                 <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-                  Carregar e salvar a configuracao do chatbot, sem alterar inbound, roteamento de conversas ou
-                  operacao humana do canal.
+                  Carregar e salvar a configuracao do chatbot, mantendo inbound, roteamento de conversas e
+                  operacao humana nas trilhas operacionais ja existentes do modulo.
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
                   Delivery ativo: {runtimeContext?.deliveryEnabled ? 'sim' : 'nao'} - Pix ativo:{' '}
