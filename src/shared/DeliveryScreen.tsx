@@ -342,7 +342,7 @@ export default function DeliveryScreen({
         />
 
         {isWhatsAppIAMode ? (
-          <TabConfig token={token} slug={slug} initialSection="evolution" standaloneSection="evolution" />
+          <DeliveryConfigPanel token={token} slug={slug} initialSection="evolution" standaloneSection="evolution" />
         ) : (
           <>
             {/* Tabs — mobile: scroll horizontal, toque confortável; desktop: inline */}
@@ -374,7 +374,7 @@ export default function DeliveryScreen({
             {tab === 'clientes'  && <TabClientes token={token} />}
             {tab === 'motoboys'  && hasMotoboyFeature && <TabMotoboys token={token} />}
             {tab === 'relatorio' && <TabRelatorio token={token} />}
-            {tab === 'config'    && <TabConfig   token={token} slug={slug} />}
+            {tab === 'config'    && <DeliveryConfigPanel token={token} slug={slug} />}
           </>
         )}
       </div>
@@ -1883,7 +1883,7 @@ function TabRelatorio({ token }: { token: string }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA CONFIG — zonas, cupons, evolution API, opções gerais
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabConfig({
+export function DeliveryConfigPanel({
   token,
   slug,
   initialSection = 'loja',

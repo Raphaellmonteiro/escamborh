@@ -43,6 +43,7 @@ const SolicitacaoModal      = lazy(() => import('./shared/modals/SolicitacaoModa
 const RHScreen              = lazy(() => import('./shared/RHScreen'));
 const SystemLogsScreen      = lazy(() => import('./shared/SystemLogsScreen'));
 const DeliveryScreen        = lazy(() => import('./shared/DeliveryScreen'));
+const WhatsAppIAScreen      = lazy(() => import('./shared/WhatsAppIAScreen'));
 const DeliveryCardapio      = lazy(() => import('./segments/delivery/DeliveryCardapio'));
 const PedidoRastreamento    = lazy(() => import('./shared/PedidoRastreamento'));
 const KDSScreen             = lazy(() => import('./segments/restaurante/KDSScreen'));
@@ -1135,11 +1136,9 @@ const handleAuth = async (e: React.FormEvent) => {
               />
             )}
             {activeTab === 'whatsapp-ia' && canAccess('whatsapp-ia') && permiteDelivery && (
-              <DeliveryScreen
+              <WhatsAppIAScreen
                 token={token}
-                hasMotoboyFeature={tenantHasMotoboyFeature}
                 slug={slugAtual}
-                mode="whatsapp-ia"
               />
             )}
             {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
