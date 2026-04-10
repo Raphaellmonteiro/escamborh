@@ -58,6 +58,7 @@ type FormState = {
   model: string;
   systemPrompt: string;
   apiKey: string;
+  apiKeyConfigured: boolean;
   baseUrl: string;
   endpoint: string;
   temperature: string;
@@ -83,6 +84,7 @@ const DEFAULT_PROVIDER = 'groq';
 const DEFAULT_MODEL = 'llama-3.1-8b-instant';
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const DEFAULT_ENDPOINT = 'chat/completions';
+const PROVIDER_SECRET_PLACEHOLDER = '__FLOWPDV_REDACTED__';
 const WHATSAPP_AI_API_PATH = '/api/whatsapp/ai';
 
 const API_KEY_KEYS = ['api_key', 'apiKey', 'token', 'access_token', 'accessToken'] as const;
@@ -176,13 +178,16 @@ function buildFormState(response: ChatbotApiResponse): FormState {
   const defaults = response.defaults || {};
   const config = response.config || {};
   const providerConfig = parseProviderConfigJson(config.provider_config_json ?? defaults.provider_config_json);
+  const storedApiKeyValue = getConfigText(providerConfig, API_KEY_KEYS);
+  const apiKeyConfigured = storedApiKeyValue === PROVIDER_SECRET_PLACEHOLDER || Boolean(storedApiKeyValue);
 
   return {
     chatbotEnabled: Boolean(config.chatbot_enabled ?? defaults.chatbot_enabled ?? false),
     provider: normalizeProviderValue(config.provider ?? defaults.provider),
     model: normalizeOptionalText(config.model) ?? getConfigText(providerConfig, ['model']) ?? '',
     systemPrompt: normalizeOptionalText(config.system_prompt) ?? normalizeOptionalText(defaults.system_prompt) ?? '',
-    apiKey: getConfigText(providerConfig, API_KEY_KEYS) ?? '',
+    apiKey: storedApiKeyValue && storedApiKeyValue !== PROVIDER_SECRET_PLACEHOLDER ? storedApiKeyValue : '',
+    apiKeyConfigured,
     baseUrl: getConfigText(providerConfig, BASE_URL_KEYS) ?? '',
     endpoint: getConfigText(providerConfig, ENDPOINT_KEYS) ?? '',
     temperature: formatNumericInput(getConfigNumber(providerConfig, TEMPERATURE_KEYS)),
@@ -290,6 +295,7 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
     model: '',
     systemPrompt: '',
     apiKey: '',
+    apiKeyConfigured: false,
     baseUrl: '',
     endpoint: '',
     temperature: '',
@@ -313,6 +319,7 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
     model: '',
     systemPrompt: '',
     apiKey: '',
+    apiKeyConfigured: false,
     baseUrl: '',
     endpoint: '',
     temperature: '',
@@ -377,7 +384,7 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
   const effectiveModel = normalizeOptionalText(form.model) ?? DEFAULT_MODEL;
   const effectiveBaseUrl = normalizeOptionalText(form.baseUrl) ?? DEFAULT_BASE_URL;
   const effectiveEndpoint = normalizeOptionalText(form.endpoint) ?? DEFAULT_ENDPOINT;
-  const hasConfiguredApiKey = Boolean(normalizeOptionalText(form.apiKey));
+  const hasConfiguredApiKey = form.apiKeyConfigured || Boolean(normalizeOptionalText(form.apiKey));
 
   const applyResponse = (data: ChatbotApiResponse, successMessage?: string) => {
     const nextForm = buildFormState(data);
@@ -606,14 +613,14 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
 
             <FormField
               label="Groq API Key"
-              helper="Salva por tenant em provider_config_json. Se ficar vazio, o backend pode usar a chave de ambiente."
+              helper="Se ficar vazio, a tela preserva a chave ja salva. O backend tambem pode usar a chave de ambiente."
             >
               <input
                 type="password"
                 value={form.apiKey}
                 onChange={(event) => setForm((current) => ({ ...current, apiKey: event.target.value }))}
                 className={fieldInputClass}
-                placeholder="gsk_..."
+                placeholder={form.apiKeyConfigured ? 'Chave ja configurada' : 'gsk_...'}
                 autoComplete="off"
                 disabled={saving || refreshing}
               />

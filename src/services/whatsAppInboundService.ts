@@ -3142,32 +3142,65 @@ export async function registerInboundWhatsAppMessages(
     : ['Dinheiro', 'Cartao'];
 
   for (const message of inboundMessages) {
-    const insertedId = await insertInboundMessage(message);
-    if (!insertedId) {
-      ignoredCount += 1;
-      continue;
-    }
+    let insertedId: number | null = null;
 
-    savedCount += 1;
+    try {
+      insertedId = await insertInboundMessage(message);
+      if (!insertedId) {
+        ignoredCount += 1;
+        continue;
+      }
 
-    if (!tenant) {
-      await updateInboundMessageAutomation(insertedId, {
-        intent: null,
-        autoReplyStatus: 'ignored_tenant_not_found',
+      savedCount += 1;
+
+      if (!tenant) {
+        await updateInboundMessageAutomation(insertedId, {
+          intent: null,
+          autoReplyStatus: 'ignored_tenant_not_found',
+        });
+        continue;
+      }
+
+      await processInboundAutoReply({
+        tenantId,
+        config,
+        tenant,
+        paymentMethods,
+        message: {
+          ...message,
+          id: insertedId,
+        },
       });
-      continue;
-    }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
-    await processInboundAutoReply({
-      tenantId,
-      config,
-      tenant,
-      paymentMethods,
-      message: {
-        ...message,
-        id: insertedId,
-      },
-    });
+      if (insertedId) {
+        try {
+          await updateInboundMessageAutomation(insertedId, {
+            intent: null,
+            autoReplyStatus: 'error_processing',
+            autoReplyError: errorMessage,
+          });
+        } catch (updateError) {
+          logError('whatsAppInboundService.message.process.updateFailure', updateError, {
+            tenantId,
+            inboundMessageId: insertedId,
+            provider: message.provider,
+            providerMessageId: message.provider_message_id,
+            recipient: maskPhone(message.customer_phone),
+          });
+        }
+      }
+
+      logError('whatsAppInboundService.message.process', error, {
+        tenantId,
+        inboundMessageId: insertedId,
+        provider: message.provider,
+        providerMessageId: message.provider_message_id,
+        recipient: maskPhone(message.customer_phone),
+        text: summarizeText(message.message_text),
+      });
+    }
   }
 
   return {

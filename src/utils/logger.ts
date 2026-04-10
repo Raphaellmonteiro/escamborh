@@ -1,34 +1,9 @@
-// src/utils/logger.ts
+import { redactAuditText, redactAuditValue } from './auditRedaction';
+
 type LogMeta = Record<string, unknown>;
 
-const SENSITIVE_KEYS = new Set([
-  'senha',
-  'subsenha',
-  'password',
-  'token',
-  'authorization',
-  'jwt',
-]);
-
 function sanitize(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sanitize);
-  }
-
-  if (value && typeof value === 'object') {
-    const input = value as Record<string, unknown>;
-    const output: Record<string, unknown> = {};
-
-    for (const [key, currentValue] of Object.entries(input)) {
-      output[key] = SENSITIVE_KEYS.has(key.toLowerCase())
-        ? '[REDACTED]'
-        : sanitize(currentValue);
-    }
-
-    return output;
-  }
-
-  return value;
+  return redactAuditValue(value);
 }
 
 export function logError(context: string, error: unknown, meta: LogMeta = {}) {
@@ -40,8 +15,8 @@ export function logError(context: string, error: unknown, meta: LogMeta = {}) {
       level: 'error',
       timestamp,
       context,
-      message: error.message,
-      stack: error.stack,
+      message: redactAuditText(error.message),
+      stack: redactAuditText(error.stack),
       meta: safeMeta,
     });
     return;
@@ -51,7 +26,7 @@ export function logError(context: string, error: unknown, meta: LogMeta = {}) {
     level: 'error',
     timestamp,
     context,
-    message: String(error),
+    message: redactAuditText(String(error)),
     meta: safeMeta,
   });
 }

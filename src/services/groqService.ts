@@ -13,6 +13,7 @@ type GroqConfig = {
   model: string
   temperature?: number
   maxTokens?: number
+  timeoutMs?: number
 }
 
 type GroqResponsePayload = {
@@ -43,11 +44,18 @@ export type GroqChatReplyResult = {
   raw: unknown
 }
 
+const DEFAULT_GROQ_REQUEST_TIMEOUT_MS = 20000
+
 function normalizeOptionalText(value: unknown) {
   if (value === undefined || value === null) return null
 
   const normalized = String(value).trim()
   return normalized || null
+}
+
+function parsePositiveTimeoutMs(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 1000 ? Math.trunc(parsed) : fallback
 }
 
 function parseJsonObject(value: unknown) {
@@ -94,10 +102,22 @@ function buildUrl(baseUrl: string, endpoint: string) {
   const safeBaseUrl = baseUrl.replace(/\/+$/, '')
   const safeEndpoint = endpoint.trim()
 
-  if (!safeEndpoint) return safeBaseUrl
-  if (/^https?:\/\//i.test(safeEndpoint)) return safeEndpoint
+  const resolved = !safeEndpoint
+    ? safeBaseUrl
+    : /^https?:\/\//i.test(safeEndpoint)
+      ? safeEndpoint
+      : `${safeBaseUrl}/${safeEndpoint.replace(/^\/+/, '')}`
 
-  return `${safeBaseUrl}/${safeEndpoint.replace(/^\/+/, '')}`
+  try {
+    const parsed = new URL(resolved)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new AppError('URL da Groq deve usar http ou https', 400)
+    }
+    return parsed.toString()
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    throw new AppError('URL da Groq invalida', 400)
+  }
 }
 
 function parseResponseBody(rawText: string) {
@@ -139,6 +159,10 @@ export function resolveGroqConfig(config: GroqConfigInput) {
     'maxTokens',
     'max_completion_tokens',
   ])
+  const timeoutMs = parsePositiveTimeoutMs(
+    getConfigNumber(providerConfig, ['timeout_ms', 'timeoutMs', 'request_timeout_ms', 'requestTimeoutMs']),
+    parsePositiveTimeoutMs(process.env.GROQ_TIMEOUT_MS, DEFAULT_GROQ_REQUEST_TIMEOUT_MS)
+  )
 
   return {
     apiKey,
@@ -146,6 +170,7 @@ export function resolveGroqConfig(config: GroqConfigInput) {
     model,
     temperature: temperature ?? undefined,
     maxTokens: maxTokens ?? undefined,
+    timeoutMs,
   } satisfies GroqConfig
 }
 
@@ -224,6 +249,19 @@ export async function generateGroqReply(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(groqConfig.timeoutMs ?? DEFAULT_GROQ_REQUEST_TIMEOUT_MS),
+  }).catch((error) => {
+    if (
+      error instanceof Error &&
+      (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ) {
+      throw new AppError(
+        `Tempo limite ao consultar a Groq apos ${groqConfig.timeoutMs ?? DEFAULT_GROQ_REQUEST_TIMEOUT_MS}ms`,
+        504
+      )
+    }
+
+    throw error
   })
 
   const rawText = await response.text()

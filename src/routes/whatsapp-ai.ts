@@ -4,6 +4,7 @@ import {
   getTenantChatbotConfig,
   loadTenantChatbotPaymentMethods,
   loadTenantChatbotRuntimeContext,
+  sanitizeTenantChatbotConfigForClient,
   upsertTenantChatbotConfig,
 } from '../services/chatbotService';
 import { AppError, isAppError } from '../utils/errors';
@@ -32,12 +33,13 @@ export function createWhatsAppAiRouter() {
       const paymentMethods = runtimeContext
         ? await loadTenantChatbotPaymentMethods(tenantId, runtimeContext)
         : [];
+      const safeConfig = sanitizeTenantChatbotConfigForClient(config);
 
       res.json({
         success: true,
         configured: Boolean(config),
         defaults: DEFAULT_TENANT_CHATBOT_CONFIG,
-        config,
+        config: safeConfig,
         runtime_context: runtimeContext,
         payment_methods: paymentMethods,
       });
@@ -74,12 +76,13 @@ export function createWhatsAppAiRouter() {
       const paymentMethods = runtimeContext
         ? await loadTenantChatbotPaymentMethods(tenantId, runtimeContext)
         : [];
+      const safeConfig = sanitizeTenantChatbotConfigForClient(config);
 
       res.json({
         success: true,
         configured: true,
         defaults: DEFAULT_TENANT_CHATBOT_CONFIG,
-        config,
+        config: safeConfig,
         runtime_context: runtimeContext,
         payment_methods: paymentMethods,
       });

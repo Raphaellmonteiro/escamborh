@@ -154,6 +154,17 @@ export const DEFAULT_TENANT_CHATBOT_CONFIG = {
   provider_config_json: null as string | null,
 }
 
+export const CHATBOT_PROVIDER_SECRET_PLACEHOLDER = '__FLOWPDV_REDACTED__'
+
+const SENSITIVE_PROVIDER_CONFIG_KEYS = new Set([
+  'api_key',
+  'apikey',
+  'token',
+  'access_token',
+  'authorization',
+  'secret',
+])
+
 function parseTenantId(value: number | string) {
   const parsed = Number(value)
 
@@ -202,6 +213,143 @@ function normalizeProviderName(value: unknown) {
   return provider
 }
 
+function normalizeConfigKey(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase()
+    .trim()
+}
+
+function isSensitiveProviderConfigKey(key: string) {
+  const normalized = normalizeConfigKey(key)
+  return (
+    SENSITIVE_PROVIDER_CONFIG_KEYS.has(normalized) ||
+    normalized.endsWith('_token') ||
+    normalized.includes('secret')
+  )
+}
+
+function isPlainRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseProviderConfigObject(
+  value: unknown,
+  options: { strict?: boolean } = {}
+): JsonRecord | null {
+  if (value === undefined || value === null) return null
+
+  if (isPlainRecord(value)) {
+    return { ...(value as JsonRecord) }
+  }
+
+  const normalized = normalizeOptionalText(value)
+  if (!normalized) return null
+
+  try {
+    const parsed = JSON.parse(normalized) as unknown
+    if (isPlainRecord(parsed)) {
+      return { ...(parsed as JsonRecord) }
+    }
+
+    if (options.strict) {
+      throw new Error('provider_config_json deve ser um objeto')
+    }
+  } catch (error) {
+    if (options.strict) {
+      throw new AppError(
+        error instanceof Error && error.message
+          ? `provider_config_json invalido: ${error.message}`
+          : 'provider_config_json invalido',
+        400
+      )
+    }
+
+    return null
+  }
+
+  if (options.strict) {
+    throw new AppError('provider_config_json invalido', 400)
+  }
+
+  return null
+}
+
+function stringifyProviderConfigObject(value: JsonRecord | null) {
+  if (!value || Object.keys(value).length === 0) return null
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    throw new AppError('provider_config_json invalido', 400)
+  }
+}
+
+function preserveMissingSensitiveProviderConfig(
+  current: JsonRecord | null,
+  next: JsonRecord | null
+): JsonRecord | null {
+  const output = next ? { ...next } : {}
+
+  if (!current) {
+    return Object.keys(output).length > 0 ? output : null
+  }
+
+  for (const [key, currentValue] of Object.entries(current)) {
+    if (isSensitiveProviderConfigKey(key)) {
+      const nextValue = output[key]
+      const normalizedNextValue = normalizeOptionalText(nextValue)
+
+      if (
+        nextValue === undefined ||
+        nextValue === null ||
+        !normalizedNextValue ||
+        normalizedNextValue === CHATBOT_PROVIDER_SECRET_PLACEHOLDER
+      ) {
+        output[key] = currentValue
+      }
+      continue
+    }
+
+    if (!isPlainRecord(currentValue)) continue
+
+    const nextValue = output[key]
+    const mergedChild = preserveMissingSensitiveProviderConfig(
+      currentValue as JsonRecord,
+      isPlainRecord(nextValue) ? (nextValue as JsonRecord) : null
+    )
+
+    if (mergedChild && Object.keys(mergedChild).length > 0) {
+      output[key] = mergedChild
+    }
+  }
+
+  return Object.keys(output).length > 0 ? output : null
+}
+
+function redactSensitiveProviderConfig(value: JsonRecord | null): JsonRecord | null {
+  if (!value) return null
+
+  const output: JsonRecord = {}
+
+  for (const [key, currentValue] of Object.entries(value)) {
+    if (isSensitiveProviderConfigKey(key)) {
+      output[key] = CHATBOT_PROVIDER_SECRET_PLACEHOLDER
+      continue
+    }
+
+    if (isPlainRecord(currentValue)) {
+      output[key] = redactSensitiveProviderConfig(currentValue as JsonRecord)
+      continue
+    }
+
+    output[key] = currentValue
+  }
+
+  return output
+}
+
 function normalizeTextForMatch(value: unknown) {
   return String(value || '')
     .trim()
@@ -215,38 +363,38 @@ function includesAny(text: string, terms: string[]) {
 }
 
 function normalizeProviderConfigJson(value: unknown) {
-  if (value === undefined || value === null) return null
+  return stringifyProviderConfigObject(parseProviderConfigObject(value, { strict: true }))
+}
 
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (!trimmed) return null
+export function redactChatbotProviderConfigJsonForClient(
+  rawValue: string | null | undefined
+) {
+  return stringifyProviderConfigObject(
+    redactSensitiveProviderConfig(parseProviderConfigObject(rawValue))
+  )
+}
 
-    try {
-      const parsed = JSON.parse(trimmed) as unknown
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('provider_config_json deve ser um objeto')
-      }
+export function mergeChatbotProviderConfigJsonPreservingSecrets(
+  currentRawValue: string | null | undefined,
+  nextValue: unknown
+) {
+  return stringifyProviderConfigObject(
+    preserveMissingSensitiveProviderConfig(
+      parseProviderConfigObject(currentRawValue),
+      parseProviderConfigObject(nextValue, { strict: true })
+    )
+  )
+}
 
-      return JSON.stringify(parsed)
-    } catch (error) {
-      throw new AppError(
-        error instanceof Error && error.message
-          ? `provider_config_json invalido: ${error.message}`
-          : 'provider_config_json invalido',
-        400
-      )
-    }
+export function sanitizeTenantChatbotConfigForClient(
+  config: TenantChatbotConfigRecord | null
+): TenantChatbotConfigRecord | null {
+  if (!config) return null
+
+  return {
+    ...config,
+    provider_config_json: redactChatbotProviderConfigJsonForClient(config.provider_config_json),
   }
-
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    try {
-      return JSON.stringify(value)
-    } catch {
-      throw new AppError('provider_config_json invalido', 400)
-    }
-  }
-
-  throw new AppError('provider_config_json invalido', 400)
 }
 
 function mapTenantChatbotConfigRow(row: TenantChatbotConfigRow): TenantChatbotConfigRecord {
@@ -873,7 +1021,10 @@ export async function upsertTenantChatbotConfig(
   const providerConfigJson =
     input.provider_config_json === undefined
       ? current?.provider_config_json ?? DEFAULT_TENANT_CHATBOT_CONFIG.provider_config_json
-      : normalizeProviderConfigJson(input.provider_config_json)
+      : mergeChatbotProviderConfigJsonPreservingSecrets(
+          current?.provider_config_json ?? null,
+          input.provider_config_json
+        )
 
   const row = await q1<TenantChatbotConfigRow>(
     `INSERT INTO tenant_whatsapp_chatbot_config (

@@ -38,6 +38,8 @@ const CONFIGURED_WHATSAPP_NUMBER_KEYS = [
   'instanceName',
 ] as const;
 
+const DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS = 15000;
+
 function normalizeOptionalText(value: unknown) {
   if (value === undefined || value === null) return null;
   const normalized = String(value).trim();
@@ -51,6 +53,27 @@ function normalizeProviderName(value: unknown) {
   return normalized
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
+}
+
+function parsePositiveTimeoutMs(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1000 ? Math.trunc(parsed) : fallback;
+}
+
+function ensureHttpUrl(value: string, fieldName: string) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error(`${fieldName} deve usar http ou https`);
+    }
+    return parsed.toString();
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && error.message
+        ? `${fieldName} invalida: ${error.message}`
+        : `${fieldName} invalida`
+    );
+  }
 }
 
 function parseProviderConfigJson(rawValue: string | null | undefined): ProviderConfigRecord {
@@ -222,10 +245,13 @@ function buildUrl(baseUrl: string, endpoint?: string | null) {
   const safeBaseUrl = baseUrl.replace(/\/+$/, '');
   const safeEndpoint = String(endpoint || '').trim();
 
-  if (!safeEndpoint) return safeBaseUrl;
-  if (/^https?:\/\//i.test(safeEndpoint)) return safeEndpoint;
+  if (!safeEndpoint) return ensureHttpUrl(safeBaseUrl, 'URL do provider');
+  if (/^https?:\/\//i.test(safeEndpoint)) return ensureHttpUrl(safeEndpoint, 'URL do provider');
 
-  return `${safeBaseUrl}/${safeEndpoint.replace(/^\/+/, '')}`;
+  return ensureHttpUrl(
+    `${safeBaseUrl}/${safeEndpoint.replace(/^\/+/, '')}`,
+    'URL do provider'
+  );
 }
 
 function truncateText(value: unknown, maxLength = 600) {
@@ -341,6 +367,16 @@ function resolveHttpRequestConfig(
   return buildGenericHttpRequest(provider, config, recipient, message);
 }
 
+function resolveProviderRequestTimeoutMs(config: ProviderConfigRecord) {
+  return parsePositiveTimeoutMs(
+    getConfigText(config, ['timeout_ms', 'timeoutMs', 'request_timeout_ms', 'requestTimeoutMs']),
+    parsePositiveTimeoutMs(
+      process.env.WHATSAPP_PROVIDER_TIMEOUT_MS,
+      DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS
+    )
+  );
+}
+
 export async function sendWhatsAppMessage(
   input: SendWhatsAppMessageInput
 ): Promise<SendWhatsAppMessageResult> {
@@ -354,12 +390,28 @@ export async function sendWhatsAppMessage(
   }
 
   const requestConfig = resolveHttpRequestConfig(provider, config, recipient, input.message);
+  const timeoutMs = resolveProviderRequestTimeoutMs(config);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const response = await fetch(requestConfig.url, {
-    method: requestConfig.method,
-    headers: requestConfig.headers,
-    body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(requestConfig.url, {
+      method: requestConfig.method,
+      headers: requestConfig.headers,
+      body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Timeout ao aguardar resposta do provider ${provider} apos ${timeoutMs}ms`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const rawResponseText = await response.text().catch(() => '');
   const providerResponse = parseResponseBody(rawResponseText);
