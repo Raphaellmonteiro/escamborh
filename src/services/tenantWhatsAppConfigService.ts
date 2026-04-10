@@ -1,4 +1,5 @@
 import { q1, qRun } from '../db';
+import { getInstanceByTenant } from '../repositories/whatsappRepository';
 
 type TenantWhatsAppConfigRow = {
   tenant_id?: number | string;
@@ -347,6 +348,64 @@ function mergeConnectionConfigWithLegacyTransport(
   };
 }
 
+function shouldAttemptInstanceRecordBackfill(config: TenantWhatsAppConnectionConfig | null) {
+  if (!config) {
+    return false;
+  }
+
+  if (config.provider && !isEvolutionConnectionProvider(config.provider)) {
+    return false;
+  }
+
+  return !config.instanceName;
+}
+
+function mergeConnectionConfigWithInstanceRecord(
+  current: TenantWhatsAppConnectionConfig | null,
+  instanceRecord: { instanceName: string } | null
+): TenantWhatsAppConnectionConfig | null {
+  if (!current) {
+    return null;
+  }
+
+  if (current.provider && !isEvolutionConnectionProvider(current.provider)) {
+    return current;
+  }
+
+  const instanceName = normalizeOptionalText(instanceRecord?.instanceName);
+  if (!instanceName || current.instanceName) {
+    return current;
+  }
+
+  const provider =
+    current.provider ||
+    resolveStoredConnectionProvider({
+      provider: null,
+      instanceName,
+      baseUrl: current.baseUrl,
+      apiKey: current.apiKey,
+    });
+  const channelIdentifier = current.channelIdentifier || instanceName;
+  const providerConfigJson =
+    provider && isEvolutionConnectionProvider(provider)
+      ? buildEvolutionProviderConfigJson(current.providerConfigJson, {
+          baseUrl: current.baseUrl,
+          apiKey: current.apiKey,
+          instanceName,
+          whatsappNumber: current.whatsappNumber,
+          channelIdentifier,
+        })
+      : current.providerConfigJson;
+
+  return {
+    ...current,
+    provider,
+    providerConfigJson,
+    instanceName,
+    channelIdentifier,
+  };
+}
+
 function hasBackfillDiff(
   current: TenantWhatsAppConnectionConfig | null,
   next: TenantWhatsAppConnectionConfig | null
@@ -431,36 +490,34 @@ export async function getTenantWhatsAppConnectionConfig(
     [normalizedTenantId]
   );
 
-  let config = row ? mapTenantRowToConnectionConfig(normalizedTenantId, row) : null;
+  const storedConfig = row ? mapTenantRowToConnectionConfig(normalizedTenantId, row) : null;
+  let config = storedConfig;
 
-  if (!shouldAttemptLegacyTransportBackfill(config)) {
-    return config;
+  if (shouldAttemptLegacyTransportBackfill(config)) {
+    const legacyRow = await q1<TenantLegacyDeliveryTransportRow>(
+      `SELECT delivery_config, whatsapp
+         FROM clientes
+        WHERE id=?`,
+      [normalizedTenantId]
+    );
+    config = mergeConnectionConfigWithLegacyTransport(
+      normalizedTenantId,
+      config,
+      resolveLegacyDeliveryTransport(legacyRow)
+    );
   }
 
-  const legacyRow = await q1<TenantLegacyDeliveryTransportRow>(
-    `SELECT delivery_config, whatsapp
-       FROM clientes
-      WHERE id=?`,
-    [normalizedTenantId]
-  );
-  const mergedConfig = mergeConnectionConfigWithLegacyTransport(
-    normalizedTenantId,
-    config,
-    resolveLegacyDeliveryTransport(legacyRow)
-  );
-
-  if (!mergedConfig) {
-    return config;
+  if (shouldAttemptInstanceRecordBackfill(config)) {
+    const instanceRecord = await getInstanceByTenant(normalizedTenantId);
+    config = mergeConnectionConfigWithInstanceRecord(config, instanceRecord);
   }
 
-  if (hasBackfillDiff(config, mergedConfig)) {
-    await persistTenantWhatsAppConnectionConfig(mergedConfig);
+  if (hasBackfillDiff(storedConfig, config)) {
+    await persistTenantWhatsAppConnectionConfig(config as TenantWhatsAppConnectionConfig);
     config = {
-      ...mergedConfig,
+      ...(config as TenantWhatsAppConnectionConfig),
       updatedAt: new Date().toISOString(),
     };
-  } else {
-    config = mergedConfig;
   }
 
   return config;
