@@ -8,6 +8,34 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 
 type AtendimentoTimeline = 'entrega' | 'retirada' | 'consumo_local';
 
+interface PublicPixConfig {
+  pix_chave?: string;
+  pix_nome?: string;
+  pix_cidade?: string;
+  pix_payload_estatico?: string;
+  qr_code_image_base64?: string | null;
+  payment_provider?: string | null;
+  payment_external_id?: string | null;
+  payment_external_reference?: string | null;
+  payment_status?: string | null;
+  payment_expires_at?: string | null;
+  whatsapp?: string;
+  desconto_pix?: number;
+}
+
+interface PublicPixPayment {
+  id?: string | null;
+  payment_id?: string | null;
+  provider?: string | null;
+  external_id?: string | null;
+  external_reference?: string | null;
+  status?: string | null;
+  qr_code_text?: string | null;
+  qr_code_base64?: string | null;
+  qr_code_image_base64?: string | null;
+  expires_at?: string | null;
+}
+
 interface PedidoData {
   id: number;
   order_number: string;
@@ -28,12 +56,20 @@ interface PedidoData {
   /** Com `canal=retirada`: `levar` = retirada no balcão; `local` = consumo no estabelecimento. Com entrega costuma ser `local` (legado). */
   tipo_retirada?: string | null;
   observation?: string | null;
+  payment_pix?: PublicPixPayment | null;
+  config_pix?: PublicPixConfig | null;
 }
+
+type PedidoTrackingApiPedido = Omit<PedidoData, 'estabelecimento' | 'payment_pix' | 'config_pix'> & {
+  estabelecimento?: string;
+};
 
 /** Resposta de GET /public/delivery/:slug/pedido/:id (pedido vem aninhado). */
 interface PedidoTrackingApiResponse {
-  pedido: Omit<PedidoData, 'estabelecimento'> & { estabelecimento?: string };
+  pedido: PedidoTrackingApiPedido;
   nome_estabelecimento?: string | null;
+  payment_pix?: PublicPixPayment | null;
+  config_pix?: PublicPixConfig | null;
 }
 
 type TimeField = 'created_at' | 'saiu_entrega_at' | 'entregue_at';
@@ -54,6 +90,20 @@ const ALIAS: Record<string, string> = {
   'Concluído': 'Entregue',
   concluido: 'Entregue',
 };
+
+const PIX_WAITING_PAYMENT_STATUSES = new Set([
+  'aguardando_pagamento',
+  'aguardando_confirmacao',
+  'pending',
+  'pendente',
+  'in_process',
+]);
+
+const PIX_PAID_PAYMENT_STATUSES = new Set([
+  'pago',
+  'paid',
+  'approved',
+]);
 
 function normalizeStatus(s: string): string {
   const t = String(s || '').trim();
@@ -128,15 +178,44 @@ function getCurrentStepIndex(status: string, defs: StepDef[]): number {
   return 0;
 }
 
+function normalizePaymentStatus(status: unknown): string {
+  return String(status || '').trim().toLowerCase();
+}
+
+function isPixPaidStatus(status: unknown): boolean {
+  return PIX_PAID_PAYMENT_STATUSES.has(normalizePaymentStatus(status));
+}
+
+function isPixWaitingStatus(status: unknown): boolean {
+  const key = normalizePaymentStatus(status);
+  return key ? PIX_WAITING_PAYMENT_STATUSES.has(key) : false;
+}
+
+function parseDateValue(d?: string | null): Date | null {
+  if (!d) return null;
+  const value = d.includes('T') ? d : d.replace(' ', 'T');
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function fmtHora(d?: string | null): string {
-  if (!d) return '';
-  try {
-    const date = new Date(d.includes('T') ? d : d.replace(' ', 'T'));
-    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  } catch { return ''; }
+  const date = parseDateValue(d);
+  return date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
 }
 
 const fmt = (v: number) => `R$ ${(Number.isFinite(v) ? v : 0).toFixed(2).replace('.', ',')}`;
+
+function fmtDataHora(d?: string | null): string {
+  const date = parseDateValue(d);
+  return date
+    ? date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+}
 
 interface Props {
   slug: string;
@@ -148,7 +227,9 @@ interface Props {
 export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) {
   const [pedido, setPedido]     = useState<PedidoData | null>(null);
   const [error, setError]       = useState(false);
+  const [pixCopiado, setPixCopiado] = useState(false);
   const intervalRef             = useRef<ReturnType<typeof setInterval> | null>(null);
+  const copyTimeoutRef          = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPedido = async () => {
     try {
@@ -167,6 +248,8 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
         total_amount: Number.isFinite(total) ? total : 0,
         taxa_entrega: Number.isFinite(taxa) ? taxa : 0,
         estabelecimento: String(body.nome_estabelecimento ?? p.estabelecimento ?? ''),
+        payment_pix: body.payment_pix ?? null,
+        config_pix: body.config_pix ?? null,
       };
       setPedido(mapped);
       setError(false);
@@ -184,6 +267,12 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
   useEffect(() => {
     const id = setInterval(() => setHora(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
   }, []);
 
   const rootStyle: React.CSSProperties = embedded
@@ -224,6 +313,57 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
   const isCancelado = stNorm === 'cancelado';
   const isEntregue  = stNorm === 'entregue' || stNorm.startsWith('conclu');
   const step        = steps[stepIdx];
+  const isPix = pedido.pagamento_tipo === 'pix';
+  const paymentPix = pedido.payment_pix ?? null;
+  const configPix = pedido.config_pix ?? null;
+  const pixStatusKeys = [
+    normalizePaymentStatus(pedido.pagamento_status),
+    normalizePaymentStatus(configPix?.payment_status),
+    normalizePaymentStatus(paymentPix?.status),
+  ].filter(Boolean);
+  const pixPago = isPix && (
+    isPixPaidStatus(pedido.pagamento_status)
+    || isPixPaidStatus(configPix?.payment_status)
+    || isPixPaidStatus(paymentPix?.status)
+  );
+  const pixPendente = isPix && !pixPago && (
+    isPixWaitingStatus(pedido.pagamento_status)
+    || isPixWaitingStatus(configPix?.payment_status)
+    || isPixWaitingStatus(paymentPix?.status)
+    || (pixStatusKeys.length === 0 && Boolean(paymentPix || configPix))
+  );
+  const pixExpiresAt = paymentPix?.expires_at || configPix?.payment_expires_at || null;
+  const pixExpirado = isPix && !pixPago && (
+    (() => {
+      const expiresAt = parseDateValue(pixExpiresAt);
+      return Boolean(expiresAt && expiresAt.getTime() <= Date.now());
+    })()
+  );
+  const pixPayload = String(paymentPix?.qr_code_text || configPix?.pix_payload_estatico || '').trim();
+  const pixQrImageBase64 =
+    paymentPix?.qr_code_base64 ||
+    paymentPix?.qr_code_image_base64 ||
+    configPix?.qr_code_image_base64 ||
+    null;
+  const mostrarPixPendente = isPix && pixPendente && !pixExpirado && Boolean(pixPayload || pixQrImageBase64);
+  const pagamentoConcluido = isPix ? pixPago : pedido.pagamento_status === 'pago';
+
+  const copiarPix = async () => {
+    if (!pixPayload) return;
+    try {
+      await navigator.clipboard.writeText(pixPayload);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = pixPayload;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setPixCopiado(true);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setPixCopiado(false), 4000);
+  };
 
   const tipoAtendimentoLabel =
     timelineMode === 'entrega'
@@ -405,13 +545,108 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
               </span>
               <span style={{
                 padding:'3px 10px', borderRadius:100, fontSize:11, fontWeight:700,
-                background: pedido.pagamento_status==='pago' ? 'rgba(34,211,238,0.15)' : 'rgba(251,191,36,0.15)',
-                color:       pedido.pagamento_status==='pago' ? '#67e8f9' : '#fbbf24',
+                background: pagamentoConcluido
+                  ? 'rgba(34,211,238,0.15)'
+                  : pixExpirado
+                    ? 'rgba(239,68,68,0.15)'
+                    : 'rgba(251,191,36,0.15)',
+                color: pagamentoConcluido
+                  ? '#67e8f9'
+                  : pixExpirado
+                    ? '#fca5a5'
+                    : '#fbbf24',
               }}>
-                {pedido.pagamento_status==='pago' ? '✓ Pago' : 'Aguardando'}
+                {pagamentoConcluido ? '✓ Pago' : pixExpirado ? 'Pix expirado' : 'Aguardando'}
               </span>
             </div>
           </div>
+
+          {mostrarPixPendente && (
+            <div style={{ ...s.section, marginTop: 12, border: '1px solid rgba(251,191,36,0.28)', background: 'rgba(251,191,36,0.08)' }}>
+              <div style={s.sectionTitle}>Retomar pagamento Pix</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ color: '#fcd34d', fontSize: 16, fontWeight: 900 }}>Pix pendente</div>
+                  <div style={{ color: '#fde68a', fontSize: 13, marginTop: 4 }}>
+                    Continue o pagamento com o mesmo QR Code deste pedido.
+                  </div>
+                  {pixExpiresAt && (
+                    <div style={{ color: '#fbbf24', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
+                      Válido até {fmtDataHora(pixExpiresAt)}
+                    </div>
+                  )}
+                </div>
+                <div style={{
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  background: 'rgba(251,191,36,0.16)',
+                  border: '1px solid rgba(251,191,36,0.26)',
+                  color: '#fcd34d',
+                  fontSize: 11,
+                  fontWeight: 800,
+                }}>
+                  Aguardando pagamento
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                <div style={{ background: '#ffffff', borderRadius: 18, padding: 14, boxShadow: '0 18px 40px rgba(0,0,0,0.18)' }}>
+                  <img
+                    src={
+                      pixQrImageBase64
+                        ? `data:image/png;base64,${pixQrImageBase64}`
+                        : `https://api.qrserver.com/v1/create-qr-code/?size=192x192&ecc=M&data=${encodeURIComponent(pixPayload)}`
+                    }
+                    alt="QR Code Pix do pedido"
+                    width={192}
+                    height={192}
+                    style={{ width: 192, height: 192, maxWidth: '100%', borderRadius: 12, objectFit: 'contain', display: 'block' }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              </div>
+
+              {pixPayload && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#fde68a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Pix copia e cola
+                  </div>
+                  <div style={{
+                    marginTop: 8,
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    background: 'rgba(9,9,11,0.86)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: '#f4f4f5',
+                    fontSize: 12,
+                    lineHeight: 1.55,
+                    fontFamily: "'Roboto Mono', monospace",
+                    wordBreak: 'break-all',
+                  }}>
+                    {pixPayload}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copiarPix}
+                    style={{
+                      width: '100%',
+                      marginTop: 12,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: pixCopiado ? '#0891b2' : '#f8fafc',
+                      color: pixCopiado ? '#ecfeff' : '#09090b',
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {pixCopiado ? 'Código Pix copiado' : 'Copiar código Pix'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Botão refazer pedido */}
           <a href={`/delivery/${slug}`} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:24, padding:'14px', background:'rgba(255,255,255,0.92)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:14, color:'#09090b', fontWeight:800, fontSize:14, textDecoration:'none', transition:'all .2s' }}>
