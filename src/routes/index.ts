@@ -22,6 +22,7 @@ import { createLogsRouter, createUsuariosRouter, createAcessoFuncRouter } from '
 import { createMesasRouter } from './mesas';
 import { createOrdersRouter } from './orders';
 import { createClientesRouter } from './clientes';
+import { createChatbotRouter } from './chatbot';
 import { createPrintRouter } from './print';
 import { createProductsRouter } from './products';
 import { createRhRouter } from './rh';
@@ -192,6 +193,7 @@ export function createApiRouter() {
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
   protectedRouter.use('/whatsapp', createWhatsAppRouter());
+  protectedRouter.use('/chatbot', createChatbotRouter());
   protectedRouter.use('/ai', createAiRouter());
   protectedRouter.use('/logs', requirePlanFeature('logs'), requireAnyPermission('logs'), createLogsRouter());
   protectedRouter.use('/usuarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createUsuariosRouter());
