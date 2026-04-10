@@ -203,6 +203,30 @@ function getConfigValueText(record: Record<string, any>, keys: string[]) {
   return null;
 }
 
+function buildEvolutionProviderConfigJson(input: {
+  evolutionUrl: string | null;
+  evolutionToken: string | null;
+  evolutionInstance: string | null;
+  whatsappNumber: string | null;
+  channelIdentifier: string | null;
+}) {
+  const providerConfig: Record<string, string> = {};
+
+  if (input.evolutionUrl) providerConfig.base_url = input.evolutionUrl;
+  if (input.evolutionToken) providerConfig.apikey = input.evolutionToken;
+  if (input.evolutionInstance) {
+    providerConfig.instance = input.evolutionInstance;
+    providerConfig.instance_name = input.evolutionInstance;
+  }
+  if (input.whatsappNumber) {
+    providerConfig.phone_number = input.whatsappNumber;
+    providerConfig.display_number = input.whatsappNumber;
+  }
+  if (input.channelIdentifier) providerConfig.channel_id = input.channelIdentifier;
+
+  return Object.keys(providerConfig).length > 0 ? JSON.stringify(providerConfig) : null;
+}
+
 function toFlag(value: unknown) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;
@@ -262,20 +286,22 @@ function resolveEvolutionWhatsAppSyncFields(cfg: Record<string, any>, fallbackWh
   const channelIdentifier =
     normalizeOptionalText(cfg.evolution_channel_id) ||
     evolutionInstance;
+  const providerHinted = Boolean(
+    evolutionUrl ||
+      evolutionToken ||
+      evolutionInstance
+  );
   const configured = Boolean(evolutionUrl && evolutionToken && evolutionInstance);
-  const provider = configured ? 'evolution_api' : null;
-  const providerConfig =
-    configured
-      ? {
-          base_url: evolutionUrl,
-          apikey: evolutionToken,
-          instance: evolutionInstance,
-          phone_number: whatsappNumber,
-          display_number: whatsappNumber,
-          instance_name: evolutionInstance,
-          channel_id: channelIdentifier,
-        }
-      : null;
+  const provider = providerHinted ? 'evolution_api' : null;
+  const providerConfigJson = provider
+    ? buildEvolutionProviderConfigJson({
+        evolutionUrl,
+        evolutionToken,
+        evolutionInstance,
+        whatsappNumber,
+        channelIdentifier,
+      })
+    : null;
 
   return {
     evolutionUrl,
@@ -285,7 +311,7 @@ function resolveEvolutionWhatsAppSyncFields(cfg: Record<string, any>, fallbackWh
     channelIdentifier,
     configured,
     provider,
-    providerConfigJson: providerConfig ? JSON.stringify(providerConfig) : null,
+    providerConfigJson,
   };
 }
 
@@ -392,7 +418,7 @@ async function upsertTenantWhatsAppConfigFromDeliveryTransport(
     fallbackWhatsapp
   );
 
-  if (!current && !hasTransportInput && !resolved.configured && !resolved.whatsappNumber) {
+  if (!current && !resolved.provider) {
     return;
   }
 

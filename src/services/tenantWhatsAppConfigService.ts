@@ -1,4 +1,4 @@
-import { q1 } from '../db';
+import { q1, qRun } from '../db';
 
 type TenantWhatsAppConfigRow = {
   tenant_id?: number | string;
@@ -12,6 +12,11 @@ type TenantWhatsAppConfigRow = {
 };
 
 type JsonRecord = Record<string, unknown>;
+
+type TenantLegacyDeliveryTransportRow = {
+  delivery_config?: string | null;
+  whatsapp?: string | null;
+};
 
 export type TenantWhatsAppConnectionConfig = {
   tenantId: number;
@@ -36,6 +41,17 @@ export type TenantWhatsAppConnectionSafeConfig = {
   hasBaseUrl: boolean;
   hasApiKey: boolean;
   updatedAt: string | null;
+};
+
+type EvolutionTransportSnapshot = {
+  provider: string | null;
+  providerConfigJson: string | null;
+  baseUrl: string | null;
+  apiKey: string | null;
+  instanceName: string | null;
+  whatsappNumber: string | null;
+  channelIdentifier: string | null;
+  transportHinted: boolean;
 };
 
 function normalizeTenantId(value: number | string) {
@@ -91,6 +107,15 @@ function parseProviderConfigJson(rawValue: string | null | undefined) {
   return {} as JsonRecord;
 }
 
+function setConfigValueText(record: JsonRecord, key: string, value: string | null) {
+  if (value) {
+    record[key] = value;
+    return;
+  }
+
+  delete record[key];
+}
+
 function getConfigValueText(record: JsonRecord, keys: readonly string[]) {
   for (const key of keys) {
     const normalized = normalizeOptionalText(record[key]);
@@ -111,6 +136,277 @@ function normalizeUpdatedAt(value: string | Date | null | undefined) {
   }
 
   return parsed.toISOString();
+}
+
+function resolveStoredConnectionProvider(config: {
+  provider: string | null;
+  instanceName: string | null;
+  baseUrl: string | null;
+  apiKey: string | null;
+}) {
+  if (config.provider) {
+    return config.provider;
+  }
+
+  if (config.instanceName || config.baseUrl || config.apiKey) {
+    return 'evolution_api';
+  }
+
+  return null;
+}
+
+function hasEvolutionTransportHints(snapshot: {
+  baseUrl: string | null;
+  apiKey: string | null;
+  instanceName: string | null;
+}) {
+  return Boolean(
+    snapshot.baseUrl ||
+      snapshot.apiKey ||
+      snapshot.instanceName
+  );
+}
+
+function buildEvolutionProviderConfigJson(
+  currentRawValue: string | null | undefined,
+  input: {
+    baseUrl: string | null;
+    apiKey: string | null;
+    instanceName: string | null;
+    whatsappNumber: string | null;
+    channelIdentifier: string | null;
+  }
+) {
+  const next = parseProviderConfigJson(currentRawValue);
+
+  setConfigValueText(next, 'base_url', input.baseUrl);
+  setConfigValueText(next, 'apikey', input.apiKey);
+  setConfigValueText(next, 'instance', input.instanceName);
+  setConfigValueText(next, 'instance_name', input.instanceName);
+  setConfigValueText(next, 'phone_number', input.whatsappNumber);
+  setConfigValueText(next, 'display_number', input.whatsappNumber);
+  setConfigValueText(next, 'channel_id', input.channelIdentifier);
+
+  return Object.keys(next).length > 0 ? JSON.stringify(next) : null;
+}
+
+function mapTenantRowToConnectionConfig(
+  tenantId: number,
+  row: TenantWhatsAppConfigRow
+): TenantWhatsAppConnectionConfig {
+  const provider = normalizeProviderName(row.provider);
+  const providerConfigJson = normalizeOptionalText(row.provider_config_json);
+  const providerConfig = parseProviderConfigJson(providerConfigJson);
+  const instanceName =
+    normalizeOptionalText(row.instance_name) ||
+    getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName']);
+  const whatsappNumber =
+    normalizeOptionalText(row.whatsapp_number) ||
+    getConfigValueText(providerConfig, ['phone_number', 'display_number', 'whatsapp_number']);
+  const channelIdentifier =
+    normalizeOptionalText(row.channel_identifier) ||
+    getConfigValueText(providerConfig, ['channel_id', 'channel_identifier']) ||
+    instanceName;
+
+  return {
+    tenantId,
+    whatsappEnabled: toBool(row.whatsapp_enabled, false),
+    provider,
+    providerConfigJson,
+    baseUrl: getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url']),
+    apiKey: getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']),
+    instanceName,
+    whatsappNumber,
+    channelIdentifier,
+    updatedAt: normalizeUpdatedAt(row.updated_at),
+  };
+}
+
+function shouldAttemptLegacyTransportBackfill(config: TenantWhatsAppConnectionConfig | null) {
+  if (!config) {
+    return true;
+  }
+
+  if (config.provider && !isEvolutionConnectionProvider(config.provider)) {
+    return false;
+  }
+
+  const resolvedProvider = resolveStoredConnectionProvider(config);
+  const hasTransport =
+    Boolean(resolvedProvider) ||
+    hasEvolutionTransportHints({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      instanceName: config.instanceName,
+    });
+
+  if (!hasTransport) {
+    return true;
+  }
+
+  return !config.instanceName;
+}
+
+function resolveLegacyDeliveryTransport(
+  row: TenantLegacyDeliveryTransportRow | null
+): EvolutionTransportSnapshot | null {
+  if (!row) {
+    return null;
+  }
+
+  const deliveryConfig = parseProviderConfigJson(row.delivery_config);
+  const baseUrl = getConfigValueText(deliveryConfig, ['evolution_url']);
+  const apiKey = getConfigValueText(deliveryConfig, ['evolution_token']);
+  const instanceName = getConfigValueText(deliveryConfig, ['evolution_instance']);
+  const whatsappNumber =
+    getConfigValueText(deliveryConfig, ['evolution_phone_number', 'whatsapp']) ||
+    normalizeOptionalText(row.whatsapp);
+  const channelIdentifier =
+    getConfigValueText(deliveryConfig, ['evolution_channel_id']) || instanceName;
+  const transportHinted = hasEvolutionTransportHints({
+    baseUrl,
+    apiKey,
+    instanceName,
+  });
+  const provider = transportHinted ? 'evolution_api' : null;
+  const providerConfigJson = provider
+    ? buildEvolutionProviderConfigJson(null, {
+        baseUrl,
+        apiKey,
+        instanceName,
+        whatsappNumber,
+        channelIdentifier,
+      })
+    : null;
+
+  return {
+    provider,
+    providerConfigJson,
+    baseUrl,
+    apiKey,
+    instanceName,
+    whatsappNumber,
+    channelIdentifier,
+    transportHinted,
+  };
+}
+
+function mergeConnectionConfigWithLegacyTransport(
+  tenantId: number,
+  current: TenantWhatsAppConnectionConfig | null,
+  legacy: EvolutionTransportSnapshot | null
+): TenantWhatsAppConnectionConfig | null {
+  if (current?.provider && !isEvolutionConnectionProvider(current.provider)) {
+    return current;
+  }
+
+  if (!current && !legacy?.transportHinted) {
+    return null;
+  }
+
+  if (!legacy?.transportHinted) {
+    return current;
+  }
+
+  const provider =
+    current?.provider ||
+    resolveStoredConnectionProvider({
+      provider: legacy.provider,
+      instanceName: legacy.instanceName,
+      baseUrl: legacy.baseUrl,
+      apiKey: legacy.apiKey,
+    });
+  const baseUrl = current?.baseUrl || legacy.baseUrl;
+  const apiKey = current?.apiKey || legacy.apiKey;
+  const instanceName = current?.instanceName || legacy.instanceName;
+  const whatsappNumber = current?.whatsappNumber || legacy.whatsappNumber;
+  const channelIdentifier =
+    current?.channelIdentifier || legacy.channelIdentifier || instanceName;
+  const providerConfigJson =
+    provider && isEvolutionConnectionProvider(provider)
+      ? buildEvolutionProviderConfigJson(current?.providerConfigJson ?? null, {
+          baseUrl,
+          apiKey,
+          instanceName,
+          whatsappNumber,
+          channelIdentifier,
+        })
+      : current?.providerConfigJson ?? legacy.providerConfigJson;
+
+  return {
+    tenantId,
+    whatsappEnabled: current?.whatsappEnabled ?? false,
+    provider,
+    providerConfigJson,
+    baseUrl,
+    apiKey,
+    instanceName,
+    whatsappNumber,
+    channelIdentifier,
+    updatedAt: current?.updatedAt ?? null,
+  };
+}
+
+function hasBackfillDiff(
+  current: TenantWhatsAppConnectionConfig | null,
+  next: TenantWhatsAppConnectionConfig | null
+) {
+  if (!next) {
+    return false;
+  }
+
+  if (!current) {
+    return Boolean(
+      next.provider ||
+        next.providerConfigJson ||
+        next.instanceName ||
+        next.baseUrl ||
+        next.apiKey ||
+        next.channelIdentifier
+    );
+  }
+
+  return (
+    current.provider !== next.provider ||
+    current.providerConfigJson !== next.providerConfigJson ||
+    current.whatsappNumber !== next.whatsappNumber ||
+    current.instanceName !== next.instanceName ||
+    current.channelIdentifier !== next.channelIdentifier
+  );
+}
+
+async function persistTenantWhatsAppConnectionConfig(
+  config: TenantWhatsAppConnectionConfig
+) {
+  await qRun(
+    `INSERT INTO tenant_whatsapp_config (
+        tenant_id,
+        whatsapp_enabled,
+        provider,
+        provider_config_json,
+        whatsapp_number,
+        instance_name,
+        channel_identifier,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+      ON CONFLICT (tenant_id) DO UPDATE SET
+        whatsapp_enabled=EXCLUDED.whatsapp_enabled,
+        provider=EXCLUDED.provider,
+        provider_config_json=EXCLUDED.provider_config_json,
+        whatsapp_number=EXCLUDED.whatsapp_number,
+        instance_name=EXCLUDED.instance_name,
+        channel_identifier=EXCLUDED.channel_identifier,
+        updated_at=NOW()`,
+    [
+      config.tenantId,
+      config.whatsappEnabled ? 1 : 0,
+      config.provider,
+      config.providerConfigJson,
+      config.whatsappNumber,
+      config.instanceName,
+      config.channelIdentifier,
+    ]
+  );
 }
 
 export function isEvolutionConnectionProvider(provider: string | null) {
@@ -135,36 +431,39 @@ export async function getTenantWhatsAppConnectionConfig(
     [normalizedTenantId]
   );
 
-  if (!row) {
-    return null;
+  let config = row ? mapTenantRowToConnectionConfig(normalizedTenantId, row) : null;
+
+  if (!shouldAttemptLegacyTransportBackfill(config)) {
+    return config;
   }
 
-  const provider = normalizeProviderName(row.provider);
-  const providerConfigJson = normalizeOptionalText(row.provider_config_json);
-  const providerConfig = parseProviderConfigJson(providerConfigJson);
-  const instanceName =
-    normalizeOptionalText(row.instance_name) ||
-    getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName']);
-  const whatsappNumber =
-    normalizeOptionalText(row.whatsapp_number) ||
-    getConfigValueText(providerConfig, ['phone_number', 'display_number', 'whatsapp_number']);
-  const channelIdentifier =
-    normalizeOptionalText(row.channel_identifier) ||
-    getConfigValueText(providerConfig, ['channel_id', 'channel_identifier']) ||
-    instanceName;
+  const legacyRow = await q1<TenantLegacyDeliveryTransportRow>(
+    `SELECT delivery_config, whatsapp
+       FROM clientes
+      WHERE id=?`,
+    [normalizedTenantId]
+  );
+  const mergedConfig = mergeConnectionConfigWithLegacyTransport(
+    normalizedTenantId,
+    config,
+    resolveLegacyDeliveryTransport(legacyRow)
+  );
 
-  return {
-    tenantId: normalizedTenantId,
-    whatsappEnabled: toBool(row.whatsapp_enabled, false),
-    provider,
-    providerConfigJson,
-    baseUrl: getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url']),
-    apiKey: getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']),
-    instanceName,
-    whatsappNumber,
-    channelIdentifier,
-    updatedAt: normalizeUpdatedAt(row.updated_at),
-  };
+  if (!mergedConfig) {
+    return config;
+  }
+
+  if (hasBackfillDiff(config, mergedConfig)) {
+    await persistTenantWhatsAppConnectionConfig(mergedConfig);
+    config = {
+      ...mergedConfig,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    config = mergedConfig;
+  }
+
+  return config;
 }
 
 export function sanitizeTenantWhatsAppConnectionConfigForClient(

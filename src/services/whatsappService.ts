@@ -342,9 +342,16 @@ export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResul
 export async function getConnectionInfo(tenantId: TenantId): Promise<WhatsAppConnectionInfoResult> {
   const context = await resolveTenantConnectionContext(tenantId);
   const safeTenantConfig = sanitizeTenantWhatsAppConnectionConfigForClient(context.tenantConfig);
+  const configured = Boolean(
+    context.instanceRecord ||
+      context.instanceName ||
+      context.provider ||
+      safeTenantConfig?.hasBaseUrl ||
+      safeTenantConfig?.hasApiKey
+  );
   const baseResult: WhatsAppConnectionInfoResult = {
     source: context.tenantConfig ? 'tenant_whatsapp_config' : 'legacy',
-    configured: Boolean(context.tenantConfig || context.instanceRecord),
+    configured,
     whatsapp_enabled: safeTenantConfig?.whatsappEnabled ?? false,
     provider: context.provider,
     supported: !context.provider || isEvolutionConnectionProvider(context.provider),
