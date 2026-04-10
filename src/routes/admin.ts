@@ -1,6 +1,6 @@
 // src/routes/admin.ts — painel administrativo FlowPDV
 import fs from 'fs';
-import { Router, Request } from 'express';
+import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { q1, qAll, qRun, qInsert, withTx, txInsert, txRun, txQ1 } from '../db';
@@ -13,6 +13,7 @@ import {
   requireTrustedBrowserOrigin,
 } from '../middleware';
 import { logError } from '../utils/logger';
+import { isAppError } from '../utils/errors';
 import { sendInternalError } from '../utils/internalServerError';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
 import { adminLgpdStatusPatchSchema } from '../validation/schemas/privacidade';
@@ -78,6 +79,18 @@ function sqlCount(row: { c?: unknown } | null | undefined): number {
   if (typeof v === 'bigint') return Number(v);
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function sendAdminRouteError(res: Response, context: string, error: unknown) {
+  if (isAppError(error)) {
+    return res.status(error.statusCode).json({
+      success: false,
+      error: error.message,
+      code: error.code,
+    });
+  }
+
+  sendInternalError(res, context, error);
 }
 
 function buildTrialWindow(days: number) {
@@ -2401,7 +2414,7 @@ export function createAdminRouter() {
       const conversations = await listWhatsAppConversations(tenantId);
       res.json({ conversations });
     } catch (e: unknown) {
-      sendInternalError(res, 'routes/admin:whatsapp-conversations', e);
+      sendAdminRouteError(res, 'routes/admin:whatsapp-conversations', e);
     }
   });
 
@@ -2426,7 +2439,7 @@ export function createAdminRouter() {
 
       res.json(conversation);
     } catch (e: unknown) {
-      sendInternalError(res, 'routes/admin:whatsapp-conversation-detail', e);
+      sendAdminRouteError(res, 'routes/admin:whatsapp-conversation-detail', e);
     }
   });
 
@@ -2452,7 +2465,7 @@ export function createAdminRouter() {
 
       res.status(result.status === 'erro' ? 502 : 200).json(result);
     } catch (e: unknown) {
-      sendInternalError(res, 'routes/admin:whatsapp-conversation-send', e);
+      sendAdminRouteError(res, 'routes/admin:whatsapp-conversation-send', e);
     }
   });
 
