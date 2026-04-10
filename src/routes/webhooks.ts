@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
 import { registerInboundWhatsAppMessages } from '../services/whatsAppInboundService';
+import { validateInboundWhatsAppWebhookAuth } from '../services/whatsAppWebhookAuthService';
 import { logError, logInfo } from '../utils/logger';
 import { createWhatsAppWebhookRouter } from './webhooks/whatsappWebhook';
 
@@ -30,6 +31,14 @@ function extractPayloadEventName(payload: unknown) {
 
   const payloadRecord = payload as Record<string, unknown>;
   return payloadRecord.event ?? payloadRecord.type ?? null;
+}
+
+function getWhatsAppWebhookAuthErrorStatus(reason: string) {
+  return reason === 'invalid_tenant_id' ? 400 : 401;
+}
+
+function getWhatsAppWebhookAuthPublicMessage(reason: string) {
+  return reason === 'invalid_tenant_id' ? 'Tenant invalido' : 'Webhook nao autorizado';
 }
 
 function forwardToCentralWhatsAppInbound(
@@ -138,15 +147,81 @@ export function createWebhooksRouter() {
   // Ponto central do inbound de WhatsApp no FlowPDV.
   // Trilha principal: Evolution webhook -> /api/webhooks/whatsapp/inbound/:tenantId/:eventName? -> registerInboundWhatsAppMessages()
   const handleInbound = (req: Request, res: Response) => {
-    res.status(200).json({ received: true });
+    void (async () => {
+      const authResult = await validateInboundWhatsAppWebhookAuth({
+        tenantId: req.params.tenantId,
+        headers: req.headers as Record<string, unknown>,
+        payload: req.body,
+      });
 
-    forwardToCentralWhatsAppInbound({
-      tenantId: req.params.tenantId,
-      payload: req.body,
-      webhookEventName: req.params.eventName,
-      path: req.originalUrl,
-      method: req.method,
-      source: 'primary_route',
+      if (!authResult.allowed) {
+        logInfo('webhooks.whatsappInbound.authRejected', {
+          path: req.originalUrl,
+          method: req.method,
+          source: 'primary_route',
+          tenantId: req.params.tenantId,
+          eventName: normalizeWebhookEventName(req.params.eventName),
+          payloadEvent: extractPayloadEventName(req.body),
+          provider: authResult.provider,
+          reason: authResult.reason,
+          enforced: authResult.enforced,
+          incomingAuthSources: authResult.incomingAuthSources,
+          expectedAuthSources: authResult.expectedAuthSources,
+        });
+
+        return res
+          .status(getWhatsAppWebhookAuthErrorStatus(authResult.reason))
+          .json({ error: getWhatsAppWebhookAuthPublicMessage(authResult.reason) });
+      }
+
+      if (authResult.enforced) {
+        logInfo('webhooks.whatsappInbound.authValidated', {
+          path: req.originalUrl,
+          method: req.method,
+          source: 'primary_route',
+          tenantId: req.params.tenantId,
+          eventName: normalizeWebhookEventName(req.params.eventName),
+          payloadEvent: extractPayloadEventName(req.body),
+          provider: authResult.provider,
+          reason: authResult.reason,
+          matchedIncomingSource: authResult.matchedIncomingSource,
+          matchedExpectedSource: authResult.matchedExpectedSource,
+        });
+      } else {
+        logInfo('webhooks.whatsappInbound.authSkipped', {
+          path: req.originalUrl,
+          method: req.method,
+          source: 'primary_route',
+          tenantId: req.params.tenantId,
+          eventName: normalizeWebhookEventName(req.params.eventName),
+          payloadEvent: extractPayloadEventName(req.body),
+          provider: authResult.provider,
+          reason: authResult.reason,
+        });
+      }
+
+      res.status(200).json({ received: true });
+
+      forwardToCentralWhatsAppInbound({
+        tenantId: req.params.tenantId,
+        payload: req.body,
+        webhookEventName: req.params.eventName,
+        path: req.originalUrl,
+        method: req.method,
+        source: 'primary_route',
+      });
+    })().catch((error) => {
+      logError('webhooks.whatsappInbound.auth', error, {
+        path: req.originalUrl,
+        method: req.method,
+        source: 'primary_route',
+        tenantId: req.params.tenantId,
+        eventName: normalizeWebhookEventName(req.params.eventName),
+      });
+
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Erro interno do servidor' });
+      }
     });
   };
 

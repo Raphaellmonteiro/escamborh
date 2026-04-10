@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getInstanceByName } from '../../repositories/whatsappRepository';
+import { validateInboundWhatsAppWebhookAuth } from '../../services/whatsAppWebhookAuthService';
 import { logError, logInfo } from '../../utils/logger';
 
 type EvolutionWebhookPayload = {
@@ -60,6 +61,14 @@ async function resolveTenantIdFromInstance(instance: string) {
   return instanceRecord?.tenantId ?? resolveTenantIdFromInstanceName(instance);
 }
 
+function getWhatsAppWebhookAuthErrorStatus(reason: string) {
+  return reason === 'invalid_tenant_id' ? 400 : 401;
+}
+
+function getWhatsAppWebhookAuthPublicMessage(reason: string) {
+  return reason === 'invalid_tenant_id' ? 'Tenant invalido' : 'Webhook nao autorizado';
+}
+
 export function createWhatsAppWebhookRouter(
   input: CreateWhatsAppWebhookRouterInput
 ) {
@@ -68,7 +77,7 @@ export function createWhatsAppWebhookRouter(
   // Endpoint legado de compatibilidade externa.
   // Qualquer processamento de negocio deve seguir pela trilha principal em /api/webhooks/whatsapp/inbound/:tenantId/:eventName?
   router.post('/', (req: Request, res: Response) => {
-    try {
+    void (async () => {
       const payload = isObject(req.body) ? (req.body as EvolutionWebhookPayload) : null;
       const instance = toNonEmptyString(payload?.instance);
 
@@ -77,43 +86,94 @@ export function createWhatsAppWebhookRouter(
       }
 
       const eventType = normalizeEventType(payload);
+      const tenantId = await resolveTenantIdFromInstance(instance);
+
+      if (tenantId) {
+        const authResult = await validateInboundWhatsAppWebhookAuth({
+          tenantId,
+          headers: req.headers as Record<string, unknown>,
+          payload,
+        });
+
+        if (!authResult.allowed) {
+          logInfo('webhooks.whatsapp.legacyAdapter.authRejected', {
+            path: req.originalUrl,
+            method: req.method,
+            instance,
+            tenantId,
+            eventType,
+            provider: authResult.provider,
+            reason: authResult.reason,
+            enforced: authResult.enforced,
+            incomingAuthSources: authResult.incomingAuthSources,
+            expectedAuthSources: authResult.expectedAuthSources,
+          });
+
+          return res
+            .status(getWhatsAppWebhookAuthErrorStatus(authResult.reason))
+            .json({ error: getWhatsAppWebhookAuthPublicMessage(authResult.reason) });
+        }
+
+        if (authResult.enforced) {
+          logInfo('webhooks.whatsapp.legacyAdapter.authValidated', {
+            path: req.originalUrl,
+            method: req.method,
+            instance,
+            tenantId,
+            eventType,
+            provider: authResult.provider,
+            matchedIncomingSource: authResult.matchedIncomingSource,
+            matchedExpectedSource: authResult.matchedExpectedSource,
+          });
+        } else {
+          logInfo('webhooks.whatsapp.legacyAdapter.authSkipped', {
+            path: req.originalUrl,
+            method: req.method,
+            instance,
+            tenantId,
+            eventType,
+            provider: authResult.provider,
+            reason: authResult.reason,
+          });
+        }
+      } else {
+        logInfo('webhooks.whatsapp.legacyAdapter.authSkipped', {
+          path: req.originalUrl,
+          method: req.method,
+          instance,
+          tenantId: null,
+          eventType,
+          provider: null,
+          reason: 'tenant_unresolved',
+        });
+      }
 
       res.status(200).json({ received: true });
 
-      void resolveTenantIdFromInstance(instance)
-        .then((tenantId) => {
-          logInfo('webhooks.whatsapp.legacyAdapter.delegated', {
-            path: req.originalUrl,
-            method: req.method,
-            instance,
-            tenantId: tenantId ?? null,
-            eventType,
-            delegatedTo: PRIMARY_WHATSAPP_INBOUND_ROUTE,
-          });
+      logInfo('webhooks.whatsapp.legacyAdapter.delegated', {
+        path: req.originalUrl,
+        method: req.method,
+        instance,
+        tenantId: tenantId ?? null,
+        eventType,
+        delegatedTo: PRIMARY_WHATSAPP_INBOUND_ROUTE,
+      });
 
-          input.forwardToPrimaryInbound({
-            tenantId: tenantId ?? '',
-            payload,
-            webhookEventName: eventType,
-            path: req.originalUrl,
-            method: req.method,
-            instance,
-          });
-        })
-        .catch((error) => {
-          logError('webhooks.whatsapp.legacyAdapter', error, {
-            path: req.originalUrl,
-            method: req.method,
-            instance,
-            eventType,
-          });
-        });
-      return;
-    } catch (error) {
+      input.forwardToPrimaryInbound({
+        tenantId: tenantId ?? '',
+        payload,
+        webhookEventName: eventType,
+        path: req.originalUrl,
+        method: req.method,
+        instance,
+      });
+    })().catch((error) => {
       logError('webhooks.whatsapp', error);
 
-      return res.status(500).json({ error: 'Erro interno do servidor' });
-    }
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Erro interno do servidor' });
+      }
+    });
   });
 
   return router;
