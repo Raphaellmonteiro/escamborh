@@ -16,6 +16,7 @@ import {
 import {
   getTenantWhatsAppConnectionConfig,
   isEvolutionConnectionProvider,
+  persistTenantWhatsAppInstanceName,
   sanitizeTenantWhatsAppConnectionConfigForClient,
   type TenantWhatsAppConnectionConfig,
 } from './tenantWhatsAppConfigService';
@@ -183,6 +184,28 @@ function buildEvolutionError(action: string, error: unknown) {
   return new AppError(message, 502);
 }
 
+function buildTenantInstanceName(tenantId: number) {
+  return `tenant_${tenantId}_whatsapp`;
+}
+
+function isEvolutionInstanceAlreadyExistsError(error: unknown) {
+  const message =
+    error instanceof Error && error.message ? error.message.trim().toLowerCase() : '';
+
+  if (!message) {
+    return false;
+  }
+
+  return (
+    message.includes('already exists') ||
+    message.includes('already exist') ||
+    message.includes('instance already') ||
+    message.includes('duplicate') ||
+    message.includes('ja existe') ||
+    message.includes('já existe')
+  );
+}
+
 function resolveContextProvider(
   tenantConfig: TenantWhatsAppConnectionConfig | null,
   instanceRecord: WhatsAppInstanceRecord | null
@@ -260,6 +283,11 @@ async function persistInstanceRecordIfNeeded(tenantId: number, instanceName: str
   }
 }
 
+async function persistProvisionedInstance(tenantId: number, instanceName: string) {
+  await persistInstanceRecordIfNeeded(tenantId, instanceName);
+  await persistTenantWhatsAppInstanceName(tenantId, instanceName);
+}
+
 async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstanceRecord> {
   const normalizedTenantId = normalizeTenantId(tenantId);
   const instance = await getInstanceByTenant(normalizedTenantId);
@@ -274,22 +302,30 @@ async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstan
 export async function createWhatsAppInstance(tenantId: TenantId) {
   const context = await resolveTenantConnectionContext(tenantId);
   assertSupportedConnectionProvider(context.provider);
-  const instanceName = context.instanceName || `tenant_${context.tenantId}_${Date.now()}`;
+  const instanceName = context.instanceName || buildTenantInstanceName(context.tenantId);
 
   try {
     await createEvolutionInstance(instanceName, context.evolutionClientConfig);
   } catch (error) {
-    throw buildEvolutionError('criar a instancia WhatsApp', error);
+    if (!isEvolutionInstanceAlreadyExistsError(error)) {
+      throw buildEvolutionError('criar a instancia WhatsApp', error);
+    }
   }
 
-  await persistInstanceRecordIfNeeded(context.tenantId, instanceName);
+  await persistProvisionedInstance(context.tenantId, instanceName);
 
   return instanceName;
 }
 
 export async function generateQrCode(tenantId: TenantId): Promise<GenerateQrCodeResult> {
-  const context = await resolveTenantConnectionContext(tenantId);
+  let context = await resolveTenantConnectionContext(tenantId);
   assertSupportedConnectionProvider(context.provider);
+
+  if (!context.instanceName && isEvolutionConnectionProvider(context.provider)) {
+    await createWhatsAppInstance(context.tenantId);
+    context = await resolveTenantConnectionContext(context.tenantId);
+  }
+
   const instanceName = requireConnectionInstanceName(context);
 
   let response: EvolutionApiResponse<unknown>;
@@ -309,8 +345,14 @@ export async function generateQrCode(tenantId: TenantId): Promise<GenerateQrCode
 }
 
 export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResult> {
-  const context = await resolveTenantConnectionContext(tenantId);
+  let context = await resolveTenantConnectionContext(tenantId);
   assertSupportedConnectionProvider(context.provider);
+
+  if (!context.instanceName && isEvolutionConnectionProvider(context.provider)) {
+    await createWhatsAppInstance(context.tenantId);
+    context = await resolveTenantConnectionContext(context.tenantId);
+  }
+
   const instanceName = requireConnectionInstanceName(context);
 
   let response: EvolutionApiResponse<unknown>;

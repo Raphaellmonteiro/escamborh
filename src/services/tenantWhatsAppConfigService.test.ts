@@ -11,7 +11,10 @@ vi.mock('../repositories/whatsappRepository', () => ({
 
 import { q1, qRun } from '../db';
 import { getInstanceByTenant } from '../repositories/whatsappRepository';
-import { getTenantWhatsAppConnectionConfig } from './tenantWhatsAppConfigService';
+import {
+  getTenantWhatsAppConnectionConfig,
+  persistTenantWhatsAppInstanceName,
+} from './tenantWhatsAppConfigService';
 
 describe('tenantWhatsAppConfigService', () => {
   beforeEach(() => {
@@ -163,6 +166,65 @@ describe('tenantWhatsAppConfigService', () => {
       instance: 'tenant_9_instance',
       instance_name: 'tenant_9_instance',
       channel_id: 'tenant_9_instance',
+    });
+  });
+
+  it('persists instance_name directly into tenant_whatsapp_config preserving tenant transport settings', async () => {
+    vi.mocked(q1)
+      .mockResolvedValueOnce({
+        tenant_id: 9,
+        whatsapp_enabled: 1,
+        provider: 'evolution_api',
+        provider_config_json: JSON.stringify({
+          base_url: 'https://evo.flowpdv.local',
+          apikey: 'tenant-token',
+          phone_number: '82981831172',
+          display_number: '82981831172',
+          custom_flag: 'preservar',
+        }),
+        whatsapp_number: '82981831172',
+        instance_name: null,
+        channel_identifier: null,
+        updated_at: '2026-04-10T10:00:00.000Z',
+      })
+      .mockResolvedValueOnce({
+        delivery_config: null,
+        whatsapp: '82981831172',
+      });
+
+    const result = await persistTenantWhatsAppInstanceName(9, 'tenant_9_whatsapp');
+
+    expect(result).toMatchObject({
+      tenantId: 9,
+      whatsappEnabled: true,
+      provider: 'evolution_api',
+      baseUrl: 'https://evo.flowpdv.local',
+      apiKey: 'tenant-token',
+      instanceName: 'tenant_9_whatsapp',
+      whatsappNumber: '82981831172',
+      channelIdentifier: 'tenant_9_whatsapp',
+    });
+
+    expect(vi.mocked(qRun)).toHaveBeenCalledTimes(1);
+    const [, params] = vi.mocked(qRun).mock.calls[0];
+    expect(params).toMatchObject([
+      9,
+      1,
+      'evolution_api',
+      expect.any(String),
+      '82981831172',
+      'tenant_9_whatsapp',
+      'tenant_9_whatsapp',
+    ]);
+    expect(JSON.parse(String(params?.[3]))).toEqual({
+      base_url: 'https://evo.flowpdv.local',
+      apikey: 'tenant-token',
+      phone_number: '82981831172',
+      display_number: '82981831172',
+      custom_flag: 'preservar',
+      instance: 'tenant_9_whatsapp',
+      instance_name: 'tenant_9_whatsapp',
+      channel_id: 'tenant_9_whatsapp',
     });
   });
 });

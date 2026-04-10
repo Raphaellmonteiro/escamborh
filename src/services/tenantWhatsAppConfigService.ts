@@ -71,6 +71,15 @@ function normalizeOptionalText(value: unknown) {
   return normalized || null;
 }
 
+function normalizeRequiredText(value: unknown, fieldName: string) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    throw new Error(`${fieldName} obrigatorio`);
+  }
+
+  return normalized;
+}
+
 function normalizeProviderName(value: unknown) {
   const normalized = normalizeOptionalText(value);
   if (!normalized) return null;
@@ -466,6 +475,54 @@ async function persistTenantWhatsAppConnectionConfig(
       config.channelIdentifier,
     ]
   );
+}
+
+export async function persistTenantWhatsAppInstanceName(
+  tenantId: number | string,
+  instanceName: string
+): Promise<TenantWhatsAppConnectionConfig> {
+  const normalizedTenantId = normalizeTenantId(tenantId);
+  const normalizedInstanceName = normalizeRequiredText(instanceName, 'instanceName');
+  const current = await getTenantWhatsAppConnectionConfig(normalizedTenantId);
+
+  if (current?.provider && !isEvolutionConnectionProvider(current.provider)) {
+    throw new Error('Provider WhatsApp nao suportado para persistir instance_name');
+  }
+
+  const provider =
+    current?.provider ||
+    resolveStoredConnectionProvider({
+      provider: null,
+      instanceName: normalizedInstanceName,
+      baseUrl: current?.baseUrl ?? null,
+      apiKey: current?.apiKey ?? null,
+    });
+  const channelIdentifier = current?.channelIdentifier || normalizedInstanceName;
+  const next: TenantWhatsAppConnectionConfig = {
+    tenantId: normalizedTenantId,
+    whatsappEnabled: current?.whatsappEnabled ?? false,
+    provider,
+    providerConfigJson:
+      provider && isEvolutionConnectionProvider(provider)
+        ? buildEvolutionProviderConfigJson(current?.providerConfigJson, {
+            baseUrl: current?.baseUrl ?? null,
+            apiKey: current?.apiKey ?? null,
+            instanceName: normalizedInstanceName,
+            whatsappNumber: current?.whatsappNumber ?? null,
+            channelIdentifier,
+          })
+        : current?.providerConfigJson ?? null,
+    baseUrl: current?.baseUrl ?? null,
+    apiKey: current?.apiKey ?? null,
+    instanceName: normalizedInstanceName,
+    whatsappNumber: current?.whatsappNumber ?? null,
+    channelIdentifier,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await persistTenantWhatsAppConnectionConfig(next);
+
+  return next;
 }
 
 export function isEvolutionConnectionProvider(provider: string | null) {

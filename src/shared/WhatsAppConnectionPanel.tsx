@@ -61,6 +61,7 @@ type QrCodeState = {
 };
 
 const WHATSAPP_CONNECTION_API_PATH = '/api/whatsapp/connection';
+const WHATSAPP_PROVISION_API_PATH = '/api/whatsapp/create';
 const WHATSAPP_QR_CODE_API_PATH = '/api/whatsapp/qrcode';
 
 function normalizeOptionalText(value: unknown) {
@@ -157,6 +158,19 @@ function normalizeQrCodeImageSrc(value: unknown) {
   return null;
 }
 
+function shouldProvisionInstance(connection: ConnectionInfoResponse | null) {
+  if (!connection?.supported) {
+    return false;
+  }
+
+  if (normalizeOptionalText(connection.instance_name)) {
+    return false;
+  }
+
+  const provider = normalizeOptionalText(connection.provider)?.toLowerCase();
+  return provider === 'evolution_api' || Boolean(connection.has_base_url || connection.has_api_key);
+}
+
 function SummaryCard({
   label,
   value,
@@ -191,6 +205,95 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [qrCode, setQrCode] = useState<QrCodeState>(emptyQrCodeState);
 
+  const maybeProvisionInstance = async (
+    currentConnection: ConnectionInfoResponse,
+    options?: {
+      signal?: AbortSignal;
+      suppressFeedback?: boolean;
+    }
+  ) => {
+    if (!shouldProvisionInstance(currentConnection)) {
+      return {
+        connection: currentConnection,
+        attempted: false,
+        provisioned: false,
+      };
+    }
+
+    const provisionResponse = await fetch(WHATSAPP_PROVISION_API_PATH, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: options?.signal,
+    });
+    const provisionData = (await provisionResponse.json().catch(() => ({}))) as { error?: string };
+
+    if (!provisionResponse.ok) {
+      if (!options?.suppressFeedback) {
+        setFeedback({
+          type: 'error',
+          text: provisionData.error || 'Nao foi possivel provisionar a instancia do WhatsApp.',
+        });
+      }
+
+      return {
+        connection: currentConnection,
+        attempted: true,
+        provisioned: false,
+      };
+    }
+
+    const refreshedResponse = await fetch(WHATSAPP_CONNECTION_API_PATH, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: options?.signal,
+    });
+    const refreshedData = (await refreshedResponse.json().catch(() => ({}))) as ConnectionInfoResponse;
+
+    if (!refreshedResponse.ok || refreshedData.success === false) {
+      if (!options?.suppressFeedback) {
+        setFeedback({
+          type: 'error',
+          text: refreshedData.error || 'Nao foi possivel recarregar a conexao apos provisionar a instancia.',
+        });
+      }
+
+      return {
+        connection: currentConnection,
+        attempted: true,
+        provisioned: false,
+      };
+    }
+
+    const provisioned = Boolean(normalizeOptionalText(refreshedData.instance_name));
+
+    if (!provisioned) {
+      if (!options?.suppressFeedback) {
+        setFeedback({
+          type: 'error',
+          text: 'A instancia foi solicitada, mas o backend ainda nao retornou um instance_name valido.',
+        });
+      }
+
+      return {
+        connection: refreshedData,
+        attempted: true,
+        provisioned: false,
+      };
+    }
+
+    if (!options?.suppressFeedback) {
+      setFeedback({
+        type: 'success',
+        text: 'Instancia do WhatsApp provisionada para este tenant.',
+      });
+    }
+
+    return {
+      connection: refreshedData,
+      attempted: true,
+      provisioned: true,
+    };
+  };
+
   useEffect(() => {
     if (!feedback) return undefined;
 
@@ -223,7 +326,13 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
           throw new Error(data.error || 'Nao foi possivel carregar a conexao do WhatsApp.');
         }
 
-        setConnection(data);
+        const provisionResult = await maybeProvisionInstance(data, {
+          signal: abortController.signal,
+          suppressFeedback: true,
+        });
+
+        if (abortController.signal.aborted) return;
+        setConnection(provisionResult.connection);
       } catch (error) {
         if (abortController.signal.aborted) return;
         setLoadError(error instanceof Error ? error.message : 'Falha ao carregar a conexao do WhatsApp.');
@@ -253,8 +362,12 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
         throw new Error(data.error || 'Nao foi possivel atualizar o status do WhatsApp.');
       }
 
-      setConnection(data);
-      if (!suppressErrorFeedback) {
+      const provisionResult = await maybeProvisionInstance(data, {
+        suppressFeedback: suppressErrorFeedback,
+      });
+
+      setConnection(provisionResult.connection);
+      if (!suppressErrorFeedback && !provisionResult.attempted) {
         setFeedback({ type: 'success', text: 'Status do WhatsApp recarregado.' });
       }
     } catch (error) {
