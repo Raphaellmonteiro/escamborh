@@ -72,6 +72,14 @@ interface PedidoTrackingApiResponse {
   config_pix?: PublicPixConfig | null;
 }
 
+interface RegeneratePixApiResponse {
+  success?: boolean;
+  error?: string;
+  pagamento_status?: string | null;
+  payment_pix?: PublicPixPayment | null;
+  config_pix?: PublicPixConfig | null;
+}
+
 type TimeField = 'created_at' | 'saiu_entrega_at' | 'entregue_at';
 
 interface StepDef {
@@ -217,6 +225,16 @@ function fmtDataHora(d?: string | null): string {
     : '';
 }
 
+function getDeliveryClienteToken(slug: string): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return localStorage.getItem(`dc_token_${slug}`);
+  } catch {
+    return null;
+  }
+}
+
 interface Props {
   slug: string;
   pedidoId: number;
@@ -228,31 +246,37 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
   const [pedido, setPedido]     = useState<PedidoData | null>(null);
   const [error, setError]       = useState(false);
   const [pixCopiado, setPixCopiado] = useState(false);
+  const [pixRegenerando, setPixRegenerando] = useState(false);
+  const [pixRegenerarErro, setPixRegenerarErro] = useState<string | null>(null);
   const intervalRef             = useRef<ReturnType<typeof setInterval> | null>(null);
   const copyTimeoutRef          = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const applyPedidoResponse = (body: PedidoTrackingApiResponse) => {
+    const p = body?.pedido;
+    if (!p || typeof p.id !== 'number') {
+      setError(true);
+      return;
+    }
+    const total = Number(p.total_amount);
+    const taxa = Number(p.taxa_entrega);
+    const mapped: PedidoData = {
+      ...p,
+      total_amount: Number.isFinite(total) ? total : 0,
+      taxa_entrega: Number.isFinite(taxa) ? taxa : 0,
+      estabelecimento: String(body.nome_estabelecimento ?? p.estabelecimento ?? ''),
+      payment_pix: body.payment_pix ?? null,
+      config_pix: body.config_pix ?? null,
+    };
+    setPedido(mapped);
+    setError(false);
+  };
 
   const fetchPedido = async () => {
     try {
       const res = await fetch(`/public/delivery/${slug}/pedido/${pedidoId}`);
       if (!res.ok) { setError(true); return; }
       const body = (await res.json()) as PedidoTrackingApiResponse;
-      const p = body?.pedido;
-      if (!p || typeof p.id !== 'number') {
-        setError(true);
-        return;
-      }
-      const total = Number(p.total_amount);
-      const taxa = Number(p.taxa_entrega);
-      const mapped: PedidoData = {
-        ...p,
-        total_amount: Number.isFinite(total) ? total : 0,
-        taxa_entrega: Number.isFinite(taxa) ? taxa : 0,
-        estabelecimento: String(body.nome_estabelecimento ?? p.estabelecimento ?? ''),
-        payment_pix: body.payment_pix ?? null,
-        config_pix: body.config_pix ?? null,
-      };
-      setPedido(mapped);
-      setError(false);
+      applyPedidoResponse(body);
     } catch { setError(true); }
   };
 
@@ -313,7 +337,7 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
   const isCancelado = stNorm === 'cancelado';
   const isEntregue  = stNorm === 'entregue' || stNorm.startsWith('conclu');
   const step        = steps[stepIdx];
-  const isPix = pedido.pagamento_tipo === 'pix';
+  const isPix = String(pedido.pagamento_tipo || '').trim().toLowerCase() === 'pix';
   const paymentPix = pedido.payment_pix ?? null;
   const configPix = pedido.config_pix ?? null;
   const pixStatusKeys = [
@@ -333,8 +357,10 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
     || (pixStatusKeys.length === 0 && Boolean(paymentPix || configPix))
   );
   const pixExpiresAt = paymentPix?.expires_at || configPix?.payment_expires_at || null;
+  const pixStatusAtual = normalizePaymentStatus(paymentPix?.status || configPix?.payment_status);
   const pixExpirado = isPix && !pixPago && (
     (() => {
+      if (pixStatusAtual === 'expired') return true;
       const expiresAt = parseDateValue(pixExpiresAt);
       return Boolean(expiresAt && expiresAt.getTime() <= Date.now());
     })()
@@ -363,6 +389,48 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
     setPixCopiado(true);
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(() => setPixCopiado(false), 4000);
+  };
+
+  const gerarNovoPix = async () => {
+    if (pixRegenerando) return;
+
+    setPixRegenerarErro(null);
+    setPixRegenerando(true);
+
+    try {
+      const clienteToken = getDeliveryClienteToken(slug);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (clienteToken) {
+        headers.Authorization = `Bearer ${clienteToken}`;
+      }
+
+      const res = await fetch(`/public/delivery/${slug}/pedido/${pedidoId}/gerar-novo-pix`, {
+        method: 'POST',
+        headers,
+      });
+
+      const body = (await res.json().catch(() => null)) as RegeneratePixApiResponse | null;
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || 'Nao foi possivel gerar um novo Pix agora.');
+      }
+
+      setPixCopiado(false);
+      setPedido((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          pagamento_status: String(body.pagamento_status ?? current.pagamento_status ?? ''),
+          payment_pix: body.payment_pix ?? null,
+          config_pix: body.config_pix ?? null,
+        };
+      });
+    } catch (err) {
+      setPixRegenerarErro(err instanceof Error ? err.message : 'Nao foi possivel gerar um novo Pix agora.');
+    } finally {
+      setPixRegenerando(false);
+    }
   };
 
   const tipoAtendimentoLabel =
@@ -645,6 +713,54 @@ export default function PedidoRastreamento({ slug, pedidoId, embedded }: Props) 
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {isPix && pixExpirado && !pagamentoConcluido && (
+            <div style={{ ...s.section, marginTop: 12, border: '1px solid rgba(239,68,68,0.28)', background: 'rgba(239,68,68,0.08)' }}>
+              <div style={s.sectionTitle}>Pix expirado</div>
+              <div style={{ color: '#fca5a5', fontSize: 16, fontWeight: 900 }}>A cobranca Pix deste pedido expirou.</div>
+              <div style={{ color: '#fecaca', fontSize: 13, marginTop: 6 }}>
+                Gere um novo Pix para continuar o pagamento deste mesmo pedido.
+              </div>
+              {pixExpiresAt && (
+                <div style={{ color: '#fca5a5', fontSize: 12, fontWeight: 700, marginTop: 10 }}>
+                  Expirado em {fmtDataHora(pixExpiresAt)}
+                </div>
+              )}
+              {pixRegenerarErro && (
+                <div style={{
+                  marginTop: 12,
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(127,29,29,0.32)',
+                  border: '1px solid rgba(248,113,113,0.25)',
+                  color: '#fecaca',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}>
+                  {pixRegenerarErro}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={gerarNovoPix}
+                disabled={pixRegenerando}
+                style={{
+                  width: '100%',
+                  marginTop: 14,
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: pixRegenerando ? 'rgba(248,250,252,0.25)' : '#f8fafc',
+                  color: pixRegenerando ? '#e4e4e7' : '#09090b',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: pixRegenerando ? 'wait' : 'pointer',
+                }}
+              >
+                {pixRegenerando ? 'Gerando novo Pix...' : 'Gerar novo Pix'}
+              </button>
             </div>
           )}
 

@@ -11,6 +11,7 @@ export type CreatePixProviderPaymentInput = {
   payerEmail?: string | null;
   sandbox?: boolean;
   expiresAt?: string | null;
+  idempotencyKey?: string | null;
 };
 
 export type CreatePixProviderPaymentResult = {

@@ -297,6 +297,26 @@ async function tryRevalidatePendingPixOrder(input: {
   }
 }
 
+function parseOptionalIsoDate(value: unknown) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isPixPaymentExpired(payment?: {
+  status?: string | null;
+  expires_at?: string | null;
+} | null) {
+  if (!payment) return false;
+
+  const status = String(payment.status || '').trim().toLowerCase();
+  if (status === 'expired') return true;
+
+  const expiresAt = parseOptionalIsoDate(payment.expires_at);
+  return Boolean(expiresAt && expiresAt.getTime() <= Date.now());
+}
+
 function getCurrentDateInTimeZone() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: TZ,
@@ -1874,6 +1894,164 @@ export function createDeliveryPublicRouter() {
         sendInternalError(res, 'delivery-public', e);
       }
     });
+
+  router.post(
+    '/:slug/pedido/:pedidoId/gerar-novo-pix',
+    publicRateLimit,
+    requireBrowserOrigin,
+    requireDeliveryTrackingPlan,
+    optionalAuthDeliveryCliente,
+    async (req: any, res) => {
+      try {
+        const pedidoId = Number(req.params.pedidoId);
+        if (!Number.isInteger(pedidoId) || pedidoId <= 0) {
+          return res.status(400).json({ error: 'Pedido invalido' });
+        }
+
+        const tenant = await getTenant(req.params.slug);
+        if (!tenant) return res.status(404).json({ error: 'Estabelecimento nao encontrado' });
+        const dcfg = parseDeliveryConfig(tenant.delivery_config);
+
+        let pedido = await q1<{
+          id: number;
+          order_number: string;
+          total_amount: number | string;
+          cliente_nome: string | null;
+          pagamento_tipo: string | null;
+          pagamento_status: string | null;
+          canal: string | null;
+          delivery_cliente_id: number | null;
+          cliente_id: number | null;
+        }>(
+          `SELECT id, order_number, total_amount, cliente_nome, pagamento_tipo, pagamento_status,
+                  canal, delivery_cliente_id, cliente_id
+             FROM pedidos
+            WHERE id=? AND tenant_id=?`,
+          [pedidoId, tenant.id]
+        );
+        if (!pedido) return res.status(404).json({ error: 'Pedido nao encontrado' });
+        if (pedido.canal !== 'delivery' && pedido.canal !== 'retirada') {
+          return res.status(400).json({ error: 'Canal do pedido nao permite gerar Pix por aqui' });
+        }
+        if (String(pedido.pagamento_tipo || '').trim().toLowerCase() !== 'pix') {
+          return res.status(400).json({ error: 'Este pedido nao usa pagamento Pix' });
+        }
+
+        const ownerClienteId = Number(pedido.delivery_cliente_id || pedido.cliente_id || 0);
+        if (ownerClienteId > 0) {
+          if (req.clienteId == null) {
+            return res.status(401).json({
+              error: 'Identifique-se para gerar um novo Pix deste pedido',
+              code: 'DELIVERY_REGERAR_PIX_AUTH',
+            });
+          }
+          if (Number(req.tenantId) !== Number(tenant.id)) {
+            return res.status(403).json({ error: 'Token nao corresponde a esta loja' });
+          }
+          if (Number(req.clienteId) !== ownerClienteId) {
+            return res.status(403).json({ error: 'Pedido nao pertence a esta conta' });
+          }
+        }
+
+        await tryRevalidatePendingPixOrder({
+          orderId: Number(pedido.id),
+          tenantId: Number(tenant.id),
+          paymentMethod: pedido.pagamento_tipo,
+          paymentStatus: pedido.pagamento_status,
+          context: 'delivery-public.regeneratePix.revalidateBeforeCreate',
+        });
+
+        pedido = await q1<{
+          id: number;
+          order_number: string;
+          total_amount: number | string;
+          cliente_nome: string | null;
+          pagamento_tipo: string | null;
+          pagamento_status: string | null;
+          canal: string | null;
+          delivery_cliente_id: number | null;
+          cliente_id: number | null;
+        }>(
+          `SELECT id, order_number, total_amount, cliente_nome, pagamento_tipo, pagamento_status,
+                  canal, delivery_cliente_id, cliente_id
+             FROM pedidos
+            WHERE id=? AND tenant_id=?`,
+          [pedidoId, tenant.id]
+        );
+        if (!pedido) return res.status(404).json({ error: 'Pedido nao encontrado' });
+
+        const pagamentoStatus = String(pedido.pagamento_status || '').trim().toLowerCase();
+        if (pagamentoStatus === 'pago') {
+          return res.status(409).json({ error: 'O pagamento deste pedido ja foi confirmado' });
+        }
+
+        const persistedPayments = await getPaymentByOrderId({
+          orderId: Number(pedido.id),
+          tenantId: Number(tenant.id),
+        });
+
+        const latestPixPayment = persistedPayments.find(
+          (payment) => String(payment.method || '').trim().toLowerCase() === 'pix'
+        );
+
+        if (!latestPixPayment) {
+          return res.status(404).json({ error: 'Nenhuma cobranca Pix foi encontrada para este pedido' });
+        }
+
+        if (!isPixPaymentExpired(latestPixPayment)) {
+          return res.status(409).json({ error: 'Ainda existe um Pix valido para este pedido' });
+        }
+
+        const previousPaymentKey = String(latestPixPayment.id);
+        const orderNumber = String(pedido.order_number || pedido.id).trim() || String(pedido.id);
+        const amount = Number(pedido.total_amount || 0);
+
+        const paymentPix = await createPixPayment({
+          tenant_id: tenant.id,
+          order_id: Number(pedido.id),
+          amount: Number.isFinite(amount) ? amount : 0,
+          customer_name: pedido.cliente_nome || null,
+          external_reference: `${orderNumber}-repix-${previousPaymentKey}`,
+          description: `${pedido.canal === 'retirada' ? 'Pedido retirada' : 'Pedido delivery'} #${orderNumber} (novo Pix)`,
+          metadata: {
+            channel: pedido.canal || null,
+            order_number: orderNumber,
+            previous_payment_id: Number(latestPixPayment.id),
+            source: 'routes.deliveryPublic.regeneratePix',
+          },
+          force_new: true,
+          idempotency_key: `${tenant.id}-${pedido.id}-pix-refresh-${previousPaymentKey}`,
+        });
+
+        if (!paymentPix) {
+          return res.status(502).json({ error: 'Nao foi possivel gerar um novo Pix para este pedido agora' });
+        }
+
+        if (pagamentoStatus !== 'aguardando_confirmacao') {
+          await qRun("UPDATE pedidos SET pagamento_status='aguardando_confirmacao' WHERE id=? AND tenant_id=?", [
+            pedido.id,
+            tenant.id,
+          ]);
+          notifyTenantOrderStreams(Number(tenant.id), 'status', { orderId: Number(pedido.id) });
+        }
+
+        return res.json({
+          success: true,
+          pagamento_status: 'aguardando_confirmacao',
+          payment_pix: buildPublicPixPayment({
+            ...paymentPix,
+            qr_code_image_base64: paymentPix.qr_code_base64,
+          }),
+          config_pix: buildPublicPixConfig(dcfg, tenant.whatsapp, paymentPix),
+        });
+      } catch (e: any) {
+        if (isAppError(e)) {
+          return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+        }
+        sendInternalError(res, 'delivery-public', e);
+      }
+    }
+  );
 
   router.post(
     '/:slug/pedido/:pedidoId/confirmar-pix',

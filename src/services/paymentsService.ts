@@ -56,6 +56,8 @@ export type CreatePixPaymentInput = {
   description?: string | null;
   expires_at?: string | null;
   metadata?: Record<string, unknown> | null;
+  force_new?: boolean;
+  idempotency_key?: string | null;
 };
 
 export type CreatePixPaymentResult = {
@@ -407,14 +409,17 @@ export async function createPixPayment(
   const tenantId = parsePositiveId(input.tenant_id, 'Tenant');
   const orderId = parsePositiveId(input.order_id, 'Pedido');
   const amount = normalizeAmount(input.amount);
+  const forceNew = Boolean(input.force_new);
   const pixFlow = await resolveTenantPixFlow(tenantId);
 
   await ensureOrderExistsForTenant(orderId, tenantId);
 
-  const existingPayment = await getLatestPixPaymentByOrder({
-    orderId,
-    tenantId,
-  });
+  const existingPayment = forceNew
+    ? null
+    : await getLatestPixPaymentByOrder({
+        orderId,
+        tenantId,
+      });
 
   if (existingPayment?.external_id || existingPayment?.qr_code_text) {
     if (existingPayment.external_reference) {
@@ -453,9 +458,46 @@ export async function createPixPayment(
       payerEmail: normalizeOptionalText(input.customer_email),
       sandbox: providerConfig.sandbox,
       expiresAt: normalizeOptionalText(input.expires_at),
+      idempotencyKey: normalizeOptionalText(input.idempotency_key),
     });
   } else {
     throw new AppError(`Provider de pagamento nao suportado: ${providerConfig.provider}`, 400);
+  }
+
+  const existingProviderPayment =
+    providerResult.external_id
+      ? await getPaymentByExternalId({
+          externalId: providerResult.external_id,
+          provider: providerResult.provider,
+        })
+      : null;
+
+  if (
+    existingProviderPayment &&
+    Number(existingProviderPayment.order_id) === orderId &&
+    Number(existingProviderPayment.tenant_id) === tenantId
+  ) {
+    if (existingProviderPayment.external_id) {
+      await qRun(
+        `UPDATE pedidos
+         SET pix_txid=COALESCE(?, pix_txid),
+             pix_external_reference=COALESCE(?, pix_external_reference)
+         WHERE id=? AND tenant_id=?`,
+        [
+          existingProviderPayment.external_id,
+          existingProviderPayment.external_reference,
+          orderId,
+          tenantId,
+        ]
+      );
+    } else if (existingProviderPayment.external_reference) {
+      await qRun(
+        'UPDATE pedidos SET pix_external_reference=COALESCE(?, pix_external_reference) WHERE id=? AND tenant_id=?',
+        [existingProviderPayment.external_reference, orderId, tenantId]
+      );
+    }
+
+    return mapPixResultFromPayment(existingProviderPayment);
   }
 
   const metadata = {

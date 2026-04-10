@@ -186,7 +186,9 @@ export async function createMercadoPagoPixPayment(
   );
   const payerName = normalizeOptionalText(input.payerName) || 'Cliente';
   const expiresAt = buildPixExpirationIso(input.expiresAt);
-  const idempotencyKey = `${input.tenantId}-${input.orderId}-pix`;
+  const idempotencyKey =
+    normalizeOptionalText(input.idempotencyKey) ||
+    `${input.tenantId}-${input.orderId}-pix`;
   const notificationUrl = buildMercadoPagoNotificationUrl();
   const requestBody = {
     transaction_amount: Number(input.amount.toFixed(2)),
