@@ -10,6 +10,10 @@ import {
   resolveConfiguredWhatsAppNumbersFromProviderConfigJson,
   sendWhatsAppMessage,
 } from './whatsAppSenderService';
+import {
+  getTenantWhatsAppConnectionConfig,
+  type TenantWhatsAppConnectionConfig,
+} from './tenantWhatsAppConfigService';
 import { whatsAppChatbotService } from './whatsAppChatbotService';
 
 type TenantWhatsAppConfigRow = {
@@ -1466,6 +1470,18 @@ function resolveConfiguredInboundInstanceNumbers(config?: TenantWhatsAppConfigRo
   }
 
   return configuredInstanceNumbers;
+}
+
+function mapTenantConnectionConfigToInboundRow(
+  config: TenantWhatsAppConnectionConfig
+): TenantWhatsAppConfigRow {
+  return {
+    tenant_id: config.tenantId,
+    whatsapp_enabled: config.whatsappEnabled,
+    provider: config.provider,
+    provider_config_json: config.providerConfigJson,
+    whatsapp_number: config.whatsappNumber,
+  };
 }
 
 function parseProviderConfigRecord(rawValue: string | null | undefined) {
@@ -2968,12 +2984,8 @@ export async function registerInboundWhatsAppMessages(
     };
   }
 
-  const config = await q1<TenantWhatsAppConfigRow>(
-    `SELECT tenant_id, whatsapp_enabled, provider, provider_config_json, whatsapp_number
-     FROM tenant_whatsapp_config
-     WHERE tenant_id=?`,
-    [tenantId]
-  );
+  const connectionConfig = await getTenantWhatsAppConnectionConfig(tenantId);
+  const config = connectionConfig ? mapTenantConnectionConfigToInboundRow(connectionConfig) : null;
 
   if (!config) {
     logInfo('whatsAppInboundService.tenantResolved', {

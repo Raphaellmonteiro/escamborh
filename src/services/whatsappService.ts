@@ -93,6 +93,13 @@ function normalizeRequiredText(value: string, fieldName: string) {
   return normalized;
 }
 
+function resolveEvolutionRuntimeValue(
+  configuredValue: string | null | undefined,
+  envName: 'EVOLUTION_API_URL' | 'EVOLUTION_API_KEY'
+) {
+  return toNonEmptyString(configuredValue) ?? toNonEmptyString(process.env[envName]);
+}
+
 function toRecord(value: unknown): UnknownRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -214,7 +221,8 @@ function isEvolutionInstanceAlreadyExistsError(error: unknown) {
 
 function resolveContextProvider(
   tenantConfig: TenantWhatsAppConnectionConfig | null,
-  instanceRecord: WhatsAppInstanceRecord | null
+  instanceRecord: WhatsAppInstanceRecord | null,
+  evolutionClientConfig?: EvolutionApiClientConfig
 ) {
   if (tenantConfig?.provider) {
     return tenantConfig.provider;
@@ -225,6 +233,10 @@ function resolveContextProvider(
   }
 
   if (instanceRecord?.instanceName) {
+    return 'evolution_api';
+  }
+
+  if (evolutionClientConfig?.baseUrl || evolutionClientConfig?.apiKey) {
     return 'evolution_api';
   }
 
@@ -245,7 +257,14 @@ async function resolveTenantConnectionContext(tenantId: TenantId): Promise<Tenan
     getTenantWhatsAppConnectionConfig(normalizedTenantId),
     getInstanceByTenant(normalizedTenantId),
   ]);
-  const provider = resolveContextProvider(tenantConfig, instanceRecord);
+  const evolutionClientConfig =
+    tenantConfig || process.env.EVOLUTION_API_URL || process.env.EVOLUTION_API_KEY
+      ? {
+          baseUrl: resolveEvolutionRuntimeValue(tenantConfig?.baseUrl, 'EVOLUTION_API_URL'),
+          apiKey: resolveEvolutionRuntimeValue(tenantConfig?.apiKey, 'EVOLUTION_API_KEY'),
+        }
+      : undefined;
+  const provider = resolveContextProvider(tenantConfig, instanceRecord, evolutionClientConfig);
 
   return {
     tenantId: normalizedTenantId,
@@ -253,12 +272,7 @@ async function resolveTenantConnectionContext(tenantId: TenantId): Promise<Tenan
     instanceRecord,
     provider,
     instanceName: tenantConfig?.instanceName || instanceRecord?.instanceName || null,
-    evolutionClientConfig: tenantConfig
-      ? {
-          baseUrl: tenantConfig.baseUrl,
-          apiKey: tenantConfig.apiKey,
-        }
-      : undefined,
+    evolutionClientConfig,
   };
 }
 
@@ -399,12 +413,14 @@ export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResul
 export async function getConnectionInfo(tenantId: TenantId): Promise<WhatsAppConnectionInfoResult> {
   const context = await resolveTenantConnectionContext(tenantId);
   const safeTenantConfig = sanitizeTenantWhatsAppConnectionConfigForClient(context.tenantConfig);
+  const hasBaseUrl = Boolean(safeTenantConfig?.hasBaseUrl || context.evolutionClientConfig?.baseUrl);
+  const hasApiKey = Boolean(safeTenantConfig?.hasApiKey || context.evolutionClientConfig?.apiKey);
   const configured = Boolean(
     context.instanceRecord ||
       context.instanceName ||
       context.provider ||
-      safeTenantConfig?.hasBaseUrl ||
-      safeTenantConfig?.hasApiKey
+      hasBaseUrl ||
+      hasApiKey
   );
   const baseResult: WhatsAppConnectionInfoResult = {
     source: context.tenantConfig ? 'tenant_whatsapp_config' : 'legacy',
@@ -416,8 +432,8 @@ export async function getConnectionInfo(tenantId: TenantId): Promise<WhatsAppCon
     active_number: safeTenantConfig?.whatsappNumber ?? null,
     channel_identifier:
       safeTenantConfig?.channelIdentifier ?? context.instanceName ?? null,
-    has_base_url: safeTenantConfig?.hasBaseUrl ?? false,
-    has_api_key: safeTenantConfig?.hasApiKey ?? false,
+    has_base_url: hasBaseUrl,
+    has_api_key: hasApiKey,
     updated_at: safeTenantConfig?.updatedAt ?? null,
     status: {
       state: context.instanceRecord?.status ?? null,
@@ -463,15 +479,18 @@ export async function sendMessage<TData = unknown>(
   number: string,
   text: string
 ): Promise<EvolutionApiResponse<TData>> {
-  const instance = await requireTenantInstance(tenantId);
+  const context = await resolveTenantConnectionContext(tenantId);
+  assertSupportedConnectionProvider(context.provider);
+  const instanceName = requireConnectionInstanceName(context);
   const normalizedNumber = normalizeRequiredText(number, 'number');
   const normalizedText = normalizeRequiredText(text, 'text');
 
   try {
     return (await sendText<TData>(
-      instance.instanceName,
+      instanceName,
       normalizedNumber,
-      normalizedText
+      normalizedText,
+      context.evolutionClientConfig
     )) as EvolutionApiResponse<TData>;
   } catch (error) {
     throw buildEvolutionError('enviar mensagem pela instancia WhatsApp', error);

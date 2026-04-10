@@ -148,6 +148,13 @@ function normalizeUpdatedAt(value: string | Date | null | undefined) {
   return parsed.toISOString();
 }
 
+function resolveEvolutionRuntimeValue(
+  configuredValue: string | null | undefined,
+  envName: 'EVOLUTION_API_URL' | 'EVOLUTION_API_KEY'
+) {
+  return normalizeOptionalText(configuredValue) || normalizeOptionalText(process.env[envName]);
+}
+
 function resolveStoredConnectionProvider(config: {
   provider: string | null;
   instanceName: string | null;
@@ -415,6 +422,62 @@ function mergeConnectionConfigWithInstanceRecord(
   };
 }
 
+function applyRuntimeEvolutionConnectionFallback(
+  config: TenantWhatsAppConnectionConfig | null
+): TenantWhatsAppConnectionConfig | null {
+  if (!config) {
+    return null;
+  }
+
+  if (config.provider && !isEvolutionConnectionProvider(config.provider)) {
+    return config;
+  }
+
+  const baseUrl = resolveEvolutionRuntimeValue(config.baseUrl, 'EVOLUTION_API_URL');
+  const apiKey = resolveEvolutionRuntimeValue(config.apiKey, 'EVOLUTION_API_KEY');
+  const provider =
+    config.provider ||
+    resolveStoredConnectionProvider({
+      provider: null,
+      instanceName: config.instanceName,
+      baseUrl,
+      apiKey,
+    });
+  const channelIdentifier = config.channelIdentifier || config.instanceName;
+  const providerConfigJson =
+    provider && isEvolutionConnectionProvider(provider)
+      ? buildEvolutionProviderConfigJson(config.providerConfigJson, {
+          baseUrl,
+          apiKey,
+          instanceName: config.instanceName,
+          whatsappNumber: config.whatsappNumber,
+          channelIdentifier,
+        })
+      : config.providerConfigJson;
+
+  return {
+    ...config,
+    provider,
+    providerConfigJson,
+    baseUrl,
+    apiKey,
+    channelIdentifier,
+  };
+}
+
+function hasCompleteEvolutionConnectionConfig(input: {
+  provider: string | null;
+  baseUrl: string | null;
+  apiKey: string | null;
+  instanceName: string | null;
+}) {
+  if (input.provider && !isEvolutionConnectionProvider(input.provider)) {
+    return false;
+  }
+
+  return Boolean(input.baseUrl && input.apiKey && input.instanceName);
+}
+
 function hasBackfillDiff(
   current: TenantWhatsAppConnectionConfig | null,
   next: TenantWhatsAppConnectionConfig | null
@@ -494,26 +557,36 @@ export async function persistTenantWhatsAppInstanceName(
     resolveStoredConnectionProvider({
       provider: null,
       instanceName: normalizedInstanceName,
-      baseUrl: current?.baseUrl ?? null,
-      apiKey: current?.apiKey ?? null,
+      baseUrl: resolveEvolutionRuntimeValue(current?.baseUrl ?? null, 'EVOLUTION_API_URL'),
+      apiKey: resolveEvolutionRuntimeValue(current?.apiKey ?? null, 'EVOLUTION_API_KEY'),
     });
+  const baseUrl = resolveEvolutionRuntimeValue(current?.baseUrl ?? null, 'EVOLUTION_API_URL');
+  const apiKey = resolveEvolutionRuntimeValue(current?.apiKey ?? null, 'EVOLUTION_API_KEY');
   const channelIdentifier = current?.channelIdentifier || normalizedInstanceName;
   const next: TenantWhatsAppConnectionConfig = {
     tenantId: normalizedTenantId,
-    whatsappEnabled: current?.whatsappEnabled ?? false,
+    whatsappEnabled: Boolean(
+      current?.whatsappEnabled ||
+        hasCompleteEvolutionConnectionConfig({
+          provider,
+          baseUrl,
+          apiKey,
+          instanceName: normalizedInstanceName,
+        })
+    ),
     provider,
     providerConfigJson:
       provider && isEvolutionConnectionProvider(provider)
         ? buildEvolutionProviderConfigJson(current?.providerConfigJson, {
-            baseUrl: current?.baseUrl ?? null,
-            apiKey: current?.apiKey ?? null,
+            baseUrl,
+            apiKey,
             instanceName: normalizedInstanceName,
             whatsappNumber: current?.whatsappNumber ?? null,
             channelIdentifier,
           })
         : current?.providerConfigJson ?? null,
-    baseUrl: current?.baseUrl ?? null,
-    apiKey: current?.apiKey ?? null,
+    baseUrl,
+    apiKey,
     instanceName: normalizedInstanceName,
     whatsappNumber: current?.whatsappNumber ?? null,
     channelIdentifier,
@@ -577,7 +650,7 @@ export async function getTenantWhatsAppConnectionConfig(
     };
   }
 
-  return config;
+  return applyRuntimeEvolutionConnectionFallback(config);
 }
 
 export function sanitizeTenantWhatsAppConnectionConfigForClient(
