@@ -55,9 +55,12 @@ function createWhatsAppManagementRouter() {
   router.post('/create', async (req: TenantRequest, res: Response) => {
     try {
       const tenantId = getRequestTenantId(req);
-      const instanceName = await createWhatsAppInstance(tenantId);
+      const result = await createWhatsAppInstance(tenantId);
 
-      res.status(201).json({ instanceName });
+      res.status(result.created ? 201 : 200).json({
+        success: true,
+        ...result,
+      });
     } catch (error) {
       sendRouteError(res, error);
     }

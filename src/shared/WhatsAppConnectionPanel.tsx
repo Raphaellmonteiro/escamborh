@@ -46,6 +46,14 @@ type QrCodeResponse = {
   error?: string;
 };
 
+type CreateInstanceResponse = {
+  success?: boolean;
+  instanceName?: string | null;
+  created?: boolean;
+  alreadyExisted?: boolean;
+  error?: string;
+};
+
 type FeedbackState =
   | {
       type: 'success' | 'error';
@@ -171,6 +179,18 @@ function shouldProvisionInstance(connection: ConnectionInfoResponse | null) {
   return provider === 'evolution_api' || Boolean(connection.has_base_url || connection.has_api_key);
 }
 
+function canPrepareConnection(connection: ConnectionInfoResponse | null) {
+  if (!connection?.supported) {
+    return false;
+  }
+
+  if (normalizeOptionalText(connection.instance_name)) {
+    return true;
+  }
+
+  return shouldProvisionInstance(connection);
+}
+
 function SummaryCard({
   label,
   value,
@@ -200,6 +220,7 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
   const [connection, setConnection] = useState<ConnectionInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [creatingInstance, setCreatingInstance] = useState(false);
   const [qrLoading, setQrLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
@@ -210,9 +231,21 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
     options?: {
       signal?: AbortSignal;
       suppressFeedback?: boolean;
+      force?: boolean;
     }
   ) => {
-    if (!shouldProvisionInstance(currentConnection)) {
+    const shouldAttemptProvision = options?.force
+      ? canPrepareConnection(currentConnection)
+      : shouldProvisionInstance(currentConnection);
+
+    if (!shouldAttemptProvision) {
+      if (options?.force && !options.suppressFeedback) {
+        setFeedback({
+          type: 'error',
+          text: 'Defina o provider e as credenciais do tenant antes de preparar a conexao do WhatsApp.',
+        });
+      }
+
       return {
         connection: currentConnection,
         attempted: false,
@@ -225,7 +258,7 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
       headers: { Authorization: `Bearer ${token}` },
       signal: options?.signal,
     });
-    const provisionData = (await provisionResponse.json().catch(() => ({}))) as { error?: string };
+    const provisionData = (await provisionResponse.json().catch(() => ({}))) as CreateInstanceResponse;
 
     if (!provisionResponse.ok) {
       if (!options?.suppressFeedback) {
@@ -283,7 +316,10 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
     if (!options?.suppressFeedback) {
       setFeedback({
         type: 'success',
-        text: 'Instancia do WhatsApp provisionada para este tenant.',
+        text:
+          provisionData.alreadyExisted || provisionData.created === false
+            ? 'Instancia do WhatsApp ja estava preparada para este tenant. Status recarregado com sucesso.'
+            : 'Instancia do WhatsApp provisionada para este tenant.',
       });
     }
 
@@ -380,6 +416,31 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
     }
   };
 
+  const handlePrepareConnection = async () => {
+    if (!connection) {
+      return;
+    }
+
+    try {
+      setCreatingInstance(true);
+      setLoadError(null);
+      setFeedback(null);
+
+      const provisionResult = await maybeProvisionInstance(connection, {
+        force: true,
+      });
+
+      setConnection(provisionResult.connection);
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Falha ao preparar a conexao do WhatsApp.',
+      });
+    } finally {
+      setCreatingInstance(false);
+    }
+  };
+
   const handleGenerateQrCode = async () => {
     try {
       setQrLoading(true);
@@ -426,6 +487,7 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
 
   const statusLabel = formatConnectionStateLabel(connection);
   const statusToneClass = getStatusToneClass(connection);
+  const canPrepare = !loading && canPrepareConnection(connection);
   const canGenerateQrCode =
     !loading && Boolean(connection?.supported && normalizeOptionalText(connection?.instance_name));
   const rawState = normalizeOptionalText(connection?.status?.state) ?? 'Nao informado';
@@ -444,11 +506,30 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => void refreshConnectionInfo()} variant="secondary" disabled={loading || refreshing}>
+          <Button
+            onClick={() => void handlePrepareConnection()}
+            variant="secondary"
+            disabled={!canPrepare || loading || refreshing || creatingInstance || qrLoading}
+          >
+            {creatingInstance ? (
+              <Spinner className="h-4 w-4 border-[1.5px]" label="Preparando conexao" />
+            ) : (
+              <Link2 size={16} />
+            )}
+            Preparar conexao
+          </Button>
+          <Button
+            onClick={() => void refreshConnectionInfo()}
+            variant="secondary"
+            disabled={loading || refreshing || creatingInstance}
+          >
             {refreshing ? <RefreshCw size={16} className="animate-spin" /> : <RefreshCw size={16} />}
             Recarregar status
           </Button>
-          <Button onClick={() => void handleGenerateQrCode()} disabled={!canGenerateQrCode || qrLoading}>
+          <Button
+            onClick={() => void handleGenerateQrCode()}
+            disabled={!canGenerateQrCode || qrLoading || creatingInstance}
+          >
             {qrLoading ? <Spinner className="h-4 w-4 border-[1.5px]" label="Gerando QR Code" /> : <QrCode size={16} />}
             Gerar novo QR Code
           </Button>
@@ -558,8 +639,9 @@ export default function WhatsAppConnectionPanel({ token }: { token: string }) {
 
               {connection?.supported && !normalizeOptionalText(connection?.instance_name) ? (
                 <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-100 p-3 text-xs leading-relaxed text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300">
-                  Para gerar um novo QR Code, o backend precisa expor um <code>instance_name</code> valido para o
-                  tenant atual.
+                  Use <code>Preparar conexao</code> para solicitar o <code>POST /api/whatsapp/create</code> com a
+                  sessao autenticada atual. Depois disso, a tela recarrega o <code>instance_name</code> e libera a
+                  geracao do QR Code.
                 </div>
               ) : null}
 

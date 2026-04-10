@@ -10,6 +10,7 @@ export default defineConfig({
       'src/utils/logger.test.ts',
       'src/services/adminAuditService.test.ts',
       'src/services/tenantWhatsAppConfigService.test.ts',
+      'src/services/whatsappService.test.ts',
       'src/services/whatsAppWebhookAuthService.test.ts',
       'src/services/whatsAppChatbotService.test.ts',
     ],

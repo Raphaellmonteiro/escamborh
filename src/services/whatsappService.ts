@@ -31,6 +31,12 @@ export type GenerateQrCodeResult = {
   status: number;
 };
 
+export type CreateWhatsAppInstanceResult = {
+  instanceName: string;
+  created: boolean;
+  alreadyExisted: boolean;
+};
+
 export type WhatsAppStatusResult = {
   state: string;
   connected: boolean;
@@ -299,10 +305,13 @@ async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstan
   return instance;
 }
 
-export async function createWhatsAppInstance(tenantId: TenantId) {
+export async function createWhatsAppInstance(
+  tenantId: TenantId
+): Promise<CreateWhatsAppInstanceResult> {
   const context = await resolveTenantConnectionContext(tenantId);
   assertSupportedConnectionProvider(context.provider);
   const instanceName = context.instanceName || buildTenantInstanceName(context.tenantId);
+  let alreadyExisted = false;
 
   try {
     await createEvolutionInstance(instanceName, context.evolutionClientConfig);
@@ -310,11 +319,17 @@ export async function createWhatsAppInstance(tenantId: TenantId) {
     if (!isEvolutionInstanceAlreadyExistsError(error)) {
       throw buildEvolutionError('criar a instancia WhatsApp', error);
     }
+
+    alreadyExisted = true;
   }
 
   await persistProvisionedInstance(context.tenantId, instanceName);
 
-  return instanceName;
+  return {
+    instanceName,
+    created: !alreadyExisted,
+    alreadyExisted,
+  };
 }
 
 export async function generateQrCode(tenantId: TenantId): Promise<GenerateQrCodeResult> {
