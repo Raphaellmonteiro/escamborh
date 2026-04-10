@@ -155,6 +155,16 @@ type TenantWhatsAppConfigSyncRow = {
   channel_identifier?: string | null;
 };
 
+const DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS = [
+  'evolution_url',
+  'evolution_token',
+  'evolution_instance',
+  'evolution_phone_number',
+  'evolution_channel_id',
+] as const;
+
+type DeliveryConfigWhatsAppTransportInput = Partial<Record<(typeof DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS)[number], unknown>>;
+
 function normalizeWhatsAppProvider(value: unknown) {
   const normalized = String(value ?? '')
     .trim()
@@ -205,6 +215,42 @@ function buildTenantWhatsAppInboundWebhookPath(tenantId: number) {
   return `/api/webhooks/whatsapp/inbound/${tenantId}`;
 }
 
+function hasDeliveryConfigWhatsAppTransportInput(input: DeliveryConfigWhatsAppTransportInput) {
+  return DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(input, key));
+}
+
+function hasTenantWhatsAppTransportState(config: TenantWhatsAppConfigSyncRow | null) {
+  return Boolean(
+    normalizeWhatsAppProvider(config?.provider) ||
+    normalizeOptionalText(config?.provider_config_json) ||
+    normalizeOptionalText(config?.whatsapp_number) ||
+    normalizeOptionalText(config?.instance_name) ||
+    normalizeOptionalText(config?.channel_identifier)
+  );
+}
+
+function pickDeliveryConfigWhatsAppTransportInput(source: Record<string, any>) {
+  const picked: DeliveryConfigWhatsAppTransportInput = {};
+
+  for (const key of DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      picked[key] = source[key];
+    }
+  }
+
+  return picked;
+}
+
+function removeDeliveryConfigWhatsAppTransportFields(source: Record<string, any>) {
+  const next = { ...source };
+
+  for (const key of DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS) {
+    delete next[key];
+  }
+
+  return next;
+}
+
 function resolveEvolutionWhatsAppSyncFields(cfg: Record<string, any>, fallbackWhatsapp: unknown) {
   const evolutionUrl = normalizeOptionalText(cfg.evolution_url);
   const evolutionToken = normalizeOptionalText(cfg.evolution_token);
@@ -243,76 +289,110 @@ function resolveEvolutionWhatsAppSyncFields(cfg: Record<string, any>, fallbackWh
   };
 }
 
-function hydrateDeliveryConfigWithTenantWhatsAppConfig(
-  cfg: Record<string, any>,
+function buildTenantWhatsAppConfigState(
+  tenantWhatsAppConfig: TenantWhatsAppConfigSyncRow,
+  fallbackWhatsapp: unknown
+) {
+  const provider = normalizeWhatsAppProvider(tenantWhatsAppConfig.provider);
+  const providerConfig = parseConfigJsonObject(tenantWhatsAppConfig.provider_config_json);
+  const evolutionInstance =
+    provider === 'evolution_api'
+      ? normalizeOptionalText(tenantWhatsAppConfig.instance_name) ||
+        getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName'])
+      : null;
+  const whatsappNumber =
+    normalizeOptionalText(tenantWhatsAppConfig.whatsapp_number) ||
+    getConfigValueText(providerConfig, ['phone_number', 'display_number', 'whatsapp_number']) ||
+    normalizeOptionalText(fallbackWhatsapp);
+  const channelIdentifier =
+    normalizeOptionalText(tenantWhatsAppConfig.channel_identifier) ||
+    getConfigValueText(providerConfig, ['channel_id', 'channel_identifier']) ||
+    evolutionInstance;
+
+  return {
+    provider,
+    evolutionUrl:
+      provider === 'evolution_api'
+        ? getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url'])
+        : null,
+    evolutionToken:
+      provider === 'evolution_api'
+        ? getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token'])
+        : null,
+    evolutionInstance,
+    whatsappNumber,
+    channelIdentifier,
+  };
+}
+
+function buildDeliveryConfigWhatsAppTransportResponse(
+  deliveryConfig: Record<string, any>,
   tenantWhatsAppConfig: TenantWhatsAppConfigSyncRow | null,
   fallbackWhatsapp: unknown
 ) {
-  if (!tenantWhatsAppConfig) {
-    if (!normalizeOptionalText(cfg.evolution_phone_number)) {
-      cfg.evolution_phone_number =
-        normalizeOptionalText(cfg.whatsapp) || normalizeOptionalText(fallbackWhatsapp);
-    }
-    return;
+  const legacy = resolveEvolutionWhatsAppSyncFields(deliveryConfig, fallbackWhatsapp);
+  const tenantState = tenantWhatsAppConfig
+    ? buildTenantWhatsAppConfigState(tenantWhatsAppConfig, fallbackWhatsapp)
+    : null;
+
+  if (tenantState?.provider && tenantState.provider !== 'evolution_api') {
+    return {};
   }
 
-  const provider = normalizeWhatsAppProvider(tenantWhatsAppConfig.provider);
-  const providerConfig = parseConfigJsonObject(tenantWhatsAppConfig.provider_config_json);
+  const transportSource =
+    tenantState?.provider === 'evolution_api'
+      ? {
+          evolution_url: tenantState.evolutionUrl || legacy.evolutionUrl,
+          evolution_token: tenantState.evolutionToken || legacy.evolutionToken,
+          evolution_instance: tenantState.evolutionInstance || legacy.evolutionInstance,
+          evolution_phone_number: tenantState.whatsappNumber || legacy.whatsappNumber,
+          evolution_channel_id: tenantState.channelIdentifier || legacy.channelIdentifier,
+        }
+      : {
+          evolution_url: legacy.evolutionUrl,
+          evolution_token: legacy.evolutionToken,
+          evolution_instance: legacy.evolutionInstance,
+          evolution_phone_number: legacy.whatsappNumber,
+          evolution_channel_id: legacy.channelIdentifier,
+        };
 
-  if ((provider === 'evolution_api' || provider === 'evolution') && !normalizeOptionalText(cfg.evolution_url)) {
-    cfg.evolution_url = getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url']);
-  }
-  if ((provider === 'evolution_api' || provider === 'evolution') && !normalizeOptionalText(cfg.evolution_token)) {
-    cfg.evolution_token = getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']);
-  }
-  if (!normalizeOptionalText(cfg.evolution_instance)) {
-    cfg.evolution_instance =
-      normalizeOptionalText(tenantWhatsAppConfig.instance_name) ||
-      getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName']);
-  }
-  if (!normalizeOptionalText(cfg.evolution_phone_number)) {
-    cfg.evolution_phone_number =
-      normalizeOptionalText(tenantWhatsAppConfig.whatsapp_number) ||
-      getConfigValueText(providerConfig, ['phone_number', 'display_number', 'whatsapp_number']) ||
-      normalizeOptionalText(cfg.whatsapp) ||
-      normalizeOptionalText(fallbackWhatsapp);
-  }
-  if (!normalizeOptionalText(cfg.evolution_channel_id)) {
-    cfg.evolution_channel_id =
-      normalizeOptionalText(tenantWhatsAppConfig.channel_identifier) ||
-      getConfigValueText(providerConfig, ['channel_id', 'channel_identifier']) ||
-      normalizeOptionalText(tenantWhatsAppConfig.instance_name) ||
-      getConfigValueText(providerConfig, ['instance', 'instance_name', 'instanceName']);
-  }
+  const response: Record<string, string> = {};
+
+  if (transportSource.evolution_url) response.evolution_url = transportSource.evolution_url;
+  if (transportSource.evolution_token) response.evolution_token = transportSource.evolution_token;
+  if (transportSource.evolution_instance) response.evolution_instance = transportSource.evolution_instance;
+  if (transportSource.evolution_phone_number) response.evolution_phone_number = transportSource.evolution_phone_number;
+  if (transportSource.evolution_channel_id) response.evolution_channel_id = transportSource.evolution_channel_id;
+
+  return response;
 }
 
-async function syncTenantWhatsAppConfigFromDeliveryConfig(
+async function upsertTenantWhatsAppConfigFromDeliveryTransport(
   tenantId: number,
-  cfg: Record<string, any>,
+  transportInput: DeliveryConfigWhatsAppTransportInput,
+  current: TenantWhatsAppConfigSyncRow | null,
   fallbackWhatsapp: unknown
 ) {
-  const hasEvolutionFields = [
-    'evolution_url',
-    'evolution_token',
-    'evolution_instance',
-    'evolution_phone_number',
-    'evolution_channel_id',
-  ].some((key) => Object.prototype.hasOwnProperty.call(cfg, key));
-
-  const current = await q1<TenantWhatsAppConfigSyncRow>(
-    `SELECT provider
-       FROM tenant_whatsapp_config
-      WHERE tenant_id=?`,
-    [tenantId]
-  );
+  const hasTransportInput = hasDeliveryConfigWhatsAppTransportInput(transportInput);
   const currentProvider = normalizeWhatsAppProvider(current?.provider);
 
-  if (!hasEvolutionFields && currentProvider && currentProvider !== 'evolution_api') {
+  if (!hasTransportInput && currentProvider !== 'evolution_api') {
     return;
   }
 
-  const resolved = resolveEvolutionWhatsAppSyncFields(cfg, fallbackWhatsapp);
-  if (!current && !hasEvolutionFields && !resolved.configured && !resolved.whatsappNumber) {
+  const currentTransportSource =
+    currentProvider === 'evolution_api'
+      ? buildDeliveryConfigWhatsAppTransportResponse({}, current, fallbackWhatsapp)
+      : {};
+  const resolved = resolveEvolutionWhatsAppSyncFields(
+    {
+      ...currentTransportSource,
+      ...transportInput,
+    },
+    fallbackWhatsapp
+  );
+
+  if (!current && !hasTransportInput && !resolved.configured && !resolved.whatsappNumber) {
     return;
   }
 
@@ -494,16 +574,27 @@ export function createDeliveryRouter() {
           WHERE tenant_id=?`,
         [req.tenantId]
       );
-      hydrateDeliveryConfigWithTenantWhatsAppConfig(base, tenantWhatsAppConfig, row?.whatsapp);
       applyNormalizedBannerSlots(base);
+      const deliveryBase = removeDeliveryConfigWhatsAppTransportFields(base);
+      const transportConfig = buildDeliveryConfigWhatsAppTransportResponse(base, tenantWhatsAppConfig, row?.whatsapp);
       const resolvedProvider = normalizeWhatsAppProvider(tenantWhatsAppConfig?.provider);
-      const resolvedWhatsApp = resolveEvolutionWhatsAppSyncFields(base, row?.whatsapp);
+      const tenantWhatsAppState = tenantWhatsAppConfig
+        ? buildTenantWhatsAppConfigState(tenantWhatsAppConfig, row?.whatsapp)
+        : null;
+      const resolvedWhatsApp = resolveEvolutionWhatsAppSyncFields(
+        {
+          ...transportConfig,
+          whatsapp: base.whatsapp,
+        },
+        row?.whatsapp
+      );
       res.json({
         ativo: !!row?.delivery_ativo,
-        ...base,
+        ...deliveryBase,
+        ...transportConfig,
         whatsapp_provider: resolvedProvider,
         whatsapp_enabled: toFlag(tenantWhatsAppConfig?.whatsapp_enabled),
-        whatsapp_active_number: resolvedWhatsApp.whatsappNumber,
+        whatsapp_active_number: tenantWhatsAppState?.whatsappNumber || resolvedWhatsApp.whatsappNumber,
         whatsapp_inbound_webhook_path: buildTenantWhatsAppInboundWebhookPath(Number(req.tenantId)),
       });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
@@ -519,22 +610,41 @@ export function createDeliveryRouter() {
         whatsapp_inbound_webhook_path: _whatsappInboundWebhookPath,
         ...rest
       } = req.body;
-      const row = await q1<{ delivery_config: string | null; whatsapp?: string | null }>(
-        'SELECT delivery_config, whatsapp FROM clientes WHERE id=?',
-        [req.tenantId]
-      );
+      const [row, tenantWhatsAppConfig] = await Promise.all([
+        q1<{ delivery_config: string | null; whatsapp?: string | null }>(
+          'SELECT delivery_config, whatsapp FROM clientes WHERE id=?',
+          [req.tenantId]
+        ),
+        q1<TenantWhatsAppConfigSyncRow>(
+          `SELECT whatsapp_enabled,
+                  provider,
+                  provider_config_json,
+                  whatsapp_number,
+                  instance_name,
+                  channel_identifier
+             FROM tenant_whatsapp_config
+            WHERE tenant_id=?`,
+          [req.tenantId]
+        ),
+      ]);
       const existing = coerceDeliveryConfigRow(row?.delivery_config ?? null);
       const restConfig =
         rest && typeof rest === 'object' && !Array.isArray(rest)
           ? { ...(rest as Record<string, any>) }
           : {};
+      const transportInput = pickDeliveryConfigWhatsAppTransportInput(restConfig);
+      const hasTransportInput = hasDeliveryConfigWhatsAppTransportInput(transportInput);
+      const sanitizedRestConfig = removeDeliveryConfigWhatsAppTransportFields(restConfig);
       if (
-        !Object.prototype.hasOwnProperty.call(restConfig, 'cardapio_online_banner_urls') &&
-        Object.prototype.hasOwnProperty.call(restConfig, 'cardapio_banner_slots')
+        !Object.prototype.hasOwnProperty.call(sanitizedRestConfig, 'cardapio_online_banner_urls') &&
+        Object.prototype.hasOwnProperty.call(sanitizedRestConfig, 'cardapio_banner_slots')
       ) {
-        restConfig.cardapio_online_banner_urls = restConfig.cardapio_banner_slots;
+        sanitizedRestConfig.cardapio_online_banner_urls = sanitizedRestConfig.cardapio_banner_slots;
       }
-      const merged = mergeDeliveryConfigClientPut(existing, restConfig);
+      let merged = mergeDeliveryConfigClientPut(existing, sanitizedRestConfig);
+      if (hasTenantWhatsAppTransportState(tenantWhatsAppConfig) || hasTransportInput) {
+        merged = removeDeliveryConfigWhatsAppTransportFields(merged);
+      }
       const normalizedCardapioShortLink = normalizeOptionalText(merged.cardapio_link_curto);
       if (normalizedCardapioShortLink) merged.cardapio_link_curto = normalizedCardapioShortLink;
       else delete merged.cardapio_link_curto;
@@ -557,7 +667,12 @@ export function createDeliveryRouter() {
         }
       }
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
-      await syncTenantWhatsAppConfigFromDeliveryConfig(Number(req.tenantId), merged, row?.whatsapp);
+      await upsertTenantWhatsAppConfigFromDeliveryTransport(
+        Number(req.tenantId),
+        transportInput,
+        tenantWhatsAppConfig,
+        row?.whatsapp
+      );
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });
