@@ -4,6 +4,7 @@ import {
   connectInstance,
   getConnectionState,
   sendText,
+  type EvolutionApiClientConfig,
   type EvolutionApiResponse,
 } from './evolutionClient';
 import {
@@ -12,6 +13,12 @@ import {
   updateInstanceStatus,
   type WhatsAppInstanceRecord,
 } from '../repositories/whatsappRepository';
+import {
+  getTenantWhatsAppConnectionConfig,
+  isEvolutionConnectionProvider,
+  sanitizeTenantWhatsAppConnectionConfigForClient,
+  type TenantWhatsAppConnectionConfig,
+} from './tenantWhatsAppConfigService';
 
 type TenantId = number | string;
 type UnknownRecord = Record<string, unknown>;
@@ -28,6 +35,35 @@ export type WhatsAppStatusResult = {
   connected: boolean;
   raw: unknown;
   status: number;
+};
+
+export type WhatsAppConnectionInfoResult = {
+  source: 'tenant_whatsapp_config' | 'legacy';
+  configured: boolean;
+  whatsapp_enabled: boolean;
+  provider: string | null;
+  supported: boolean;
+  instance_name: string | null;
+  active_number: string | null;
+  channel_identifier: string | null;
+  has_base_url: boolean;
+  has_api_key: boolean;
+  updated_at: string | null;
+  status: {
+    state: string | null;
+    connected: boolean;
+    source: 'provider' | 'database' | 'unavailable';
+    http_status: number | null;
+  };
+};
+
+type TenantConnectionContext = {
+  tenantId: number;
+  tenantConfig: TenantWhatsAppConnectionConfig | null;
+  instanceRecord: WhatsAppInstanceRecord | null;
+  provider: string | null;
+  instanceName: string | null;
+  evolutionClientConfig?: EvolutionApiClientConfig;
 };
 
 function normalizeTenantId(value: TenantId) {
@@ -147,6 +183,83 @@ function buildEvolutionError(action: string, error: unknown) {
   return new AppError(message, 502);
 }
 
+function resolveContextProvider(
+  tenantConfig: TenantWhatsAppConnectionConfig | null,
+  instanceRecord: WhatsAppInstanceRecord | null
+) {
+  if (tenantConfig?.provider) {
+    return tenantConfig.provider;
+  }
+
+  if (tenantConfig?.instanceName || tenantConfig?.baseUrl || tenantConfig?.apiKey) {
+    return 'evolution_api';
+  }
+
+  if (instanceRecord?.instanceName) {
+    return 'evolution_api';
+  }
+
+  return null;
+}
+
+function assertSupportedConnectionProvider(provider: string | null) {
+  if (!provider || isEvolutionConnectionProvider(provider)) {
+    return;
+  }
+
+  throw new AppError('Provider WhatsApp nao suportado no fluxo de conexao atual', 409);
+}
+
+async function resolveTenantConnectionContext(tenantId: TenantId): Promise<TenantConnectionContext> {
+  const normalizedTenantId = normalizeTenantId(tenantId);
+  const [tenantConfig, instanceRecord] = await Promise.all([
+    getTenantWhatsAppConnectionConfig(normalizedTenantId),
+    getInstanceByTenant(normalizedTenantId),
+  ]);
+  const provider = resolveContextProvider(tenantConfig, instanceRecord);
+
+  return {
+    tenantId: normalizedTenantId,
+    tenantConfig,
+    instanceRecord,
+    provider,
+    instanceName: tenantConfig?.instanceName || instanceRecord?.instanceName || null,
+    evolutionClientConfig: tenantConfig
+      ? {
+          baseUrl: tenantConfig.baseUrl,
+          apiKey: tenantConfig.apiKey,
+        }
+      : undefined,
+  };
+}
+
+function requireConnectionInstanceName(context: TenantConnectionContext) {
+  if (context.instanceName) {
+    return context.instanceName;
+  }
+
+  if (context.tenantConfig) {
+    throw new AppError('instance_name nao configurado em tenant_whatsapp_config para este tenant', 400);
+  }
+
+  throw new AppError('Instancia WhatsApp nao encontrada para este tenant', 404);
+}
+
+async function persistInstanceRecordIfNeeded(tenantId: number, instanceName: string) {
+  try {
+    await createInstanceRecord({
+      tenantId,
+      instanceName,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'instanceName ja cadastrado') {
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstanceRecord> {
   const normalizedTenantId = normalizeTenantId(tenantId);
   const instance = await getInstanceByTenant(normalizedTenantId);
@@ -159,30 +272,30 @@ async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstan
 }
 
 export async function createWhatsAppInstance(tenantId: TenantId) {
-  const normalizedTenantId = normalizeTenantId(tenantId);
-  const instanceName = `tenant_${normalizedTenantId}_${Date.now()}`;
+  const context = await resolveTenantConnectionContext(tenantId);
+  assertSupportedConnectionProvider(context.provider);
+  const instanceName = context.instanceName || `tenant_${context.tenantId}_${Date.now()}`;
 
   try {
-    await createEvolutionInstance(instanceName);
+    await createEvolutionInstance(instanceName, context.evolutionClientConfig);
   } catch (error) {
     throw buildEvolutionError('criar a instancia WhatsApp', error);
   }
 
-  await createInstanceRecord({
-    tenantId: normalizedTenantId,
-    instanceName,
-  });
+  await persistInstanceRecordIfNeeded(context.tenantId, instanceName);
 
   return instanceName;
 }
 
 export async function generateQrCode(tenantId: TenantId): Promise<GenerateQrCodeResult> {
-  const instance = await requireTenantInstance(tenantId);
+  const context = await resolveTenantConnectionContext(tenantId);
+  assertSupportedConnectionProvider(context.provider);
+  const instanceName = requireConnectionInstanceName(context);
 
   let response: EvolutionApiResponse<unknown>;
 
   try {
-    response = await connectInstance(instance.instanceName);
+    response = await connectInstance(instanceName, context.evolutionClientConfig);
   } catch (error) {
     throw buildEvolutionError('gerar o QR Code da instancia WhatsApp', error);
   }
@@ -196,12 +309,14 @@ export async function generateQrCode(tenantId: TenantId): Promise<GenerateQrCode
 }
 
 export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResult> {
-  const instance = await requireTenantInstance(tenantId);
+  const context = await resolveTenantConnectionContext(tenantId);
+  assertSupportedConnectionProvider(context.provider);
+  const instanceName = requireConnectionInstanceName(context);
 
   let response: EvolutionApiResponse<unknown>;
 
   try {
-    response = await getConnectionState(instance.instanceName);
+    response = await getConnectionState(instanceName, context.evolutionClientConfig);
   } catch (error) {
     throw buildEvolutionError('consultar o status da instancia WhatsApp', error);
   }
@@ -209,8 +324,9 @@ export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResul
   const state = extractConnectionState(response.data);
   const connected = state.toLowerCase() === 'open';
 
+  await persistInstanceRecordIfNeeded(context.tenantId, instanceName);
   await updateInstanceStatus({
-    instanceName: instance.instanceName,
+    instanceName,
     status: state,
     connected,
   });
@@ -221,6 +337,61 @@ export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResul
     raw: response.data,
     status: response.status,
   };
+}
+
+export async function getConnectionInfo(tenantId: TenantId): Promise<WhatsAppConnectionInfoResult> {
+  const context = await resolveTenantConnectionContext(tenantId);
+  const safeTenantConfig = sanitizeTenantWhatsAppConnectionConfigForClient(context.tenantConfig);
+  const baseResult: WhatsAppConnectionInfoResult = {
+    source: context.tenantConfig ? 'tenant_whatsapp_config' : 'legacy',
+    configured: Boolean(context.tenantConfig || context.instanceRecord),
+    whatsapp_enabled: safeTenantConfig?.whatsappEnabled ?? false,
+    provider: context.provider,
+    supported: !context.provider || isEvolutionConnectionProvider(context.provider),
+    instance_name: context.instanceName,
+    active_number: safeTenantConfig?.whatsappNumber ?? null,
+    channel_identifier:
+      safeTenantConfig?.channelIdentifier ?? context.instanceName ?? null,
+    has_base_url: safeTenantConfig?.hasBaseUrl ?? false,
+    has_api_key: safeTenantConfig?.hasApiKey ?? false,
+    updated_at: safeTenantConfig?.updatedAt ?? null,
+    status: {
+      state: context.instanceRecord?.status ?? null,
+      connected: Boolean(context.instanceRecord?.connected),
+      source: context.instanceRecord ? 'database' : 'unavailable',
+      http_status: null,
+    },
+  };
+
+  if (!baseResult.supported || !context.instanceName) {
+    return baseResult;
+  }
+
+  try {
+    const response = await getConnectionState(context.instanceName, context.evolutionClientConfig);
+    const state = extractConnectionState(response.data);
+    const connected = state.toLowerCase() === 'open';
+
+    if (context.instanceRecord) {
+      await updateInstanceStatus({
+        instanceName: context.instanceName,
+        status: state,
+        connected,
+      });
+    }
+
+    return {
+      ...baseResult,
+      status: {
+        state,
+        connected,
+        source: 'provider',
+        http_status: response.status,
+      },
+    };
+  } catch {
+    return baseResult;
+  }
 }
 
 export async function sendMessage<TData = unknown>(
@@ -245,6 +416,7 @@ export async function sendMessage<TData = unknown>(
 
 export const whatsappService = {
   createWhatsAppInstance,
+  getConnectionInfo,
   generateQrCode,
   getStatus,
   sendMessage,

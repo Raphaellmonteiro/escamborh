@@ -16,6 +16,11 @@ type SendTextPayload = {
   text: string;
 };
 
+export type EvolutionApiClientConfig = {
+  baseUrl?: string | null;
+  apiKey?: string | null;
+};
+
 function normalizeRequiredEnv(value: string | undefined, envName: string) {
   const normalized = value?.trim();
 
@@ -36,11 +41,23 @@ function normalizeRequiredText(value: string, fieldName: string) {
   return normalized;
 }
 
-function createEvolutionApiClient(): AxiosInstance {
+function resolveConfigOrEnvValue(
+  configuredValue: string | null | undefined,
+  envName: 'EVOLUTION_API_URL' | 'EVOLUTION_API_KEY'
+) {
+  const normalized = configuredValue?.trim();
+  if (normalized) {
+    return normalized;
+  }
+
+  return normalizeRequiredEnv(process.env[envName], envName);
+}
+
+function createEvolutionApiClient(config: EvolutionApiClientConfig = {}): AxiosInstance {
   return axios.create({
-    baseURL: normalizeRequiredEnv(process.env.EVOLUTION_API_URL, 'EVOLUTION_API_URL'),
+    baseURL: resolveConfigOrEnvValue(config.baseUrl, 'EVOLUTION_API_URL'),
     headers: {
-      apikey: normalizeRequiredEnv(process.env.EVOLUTION_API_KEY, 'EVOLUTION_API_KEY'),
+      apikey: resolveConfigOrEnvValue(config.apiKey, 'EVOLUTION_API_KEY'),
       'Content-Type': 'application/json',
     },
   });
@@ -103,8 +120,11 @@ async function requestEvolutionApi<TData>(
   }
 }
 
-export async function createInstance<TData = EvolutionApiData>(instanceName: string) {
-  const client = createEvolutionApiClient();
+export async function createInstance<TData = EvolutionApiData>(
+  instanceName: string,
+  config?: EvolutionApiClientConfig
+) {
+  const client = createEvolutionApiClient(config);
   const payload: CreateInstancePayload = {
     instanceName: normalizeRequiredText(instanceName, 'instanceName'),
   };
@@ -115,8 +135,11 @@ export async function createInstance<TData = EvolutionApiData>(instanceName: str
   );
 }
 
-export async function connectInstance<TData = EvolutionApiData>(instanceName: string) {
-  const client = createEvolutionApiClient();
+export async function connectInstance<TData = EvolutionApiData>(
+  instanceName: string,
+  config?: EvolutionApiClientConfig
+) {
+  const client = createEvolutionApiClient(config);
   const normalizedInstanceName = normalizeRequiredText(instanceName, 'instanceName');
 
   return requestEvolutionApi(
@@ -125,8 +148,11 @@ export async function connectInstance<TData = EvolutionApiData>(instanceName: st
   );
 }
 
-export async function getConnectionState<TData = EvolutionApiData>(instanceName: string) {
-  const client = createEvolutionApiClient();
+export async function getConnectionState<TData = EvolutionApiData>(
+  instanceName: string,
+  config?: EvolutionApiClientConfig
+) {
+  const client = createEvolutionApiClient(config);
   const normalizedInstanceName = normalizeRequiredText(instanceName, 'instanceName');
 
   return requestEvolutionApi(
@@ -138,9 +164,10 @@ export async function getConnectionState<TData = EvolutionApiData>(instanceName:
 export async function sendText<TData = EvolutionApiData>(
   instanceName: string,
   number: string,
-  text: string
+  text: string,
+  config?: EvolutionApiClientConfig
 ) {
-  const client = createEvolutionApiClient();
+  const client = createEvolutionApiClient(config);
   const normalizedInstanceName = normalizeRequiredText(instanceName, 'instanceName');
   const payload: SendTextPayload = {
     number: normalizeRequiredText(number, 'number'),

@@ -9,6 +9,7 @@ import {
 import { AppError } from '../utils/errors';
 import {
   createWhatsAppInstance,
+  getConnectionInfo,
   generateQrCode,
   getStatus,
   sendMessage,
@@ -57,6 +58,20 @@ function createWhatsAppManagementRouter() {
       const instanceName = await createWhatsAppInstance(tenantId);
 
       res.status(201).json({ instanceName });
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  });
+
+  router.get('/connection', async (req: TenantRequest, res: Response) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const result = await getConnectionInfo(tenantId);
+
+      res.json({
+        success: true,
+        ...result,
+      });
     } catch (error) {
       sendRouteError(res, error);
     }
