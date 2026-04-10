@@ -83,6 +83,7 @@ const DEFAULT_PROVIDER = 'groq';
 const DEFAULT_MODEL = 'llama-3.1-8b-instant';
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const DEFAULT_ENDPOINT = 'chat/completions';
+const WHATSAPP_AI_API_PATH = '/api/whatsapp/ai';
 
 const API_KEY_KEYS = ['api_key', 'apiKey', 'token', 'access_token', 'accessToken'] as const;
 const BASE_URL_KEYS = ['base_url', 'baseUrl', 'url', 'api_url'] as const;
@@ -334,7 +335,7 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
         setLoading(true);
         setLoadError(null);
 
-        const response = await fetch('/api/chatbot', {
+        const response = await fetch(WHATSAPP_AI_API_PATH, {
           headers: { Authorization: `Bearer ${token}` },
           signal: abortController.signal,
         });
@@ -400,7 +401,7 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
     try {
       setRefreshing(true);
 
-      const response = await fetch('/api/chatbot', {
+      const response = await fetch(WHATSAPP_AI_API_PATH, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = (await response.json().catch(() => ({}))) as ChatbotApiResponse;
@@ -437,7 +438,7 @@ export default function WhatsAppChatbotPanel({ token }: { token: string }) {
     try {
       setSaving(true);
 
-      const response = await fetch('/api/chatbot', {
+      const response = await fetch(WHATSAPP_AI_API_PATH, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

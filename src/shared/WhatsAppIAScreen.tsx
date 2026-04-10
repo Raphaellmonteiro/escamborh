@@ -50,7 +50,7 @@ export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps)
                 <div>
                   <p className="text-sm font-bold text-fptext-primary">Incluido agora</p>
                   <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-                    Painel de configuracao, leitura via <code>GET /api/chatbot</code> e salvamento via <code>PUT /api/chatbot</code>.
+                    Painel de configuracao, leitura via <code>GET /api/whatsapp/ai</code> e salvamento via <code>PUT /api/whatsapp/ai</code>.
                   </p>
                 </div>
               </div>

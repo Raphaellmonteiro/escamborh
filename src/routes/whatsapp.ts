@@ -13,6 +13,7 @@ import {
   getStatus,
   sendMessage,
 } from '../services/whatsappService';
+import { createWhatsAppAiRouter } from './whatsapp-ai';
 
 type TenantRequest = Request & { tenantId: number | string };
 
@@ -106,6 +107,7 @@ export function createWhatsAppRouter() {
 
   router.use(requireAnyPermission('orders', 'delivery'));
   router.use(createWhatsAppManagementRouter());
+  router.use('/ai', createWhatsAppAiRouter());
 
   router.get(
     '/conversations',
