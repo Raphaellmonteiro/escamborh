@@ -2185,6 +2185,15 @@ function getEvolutionLidCandidates(item: JsonRecord, envelope?: JsonRecord | nul
   ];
 }
 
+function resolveEvolutionFallbackCustomerIdentifier(
+  item: JsonRecord,
+  envelope?: JsonRecord | null
+) {
+  const lidCandidates = getEvolutionLidCandidates(item, envelope);
+  if (lidCandidates.length !== 1) return null;
+  return lidCandidates[0];
+}
+
 const EVOLUTION_CONTACT_LOOKUP_ID_KEYS = [
   'id',
   'jid',
@@ -2747,6 +2756,7 @@ async function analyzeEvolutionMessages(
     );
     let phone = phoneResolution.phone;
     let contactLookupResolution: EvolutionContactLookupResolution | null = null;
+    let persistedFallbackIdentifier: string | null = null;
 
     if (!phone) {
       const lid = getEvolutionLidCandidates(item, envelope)[0] || null;
@@ -2764,6 +2774,13 @@ async function analyzeEvolutionMessages(
         if (contactLookupResolution.phone) {
           phone = contactLookupResolution.phone;
         }
+      }
+    }
+
+    if (!phone) {
+      persistedFallbackIdentifier = resolveEvolutionFallbackCustomerIdentifier(item, envelope);
+      if (persistedFallbackIdentifier) {
+        phone = persistedFallbackIdentifier;
       }
     }
 
@@ -2832,6 +2849,36 @@ async function analyzeEvolutionMessages(
         lid: maskEvolutionDiagnosticValue(contactLookupResolution.lid),
         phoneMasked: maskPhone(contactLookupResolution.phone),
         sourcePath: contactLookupResolution.sourcePath,
+      });
+    }
+
+    if (persistedFallbackIdentifier) {
+      logInfo('whatsAppInboundService.evolutionCustomerIdentifierFallbackPersisted', {
+        tenantId,
+        provider,
+        resolvedCustomerName: customerName,
+        messageId:
+          normalizeOptionalText(key?.id) ||
+          normalizeOptionalText(item.id) ||
+          normalizeOptionalText(item.messageId) ||
+          normalizeOptionalText(envelopeKey?.id) ||
+          normalizeOptionalText(envelope?.id) ||
+          normalizeOptionalText(envelope?.messageId),
+        customerPhoneResolved: false,
+        customerIdentifierPersisted: true,
+        customerIdentifierKind: 'lid',
+        customerIdentifierMasked: maskEvolutionDiagnosticValue(persistedFallbackIdentifier),
+        reason: phoneResolution.unresolvedReason || 'customer_phone_unresolved',
+        text: summarizeText(messageText),
+        auxiliaryContactLookup:
+          contactLookupResolution && contactLookupResolution.lookupStatus !== 'not_attempted'
+            ? {
+                lid: maskEvolutionDiagnosticValue(contactLookupResolution.lid),
+                phoneMasked: maskPhone(contactLookupResolution.phone),
+                sourcePath: contactLookupResolution.sourcePath,
+                status: contactLookupResolution.lookupStatus,
+              }
+            : undefined,
       });
     }
 
