@@ -41,6 +41,10 @@ function getWhatsAppWebhookAuthPublicMessage(reason: string) {
   return reason === 'invalid_tenant_id' ? 'Tenant invalido' : 'Webhook nao autorizado';
 }
 
+function getRequestPath(req: Request) {
+  return `${req.baseUrl}${req.path}`;
+}
+
 function forwardToCentralWhatsAppInbound(
   input: ForwardWhatsAppInboundInput
 ) {
@@ -151,12 +155,13 @@ export function createWebhooksRouter() {
       const authResult = await validateInboundWhatsAppWebhookAuth({
         tenantId: req.params.tenantId,
         headers: req.headers as Record<string, unknown>,
+        query: req.query as Record<string, unknown>,
         payload: req.body,
       });
 
       if (!authResult.allowed) {
         logInfo('webhooks.whatsappInbound.authRejected', {
-          path: req.originalUrl,
+          path: getRequestPath(req),
           method: req.method,
           source: 'primary_route',
           tenantId: req.params.tenantId,
@@ -176,7 +181,7 @@ export function createWebhooksRouter() {
 
       if (authResult.enforced) {
         logInfo('webhooks.whatsappInbound.authValidated', {
-          path: req.originalUrl,
+          path: getRequestPath(req),
           method: req.method,
           source: 'primary_route',
           tenantId: req.params.tenantId,
@@ -189,7 +194,7 @@ export function createWebhooksRouter() {
         });
       } else {
         logInfo('webhooks.whatsappInbound.authSkipped', {
-          path: req.originalUrl,
+          path: getRequestPath(req),
           method: req.method,
           source: 'primary_route',
           tenantId: req.params.tenantId,
@@ -206,13 +211,13 @@ export function createWebhooksRouter() {
         tenantId: req.params.tenantId,
         payload: req.body,
         webhookEventName: req.params.eventName,
-        path: req.originalUrl,
+        path: getRequestPath(req),
         method: req.method,
         source: 'primary_route',
       });
     })().catch((error) => {
       logError('webhooks.whatsappInbound.auth', error, {
-        path: req.originalUrl,
+        path: getRequestPath(req),
         method: req.method,
         source: 'primary_route',
         tenantId: req.params.tenantId,

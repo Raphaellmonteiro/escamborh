@@ -78,6 +78,34 @@ describe('evaluateWhatsAppInboundWebhookAuth', () => {
     });
   });
 
+  it('accepts webhook apikey forwarded in the query string for Evolution providers', () => {
+    const result = evaluateWhatsAppInboundWebhookAuth({
+      config: {
+        provider: 'evolution_api',
+        whatsappEnabled: true,
+        providerConfigJson: JSON.stringify({
+          apikey: 'tenant-secret',
+        }),
+      },
+      query: {
+        apikey: 'tenant-secret',
+      },
+      payload: {
+        event: 'messages.upsert',
+        instance: 'tenant_10_abc',
+      },
+      headers: {},
+    });
+
+    expect(result).toMatchObject({
+      allowed: true,
+      enforced: true,
+      reason: 'validated',
+      matchedIncomingSource: 'query.apikey',
+      matchedExpectedSource: 'provider_config.apikey',
+    });
+  });
+
   it('keeps the controlled fallback when the tenant has no auth material configured', () => {
     const result = evaluateWhatsAppInboundWebhookAuth({
       config: {

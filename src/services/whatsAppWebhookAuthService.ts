@@ -42,6 +42,7 @@ export type WhatsAppWebhookAuthResult = {
 type EvaluateWhatsAppWebhookAuthInput = {
   config: TenantWhatsAppWebhookAuthConfig | null;
   headers?: Record<string, unknown> | null;
+  query?: Record<string, unknown> | null;
   payload?: unknown;
 };
 
@@ -60,6 +61,19 @@ const EXPLICIT_WEBHOOK_SECRET_KEYS = [
 const EVOLUTION_PROVIDER_SECRET_KEYS = ['apikey', 'api_key', 'apiKey', 'token'] as const;
 
 const PAYLOAD_SECRET_KEYS = [
+  'apikey',
+  'api_key',
+  'apiKey',
+  'token',
+  'webhook_secret',
+  'webhookSecret',
+  'verify_token',
+  'verifyToken',
+  'signature',
+  'secret',
+] as const;
+
+const QUERY_SECRET_KEYS = [
   'apikey',
   'api_key',
   'apiKey',
@@ -260,6 +274,40 @@ function extractHeaderSecretCandidates(headers?: Record<string, unknown> | null)
   return dedupeCandidates(candidates);
 }
 
+function extractQuerySecretCandidates(query?: Record<string, unknown> | null) {
+  if (!query) return [] as SecretCandidate[];
+
+  const candidates: SecretCandidate[] = [];
+
+  for (const key of QUERY_SECRET_KEYS) {
+    const value = normalizeHeaderValue(query[key]);
+    if (value) {
+      candidates.push({
+        source: `query.${key}`,
+        value,
+      });
+    }
+  }
+
+  const authorization = normalizeHeaderValue(query.authorization);
+  if (authorization) {
+    candidates.push({
+      source: 'query.authorization',
+      value: authorization,
+    });
+
+    const bearer = stripBearerPrefix(authorization);
+    if (bearer) {
+      candidates.push({
+        source: 'query.authorization_bearer',
+        value: bearer,
+      });
+    }
+  }
+
+  return dedupeCandidates(candidates);
+}
+
 function resolveExpectedSecretCandidates(config: TenantWhatsAppWebhookAuthConfig) {
   const providerConfig = parseProviderConfigJson(config.providerConfigJson);
   const candidates: SecretCandidate[] = [];
@@ -336,6 +384,7 @@ export function evaluateWhatsAppInboundWebhookAuth(
 
   const incomingSecrets = dedupeCandidates([
     ...extractHeaderSecretCandidates(input.headers),
+    ...extractQuerySecretCandidates(input.query),
     ...extractPayloadSecretCandidates(input.payload),
   ]);
 
@@ -386,6 +435,7 @@ export function evaluateWhatsAppInboundWebhookAuth(
 export async function validateInboundWhatsAppWebhookAuth(input: {
   tenantId: number | string;
   headers?: Record<string, unknown> | null;
+  query?: Record<string, unknown> | null;
   payload?: unknown;
 }): Promise<WhatsAppWebhookAuthResult> {
   const normalizedTenantId = parsePositiveInt(input.tenantId);
@@ -420,6 +470,7 @@ export async function validateInboundWhatsAppWebhookAuth(input: {
   return evaluateWhatsAppInboundWebhookAuth({
     config,
     headers: input.headers,
+    query: input.query,
     payload: input.payload,
   });
 }

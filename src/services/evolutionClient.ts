@@ -16,6 +16,14 @@ type SendTextPayload = {
   text: string;
 };
 
+export type SetWebhookPayload = {
+  enabled: boolean;
+  url: string;
+  webhookByEvents: boolean;
+  webhookBase64: boolean;
+  events: string[];
+};
+
 export type EvolutionApiClientConfig = {
   baseUrl?: string | null;
   apiKey?: string | null;
@@ -158,6 +166,24 @@ export async function getConnectionState<TData = EvolutionApiData>(
   return requestEvolutionApi(
     () => client.get<TData>(`/instance/connectionState/${encodeURIComponent(normalizedInstanceName)}`),
     'Erro ao consultar estado da conexao na Evolution API'
+  );
+}
+
+export async function setWebhook<TData = EvolutionApiData>(
+  instanceName: string,
+  payload: SetWebhookPayload,
+  config?: EvolutionApiClientConfig
+) {
+  const client = createEvolutionApiClient(config);
+  const normalizedInstanceName = normalizeRequiredText(instanceName, 'instanceName');
+
+  return requestEvolutionApi(
+    () =>
+      client.post<TData>(
+        `/webhook/set/${encodeURIComponent(normalizedInstanceName)}`,
+        payload
+      ),
+    'Erro ao configurar webhook na Evolution API'
   );
 }
 

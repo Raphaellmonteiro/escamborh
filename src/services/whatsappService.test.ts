@@ -4,6 +4,7 @@ vi.mock('./evolutionClient', () => ({
   createInstance: vi.fn(),
   connectInstance: vi.fn(),
   getConnectionState: vi.fn(),
+  setWebhook: vi.fn(),
   sendText: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock('./tenantWhatsAppConfigService', () => ({
 }));
 
 import { createInstance as createEvolutionInstance } from './evolutionClient';
+import { setWebhook } from './evolutionClient';
 import { createInstanceRecord, getInstanceByTenant } from '../repositories/whatsappRepository';
 import {
   getTenantWhatsAppConnectionConfig,
@@ -51,6 +53,10 @@ describe('whatsappService.createWhatsAppInstance', () => {
       whatsappNumber: '82981831172',
       channelIdentifier: 'tenant_9_whatsapp',
       updatedAt: '2026-04-10T10:05:00.000Z',
+    });
+    vi.mocked(setWebhook).mockResolvedValue({
+      data: { webhook: { enabled: true } },
+      status: 201,
     });
     vi.mocked(getTenantWhatsAppConnectionConfig).mockResolvedValue({
       tenantId: 9,
@@ -91,6 +97,20 @@ describe('whatsappService.createWhatsAppInstance', () => {
       9,
       'tenant_9_whatsapp'
     );
+    expect(vi.mocked(setWebhook)).toHaveBeenCalledWith(
+      'tenant_9_whatsapp',
+      {
+        enabled: true,
+        url: 'http://localhost:3001/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT'],
+      },
+      {
+        baseUrl: 'https://evo.flowpdv.local',
+        apiKey: 'tenant-token',
+      }
+    );
   });
 
   it('treats an already existing remote instance as an idempotent success', async () => {
@@ -110,6 +130,20 @@ describe('whatsappService.createWhatsAppInstance', () => {
     expect(vi.mocked(persistTenantWhatsAppInstanceName)).toHaveBeenCalledWith(
       9,
       'tenant_9_whatsapp'
+    );
+    expect(vi.mocked(setWebhook)).toHaveBeenCalledWith(
+      'tenant_9_whatsapp',
+      {
+        enabled: true,
+        url: 'http://localhost:3001/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT'],
+      },
+      {
+        baseUrl: 'https://evo.flowpdv.local',
+        apiKey: 'tenant-token',
+      }
     );
   });
 });

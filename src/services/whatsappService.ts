@@ -1,9 +1,11 @@
 import { AppError } from '../utils/errors';
+import { logError, logInfo } from '../utils/logger';
 import {
   createInstance as createEvolutionInstance,
   connectInstance,
   getConnectionState,
   sendText,
+  setWebhook,
   type EvolutionApiClientConfig,
   type EvolutionApiResponse,
 } from './evolutionClient';
@@ -72,6 +74,14 @@ type TenantConnectionContext = {
   instanceName: string | null;
   evolutionClientConfig?: EvolutionApiClientConfig;
 };
+
+type EvolutionInboundWebhookConfig = {
+  url: string;
+  logSafeUrl: string;
+  authMode: 'none' | 'query.apikey';
+};
+
+const EVOLUTION_INBOUND_WEBHOOK_EVENTS = ['MESSAGES_UPSERT'];
 
 function normalizeTenantId(value: TenantId) {
   const parsed = Number(value);
@@ -201,6 +211,49 @@ function buildTenantInstanceName(tenantId: number) {
   return `tenant_${tenantId}_whatsapp`;
 }
 
+function resolvePublicBaseUrl() {
+  const explicit =
+    toNonEmptyString(process.env.FLOWPDV_PUBLIC_URL) ||
+    toNonEmptyString(process.env.RAILWAY_PUBLIC_DOMAIN);
+
+  if (explicit) {
+    const withProtocol = /^https?:\/\//i.test(explicit) ? explicit : `https://${explicit}`;
+    return withProtocol.replace(/\/+$/, '');
+  }
+
+  const fromAllowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((item) => toNonEmptyString(item))
+    .find((item) => item);
+
+  if (fromAllowedOrigins) {
+    return fromAllowedOrigins.replace(/\/+$/, '');
+  }
+
+  return `http://localhost:${toNonEmptyString(process.env.PORT) || '3001'}`;
+}
+
+function resolveInboundWebhookSecret(config: TenantWhatsAppConnectionConfig | null) {
+  return toNonEmptyString(config?.webhookSecret) ?? toNonEmptyString(config?.apiKey);
+}
+
+function buildInboundWebhookConfig(
+  tenantId: number,
+  secret: string | null
+): EvolutionInboundWebhookConfig {
+  const url = new URL(`${resolvePublicBaseUrl()}/api/webhooks/whatsapp/inbound/${tenantId}/messages.upsert`);
+
+  if (secret) {
+    url.searchParams.set('apikey', secret);
+  }
+
+  return {
+    url: url.toString(),
+    logSafeUrl: `${url.origin}${url.pathname}`,
+    authMode: secret ? 'query.apikey' : 'none',
+  };
+}
+
 function isEvolutionInstanceAlreadyExistsError(error: unknown) {
   const message =
     error instanceof Error && error.message ? error.message.trim().toLowerCase() : '';
@@ -308,6 +361,54 @@ async function persistProvisionedInstance(tenantId: number, instanceName: string
   await persistTenantWhatsAppInstanceName(tenantId, instanceName);
 }
 
+async function ensureEvolutionInboundWebhook(
+  context: TenantConnectionContext,
+  instanceName: string
+) {
+  if (!isEvolutionConnectionProvider(context.provider)) {
+    return;
+  }
+
+  if (!context.evolutionClientConfig) {
+    return;
+  }
+
+  const webhookConfig = buildInboundWebhookConfig(
+    context.tenantId,
+    resolveInboundWebhookSecret(context.tenantConfig)
+  );
+
+  try {
+    await setWebhook(
+      instanceName,
+      {
+        enabled: true,
+        url: webhookConfig.url,
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: EVOLUTION_INBOUND_WEBHOOK_EVENTS,
+      },
+      context.evolutionClientConfig
+    );
+
+    logInfo('whatsappService.inboundWebhookSynced', {
+      tenantId: context.tenantId,
+      instanceName,
+      webhookUrl: webhookConfig.logSafeUrl,
+      authMode: webhookConfig.authMode,
+      events: EVOLUTION_INBOUND_WEBHOOK_EVENTS,
+    });
+  } catch (error) {
+    logError('whatsappService.inboundWebhookSync', error, {
+      tenantId: context.tenantId,
+      instanceName,
+      webhookUrl: webhookConfig.logSafeUrl,
+      authMode: webhookConfig.authMode,
+      events: EVOLUTION_INBOUND_WEBHOOK_EVENTS,
+    });
+  }
+}
+
 async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstanceRecord> {
   const normalizedTenantId = normalizeTenantId(tenantId);
   const instance = await getInstanceByTenant(normalizedTenantId);
@@ -338,6 +439,13 @@ export async function createWhatsAppInstance(
   }
 
   await persistProvisionedInstance(context.tenantId, instanceName);
+  await ensureEvolutionInboundWebhook(
+    {
+      ...context,
+      instanceName,
+    },
+    instanceName
+  );
 
   return {
     instanceName,

@@ -26,6 +26,7 @@ export type TenantWhatsAppConnectionConfig = {
   providerConfigJson: string | null;
   baseUrl: string | null;
   apiKey: string | null;
+  webhookSecret?: string | null;
   instanceName: string | null;
   whatsappNumber: string | null;
   channelIdentifier: string | null;
@@ -232,6 +233,17 @@ function mapTenantRowToConnectionConfig(
     providerConfigJson,
     baseUrl: getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url']),
     apiKey: getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']),
+    webhookSecret: getConfigValueText(providerConfig, [
+      'webhook_secret',
+      'webhookSecret',
+      'inbound_webhook_secret',
+      'inboundWebhookSecret',
+      'verify_token',
+      'verifyToken',
+      'signature_secret',
+      'signatureSecret',
+      'secret',
+    ]),
     instanceName,
     whatsappNumber,
     channelIdentifier,
@@ -357,6 +369,7 @@ function mergeConnectionConfigWithLegacyTransport(
     providerConfigJson,
     baseUrl,
     apiKey,
+    webhookSecret: current?.webhookSecret ?? null,
     instanceName,
     whatsappNumber,
     channelIdentifier,
@@ -417,6 +430,7 @@ function mergeConnectionConfigWithInstanceRecord(
     ...current,
     provider,
     providerConfigJson,
+    webhookSecret: current.webhookSecret ?? null,
     instanceName,
     channelIdentifier,
   };
@@ -461,6 +475,7 @@ function applyRuntimeEvolutionConnectionFallback(
     providerConfigJson,
     baseUrl,
     apiKey,
+    webhookSecret: config.webhookSecret ?? null,
     channelIdentifier,
   };
 }
@@ -587,6 +602,7 @@ export async function persistTenantWhatsAppInstanceName(
         : current?.providerConfigJson ?? null,
     baseUrl,
     apiKey,
+    webhookSecret: current?.webhookSecret ?? null,
     instanceName: normalizedInstanceName,
     whatsappNumber: current?.whatsappNumber ?? null,
     channelIdentifier,

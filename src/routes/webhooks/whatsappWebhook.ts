@@ -69,6 +69,10 @@ function getWhatsAppWebhookAuthPublicMessage(reason: string) {
   return reason === 'invalid_tenant_id' ? 'Tenant invalido' : 'Webhook nao autorizado';
 }
 
+function getRequestPath(req: Request) {
+  return `${req.baseUrl}${req.path}`;
+}
+
 export function createWhatsAppWebhookRouter(
   input: CreateWhatsAppWebhookRouterInput
 ) {
@@ -92,12 +96,13 @@ export function createWhatsAppWebhookRouter(
         const authResult = await validateInboundWhatsAppWebhookAuth({
           tenantId,
           headers: req.headers as Record<string, unknown>,
+          query: req.query as Record<string, unknown>,
           payload,
         });
 
         if (!authResult.allowed) {
           logInfo('webhooks.whatsapp.legacyAdapter.authRejected', {
-            path: req.originalUrl,
+            path: getRequestPath(req),
             method: req.method,
             instance,
             tenantId,
@@ -116,7 +121,7 @@ export function createWhatsAppWebhookRouter(
 
         if (authResult.enforced) {
           logInfo('webhooks.whatsapp.legacyAdapter.authValidated', {
-            path: req.originalUrl,
+            path: getRequestPath(req),
             method: req.method,
             instance,
             tenantId,
@@ -127,7 +132,7 @@ export function createWhatsAppWebhookRouter(
           });
         } else {
           logInfo('webhooks.whatsapp.legacyAdapter.authSkipped', {
-            path: req.originalUrl,
+            path: getRequestPath(req),
             method: req.method,
             instance,
             tenantId,
@@ -138,7 +143,7 @@ export function createWhatsAppWebhookRouter(
         }
       } else {
         logInfo('webhooks.whatsapp.legacyAdapter.authSkipped', {
-          path: req.originalUrl,
+          path: getRequestPath(req),
           method: req.method,
           instance,
           tenantId: null,
@@ -151,7 +156,7 @@ export function createWhatsAppWebhookRouter(
       res.status(200).json({ received: true });
 
       logInfo('webhooks.whatsapp.legacyAdapter.delegated', {
-        path: req.originalUrl,
+        path: getRequestPath(req),
         method: req.method,
         instance,
         tenantId: tenantId ?? null,
@@ -163,7 +168,7 @@ export function createWhatsAppWebhookRouter(
         tenantId: tenantId ?? '',
         payload,
         webhookEventName: eventType,
-        path: req.originalUrl,
+        path: getRequestPath(req),
         method: req.method,
         instance,
       });
