@@ -22,6 +22,13 @@ type HttpRequestConfig = {
   body?: Record<string, unknown>;
 };
 
+type EvolutionLidLookupStatus =
+  | 'resolved'
+  | 'config_unavailable'
+  | 'not_found'
+  | 'ambiguous_match_discarded'
+  | 'request_failed';
+
 const CONFIGURED_WHATSAPP_NUMBER_KEYS = [
   'phone_number',
   'display_number',
@@ -39,6 +46,14 @@ const CONFIGURED_WHATSAPP_NUMBER_KEYS = [
 ] as const;
 
 const DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS = 15000;
+const EVOLUTION_CONTACT_LOOKUP_ID_KEYS = [
+  'id',
+  'jid',
+  'remoteJid',
+  'lid',
+  'contactId',
+  'contactJid',
+] as const;
 
 function normalizeOptionalText(value: unknown) {
   if (value === undefined || value === null) return null;
@@ -148,6 +163,10 @@ function hasTrustedWhatsAppRecipientShape(value: string) {
   }
 
   return /^[+\d\s().-]+$/.test(value);
+}
+
+function isEvolutionProvider(provider: string) {
+  return provider === 'evolution' || provider === 'evolution_api';
 }
 
 function normalizeTrustedBrazilDigits(digits: string) {
@@ -271,6 +290,245 @@ function parseResponseBody(rawText: string) {
   }
 }
 
+function collectExactEvolutionContactLookupMatches(
+  value: unknown,
+  lid: string,
+  depth = 0
+): ProviderConfigRecord[] {
+  if (depth > 5 || value === undefined || value === null) return [];
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).flatMap((entry) =>
+      collectExactEvolutionContactLookupMatches(entry, lid, depth + 1)
+    );
+  }
+
+  if (!value || typeof value !== 'object') return [];
+
+  const record = value as ProviderConfigRecord;
+  const hasExactIdMatch = EVOLUTION_CONTACT_LOOKUP_ID_KEYS.some(
+    (key) => normalizeOptionalText(record[key]) === lid
+  );
+  const nestedMatches = Object.values(record).flatMap((entryValue) =>
+    collectExactEvolutionContactLookupMatches(entryValue, lid, depth + 1)
+  );
+
+  return hasExactIdMatch ? [record, ...nestedMatches] : nestedMatches;
+}
+
+function collectEvolutionLookupPhoneCandidates(
+  value: unknown,
+  configuredWhatsAppNumbers: Set<string>,
+  depth = 0
+): string[] {
+  if (depth > 5 || value === undefined || value === null) return [];
+
+  const directPhone = tryNormalizeBrazilWhatsAppNumber(value);
+  if (directPhone && !configuredWhatsAppNumbers.has(directPhone)) {
+    return [directPhone];
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).flatMap((entry) =>
+      collectEvolutionLookupPhoneCandidates(entry, configuredWhatsAppNumbers, depth + 1)
+    );
+  }
+
+  if (!value || typeof value !== 'object') return [];
+
+  return Object.values(value as ProviderConfigRecord).flatMap((entryValue) =>
+    collectEvolutionLookupPhoneCandidates(entryValue, configuredWhatsAppNumbers, depth + 1)
+  );
+}
+
+function resolveEvolutionLookupPhoneCandidate(
+  lookupResponse: unknown,
+  lid: string,
+  configuredWhatsAppNumbers: Set<string>
+): { phone: string | null; status: EvolutionLidLookupStatus } {
+  const exactMatches = collectExactEvolutionContactLookupMatches(lookupResponse, lid);
+  if (exactMatches.length !== 1) {
+    return {
+      phone: null,
+      status: exactMatches.length > 1 ? 'ambiguous_match_discarded' : 'not_found',
+    };
+  }
+
+  const uniquePhones = [
+    ...new Set(
+      collectEvolutionLookupPhoneCandidates(exactMatches[0], configuredWhatsAppNumbers)
+    ),
+  ];
+
+  if (uniquePhones.length !== 1) {
+    return {
+      phone: null,
+      status: uniquePhones.length > 1 ? 'ambiguous_match_discarded' : 'not_found',
+    };
+  }
+
+  return {
+    phone: uniquePhones[0],
+    status: 'resolved',
+  };
+}
+
+async function fetchWithTimeout(
+  requestConfig: HttpRequestConfig,
+  timeoutMs: number,
+  timeoutMessage: string
+) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(requestConfig.url, {
+      method: requestConfig.method,
+      headers: requestConfig.headers,
+      body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(timeoutMessage);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function buildEvolutionContactLookupRequest(
+  config: ProviderConfigRecord,
+  recipientLid: string
+): HttpRequestConfig {
+  const baseUrl =
+    getConfigText(config, ['base_url', 'baseUrl', 'url', 'api_url']) ||
+    (() => {
+      throw new Error('provider_config_json sem base_url para evolution_api');
+    })();
+
+  const instance =
+    getConfigText(config, ['instance', 'instance_name', 'instanceName']) ||
+    (() => {
+      throw new Error('provider_config_json sem instance para evolution_api');
+    })();
+
+  const apiKey =
+    getConfigText(config, ['apikey', 'api_key', 'apiKey', 'token']) ||
+    (() => {
+      throw new Error('provider_config_json sem apikey para evolution_api');
+    })();
+
+  return {
+    url: buildUrl(baseUrl, `chat/findContacts/${encodeURIComponent(instance)}`),
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: apiKey,
+    },
+    body: {
+      where: {
+        id: recipientLid,
+      },
+    },
+  };
+}
+
+async function resolveEvolutionRecipientFromLid(
+  config: ProviderConfigRecord,
+  recipientLid: string,
+  configuredWhatsAppNumbers: Set<string>,
+  timeoutMs: number
+): Promise<{ phone: string | null; status: EvolutionLidLookupStatus }> {
+  let requestConfig: HttpRequestConfig;
+
+  try {
+    requestConfig = buildEvolutionContactLookupRequest(config, recipientLid);
+  } catch {
+    return {
+      phone: null,
+      status: 'config_unavailable',
+    };
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      requestConfig,
+      timeoutMs,
+      `Timeout ao resolver recipient @lid no provider evolution_api apos ${timeoutMs}ms`
+    );
+    const rawResponseText = await response.text().catch(() => '');
+    const lookupResponse = parseResponseBody(rawResponseText);
+
+    if (!response.ok) {
+      return {
+        phone: null,
+        status: 'request_failed',
+      };
+    }
+
+    return resolveEvolutionLookupPhoneCandidate(
+      lookupResponse,
+      recipientLid,
+      configuredWhatsAppNumbers
+    );
+  } catch {
+    return {
+      phone: null,
+      status: 'request_failed',
+    };
+  }
+}
+
+function buildLidResolutionError(status: EvolutionLidLookupStatus) {
+  switch (status) {
+    case 'config_unavailable':
+      return 'Envio bloqueado: recipient @lid sem configuracao suficiente para resolver telefone real';
+    case 'request_failed':
+      return 'Envio bloqueado: recipient @lid nao resolvido; lookup Evolution falhou';
+    case 'ambiguous_match_discarded':
+      return 'Envio bloqueado: recipient @lid nao resolvido; lookup Evolution retornou multiplos telefones';
+    case 'not_found':
+    default:
+      return 'Envio bloqueado: recipient @lid nao resolvido para telefone real';
+  }
+}
+
+async function resolveRecipientForSend(
+  provider: string,
+  config: ProviderConfigRecord,
+  rawRecipient: string,
+  configuredWhatsAppNumbers: Set<string>,
+  timeoutMs: number
+) {
+  const normalized = normalizeOptionalText(rawRecipient);
+  if (!normalized) {
+    throw new Error('Telefone do cliente nao encontrado para envio via WhatsApp');
+  }
+
+  if (!isLidIdentifier(normalized)) {
+    return normalizeBrazilWhatsAppNumber(normalized);
+  }
+
+  if (!isEvolutionProvider(provider)) {
+    throw new Error('Envio bloqueado: recipient derivado de identificador @lid');
+  }
+
+  const lookupResult = await resolveEvolutionRecipientFromLid(
+    config,
+    normalized,
+    configuredWhatsAppNumbers,
+    timeoutMs
+  );
+  if (!lookupResult.phone) {
+    throw new Error(buildLidResolutionError(lookupResult.status));
+  }
+
+  return normalizeBrazilWhatsAppNumber(lookupResult.phone);
+}
+
 function buildEvolutionApiRequest(config: ProviderConfigRecord, recipient: string, message: string): HttpRequestConfig {
   const baseUrl =
     getConfigText(config, ['base_url', 'baseUrl', 'url', 'api_url']) ||
@@ -360,7 +618,7 @@ function resolveHttpRequestConfig(
   recipient: string,
   message: string
 ) {
-  if (provider === 'evolution' || provider === 'evolution_api') {
+  if (isEvolutionProvider(provider)) {
     return buildEvolutionApiRequest(config, recipient, message);
   }
 
@@ -382,36 +640,26 @@ export async function sendWhatsAppMessage(
 ): Promise<SendWhatsAppMessageResult> {
   const provider = normalizeProviderName(input.provider) || 'generic_http';
   const config = parseProviderConfigJson(input.providerConfigJson);
-  const recipient = normalizeBrazilWhatsAppNumber(input.to);
   const configuredWhatsAppNumbers = resolveConfiguredWhatsAppNumbers(config);
+  const timeoutMs = resolveProviderRequestTimeoutMs(config);
+  const recipient = await resolveRecipientForSend(
+    provider,
+    config,
+    input.to,
+    configuredWhatsAppNumbers,
+    timeoutMs
+  );
 
   if (configuredWhatsAppNumbers.has(recipient)) {
     throw new Error('Envio bloqueado: recipient igual ao numero da instancia configurada');
   }
 
   const requestConfig = resolveHttpRequestConfig(provider, config, recipient, input.message);
-  const timeoutMs = resolveProviderRequestTimeoutMs(config);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response: Response;
-
-  try {
-    response = await fetch(requestConfig.url, {
-      method: requestConfig.method,
-      headers: requestConfig.headers,
-      body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`Timeout ao aguardar resposta do provider ${provider} apos ${timeoutMs}ms`);
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const response = await fetchWithTimeout(
+    requestConfig,
+    timeoutMs,
+    `Timeout ao aguardar resposta do provider ${provider} apos ${timeoutMs}ms`
+  );
 
   const rawResponseText = await response.text().catch(() => '');
   const providerResponse = parseResponseBody(rawResponseText);
