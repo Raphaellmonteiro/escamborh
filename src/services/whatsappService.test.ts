@@ -22,17 +22,21 @@ vi.mock('./tenantWhatsAppConfigService', () => ({
 }));
 
 import { createInstance as createEvolutionInstance } from './evolutionClient';
+import { getConnectionState } from './evolutionClient';
 import { setWebhook } from './evolutionClient';
 import { createInstanceRecord, getInstanceByTenant } from '../repositories/whatsappRepository';
 import {
   getTenantWhatsAppConnectionConfig,
   persistTenantWhatsAppInstanceName,
 } from './tenantWhatsAppConfigService';
-import { createWhatsAppInstance } from './whatsappService';
+import { createWhatsAppInstance, getConnectionInfo } from './whatsappService';
 
 describe('whatsappService.createWhatsAppInstance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.FLOWPDV_PUBLIC_URL;
+    delete process.env.RAILWAY_PUBLIC_DOMAIN;
+    process.env.PORT = '3001';
     vi.mocked(getInstanceByTenant).mockResolvedValue(null);
     vi.mocked(createInstanceRecord).mockResolvedValue({
       id: 'instance-1',
@@ -101,7 +105,7 @@ describe('whatsappService.createWhatsAppInstance', () => {
       'tenant_9_whatsapp',
       {
         enabled: true,
-        url: 'http://localhost:3001/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
+        url: 'https://evo.flowpdv.local/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
         webhookByEvents: false,
         webhookBase64: false,
         events: ['MESSAGES_UPSERT'],
@@ -135,13 +139,63 @@ describe('whatsappService.createWhatsAppInstance', () => {
       'tenant_9_whatsapp',
       {
         enabled: true,
-        url: 'http://localhost:3001/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
+        url: 'https://evo.flowpdv.local/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
         webhookByEvents: false,
         webhookBase64: false,
         events: ['MESSAGES_UPSERT'],
       },
       {
         baseUrl: 'https://evo.flowpdv.local',
+        apiKey: 'tenant-token',
+      }
+    );
+  });
+
+  it('re-syncs the inbound webhook for an existing instance when loading connection info', async () => {
+    vi.mocked(getTenantWhatsAppConnectionConfig).mockResolvedValue({
+      tenantId: 9,
+      whatsappEnabled: true,
+      provider: 'evolution_api',
+      providerConfigJson: '{"base_url":"http://217.216.64.78:3333","apikey":"tenant-token"}',
+      baseUrl: 'http://217.216.64.78:3333',
+      apiKey: 'tenant-token',
+      instanceName: 'tenant_9_whatsapp',
+      whatsappNumber: '82981831172',
+      channelIdentifier: 'tenant_9_whatsapp',
+      updatedAt: '2026-04-10T10:00:00.000Z',
+    });
+    vi.mocked(getInstanceByTenant).mockResolvedValue({
+      id: 'instance-1',
+      tenantId: 9,
+      instanceName: 'tenant_9_whatsapp',
+      status: 'open',
+      connected: true,
+      createdAt: '2026-04-10T10:00:00.000Z',
+    });
+    vi.mocked(getConnectionState).mockResolvedValue({
+      data: { connectionState: 'open' },
+      status: 200,
+    });
+
+    const result = await getConnectionInfo(9);
+
+    expect(result.status).toEqual({
+      state: 'open',
+      connected: true,
+      source: 'provider',
+      http_status: 200,
+    });
+    expect(vi.mocked(setWebhook)).toHaveBeenCalledWith(
+      'tenant_9_whatsapp',
+      {
+        enabled: true,
+        url: 'http://217.216.64.78/api/webhooks/whatsapp/inbound/9/messages.upsert?apikey=tenant-token',
+        webhookByEvents: false,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT'],
+      },
+      {
+        baseUrl: 'http://217.216.64.78:3333',
         apiKey: 'tenant-token',
       }
     );

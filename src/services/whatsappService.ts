@@ -211,23 +211,50 @@ function buildTenantInstanceName(tenantId: number) {
   return `tenant_${tenantId}_whatsapp`;
 }
 
-function resolvePublicBaseUrl() {
+function normalizeConfiguredUrl(value: string) {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function parseAbsoluteUrl(value: string | null | undefined) {
+  const normalized = toNonEmptyString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    return new URL(normalizeConfiguredUrl(normalized));
+  } catch {
+    return null;
+  }
+}
+
+function isLocalHostname(hostname: string) {
+  const normalized = hostname.trim().toLowerCase();
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '0.0.0.0' ||
+    normalized === '::1' ||
+    normalized === '[::1]'
+  );
+}
+
+function resolvePublicBaseUrl(evolutionBaseUrl?: string | null) {
   const explicit =
     toNonEmptyString(process.env.FLOWPDV_PUBLIC_URL) ||
     toNonEmptyString(process.env.RAILWAY_PUBLIC_DOMAIN);
 
   if (explicit) {
-    const withProtocol = /^https?:\/\//i.test(explicit) ? explicit : `https://${explicit}`;
-    return withProtocol.replace(/\/+$/, '');
+    return normalizeConfiguredUrl(explicit).replace(/\/+$/, '');
   }
 
-  const fromAllowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((item) => toNonEmptyString(item))
-    .find((item) => item);
+  const parsedEvolutionUrl = parseAbsoluteUrl(evolutionBaseUrl);
+  if (parsedEvolutionUrl && !isLocalHostname(parsedEvolutionUrl.hostname)) {
+    if (parsedEvolutionUrl.port === '3333') {
+      return `${parsedEvolutionUrl.protocol}//${parsedEvolutionUrl.hostname}`;
+    }
 
-  if (fromAllowedOrigins) {
-    return fromAllowedOrigins.replace(/\/+$/, '');
+    return parsedEvolutionUrl.origin;
   }
 
   return `http://localhost:${toNonEmptyString(process.env.PORT) || '3001'}`;
@@ -239,9 +266,12 @@ function resolveInboundWebhookSecret(config: TenantWhatsAppConnectionConfig | nu
 
 function buildInboundWebhookConfig(
   tenantId: number,
-  secret: string | null
+  secret: string | null,
+  evolutionBaseUrl?: string | null
 ): EvolutionInboundWebhookConfig {
-  const url = new URL(`${resolvePublicBaseUrl()}/api/webhooks/whatsapp/inbound/${tenantId}/messages.upsert`);
+  const url = new URL(
+    `${resolvePublicBaseUrl(evolutionBaseUrl)}/api/webhooks/whatsapp/inbound/${tenantId}/messages.upsert`
+  );
 
   if (secret) {
     url.searchParams.set('apikey', secret);
@@ -375,7 +405,8 @@ async function ensureEvolutionInboundWebhook(
 
   const webhookConfig = buildInboundWebhookConfig(
     context.tenantId,
-    resolveInboundWebhookSecret(context.tenantConfig)
+    resolveInboundWebhookSecret(context.tenantConfig),
+    context.evolutionClientConfig?.baseUrl
   );
 
   try {
@@ -407,6 +438,14 @@ async function ensureEvolutionInboundWebhook(
       events: EVOLUTION_INBOUND_WEBHOOK_EVENTS,
     });
   }
+}
+
+async function syncEvolutionInboundWebhookIfPossible(context: TenantConnectionContext) {
+  if (!context.instanceName) {
+    return;
+  }
+
+  await ensureEvolutionInboundWebhook(context, context.instanceName);
 }
 
 async function requireTenantInstance(tenantId: TenantId): Promise<WhatsAppInstanceRecord> {
@@ -464,6 +503,7 @@ export async function generateQrCode(tenantId: TenantId): Promise<GenerateQrCode
   }
 
   const instanceName = requireConnectionInstanceName(context);
+  await syncEvolutionInboundWebhookIfPossible(context);
 
   let response: EvolutionApiResponse<unknown>;
 
@@ -491,6 +531,7 @@ export async function getStatus(tenantId: TenantId): Promise<WhatsAppStatusResul
   }
 
   const instanceName = requireConnectionInstanceName(context);
+  await syncEvolutionInboundWebhookIfPossible(context);
 
   let response: EvolutionApiResponse<unknown>;
 
@@ -556,6 +597,7 @@ export async function getConnectionInfo(tenantId: TenantId): Promise<WhatsAppCon
   }
 
   try {
+    await syncEvolutionInboundWebhookIfPossible(context);
     const response = await getConnectionState(context.instanceName, context.evolutionClientConfig);
     const state = extractConnectionState(response.data);
     const connected = state.toLowerCase() === 'open';
