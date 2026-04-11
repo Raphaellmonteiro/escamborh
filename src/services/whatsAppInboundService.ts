@@ -129,6 +129,22 @@ function getRecord(value: unknown): JsonRecord | null {
   return value as JsonRecord;
 }
 
+function getJsonRecordCandidate(value: unknown): JsonRecord | null {
+  const record = getRecord(value);
+  if (record) return record;
+
+  if (typeof value !== 'string') return null;
+
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  try {
+    return getRecord(JSON.parse(normalized));
+  } catch {
+    return null;
+  }
+}
+
 function getArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
@@ -256,8 +272,54 @@ function summarizeText(value: unknown, maxLength = 180) {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
+function looksLikeEvolutionInboundPayload(value: JsonRecord | null) {
+  if (!value) return false;
+
+  return Boolean(
+    normalizeOptionalText(value.instance) ||
+      normalizeOptionalText(value.event ?? value.type ?? value.webhookType) ||
+      getRecord(value.data) ||
+      getArray(value.data).length > 0 ||
+      getArray(value.messages).length > 0 ||
+      getRecord(value.key) ||
+      getRecord(value.message)
+  );
+}
+
+function resolveWrappedEvolutionPayload(
+  payload: unknown,
+  depth = 0
+): JsonRecord | null {
+  if (depth > 3) {
+    return getJsonRecordCandidate(payload);
+  }
+
+  const direct = getJsonRecordCandidate(payload);
+  if (looksLikeEvolutionInboundPayload(direct)) {
+    return direct;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      const resolved = resolveWrappedEvolutionPayload(entry, depth + 1);
+      if (resolved) return resolved;
+    }
+
+    return null;
+  }
+
+  if (!direct) return null;
+
+  for (const key of ['payload', 'body'] as const) {
+    const resolved = resolveWrappedEvolutionPayload(direct[key], depth + 1);
+    if (resolved) return resolved;
+  }
+
+  return direct;
+}
+
 function extractPayloadEventName(payload: unknown) {
-  const root = getRecord(payload);
+  const root = resolveWrappedEvolutionPayload(payload) || getRecord(payload);
   return normalizeOptionalText(root?.event ?? root?.type ?? root?.webhookType);
 }
 
@@ -296,7 +358,7 @@ async function resolveTenantContext(
   payload: unknown
 ) {
   const routeTenantId = parsePositiveInt(routeTenantIdValue);
-  const root = getRecord(payload);
+  const root = resolveWrappedEvolutionPayload(payload) || getRecord(payload);
   const instance = normalizeOptionalText(root?.instance);
   const instanceRecord = instance ? await getInstanceByName(instance).catch(() => null) : null;
   const payloadTenantId = instance
@@ -1776,7 +1838,7 @@ function summarizeEvolutionUnresolvedPhoneDiagnostic(
   payload: unknown,
   configuredInstanceNumbers = new Set<string>()
 ) {
-  const root = getRecord(payload);
+  const root = resolveWrappedEvolutionPayload(payload) || getRecord(payload);
   const dataArray = getArray(root?.data);
   const dataRecord = getRecord(root?.data) || getRecord(dataArray[0]);
   const contexts = extractEvolutionCandidateContexts(root);
@@ -2524,7 +2586,7 @@ function extractEvolutionCandidateContexts(root: JsonRecord | null) {
 }
 
 function summarizeEvolutionPayloadShape(payload: unknown) {
-  const root = getRecord(payload);
+  const root = resolveWrappedEvolutionPayload(payload) || getRecord(payload);
   const data = getRecord(root?.data);
   const dataArray = getArray(root?.data);
   const firstDataItem = getRecord(dataArray[0]);
@@ -2590,7 +2652,7 @@ async function analyzeEvolutionMessages(
   providerConfigJson: string | null | undefined,
   configuredInstanceNumbers = new Set<string>()
 ): Promise<EvolutionExtractionAnalysis> {
-  const root = getRecord(payload);
+  const root = resolveWrappedEvolutionPayload(payload) || getRecord(payload);
   const candidates = extractEvolutionCandidateContexts(root);
   const messages: NormalizedInboundWhatsAppMessage[] = [];
   let supportedMessageCount = 0;
