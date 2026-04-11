@@ -43,6 +43,7 @@ import {
   isPaymentPendingOrder,
   isPendingQrMesaOrder,
   isUrgentOrder,
+  normalizeStatusKey,
   passesCentralQuickFilter,
   passesCentralChannelFilter,
 } from '../utils/orderCentralBoard';
@@ -261,6 +262,26 @@ function getPaymentBadgeMeta(order: Order): { label: string; className: string }
   };
 }
 
+function getBoardStatusLabel(statusRaw: string, columnId: CentralColumnId, mode: 'compact' | 'detailed'): string {
+  if (columnId === 'a_confirmar') {
+    return mode === 'detailed' ? 'Aguardando confirmação da mesa' : 'Aguardando confirmação';
+  }
+
+  if (columnId === 'outros') {
+    const normalized = normalizeStatusKey(statusRaw);
+    if (
+      normalized === 'a_revisar' ||
+      normalized === 'a revisar' ||
+      normalized === 'em revisao' ||
+      normalized === 'em revisao manual'
+    ) {
+      return 'Em revisão';
+    }
+  }
+
+  return statusRaw || '—';
+}
+
 function getColumnTone(columnId: CentralColumnId): { shell: string; header: string; count: string; empty: string } {
   if (columnId === 'a_confirmar') {
     return {
@@ -326,14 +347,12 @@ function getColumnTone(columnId: CentralColumnId): { shell: string; header: stri
   };
 }
 
-const COLUMN_DEF: { id: CentralColumnId; title: string; hint?: string }[] = [
-  { id: 'a_confirmar', title: 'A confirmar', hint: 'Pedidos QR da mesa aguardando validação' },
-  { id: 'entrada', title: 'Entrada', hint: 'Novos e confirmação' },
-  { id: 'em_preparo', title: 'Em preparo' },
-  { id: 'pronto', title: 'Pronto' },
-  { id: 'rota', title: 'Rota', hint: 'Delivery em deslocamento' },
-  { id: 'encerrado', title: 'Encerrado' },
-  { id: 'outros', title: 'A revisar', hint: 'Status não mapeado no fluxo' },
+const COLUMN_DEF: { id: CentralColumnId; title: string; hint?: string; sourceIds: CentralColumnId[] }[] = [
+  { id: 'entrada', title: 'Entrada', hint: 'Novos, confirmação e revisão', sourceIds: ['a_confirmar', 'entrada', 'outros'] },
+  { id: 'em_preparo', title: 'Em preparo', sourceIds: ['em_preparo'] },
+  { id: 'pronto', title: 'Pronto', sourceIds: ['pronto'] },
+  { id: 'rota', title: 'Rota', hint: 'Delivery em deslocamento', sourceIds: ['rota'] },
+  { id: 'encerrado', title: 'Encerrado', sourceIds: ['encerrado'] },
 ];
 
 const FILTERS: { id: CentralChannelFilter; label: string }[] = [
@@ -501,8 +520,16 @@ export default function CentralPedidosScreen({
     [filtered, segCfg.statusConcluido, hasMotoboyFeature]
   );
   const visibleColumns = useMemo(
-    () => COLUMN_DEF.filter((col) => showClosed || col.id !== 'encerrado'),
-    [showClosed]
+    () =>
+      COLUMN_DEF
+        .filter((col) => showClosed || col.id !== 'encerrado')
+        .map((col) => ({
+          ...col,
+          items: col.sourceIds.flatMap((sourceColumnId) =>
+            buckets[sourceColumnId].map((order) => ({ order, sourceColumnId }))
+          ),
+        })),
+    [showClosed, buckets]
   );
 
   const updateBoardScrollState = useCallback(() => {
@@ -809,7 +836,7 @@ export default function CentralPedidosScreen({
                               {col.title}
                             </span>
                             <span className={`text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-md 2xl:text-[10px] 2xl:px-2 2xl:rounded-lg ${tone.count}`}>
-                              {buckets[col.id].length}
+                              {col.items.length}
                             </span>
                           </div>
                           {col.hint && (
@@ -817,16 +844,16 @@ export default function CentralPedidosScreen({
                           )}
                         </div>
                         <div className="min-h-0 flex-1 space-y-1 p-1 sm:space-y-1 sm:p-1.5 lg:overflow-y-auto lg:overscroll-y-contain 2xl:space-y-2 2xl:p-2">
-                          {buckets[col.id].length === 0 ? (
+                          {col.items.length === 0 ? (
                             <div className={`mx-0.5 rounded-lg border border-dashed py-2.5 px-2 text-center text-[10px] leading-snug 2xl:mx-1 2xl:rounded-2xl 2xl:py-5 2xl:px-3 2xl:text-[11px] ${tone.empty}`}>
                               Sem pedidos nesta etapa
                             </div>
                           ) : (
-                            buckets[col.id].map((order) => (
-                              <Fragment key={order.id}>
+                            col.items.map(({ order, sourceColumnId }) => (
+                              <Fragment key={`${sourceColumnId}-${order.id}`}>
                                 <OrderCard
                                   order={order}
-                                  columnId={col.id}
+                                  columnId={sourceColumnId}
                                   token={token}
                                   segmentFinalStatus={segCfg.statusConcluido}
                                   motoboys={motoboys}
@@ -899,7 +926,8 @@ function OrderCard({
   const compactItemsSummary = getCompactOrderItemsSummary(order);
   const compactOriginLabel = mesaReference ? `Mesa ${mesaReference}` : badge.label;
   const statusRaw = String(order.status || '').trim() || '—';
-  const compactStatusLabel = columnId === 'a_confirmar' ? 'Aguardando confirmacao' : statusRaw;
+  const compactStatusLabel = getBoardStatusLabel(statusRaw, columnId, 'compact');
+  const detailedStatusLabel = getBoardStatusLabel(statusRaw, columnId, 'detailed');
   const paymentPendingLabel = Number(order.payment_total_paid || 0) > 0
     ? 'Pagamento parcial'
     : String(order.pagamento_tipo || '').trim().toLowerCase() === 'pix'
@@ -1074,7 +1102,7 @@ function OrderCard({
                   className="min-w-0 inline-flex max-w-full flex-1 overflow-hidden px-1.5 py-0.5 leading-tight sm:px-2"
                   title={compactStatusLabel}
                 >
-                  <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação' : statusRaw}</span>
+                  <span className="truncate">{compactStatusLabel}</span>
                 </StatusChip>
                 {paymentBadge && (
                   <StatusChip rounded="md" size="sm" toneClassName={paymentBadge.className} emphasis="semibold" className="max-w-full shrink-0 overflow-hidden sm:max-w-[46%]">
@@ -1160,9 +1188,9 @@ function OrderCard({
                   size="sm"
                   toneClassName={statusTone}
                   className="inline-flex w-full max-w-full px-2.5 py-1 leading-tight"
-                  title={statusRaw}
+                  title={detailedStatusLabel}
                 >
-                  <span className="truncate">{columnId === 'a_confirmar' ? 'Aguardando confirmação da mesa' : statusRaw}</span>
+                  <span className="truncate">{detailedStatusLabel}</span>
                 </StatusChip>
               </div>
 
