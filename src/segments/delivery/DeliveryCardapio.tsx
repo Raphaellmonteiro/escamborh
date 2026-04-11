@@ -4489,11 +4489,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
     const resolvedBairroTemp =
       tipoAtendimento === 'retirada'
         ? undefined
-        : resolvedEndId != null && resolvedEndId > 0
-          ? undefined
-          : endSel === 'novo'
-            ? novoEndereco.campos.bairro.trim() || undefined
-            : undefined;
+        : bairroAtual.trim() || undefined;
 
     try {
       const r = await fetch(`/public/delivery/${slug}/pedido/resumo`, {
@@ -4558,6 +4554,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
     cart,
     pag,
     endSel,
+    bairroAtual,
     novoEndereco.campos.bairro,
     novoEndereco.campos.logradouro,
     novoEndereco.campos.numero,
@@ -4676,11 +4673,7 @@ const finalizar = async () => {
         bairro_temporario:
           tipoAtendimento === 'retirada'
             ? undefined
-            : enderecoIdFinal
-              ? undefined
-              : endSel === 'novo'
-                ? novoEndereco.campos.bairro.trim() || undefined
-                : undefined,
+            : bairroAtual.trim() || undefined,
         cupom_codigo: cupomValido ? cupomValido.cupom.codigo : undefined,
       };
       if (tipoAtendimento === 'entrega' && enderecoIdFinal != null) body.endereco_id = enderecoIdFinal;
