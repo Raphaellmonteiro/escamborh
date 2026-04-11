@@ -130,18 +130,22 @@ function getRecord(value: unknown): JsonRecord | null {
 }
 
 function getJsonRecordCandidate(value: unknown): JsonRecord | null {
-  const record = getRecord(value);
+  const record = getRecord(parseJsonCandidate(value));
   if (record) return record;
 
-  if (typeof value !== 'string') return null;
+  return null;
+}
+
+function parseJsonCandidate(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
 
   const normalized = value.trim();
-  if (!normalized) return null;
+  if (!normalized) return value;
 
   try {
-    return getRecord(JSON.parse(normalized));
+    return JSON.parse(normalized);
   } catch {
-    return null;
+    return value;
   }
 }
 
@@ -286,6 +290,47 @@ function looksLikeEvolutionInboundPayload(value: JsonRecord | null) {
   );
 }
 
+function hasEvolutionMessagesArray(value: JsonRecord | null | undefined) {
+  return getArray(value?.messages).some((message) => getRecord(message));
+}
+
+function hasEvolutionMessagePayload(value: JsonRecord | null) {
+  if (!value) return false;
+
+  const dataRecord = getRecord(value.data);
+  const dataCandidates = getArray(value.data)
+    .map((item) => getRecord(item))
+    .filter((item): item is JsonRecord => item !== null);
+
+  return Boolean(
+    hasEvolutionMessagesArray(value) ||
+      hasEvolutionMessagesArray(dataRecord) ||
+      dataCandidates.some(
+        (candidate) =>
+          hasEvolutionMessagesArray(candidate) || hasEvolutionDirectMessageShape(candidate)
+      ) ||
+      hasEvolutionDirectMessageShape(dataRecord) ||
+      hasEvolutionDirectMessageShape(value)
+  );
+}
+
+function mergeEvolutionPayloadMetadata(payload: JsonRecord, envelope: JsonRecord | null) {
+  if (!envelope) return payload;
+
+  const merged: JsonRecord = { ...payload };
+
+  for (const key of ['event', 'type', 'webhookType', 'instance'] as const) {
+    if (normalizeOptionalText(merged[key])) continue;
+
+    const envelopeValue = envelope[key];
+    if (envelopeValue !== undefined) {
+      merged[key] = envelopeValue;
+    }
+  }
+
+  return merged;
+}
+
 function resolveWrappedEvolutionPayload(
   payload: unknown,
   depth = 0
@@ -294,13 +339,10 @@ function resolveWrappedEvolutionPayload(
     return getJsonRecordCandidate(payload);
   }
 
-  const direct = getJsonRecordCandidate(payload);
-  if (looksLikeEvolutionInboundPayload(direct)) {
-    return direct;
-  }
+  const parsedPayload = parseJsonCandidate(payload);
 
-  if (Array.isArray(payload)) {
-    for (const entry of payload) {
+  if (Array.isArray(parsedPayload)) {
+    for (const entry of parsedPayload) {
       const resolved = resolveWrappedEvolutionPayload(entry, depth + 1);
       if (resolved) return resolved;
     }
@@ -308,14 +350,27 @@ function resolveWrappedEvolutionPayload(
     return null;
   }
 
+  const direct = getRecord(parsedPayload);
   if (!direct) return null;
 
+  let nestedResolved: JsonRecord | null = null;
   for (const key of ['payload', 'body'] as const) {
     const resolved = resolveWrappedEvolutionPayload(direct[key], depth + 1);
-    if (resolved) return resolved;
+    if (!resolved) continue;
+
+    const mergedResolved = mergeEvolutionPayloadMetadata(resolved, direct);
+    if (hasEvolutionMessagePayload(mergedResolved)) {
+      return mergedResolved;
+    }
+
+    nestedResolved ||= mergedResolved;
   }
 
-  return direct;
+  if (looksLikeEvolutionInboundPayload(direct)) {
+    return direct;
+  }
+
+  return nestedResolved || direct;
 }
 
 function extractPayloadEventName(payload: unknown) {
