@@ -187,12 +187,33 @@ type CheckoutSummary = {
 };
 
 const MAX_ITEM_OBSERVATION_LEN = 4000;
+const MAX_PEDIDO_OBSERVATION_LEN = 8000;
+const MAX_CONTATO_RECEBIMENTO_RAW = 40;
 
 function normalizeItemObservationForDb(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
   const s = String(raw).trim();
   if (!s) return null;
   return s.length > MAX_ITEM_OBSERVATION_LEN ? s.slice(0, MAX_ITEM_OBSERVATION_LEN) : s;
+}
+
+/** Telefone opcional de quem recebe/atende o pedido (não altera `cliente_tel` da conta). */
+function normalizeOptionalContatoRecebimentoTel(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const s = String(raw).trim().slice(0, MAX_CONTATO_RECEBIMENTO_RAW);
+  if (!s) return null;
+  const d = normalizeBrazilDeliveryPhoneDigits(s);
+  if (d.length < 10 || d.length > 11) return null;
+  return d;
+}
+
+function mergeDeliveryPublicOrderObservation(clienteObservation: unknown, contatoDigits: string | null): string | null {
+  const base = String(clienteObservation ?? '').trim();
+  if (!contatoDigits) return base.length ? base : null;
+  const tag = `[Contato no local] ${contatoDigits}`;
+  if (!base) return tag.length > MAX_PEDIDO_OBSERVATION_LEN ? tag.slice(0, MAX_PEDIDO_OBSERVATION_LEN) : tag;
+  const merged = `${tag}\n${base}`;
+  return merged.length > MAX_PEDIDO_OBSERVATION_LEN ? merged.slice(0, MAX_PEDIDO_OBSERVATION_LEN) : merged;
 }
 
 function normalizeOptionalEmail(value: unknown): string | null {
@@ -1515,7 +1536,20 @@ export function createDeliveryPublicRouter() {
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
       const automation = parseAutomationFromDeliveryConfigJson(dcfg as Record<string, unknown>);
-      const { items, pagamento_tipo, observation, cliente_nome, cliente_tel, endereco, clienteToken, cupom_codigo, endereco_id, bairro_temporario } = req.body;
+      const {
+        items,
+        pagamento_tipo,
+        observation,
+        cliente_nome,
+        cliente_tel,
+        endereco,
+        clienteToken,
+        cupom_codigo,
+        endereco_id,
+        bairro_temporario,
+      } = req.body;
+      const contatoRecebimentoTel = normalizeOptionalContatoRecebimentoTel(req.body?.contato_recebimento_tel);
+      const observationGravada = mergeDeliveryPublicOrderObservation(observation, contatoRecebimentoTel);
       const canalPedido: OrderChannel = String(req.body?.canal || '').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
       /** Delivery continua com tipo_retirada `local` (legado do PDV). Retirada: `levar` = buscar no balcão; `local` = consumo no estabelecimento. */
       let tipoRetirada: string;
@@ -1617,6 +1651,7 @@ export function createDeliveryPublicRouter() {
         primeiro_cliente: checkoutSummary.primeiro_cliente,
         total: checkoutSummary.total,
         delivery_endereco_id: enderecoSalvo?.id ?? null,
+        ...(contatoRecebimentoTel ? { contato_recebimento_tel: contatoRecebimentoTel } : {}),
       };
 
       const dateObj = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }));
@@ -1654,7 +1689,7 @@ export function createDeliveryPublicRouter() {
             orderNumber,
             totalFinal,
             taxaEntrega,
-            observation || null,
+            observationGravada,
             tenant.id,
             canalPedido,
             tipoRetirada,

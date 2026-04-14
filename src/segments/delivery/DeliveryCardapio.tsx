@@ -29,6 +29,7 @@ import {
   findDeliveryZoneByBairro,
   MENSAGEM_ENTREGA_FORA_DA_AREA,
 } from '../../utils/deliveryBairroZona';
+import { normalizeBrazilDeliveryPhoneDigits } from '../../utils/deliveryFirstPurchaseEligibility';
 import { normalizeProductPhotoPublicUrl } from '../../utils/productPhotoUrl';
 import { FlowProductImage } from '../../shared/FlowProductImage';
 import { fetchViaCep } from '../../utils/viacep';
@@ -4321,6 +4322,8 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const [pag, setPag] = useState('pix');
   const [pixCheckoutCopiado, setPixCheckoutCopiado] = useState(false);
   const [obs, setObs] = useState('');
+  /** Opcional: quem recebe/atende difere da conta logada (enviado como `contato_recebimento_tel`). */
+  const [contatoRecebimento, setContatoRecebimento] = useState('');
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [troco, setTroco] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -4602,6 +4605,14 @@ const finalizar = async () => {
       const trocoVal = parseFloat(troco.replace(',','.'));
       if (!trocoVal || trocoVal < tot) { setErro(`Troco deve ser maior que ${fmt(tot)}`); return; }
     }
+    const contatoRecCheck = contatoRecebimento.trim();
+    if (contatoRecCheck) {
+      const cd = normalizeBrazilDeliveryPhoneDigits(contatoRecCheck);
+      if (cd.length < 10 || cd.length > 11) {
+        setErro('Número para contato: use DDD + telefone (10 ou 11 dígitos), ou deixe em branco.');
+        return;
+      }
+    }
     if (enviando) return;
     setEnviando(true);
     try {
@@ -4676,6 +4687,8 @@ const finalizar = async () => {
             : bairroAtual.trim() || undefined,
         cupom_codigo: cupomValido ? cupomValido.cupom.codigo : undefined,
       };
+      const contatoRecTrim = contatoRecebimento.trim();
+      if (contatoRecTrim) body.contato_recebimento_tel = contatoRecTrim;
       if (tipoAtendimento === 'entrega' && enderecoIdFinal != null) body.endereco_id = enderecoIdFinal;
       const r = await fetch(`/public/delivery/${slug}/pedido`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d = await r.json();
@@ -4743,6 +4756,14 @@ const finalizar = async () => {
       const trocoVal = parseFloat(troco.replace(',', '.'));
       if (!trocoVal || trocoVal <= tot) {
         setErro(`Troco deve ser maior que ${fmt(tot)}`);
+        return false;
+      }
+    }
+    const cr = contatoRecebimento.trim();
+    if (cr) {
+      const cd = normalizeBrazilDeliveryPhoneDigits(cr);
+      if (cd.length < 10 || cd.length > 11) {
+        setErro('Número para contato: use DDD + telefone (10 ou 11 dígitos), ou deixe em branco.');
         return false;
       }
     }
@@ -5454,10 +5475,28 @@ const finalizar = async () => {
           </div>
         )}
 
-        {/* Obs geral */}
+        {/* Obs geral + contato opcional no local */}
         <div className={`${cx.obsBox} ${modalStep !== 2 ? 'hidden' : ''}`}>
           <p className={`mb-2 text-sm font-black ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>Observação <span className={`text-xs font-normal ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-400'}`}>(opcional)</span></p>
           <textarea value={obs} onChange={e=>setObs(e.target.value)} placeholder="Deixar na portaria, campainha não funciona..." rows={2} className={`${inp} resize-none text-sm`}/>
+          <div className="mt-4">
+            <p className={`mb-2 text-sm font-black ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>
+              Número para contato <span className={`text-xs font-normal ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-400'}`}>(opcional)</span>
+            </p>
+            <p className={`mb-2 text-xs leading-relaxed ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-400'}`}>
+              Se outra pessoa for receber ou atender o pedido, informe DDD + número (10 ou 11 dígitos). Não altera o telefone da sua conta.
+            </p>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={40}
+              value={contatoRecebimento}
+              onChange={(e) => setContatoRecebimento(e.target.value)}
+              placeholder="Ex.: (11) 99999-9999"
+              className={`${inp} text-sm`}
+            />
+          </div>
         </div>
         {erro && (
           <div
@@ -5517,6 +5556,16 @@ const finalizar = async () => {
             <div className={`${cx.resumoCard} text-xs ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-300'}`}>
               Confira subtotal, taxa, descontos e total antes de confirmar.
             </div>
+            {contatoRecebimento.trim() && (
+              <div className={cx.resumoCard}>
+                <p className={`text-[11px] font-bold uppercase tracking-wider ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                  Contato no local
+                </p>
+                <p className={`mt-1 text-sm font-semibold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>
+                  {contatoRecebimento.trim()}
+                </p>
+              </div>
+            )}
             {pag === 'pix' && (
               <div className={`${cx.resumoCard} text-xs ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-300'}`}>
                 O QR Code final e o copia e cola deste pedido serao exibidos logo apos confirmar.
