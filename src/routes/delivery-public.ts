@@ -1630,8 +1630,18 @@ export function createDeliveryPublicRouter() {
       const inventoryEnabled = await tenantHasInventoryFeature(tenant.id);
 
       const result = await withTx(async (client) => {
-        const n = await txQ1(client, 'SELECT COUNT(*) as c FROM pedidos WHERE tenant_id=? AND order_number LIKE ?', [tenant.id, `${prefix}-%`]);
-        const num = Number(n?.c || 0) + 1;
+        // order_number tem constraint UNIQUE (global) no Postgres.
+        // O padrão anterior (COUNT por tenant + 1) falha por concorrência e pode colidir entre tenants no mesmo dia.
+        // Serializamos a geração por prefixo (dia) e calculamos o próximo número global por prefixo.
+        await txRun(client, 'SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [prefix]);
+        const r = await txQ1<{ n: number | string | null }>(
+          client,
+          `SELECT COALESCE(MAX((substring(order_number from '(\\d+)$'))::int), 0) as n
+             FROM pedidos
+            WHERE order_number LIKE ?`,
+          [`${prefix}-%`]
+        );
+        const num = Number(r?.n || 0) + 1;
         const orderNumber = `${prefix}-${String(num).padStart(3, '0')}`;
 
         const deliveryEnderecoId =
