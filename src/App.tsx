@@ -197,6 +197,8 @@ export default function App() {
   const operationalAlertLoadedRef = React.useRef(false);
   const operationalSoundPlayedAtRef = React.useRef(0);
 
+  const [openMesasCount, setOpenMesasCount] = useState(0);
+
   const userAllows = (tab: string): boolean => {
     if (userCargo === 'dono') return true;
     if (!Array.isArray(userPermissoes)) return false;
@@ -220,6 +222,23 @@ export default function App() {
     const feature = normalizeAccessFeature(tab);
     return planAllows(feature) && userAllows(feature);
   };
+
+  const refreshOpenMesasCount = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/mesas', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const mesas = Array.isArray(data) ? data : [];
+      const n = mesas.filter((m: { status?: string }) => m.status === 'aberta').length;
+      setOpenMesasCount(n);
+    } catch {
+      setOpenMesasCount(0);
+    }
+  }, [token]);
+
   const tenantHasMotoboyFeature = token && !planProfile
     ? true
     : planFeatures.includes('funcionarios');
@@ -362,6 +381,9 @@ export default function App() {
   const permiteMesas = segmentoOperacional === 'Restaurante/Food' || segmentoOperacional === 'Bar/Pub';
   const permiteDelivery = permiteMesas;
   const isOperationTab = activeTab === 'orders' || activeTab === 'central';
+  const mesasNavAttentionEligible = Boolean(
+    token && !isAdmin && permiteMesas && canAccess('mesas'),
+  );
 
   // ── Título dinâmico + alerta operacional incremental ─────────────────────
 React.useEffect(() => {
@@ -447,6 +469,28 @@ React.useEffect(() => {
   useEffect(() => {
     localStorage.setItem(OPERATIONAL_ALERT_SOUND_KEY, String(operationalSoundEnabled));
   }, [operationalSoundEnabled]);
+
+  useEffect(() => {
+    if (!mesasNavAttentionEligible) {
+      setOpenMesasCount(0);
+      return;
+    }
+    const BOOT_MESAS_POLL_MS = 4500;
+    let intervalId: number | undefined;
+    const bootTimer = window.setTimeout(() => {
+      void refreshOpenMesasCount();
+      intervalId = window.setInterval(() => { void refreshOpenMesasCount(); }, 30000) as unknown as number;
+    }, BOOT_MESAS_POLL_MS);
+    return () => {
+      window.clearTimeout(bootTimer);
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [mesasNavAttentionEligible, refreshOpenMesasCount]);
+
+  useEffect(() => {
+    if (!mesasNavAttentionEligible) return;
+    void refreshOpenMesasCount();
+  }, [activeTab, mesasNavAttentionEligible, refreshOpenMesasCount]);
   
   // ── Rotas públicas — Tela Cliente ────────────────────────────────────────────
   // /delivery/:slug/pedido/:id → rastreamento do pedido pelo cliente
@@ -948,7 +992,14 @@ const handleAuth = async (e: React.FormEvent) => {
               <NavItem active={activeTab === 'delivery'} onClick={() => handleTabChange('delivery')} icon="🛵" label="Delivery" />
             )}
             {permiteMesas && canAccess('mesas') && (
-              <NavItem active={activeTab === 'mesas'} onClick={() => handleTabChange('mesas')} icon="🍽️" label="Mesas" />
+              <NavItem
+                active={activeTab === 'mesas'}
+                attention={openMesasCount > 0 && activeTab !== 'mesas'}
+                badgeCount={openMesasCount > 0 ? openMesasCount : undefined}
+                onClick={() => handleTabChange('mesas')}
+                icon="🍽️"
+                label="Mesas"
+              />
             )}
             {canAccess('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon="📖" label={segCfg.labelSidebarProdutos} />}
             {canAccess('whatsapp-ia') && permiteDelivery && (
