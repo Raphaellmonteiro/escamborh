@@ -712,7 +712,7 @@ export default function CentralPedidosScreen({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-zinc-50 dark:bg-zinc-950">
       <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900 sm:px-3 sm:py-2 lg:px-4">
-        <div className="mx-auto flex w-full max-w-[min(100%,76rem)] min-w-0 flex-col">
+        <div className="mx-auto flex w-full max-w-[min(100%,82rem)] min-w-0 flex-col">
         <ScreenHeader
           titleAs="h1"
           className="gap-1.5"
@@ -813,7 +813,7 @@ export default function CentralPedidosScreen({
       </div>
 
       <div className="min-h-0 flex-1">
-        <div className="mx-auto flex h-full w-full max-w-[min(100%,76rem)] min-w-0 flex-col space-y-1.5 p-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:space-y-2 sm:p-2 sm:pb-2.5 lg:p-2.5 lg:pb-2.5">
+        <div className="mx-auto flex h-full w-full max-w-[min(100%,82rem)] min-w-0 flex-col space-y-1.5 p-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:space-y-2 sm:p-2 sm:pb-2.5 lg:p-3 lg:pb-3">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-400/35 dark:bg-red-500/12 dark:text-red-100">
             {error}
@@ -862,10 +862,10 @@ export default function CentralPedidosScreen({
                 className="-mx-1 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1.5 touch-pan-y [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] scroll-smooth snap-x snap-proximity scroll-px-1.5 sm:-mx-1.5 sm:px-1.5 sm:pb-2 lg:mx-0 lg:overflow-x-visible lg:px-0 lg:pb-1 lg:touch-auto lg:snap-none"
               >
                 <div
-                  className={`flex min-w-max items-stretch gap-1.5 pr-1.5 sm:gap-2 sm:pr-2 lg:grid lg:min-w-0 lg:w-full lg:justify-center lg:gap-1.5 lg:pr-0 xl:gap-2 ${
+                  className={`flex min-w-max items-stretch gap-1.5 pr-1.5 sm:gap-2 sm:pr-2 lg:grid lg:min-w-0 lg:w-full lg:justify-center lg:gap-2 lg:pr-0 xl:gap-2.5 ${
                     showClosed
-                      ? 'lg:[grid-template-columns:repeat(5,minmax(9.25rem,12rem))]'
-                      : 'lg:[grid-template-columns:repeat(4,minmax(11rem,14rem))]'
+                      ? 'lg:[grid-template-columns:repeat(5,minmax(10.25rem,12.75rem))]'
+                      : 'lg:[grid-template-columns:repeat(4,minmax(12rem,15rem))]'
                   }`}
                 >
                   {visibleColumns.map((col) => {
@@ -873,7 +873,7 @@ export default function CentralPedidosScreen({
                     return (
                       <div
                         key={col.id}
-                        className={`snap-start flex w-[min(calc(100vw-1rem),244px)] flex-shrink-0 flex-col rounded-lg border shadow-sm shadow-zinc-950/[0.02] min-h-[min(220px,40vh)] max-h-none sm:w-[252px] md:w-[260px] lg:w-full lg:min-h-[min(248px,40vh)] lg:max-h-[min(56vh,32rem)] ${tone.shell}`}
+                        className={`snap-start flex w-[min(calc(100vw-1rem),252px)] flex-shrink-0 flex-col rounded-lg border shadow-sm shadow-zinc-950/[0.02] min-h-[min(220px,40vh)] max-h-none sm:w-[262px] md:w-[274px] lg:w-full lg:min-h-[min(256px,42vh)] lg:max-h-[min(58vh,34rem)] ${tone.shell}`}
                       >
                         <div className={`shrink-0 px-2.5 py-1.5 ${tone.header}`}>
                           <div className="flex items-center gap-1.5">
