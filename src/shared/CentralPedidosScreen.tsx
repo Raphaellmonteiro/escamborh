@@ -55,6 +55,20 @@ import {
 
 const TZ = 'America/Sao_Paulo';
 const CENTRAL_ORDERS_LIMIT = 300;
+const DARK_NEUTRAL_TONE = 'dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-100';
+const DARK_RED_TONE = 'dark:border-red-400/55 dark:bg-red-500/20 dark:text-red-100';
+const DARK_AMBER_TONE = 'dark:border-amber-400/55 dark:bg-amber-500/20 dark:text-amber-100';
+const DARK_EMERALD_TONE = 'dark:border-emerald-400/50 dark:bg-emerald-500/20 dark:text-emerald-100';
+const DARK_SKY_TONE = 'dark:border-sky-400/50 dark:bg-sky-500/20 dark:text-sky-100';
+const DARK_VIOLET_TONE = 'dark:border-violet-400/50 dark:bg-violet-500/20 dark:text-violet-100';
+const DARK_ORANGE_TONE = 'dark:border-orange-400/55 dark:bg-orange-500/20 dark:text-orange-100';
+const DARK_BLUE_TONE = 'dark:border-blue-400/50 dark:bg-blue-500/20 dark:text-blue-100';
+const DARK_GREEN_TONE = 'dark:border-green-400/50 dark:bg-green-500/20 dark:text-green-100';
+const DARK_NEUTRAL_BUTTON_TONE = `${DARK_NEUTRAL_TONE} dark:hover:border-zinc-500 dark:hover:bg-zinc-700/90`;
+const DARK_EMERALD_BUTTON_TONE = `${DARK_EMERALD_TONE} dark:hover:border-emerald-300/70 dark:hover:bg-emerald-500/30`;
+const DARK_AMBER_BUTTON_TONE = `${DARK_AMBER_TONE} dark:hover:border-amber-300/70 dark:hover:bg-amber-500/30`;
+const DARK_BLUE_BUTTON_TONE = `${DARK_BLUE_TONE} dark:hover:border-blue-300/70 dark:hover:bg-blue-500/30`;
+const DARK_GREEN_BUTTON_TONE = `${DARK_GREEN_TONE} dark:hover:border-green-300/70 dark:hover:bg-green-500/30`;
 
 function getTodayRangeQuery(): { from: string; to: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -99,52 +113,66 @@ function getElapsedMeta(createdIso: string | null | undefined): { label: string;
   if (!raw) {
     return {
       label: '—',
-      tone: 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
-      dot: 'bg-zinc-400',
+      tone: `bg-zinc-100 text-zinc-500 border-zinc-200 ${DARK_NEUTRAL_TONE}`,
+      dot: 'bg-zinc-400 dark:bg-zinc-300',
     };
   }
   const t = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T')).getTime();
   if (Number.isNaN(t)) {
     return {
       label: '—',
-      tone: 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
-      dot: 'bg-zinc-400',
+      tone: `bg-zinc-100 text-zinc-500 border-zinc-200 ${DARK_NEUTRAL_TONE}`,
+      dot: 'bg-zinc-400 dark:bg-zinc-300',
     };
   }
   const m = Math.floor((Date.now() - t) / 60000);
   if (m >= 45) {
     return {
       label: formatElapsed(raw),
-      tone: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-200 dark:border-red-500/30',
-      dot: 'bg-red-500',
+      tone: `bg-red-50 text-red-700 border-red-200 ${DARK_RED_TONE}`,
+      dot: 'bg-red-500 dark:bg-red-300',
     };
   }
   if (m >= 25) {
     return {
       label: formatElapsed(raw),
-      tone: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
-      dot: 'bg-amber-500',
+      tone: `bg-amber-50 text-amber-700 border-amber-200 ${DARK_AMBER_TONE}`,
+      dot: 'bg-amber-500 dark:bg-amber-300',
     };
   }
   return {
     label: formatElapsed(raw),
-    tone: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
-    dot: 'bg-emerald-500',
+    tone: `bg-emerald-50 text-emerald-700 border-emerald-200 ${DARK_EMERALD_TONE}`,
+    dot: 'bg-emerald-500 dark:bg-emerald-300',
   };
 }
 
 function channelBadgeMeta(order: Order): { label: string; className: string } {
   const kind = getCentralOrderKind(order);
   if (kind === 'mesa') {
-    return { label: 'Mesa', className: 'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-500/20 dark:text-violet-200 dark:border-violet-500/30' };
+    return { label: 'Mesa', className: `bg-violet-100 text-violet-800 border-violet-200 ${DARK_VIOLET_TONE}` };
   }
   if (kind === 'delivery') {
-    return { label: 'Delivery', className: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-500/20 dark:text-orange-200 dark:border-orange-500/30' };
+    return { label: 'Delivery', className: `bg-orange-100 text-orange-800 border-orange-200 ${DARK_ORANGE_TONE}` };
   }
   if (kind === 'retirada') {
-    return { label: 'Retirada', className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-500/30' };
+    return { label: 'Retirada', className: `bg-emerald-100 text-emerald-800 border-emerald-200 ${DARK_EMERALD_TONE}` };
   }
   return { label: 'Balcão', className: 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-700 dark:text-zinc-100 dark:border-zinc-600' };
+}
+
+function boardChannelBadgeMeta(order: Order): { label: string; className: string } {
+  const kind = getCentralOrderKind(order);
+  if (kind === 'mesa') {
+    return { label: 'Mesa', className: `bg-violet-100 text-violet-800 border-violet-200 ${DARK_VIOLET_TONE}` };
+  }
+  if (kind === 'delivery') {
+    return { label: 'Delivery', className: `bg-orange-100 text-orange-800 border-orange-200 ${DARK_ORANGE_TONE}` };
+  }
+  if (kind === 'retirada') {
+    return { label: 'Retirada', className: `bg-emerald-100 text-emerald-800 border-emerald-200 ${DARK_EMERALD_TONE}` };
+  }
+  return { label: 'Balcão', className: `bg-zinc-100 text-zinc-800 border-zinc-200 ${DARK_NEUTRAL_TONE}` };
 }
 
 function getOrderNumberLine(order: Order) {
@@ -235,123 +263,131 @@ function getPaymentBadgeMeta(order: Order): { label: string; className: string }
         : totalPaid > 0
           ? `PAGO · ${formatMoney(totalPaid)}`
           : 'PAGO',
-      className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-500/30',
+      className: `bg-emerald-50 text-emerald-700 border-emerald-200 ${DARK_EMERALD_TONE}`,
     };
   }
   if (totalPaid > 0 && totalPaid + 0.01 < totalAmount) {
     return {
       label: `PARCIAL · ${formatMoney(totalPaid)} / ${formatMoney(totalAmount)}`,
-      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+      className: `bg-amber-50 text-amber-700 border-amber-200 ${DARK_AMBER_TONE}`,
     };
   }
   if (tipo) {
     return {
       label: `${paymentMetodoUpper(tipo)} — PENDENTE`,
-      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+      className: `bg-amber-50 text-amber-700 border-amber-200 ${DARK_AMBER_TONE}`,
     };
   }
   if (status) {
     return {
       label: status.toUpperCase(),
-      className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30',
+      className: `bg-amber-50 text-amber-700 border-amber-200 ${DARK_AMBER_TONE}`,
     };
   }
   return {
     label: 'PAGAMENTO',
-    className: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-500/30',
+    className: `bg-sky-50 text-sky-700 border-sky-200 ${DARK_SKY_TONE}`,
   };
 }
 
+function isRevisionStatusNormalized(statusRaw: string): boolean {
+  const normalized = normalizeStatusKey(statusRaw);
+  return (
+    normalized === 'a_revisar' ||
+    normalized === 'a revisar' ||
+    normalized === 'em revisao' ||
+    normalized === 'em revisao manual'
+  );
+}
+
+/** Rótulo principal do chip de status (operacional, sem alterar buckets). */
 function getBoardStatusLabel(statusRaw: string, columnId: CentralColumnId, mode: 'compact' | 'detailed'): string {
+  const s = String(statusRaw || '').trim();
+
   if (columnId === 'a_confirmar') {
-    return mode === 'detailed' ? 'Aguardando confirmação da mesa' : 'Aguardando confirmação';
+    return mode === 'compact'
+      ? 'Confirmação pendente · QR/mesa'
+      : 'Aguardando confirmação na mesa (pedido via QR)';
   }
 
   if (columnId === 'outros') {
-    const normalized = normalizeStatusKey(statusRaw);
-    if (
-      normalized === 'a_revisar' ||
-      normalized === 'a revisar' ||
-      normalized === 'em revisao' ||
-      normalized === 'em revisao manual'
-    ) {
-      return 'Em revisão';
+    if (isRevisionStatusNormalized(s)) {
+      return mode === 'compact' ? 'Em revisão' : 'Em revisão — conferir antes de avançar';
     }
+    return s || '—';
   }
 
-  return statusRaw || '—';
+  return s || '—';
+}
+
+/** Tom do chip de status: destaque leve por subestado, sem replicar “colunas” escondidas. */
+function getCentralStatusChipTone(columnId: CentralColumnId, statusRaw: string): string {
+  if (columnId === 'a_confirmar') {
+    return `border-sky-300/85 bg-sky-50/90 text-sky-950 ${DARK_SKY_TONE}`;
+  }
+  if (columnId === 'outros') {
+    if (isRevisionStatusNormalized(statusRaw)) {
+      return `border-amber-300/85 bg-amber-50/88 text-amber-950 ${DARK_AMBER_TONE}`;
+    }
+    return `border-amber-200/75 bg-amber-50/55 text-amber-950 ${DARK_AMBER_TONE}`;
+  }
+  return `border-zinc-200 bg-zinc-50 text-zinc-800 ${DARK_NEUTRAL_TONE}`;
 }
 
 function getColumnTone(columnId: CentralColumnId): { shell: string; header: string; count: string; empty: string } {
-  if (columnId === 'a_confirmar') {
-    return {
-      shell: 'border-cyan-200/80 dark:border-cyan-500/20 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-cyan-100 dark:border-cyan-500/20 bg-cyan-50/70 dark:bg-cyan-500/10',
-      count: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-200',
-      empty: 'border-cyan-100/80 text-cyan-300 dark:border-cyan-500/20 dark:text-cyan-700/70',
-    };
-  }
   if (columnId === 'entrada') {
     return {
-      shell: 'border-sky-200/80 dark:border-sky-500/20 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-sky-100 dark:border-sky-500/20 bg-sky-50/70 dark:bg-sky-500/10',
-      count: 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
-      empty: 'border-sky-100/80 text-sky-300 dark:border-sky-500/20 dark:text-sky-700/70',
+      shell: 'border-sky-200/80 dark:border-sky-400/35 bg-white dark:bg-zinc-900/90',
+      header: 'border-b border-sky-100 dark:border-sky-400/30 bg-sky-50/70 dark:bg-sky-500/15',
+      count: 'bg-sky-100 text-sky-700 dark:bg-sky-500/25 dark:text-sky-100 dark:ring-1 dark:ring-inset dark:ring-sky-400/35',
+      empty: 'border-sky-100/80 text-sky-300 dark:border-sky-400/25 dark:text-sky-300',
     };
   }
   if (columnId === 'em_preparo') {
     return {
-      shell: 'border-amber-200/80 dark:border-amber-500/20 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-amber-100 dark:border-amber-500/20 bg-amber-50/70 dark:bg-amber-500/10',
-      count: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
-      empty: 'border-amber-100/80 text-amber-300 dark:border-amber-500/20 dark:text-amber-700/70',
+      shell: 'border-amber-200/80 dark:border-amber-400/35 bg-white dark:bg-zinc-900/90',
+      header: 'border-b border-amber-100 dark:border-amber-400/30 bg-amber-50/70 dark:bg-amber-500/15',
+      count: 'bg-amber-100 text-amber-700 dark:bg-amber-500/25 dark:text-amber-100 dark:ring-1 dark:ring-inset dark:ring-amber-400/35',
+      empty: 'border-amber-100/80 text-amber-300 dark:border-amber-400/25 dark:text-amber-300',
     };
   }
   if (columnId === 'pronto') {
     return {
-      shell: 'border-violet-200/80 dark:border-violet-500/20 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-violet-100 dark:border-violet-500/20 bg-violet-50/70 dark:bg-violet-500/10',
-      count: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200',
-      empty: 'border-violet-100/80 text-violet-300 dark:border-violet-500/20 dark:text-violet-700/70',
+      shell: 'border-violet-200/80 dark:border-violet-400/35 bg-white dark:bg-zinc-900/90',
+      header: 'border-b border-violet-100 dark:border-violet-400/30 bg-violet-50/70 dark:bg-violet-500/15',
+      count: 'bg-violet-100 text-violet-700 dark:bg-violet-500/25 dark:text-violet-100 dark:ring-1 dark:ring-inset dark:ring-violet-400/35',
+      empty: 'border-violet-100/80 text-violet-300 dark:border-violet-400/25 dark:text-violet-300',
     };
   }
   if (columnId === 'rota') {
     return {
-      shell: 'border-orange-200/80 dark:border-orange-500/20 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-orange-100 dark:border-orange-500/20 bg-orange-50/70 dark:bg-orange-500/10',
-      count: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-200',
-      empty: 'border-orange-100/80 text-orange-300 dark:border-orange-500/20 dark:text-orange-700/70',
-    };
-  }
-  if (columnId === 'outros') {
-    return {
-      shell: 'border-amber-200/80 dark:border-amber-500/20 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-amber-100 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/10',
-      count: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
-      empty: 'border-amber-100/80 text-amber-300 dark:border-amber-500/20 dark:text-amber-700/70',
+      shell: 'border-orange-200/80 dark:border-orange-400/35 bg-white dark:bg-zinc-900/90',
+      header: 'border-b border-orange-100 dark:border-orange-400/30 bg-orange-50/70 dark:bg-orange-500/15',
+      count: 'bg-orange-100 text-orange-700 dark:bg-orange-500/25 dark:text-orange-100 dark:ring-1 dark:ring-inset dark:ring-orange-400/35',
+      empty: 'border-orange-100/80 text-orange-300 dark:border-orange-400/25 dark:text-orange-300',
     };
   }
   if (columnId === 'encerrado') {
     return {
-      shell: 'border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/80',
-      header: 'border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900',
-      count: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-      empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-800 dark:text-zinc-700/70',
+      shell: 'border-zinc-200/80 dark:border-zinc-700 bg-white dark:bg-zinc-900/90',
+      header: 'border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-900',
+      count: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-1 dark:ring-inset dark:ring-zinc-700/80',
+      empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-700 dark:text-zinc-500',
     };
   }
   return {
-    shell: 'border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/80',
-    header: 'border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900',
-    count: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-    empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-800 dark:text-zinc-700/70',
+    shell: 'border-zinc-200/80 dark:border-zinc-700 bg-white dark:bg-zinc-900/90',
+    header: 'border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-900',
+    count: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-1 dark:ring-inset dark:ring-zinc-700/80',
+    empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-700 dark:text-zinc-500',
   };
 }
 
 const COLUMN_DEF: { id: CentralColumnId; title: string; hint?: string; sourceIds: CentralColumnId[] }[] = [
-  { id: 'entrada', title: 'Entrada', hint: 'Novos, confirmação e revisão', sourceIds: ['a_confirmar', 'entrada', 'outros'] },
+  { id: 'entrada', title: 'Entrada', sourceIds: ['a_confirmar', 'entrada', 'outros'] },
   { id: 'em_preparo', title: 'Em preparo', sourceIds: ['em_preparo'] },
   { id: 'pronto', title: 'Pronto', sourceIds: ['pronto'] },
-  { id: 'rota', title: 'Rota', hint: 'Delivery em deslocamento', sourceIds: ['rota'] },
+  { id: 'rota', title: 'Rota', hint: 'Em deslocamento', sourceIds: ['rota'] },
   { id: 'encerrado', title: 'Encerrado', sourceIds: ['encerrado'] },
 ];
 
@@ -675,11 +711,12 @@ export default function CentralPedidosScreen({
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-2.5 py-2 dark:border-zinc-800 dark:bg-zinc-900 sm:px-3 sm:py-2.5 2xl:px-6 2xl:py-3.5">
+      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900 sm:px-3 sm:py-2 lg:px-4">
+        <div className="mx-auto flex w-full max-w-[min(100%,100rem)] min-w-0 flex-col">
         <ScreenHeader
           titleAs="h1"
-          className="gap-1.5 sm:gap-2 2xl:gap-3"
-          titleClassName="flex items-center gap-1.5 2xl:gap-2 text-base 2xl:text-2xl"
+          className="gap-1.5"
+          titleClassName="flex items-center gap-1.5 flex-wrap text-base sm:text-lg"
           title={
             <>
               <LayoutGrid className="shrink-0 text-zinc-700 dark:text-zinc-300" size={18} strokeWidth={2.25} />
@@ -687,12 +724,12 @@ export default function CentralPedidosScreen({
             </>
           }
           subtitle={
-            <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400 mt-0.5 2xl:text-sm 2xl:mt-0.5">
-              Ao vivo · hoje · ações no card
+            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+              Ao vivo · hoje
             </p>
           }
           meta={
-            <span className={`${adminScreenMetaHintClass} hidden sm:inline`}>
+            <span className={`${adminScreenMetaHintClass} hidden lg:inline`}>
               Até {CENTRAL_ORDERS_LIMIT} pedidos (hoje)
             </span>
           }
@@ -700,7 +737,7 @@ export default function CentralPedidosScreen({
             <Button
               type="button"
               variant="secondary"
-              className="!min-h-[36px] sm:!min-h-[34px] !px-2.5 !py-1.5 !text-[11px] 2xl:!min-h-[40px] 2xl:!px-3 2xl:!py-2 2xl:!text-xs"
+              className="!min-h-[36px] sm:!min-h-[38px] !px-2.5 !py-1.5 !text-[11px]"
               onClick={() => void fetchOrders()}
               disabled={loading}
             >
@@ -710,14 +747,14 @@ export default function CentralPedidosScreen({
           }
         />
 
-        <div className="-mx-2 mt-2 overflow-x-auto px-2 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
-          <div className="flex min-w-max gap-1 sm:min-w-0 sm:flex-wrap sm:gap-1.5 2xl:gap-2">
+        <div className="-mx-2 mt-1 overflow-x-auto px-2 pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <div className="flex min-w-max gap-1 sm:min-w-0 sm:flex-wrap sm:gap-1">
             {FILTERS.map((f) => (
               <button
                 key={f.id}
                 type="button"
                 onClick={() => setChannelFilter(f.id)}
-                className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide min-h-[36px] sm:min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3.5 2xl:py-2 2xl:text-xs transition-colors ${
+                className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide min-h-[36px] sm:min-h-[38px] transition-colors ${
                   channelFilter === f.id
                     ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                     : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -729,7 +766,7 @@ export default function CentralPedidosScreen({
             <button
               type="button"
               onClick={() => setShowClosed((current) => !current)}
-              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
+              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[38px] transition-colors ${
                 showClosed
                   ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                   : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -741,7 +778,7 @@ export default function CentralPedidosScreen({
             <button
               type="button"
               onClick={() => setCompactMode((current) => !current)}
-              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[34px] 2xl:min-h-[40px] 2xl:rounded-xl 2xl:px-3 2xl:py-2 2xl:text-xs transition-colors ${
+              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[38px] transition-colors ${
                 compactMode
                   ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                   : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -753,15 +790,15 @@ export default function CentralPedidosScreen({
           </div>
         </div>
 
-        <div className="-mx-2 mt-1.5 overflow-x-auto px-2 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] sm:mx-0 sm:mt-2 sm:overflow-visible sm:px-0 sm:pb-0 2xl:mt-3">
-          <div className="flex min-w-max items-center gap-1 sm:min-w-0 sm:flex-wrap sm:gap-1.5 2xl:gap-2">
-            <span className={`${adminSectionEyebrowClass} shrink-0 text-[10px] 2xl:text-xs`}>Filtros</span>
+        <div className="-mx-2 mt-1 overflow-x-auto px-2 pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <div className="flex min-w-max items-center gap-1 sm:min-w-0 sm:flex-wrap sm:gap-1">
+            <span className={`${adminSectionEyebrowClass} shrink-0 text-[10px]`}>Filtros</span>
             {quickFilters.map((f) => (
               <button
                 key={f.id}
                 type="button"
                 onClick={() => setQuickFilter(f.id)}
-                className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold min-h-[36px] transition-colors sm:min-h-0 sm:py-1 2xl:min-h-0 2xl:px-3 2xl:py-1.5 2xl:text-xs ${
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold min-h-[36px] transition-colors sm:min-h-0 sm:py-1 ${
                   quickFilter === f.id
                     ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
                     : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
@@ -772,17 +809,19 @@ export default function CentralPedidosScreen({
             ))}
           </div>
         </div>
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-2 p-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:space-y-2.5 sm:p-3 sm:pb-3 2xl:space-y-4 2xl:p-6 2xl:pb-6">
+      <div className="min-h-0 flex-1">
+        <div className="mx-auto flex h-full w-full max-w-[min(100%,100rem)] min-w-0 flex-col space-y-1.5 p-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:space-y-2 sm:p-2 sm:pb-2.5 lg:p-3 lg:pb-3">
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/40 dark:border-red-900 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-400/35 dark:bg-red-500/12 dark:text-red-100">
             {error}
           </div>
         )}
 
         {loading && orders.length === 0 ? (
-          <div className="flex justify-center py-10 sm:py-12 2xl:py-16">
+          <div className="flex justify-center py-8 sm:py-10 2xl:py-14">
             <Spinner />
           </div>
         ) : !loading && orders.length === 0 && !error ? (
@@ -820,32 +859,36 @@ export default function CentralPedidosScreen({
               )}
               <div
                 ref={boardScrollRef}
-                className="-mx-2 overflow-x-auto overflow-y-hidden overscroll-x-contain px-2 pb-3 touch-pan-y [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] scroll-smooth snap-x snap-proximity scroll-px-2 sm:pb-3 lg:mx-0 lg:px-0 lg:pb-2 lg:touch-auto lg:snap-none 2xl:-mx-0 2xl:pb-2"
+                className="-mx-1 overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 pb-1.5 touch-pan-y [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] scroll-smooth snap-x snap-proximity scroll-px-1.5 sm:-mx-1.5 sm:px-1.5 sm:pb-2 lg:mx-0 lg:px-0 lg:pb-1 lg:touch-auto lg:snap-none"
               >
-                <div className="flex min-w-max items-start gap-2 pr-3 lg:min-w-0 lg:grid lg:grid-cols-3 lg:gap-2.5 lg:pr-0 xl:grid-cols-4 xl:gap-2.5 2xl:grid-cols-4 2xl:gap-3 min-[1800px]:grid-cols-6">
+                <div
+                  className={`flex min-w-max items-stretch gap-1.5 pr-1.5 sm:gap-2 sm:pr-2 lg:grid lg:w-full lg:max-w-none lg:gap-2 lg:pr-0 xl:gap-2.5 ${
+                    showClosed ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+                  }`}
+                >
                   {visibleColumns.map((col) => {
                     const tone = getColumnTone(col.id);
                     return (
                       <div
                         key={col.id}
-                        className={`snap-start flex w-[min(calc(100vw-1.5rem),272px)] flex-shrink-0 flex-col rounded-xl border shadow-sm shadow-zinc-950/[0.02] min-h-[min(260px,46vh)] max-h-none sm:w-[280px] md:w-[296px] lg:w-auto lg:min-h-[min(300px,50vh)] lg:max-h-[min(640px,70vh)] 2xl:rounded-2xl 2xl:min-h-[min(420px,62vh)] 2xl:max-h-[min(720px,78vh)] ${tone.shell}`}
+                        className={`snap-start flex w-[min(calc(100vw-1rem),248px)] flex-shrink-0 flex-col rounded-lg border shadow-sm shadow-zinc-950/[0.02] min-h-[min(220px,40vh)] max-h-none sm:w-[258px] md:w-[268px] lg:w-full lg:min-h-[min(252px,42vh)] lg:max-h-[min(58vh,34rem)] ${tone.shell}`}
                       >
-                        <div className={`shrink-0 px-2 py-1.5 2xl:px-3 2xl:py-2.5 ${tone.header}`}>
-                          <div className="flex items-center justify-between gap-1.5 2xl:gap-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 2xl:text-[11px]">
+                        <div className={`shrink-0 px-2.5 py-1.5 ${tone.header}`}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="min-w-0 truncate text-[13px] font-black leading-tight text-zinc-800 dark:text-zinc-100">
                               {col.title}
                             </span>
-                            <span className={`text-[9px] font-black tabular-nums px-1.5 py-0.5 rounded-md 2xl:text-[10px] 2xl:px-2 2xl:rounded-lg ${tone.count}`}>
+                            <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${tone.count}`}>
                               {col.items.length}
                             </span>
                           </div>
                           {col.hint && (
-                            <p className="hidden text-[10px] text-zinc-400 mt-0.5 leading-tight 2xl:block">{col.hint}</p>
+                            <p className="mt-0.5 hidden text-[9px] leading-tight text-zinc-400 dark:text-zinc-400 xl:block">{col.hint}</p>
                           )}
                         </div>
-                        <div className="min-h-0 flex-1 space-y-1 p-1 sm:space-y-1 sm:p-1.5 lg:overflow-y-auto lg:overscroll-y-contain 2xl:space-y-2 2xl:p-2">
+                        <div className="min-h-0 flex-1 space-y-1.5 p-1 lg:overflow-y-auto lg:overscroll-y-contain lg:space-y-1.5 lg:p-1.5">
                           {col.items.length === 0 ? (
-                            <div className={`mx-0.5 rounded-lg border border-dashed py-2.5 px-2 text-center text-[10px] leading-snug 2xl:mx-1 2xl:rounded-2xl 2xl:py-5 2xl:px-3 2xl:text-[11px] ${tone.empty}`}>
+                            <div className={`mx-0.5 rounded-lg border border-dashed px-2 py-6 text-center text-[10px] leading-snug ${tone.empty}`}>
                               Sem pedidos nesta etapa
                             </div>
                           ) : (
@@ -874,6 +917,7 @@ export default function CentralPedidosScreen({
             </div>
           </>
         )}
+        </div>
       </div>
 
       <AnimatePresence>
@@ -912,7 +956,7 @@ function OrderCard({
   onOpenDetail: () => void;
   onActionDone: () => void;
 }) {
-  const badge = channelBadgeMeta(order);
+  const badge = boardChannelBadgeMeta(order);
   const paymentBadge = getPaymentBadgeMeta(order);
   const elapsed = getElapsedMeta(order.created_at);
   const mesaReference = getMesaReference(order);
@@ -928,17 +972,18 @@ function OrderCard({
   const statusRaw = String(order.status || '').trim() || '—';
   const compactStatusLabel = getBoardStatusLabel(statusRaw, columnId, 'compact');
   const detailedStatusLabel = getBoardStatusLabel(statusRaw, columnId, 'detailed');
+  const statusChipTone = getCentralStatusChipTone(columnId, statusRaw);
+  const statusTitleHint =
+    columnId === 'a_confirmar' || (columnId === 'outros' && statusRaw && statusRaw !== '—')
+      ? `${detailedStatusLabel} · Status: ${statusRaw}`
+      : detailedStatusLabel;
+  const showOutrosExceptionHint =
+    !compactMode && columnId === 'outros' && !isRevisionStatusNormalized(statusRaw);
   const paymentPendingLabel = Number(order.payment_total_paid || 0) > 0
     ? 'Pagamento parcial'
     : String(order.pagamento_tipo || '').trim().toLowerCase() === 'pix'
       ? 'Pix pendente'
       : 'Pagamento pendente';
-  const statusTone =
-    columnId === 'a_confirmar'
-      ? 'border-cyan-200 bg-cyan-50/90 text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-100'
-      : columnId === 'outros'
-      ? 'border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100'
-      : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100';
 
   const primary = useMemo(
     () => getCentralPrimaryAction(order, { columnId, segmentFinalStatus, requireMotoboy: hasMotoboyFeature }),
@@ -1006,28 +1051,28 @@ function OrderCard({
   };
 
   return (
-    <Card className={`!shadow-none !rounded-lg sm:!rounded-xl 2xl:!rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+    <Card className={`!shadow-none !rounded-xl transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm ${
       urgent
-        ? 'ring-1 ring-red-200/80 border-red-200 dark:ring-red-500/20 dark:border-red-500/30'
-        : 'hover:border-zinc-300 dark:hover:border-zinc-600'
+        ? 'ring-1 ring-red-200/80 border-red-200 dark:ring-red-400/30 dark:border-red-400/45 dark:hover:border-red-300/60'
+        : 'hover:border-zinc-300 dark:hover:border-zinc-500'
     }`}>
-      <div className={compactMode ? 'p-2 sm:p-2.5' : 'p-2.5 sm:p-3 2xl:p-3.5'}>
+      <div className={compactMode ? 'p-2 sm:p-2.5' : 'p-2.5 sm:p-2.5 lg:p-3'}>
         <button
           type="button"
           onClick={onOpenDetail}
-          className="w-full rounded-lg text-left transition-colors active:bg-zinc-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:active:bg-zinc-800/40 sm:rounded-xl"
+          className="w-full rounded-lg text-left transition-colors hover:bg-zinc-50/70 active:bg-zinc-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:hover:bg-zinc-800/35 dark:active:bg-zinc-800/45 sm:rounded-xl"
         >
           {compactMode ? (
             <>
               {(urgent || paymentPending || withoutMotoboy || hasItemCustomization || hasAutomationBadges) && (
                 <div className="mb-1 flex flex-wrap gap-0.5 sm:mb-1.5 sm:gap-1">
                   {urgent && (
-                    <StatusChip variant="error" size="sm">
+                    <StatusChip size="sm" toneClassName={`border-red-200 bg-red-50 text-red-800 ${DARK_RED_TONE}`}>
                       {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
                     </StatusChip>
                   )}
                   {paymentPending && (
-                    <StatusChip variant="warning" size="sm" emphasis="bold">
+                    <StatusChip size="sm" toneClassName={`border-amber-200 bg-amber-50 text-amber-800 ${DARK_AMBER_TONE}`} emphasis="bold">
                       {paymentPendingLabel}
                     </StatusChip>
                   )}
@@ -1035,7 +1080,7 @@ function OrderCard({
                     <StatusChip
                       size="sm"
                       emphasis="bold"
-                      toneClassName="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200"
+                      toneClassName={`border-orange-200 bg-orange-50 text-orange-700 ${DARK_ORANGE_TONE}`}
                     >
                       Sem motoboy
                     </StatusChip>
@@ -1044,7 +1089,7 @@ function OrderCard({
                     <StatusChip
                       size="sm"
                       icon={ListTree}
-                      toneClassName="border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200"
+                      toneClassName={`border-violet-200 bg-violet-50 text-violet-800 ${DARK_VIOLET_TONE}`}
                     >
                       Itens c/ obs.
                     </StatusChip>
@@ -1098,9 +1143,9 @@ function OrderCard({
                 <StatusChip
                   rounded="lg"
                   size="sm"
-                  toneClassName={statusTone}
+                  toneClassName={statusChipTone}
                   className="min-w-0 inline-flex max-w-full flex-1 overflow-hidden px-1.5 py-0.5 leading-tight sm:px-2"
-                  title={compactStatusLabel}
+                  title={statusTitleHint}
                 >
                   <span className="truncate">{compactStatusLabel}</span>
                 </StatusChip>
@@ -1116,12 +1161,12 @@ function OrderCard({
               {(urgent || paymentPending || withoutMotoboy || hasItemCustomization || hasAutomationBadges) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {urgent && (
-                    <StatusChip variant="error" size="md">
+                    <StatusChip size="md" toneClassName={`border-red-200 bg-red-50 text-red-800 ${DARK_RED_TONE}`}>
                       {ageMinutes >= 45 ? 'Crítico' : 'Urgente'}
                     </StatusChip>
                   )}
                   {paymentPending && (
-                    <StatusChip variant="warning" size="md" emphasis="bold">
+                    <StatusChip size="md" toneClassName={`border-amber-200 bg-amber-50 text-amber-800 ${DARK_AMBER_TONE}`} emphasis="bold">
                       {paymentPendingLabel}
                     </StatusChip>
                   )}
@@ -1129,7 +1174,7 @@ function OrderCard({
                     <StatusChip
                       size="md"
                       emphasis="bold"
-                      toneClassName="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200"
+                      toneClassName={`border-orange-200 bg-orange-50 text-orange-700 ${DARK_ORANGE_TONE}`}
                     >
                       Sem motoboy
                     </StatusChip>
@@ -1138,7 +1183,7 @@ function OrderCard({
                     <StatusChip
                       size="md"
                       icon={ListTree}
-                      toneClassName="border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200"
+                      toneClassName={`border-violet-200 bg-violet-50 text-violet-800 ${DARK_VIOLET_TONE}`}
                     >
                       Itens personalizados
                     </StatusChip>
@@ -1153,7 +1198,7 @@ function OrderCard({
                       <StatusChip
                         size="md"
                         icon={QrCode}
-                        toneClassName="border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/15 dark:text-cyan-200"
+                        toneClassName={`border-zinc-200 bg-zinc-50 text-zinc-700 ${DARK_NEUTRAL_TONE}`}
                       >
                         Mesa {mesaReference}
                       </StatusChip>
@@ -1162,7 +1207,7 @@ function OrderCard({
                   <p className="text-[13px] font-black text-zinc-900 dark:text-zinc-100 truncate leading-tight tracking-tight">
                     {getOrderNumberLine(order)}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500 mt-1">Cliente</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-400 mt-1">Cliente</p>
                   <p className="text-sm mt-0.5 font-semibold text-zinc-700 dark:text-zinc-200 truncate">
                     {getClienteLine(order)}
                   </p>
@@ -1178,7 +1223,7 @@ function OrderCard({
                     <Clock size={10} className="shrink-0" strokeWidth={2.25} />
                     {elapsed.label}
                   </StatusChip>
-                  <ChevronRight size={16} className="shrink-0 text-zinc-300 dark:text-zinc-600 mt-1" />
+                  <ChevronRight size={16} className="mt-1 shrink-0 text-zinc-300 dark:text-zinc-500" />
                 </div>
               </div>
 
@@ -1186,12 +1231,17 @@ function OrderCard({
                 <StatusChip
                   rounded="xl"
                   size="sm"
-                  toneClassName={statusTone}
-                  className="inline-flex w-full max-w-full px-2.5 py-1 leading-tight"
-                  title={detailedStatusLabel}
+                  toneClassName={statusChipTone}
+                  className="inline-flex w-full max-w-full px-2.5 py-1 leading-snug font-semibold"
+                  title={statusTitleHint}
                 >
-                  <span className="truncate">{detailedStatusLabel}</span>
+                  <span className="line-clamp-2 break-words text-left">{detailedStatusLabel}</span>
                 </StatusChip>
+                {showOutrosExceptionHint && (
+                  <p className="mt-1.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                    Fora do fluxo automático — abra o pedido para tratar manualmente.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1205,7 +1255,7 @@ function OrderCard({
                 )}
               </div>
 
-              <div className={`mt-3 px-3 py-2.5 ${adminOpsInsetPanelClass}`}>
+              <div className={`mt-2.5 px-2.5 py-2 ${adminOpsInsetPanelClass}`}>
                 <div className="flex items-end justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-[0.18em]">Total</p>
@@ -1217,8 +1267,8 @@ function OrderCard({
               </div>
 
               <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-500">Detalhes</span>
-                <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">Abrir pedido</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-400">Detalhes</span>
+                <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-300">Abrir pedido</span>
               </div>
             </>
           )}
@@ -1226,7 +1276,7 @@ function OrderCard({
 
         {(canConfirmPayment || canPrintCupom || canPrintProducao || canPrintProof || canCentralOpenMaps(order) || canCentralNotifyCustomer(order) || primary) && (
           <div
-            className={`${compactMode ? 'mt-1.5 pt-1.5 space-y-1' : 'mt-3 pt-3 space-y-2'} border-t border-zinc-100 dark:border-zinc-800`}
+            className={`${compactMode ? 'mt-1.5 pt-1.5 space-y-1' : 'mt-2.5 pt-2.5 space-y-1.5'} border-t border-zinc-100 dark:border-zinc-800`}
             onClick={(e) => e.stopPropagation()}
           >
             {compactMode && !needsMotoboy ? (
@@ -1240,7 +1290,7 @@ function OrderCard({
                         aria-label="Confirmar pagamento"
                         onClick={() => void handleQuickPayment()}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200"
+                        className={`min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 ${DARK_EMERALD_BUTTON_TONE}`}
                       >
                         <BadgeCheck size={14} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
                       </button>
@@ -1252,7 +1302,7 @@ function OrderCard({
                         aria-label="Imprimir cupom"
                         onClick={() => void handleQuickPrint('cupom')}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                        className={`min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 ${DARK_NEUTRAL_BUTTON_TONE}`}
                       >
                         <Printer size={14} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
                       </button>
@@ -1264,7 +1314,7 @@ function OrderCard({
                         aria-label="Imprimir produção"
                         onClick={() => void handleQuickPrint('producao')}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100"
+                        className={`min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 ${DARK_AMBER_BUTTON_TONE}`}
                       >
                         <ChefHat size={14} className={busyQuickAction === 'producao' ? 'animate-pulse' : ''} />
                       </button>
@@ -1276,7 +1326,7 @@ function OrderCard({
                         aria-label="Imprimir comprovante"
                         onClick={() => void handleQuickPrint('comprovante')}
                         disabled={busyQuickAction !== null}
-                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                        className={`min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 ${DARK_NEUTRAL_BUTTON_TONE}`}
                       >
                         <ReceiptText size={14} className={busyQuickAction === 'comprovante' ? 'animate-pulse' : ''} />
                       </button>
@@ -1287,7 +1337,7 @@ function OrderCard({
                         title="Ver mapa"
                         aria-label="Ver mapa"
                         onClick={() => openExternalUrl(mapsUrl)}
-                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200"
+                        className={`min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 ${DARK_BLUE_BUTTON_TONE}`}
                       >
                         <MapPinned size={14} />
                       </button>
@@ -1298,7 +1348,7 @@ function OrderCard({
                         title="Avisar cliente"
                         aria-label="Avisar cliente"
                         onClick={() => openExternalUrl(notifyUrl)}
-                        className="min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200"
+                        className={`min-h-[40px] min-w-[40px] lg:min-h-[30px] lg:min-w-[30px] inline-flex items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 ${DARK_GREEN_BUTTON_TONE}`}
                       >
                         <MessageCircle size={14} />
                       </button>
@@ -1329,7 +1379,7 @@ function OrderCard({
                     aria-label="Confirmar pagamento"
                     onClick={() => void handleQuickPayment()}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] px-3 gap-2 lg:min-h-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] px-3 gap-2 lg:min-h-[36px]'} inline-flex items-center justify-center rounded-xl border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 disabled:opacity-50 ${DARK_EMERALD_BUTTON_TONE}`}
                   >
                     <BadgeCheck size={15} className={busyQuickAction === 'payment' ? 'animate-pulse' : ''} />
                     {!compactMode && (
@@ -1344,7 +1394,7 @@ function OrderCard({
                     aria-label="Imprimir cupom"
                     onClick={() => void handleQuickPrint('cupom')}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 ${DARK_NEUTRAL_BUTTON_TONE}`}
                   >
                     <Printer size={15} className={busyQuickAction === 'cupom' ? 'animate-pulse' : ''} />
                   </button>
@@ -1356,7 +1406,7 @@ function OrderCard({
                     aria-label="Imprimir produção"
                     onClick={() => void handleQuickPrint('producao')}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-900 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50 ${DARK_AMBER_BUTTON_TONE}`}
                   >
                     <ChefHat size={15} className={busyQuickAction === 'producao' ? 'animate-pulse' : ''} />
                   </button>
@@ -1368,7 +1418,7 @@ function OrderCard({
                     aria-label="Imprimir comprovante"
                     onClick={() => void handleQuickPrint('comprovante')}
                     disabled={busyQuickAction !== null}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 disabled:opacity-50 ${DARK_NEUTRAL_BUTTON_TONE}`}
                   >
                     <ReceiptText size={15} className={busyQuickAction === 'comprovante' ? 'animate-pulse' : ''} />
                   </button>
@@ -1379,7 +1429,7 @@ function OrderCard({
                     title="Ver mapa"
                     aria-label="Ver mapa"
                     onClick={() => openExternalUrl(mapsUrl)}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 shadow-sm transition-colors hover:bg-blue-100 ${DARK_BLUE_BUTTON_TONE}`}
                   >
                     <MapPinned size={15} />
                   </button>
@@ -1390,7 +1440,7 @@ function OrderCard({
                     title="Avisar cliente"
                     aria-label="Avisar cliente"
                     onClick={() => openExternalUrl(notifyUrl)}
-                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 dark:border-green-500/30 dark:bg-green-500/15 dark:text-green-200`}
+                    className={`${compactMode ? 'min-h-[40px] min-w-[40px] lg:min-h-[32px] lg:min-w-[32px]' : 'min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px]'} inline-flex items-center justify-center rounded-xl border border-green-200 bg-green-50 text-green-700 shadow-sm transition-colors hover:bg-green-100 ${DARK_GREEN_BUTTON_TONE}`}
                   >
                     <MessageCircle size={15} />
                   </button>
@@ -1453,7 +1503,7 @@ function OrderDetailModal({
   onRefresh: () => void;
   onOrderPatch: (patch: Partial<Order>) => void;
 }) {
-  const badge = channelBadgeMeta(order);
+  const badge = boardChannelBadgeMeta(order);
   const pag = getPagamentoLine(order);
   const items = Array.isArray(order.items) ? order.items : [];
   const [busyPayment, setBusyPayment] = useState(false);
@@ -1522,11 +1572,11 @@ function OrderDetailModal({
               <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold ${badge.className}`}>
                 {badge.label}
               </span>
-              <span className="rounded-lg border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+              <span className={`rounded-lg border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700 ${DARK_NEUTRAL_TONE}`}>
                 {String(order.status || '—')}
               </span>
               {orderHasAnyItemCustomization(order) && (
-                <span className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
+                <span className={`inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-800 ${DARK_VIOLET_TONE}`}>
                   <ListTree size={12} />
                   Itens personalizados
                 </span>
@@ -1588,7 +1638,7 @@ function OrderDetailModal({
                 <Button
                   type="button"
                   variant="secondary"
-                  className="!justify-start !px-3 !text-xs border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                  className={`!justify-start !px-3 !text-xs border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 ${DARK_AMBER_BUTTON_TONE}`}
                   onClick={() => void handlePrint('producao')}
                   disabled={busyPrint !== null}
                 >
@@ -1732,7 +1782,7 @@ function OrderDetailModal({
                 <Button
                   type="button"
                   variant="secondary"
-                  className="!min-h-[46px] !justify-start !px-3 !text-xs border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                  className={`!min-h-[46px] !justify-start !px-3 !text-xs border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100 ${DARK_AMBER_BUTTON_TONE}`}
                   onClick={() => void handlePrint('producao')}
                   disabled={busyPrint !== null}
                 >
