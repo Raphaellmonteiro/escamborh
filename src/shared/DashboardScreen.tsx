@@ -178,7 +178,7 @@ export default function DashboardScreen({
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             label="Receita Operacional"
-            value={fmtShort(receitaOperacional)}
+            value={fmt(receitaOperacional)}
             sub={`${stats?.totalPedidos || 0} pedidos`}
             icon={<DollarSign size={22} />}
             color="emerald"

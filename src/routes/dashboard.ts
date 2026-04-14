@@ -186,7 +186,11 @@ export function createDashboardRouter() {
       const expensesFilter = buildPeriodFilter(req, 'created_at');
       const activeOrdersClause = `${ordersFilter.clause} AND status != 'Cancelado'`;
 
-      const [today, week, monthTotal, filteredTotal, refundedTotal, totalExpenses] = await Promise.all([
+      const pedidosJoinFilter = buildPeriodFilter(req, 'p.created_at');
+      const pedidosItemSalesWhere =
+        `${pedidosJoinFilter.clause.replace(/^WHERE tenant_id=\?/, 'WHERE p.tenant_id=?')} AND p.status != 'Cancelado'`;
+
+      const [today, week, monthTotal, filteredTotal, refundedTotal, totalExpenses, productSalesRows] = await Promise.all([
         q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos WHERE tenant_id=? AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date AND status != 'Cancelado'`, [req.tenantId]),
         q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos WHERE tenant_id=? AND (created_at AT TIME ZONE '${TZ}')::date >= (NOW() AT TIME ZONE '${TZ}')::date - INTERVAL '6 days' AND status != 'Cancelado'`, [req.tenantId]),
         q1(`SELECT COUNT(*) as pedidos, COALESCE(SUM(total_amount),0) as faturamento FROM pedidos WHERE tenant_id=? AND TO_CHAR(created_at AT TIME ZONE '${TZ}','MM')=TO_CHAR(NOW() AT TIME ZONE '${TZ}','MM') AND TO_CHAR(created_at AT TIME ZONE '${TZ}','YYYY')=TO_CHAR(NOW() AT TIME ZONE '${TZ}','YYYY') AND status != 'Cancelado'`, [req.tenantId]),
@@ -200,6 +204,19 @@ export function createDashboardRouter() {
           refundsFilter.params
         ),
         q1(`SELECT COALESCE(SUM(amount),0) as v FROM despesas ${expensesFilter.clause}`, expensesFilter.params),
+        qAll(
+          `SELECT COALESCE(MAX(pr.name), 'Produto') AS name,
+                  SUM(ip.quantity) AS quantity,
+                  COALESCE(SUM(ip.quantity * ip.price_at_time), 0) AS total
+             FROM itens_pedido ip
+             INNER JOIN pedidos p ON p.id = ip.order_id AND p.tenant_id = ip.tenant_id
+             LEFT JOIN produtos pr ON pr.id = ip.product_id AND pr.tenant_id = ip.tenant_id
+             ${pedidosItemSalesWhere}
+             GROUP BY ip.product_id
+             ORDER BY SUM(ip.quantity) DESC
+             LIMIT 12`,
+          pedidosJoinFilter.params
+        ),
       ]);
 
       const totalPedidos = Number(filteredTotal?.pedidos || 0);
@@ -224,7 +241,11 @@ export function createDashboardRouter() {
         totalRefunded,
         netRevenue,
         totalRepassesPagos: 0,
-        productSales: [],
+        productSales: (productSalesRows || []).map((r: any) => ({
+          name: String(r.name || 'Produto'),
+          quantity: Number(r.quantity || 0),
+          total: Number(r.total || 0),
+        })),
       });
     } catch (e: any) {
       sendInternalError(res, 'routes/dashboard', e);
