@@ -196,7 +196,7 @@ const ProductCard = React.memo(function ProductCard({
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
-      className="group relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 text-left shadow-md shadow-black/15 transition-all duration-200 ease-out hover:border-amber-500 hover:shadow-xl hover:shadow-amber-500/10 md:rounded-xl [@media(max-height:640px)]:rounded-md"
+      className="group relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-fp-border bg-fp-card text-left shadow-sm shadow-zinc-950/[0.06] transition-all duration-200 ease-out hover:border-amber-500 hover:shadow-md hover:shadow-amber-500/15 dark:shadow-black/20 dark:hover:shadow-xl dark:hover:shadow-amber-500/10 md:rounded-xl [@media(max-height:640px)]:rounded-md"
     >
       <div className="absolute inset-0 pointer-events-none rounded-lg md:rounded-xl bg-amber-400/25 opacity-0 group-active:opacity-100 transition-opacity duration-75 z-10" aria-hidden />
       <div
@@ -210,7 +210,7 @@ const ProductCard = React.memo(function ProductCard({
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
           />
         ) : (
-          <div className="absolute inset-0 bg-zinc-700/50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-fp-secondary flex items-center justify-center">
             <span className="text-lg min-[480px]:text-xl md:text-2xl opacity-50">{emoji}</span>
           </div>
         )}
@@ -239,14 +239,14 @@ const ProductCard = React.memo(function ProductCard({
         </div>
       </div>
       <div className="p-1.5 min-[480px]:p-2 flex-1 flex flex-col min-w-0 [@media(max-height:640px)]:p-1.5">
-        <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-px min-[480px]:text-[9px] md:text-[10px] md:mb-0.5">{product.category}</p>
-        <h3 className="font-bold text-zinc-100 text-[11px] leading-snug line-clamp-2 mb-0.5 min-[480px]:text-xs xl:text-[13px]">{product.name}</h3>
+        <p className="text-[8px] font-bold text-fptext-muted uppercase tracking-wider mb-px min-[480px]:text-[9px] md:text-[10px] md:mb-0.5">{product.category}</p>
+        <h3 className="font-bold text-fptext-primary text-[11px] leading-snug line-clamp-2 mb-0.5 min-[480px]:text-xs xl:text-[13px]">{product.name}</h3>
         {(product as any).codigo_barras && (
-          <span className="text-[8px] text-zinc-500 flex items-center gap-0.5 mb-0.5 min-[480px]:text-[9px] md:text-[10px]">
+          <span className="text-[8px] text-fptext-muted flex items-center gap-0.5 mb-0.5 min-[480px]:text-[9px] md:text-[10px]">
             <Barcode size={8} className="shrink-0" />{(product as any).codigo_barras}
           </span>
         )}
-        <p className="text-xs font-black text-amber-400 mt-auto tabular-nums min-[480px]:text-[13px] md:text-sm">R$ {product.price.toFixed(2)}</p>
+        <p className="text-xs font-black text-amber-600 mt-auto tabular-nums min-[480px]:text-[13px] md:text-sm dark:text-amber-400">R$ {product.price.toFixed(2)}</p>
       </div>
     </motion.button>
   );
@@ -760,13 +760,13 @@ export default function POSScreen({
   const renderCartColumn = (variant: 'desktop' | 'drawer') => (
     <>
       {variant === 'desktop' && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:py-1.5 [@media(max-height:640px)]:px-2">
-          <ShoppingCart size={18} className="text-amber-400 shrink-0 [@media(max-height:640px)]:scale-90" />
-          <h2 className="text-sm font-black text-zinc-100 md:text-base truncate">Pedido Atual</h2>
+        <div className="flex shrink-0 items-center gap-2 border-b border-fp-border bg-fp-card px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:py-1.5 [@media(max-height:640px)]:px-2">
+          <ShoppingCart size={18} className="text-amber-500 shrink-0 dark:text-amber-400 [@media(max-height:640px)]:scale-90" />
+          <h2 className="text-sm font-black text-fptext-primary md:text-base truncate">Pedido Atual</h2>
           {cart.length > 0 && (
             <button
               onClick={() => setConfirmLimpar(true)}
-                className="ml-auto text-[10px] font-bold text-zinc-400 hover:text-red-400 transition-colors px-2 py-1 hover:bg-red-500/10 rounded-lg min-h-[40px] min-w-[40px] lg:min-h-[36px] lg:min-w-[36px] flex items-center justify-center"
+                className="ml-auto text-[10px] font-bold text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors px-2 py-1 hover:bg-red-500/10 rounded-lg min-h-[40px] min-w-[40px] lg:min-h-[36px] lg:min-w-[36px] flex items-center justify-center"
               title="Limpar carrinho"
             >
               <Trash2 size={13} />
@@ -775,32 +775,32 @@ export default function POSScreen({
         </div>
       )}
 
-      <div className="shrink-0 border-b border-zinc-800/80 bg-zinc-950 px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-2.5 xl:px-4 xl:pt-3 [@media(max-height:640px)]:py-1.5 [@media(max-height:640px)]:px-2">
+      <div className="shrink-0 border-b border-fp-border bg-fp-card px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-2.5 xl:px-4 xl:pt-3 [@media(max-height:640px)]:py-1.5 [@media(max-height:640px)]:px-2">
         {!posCliente ? (
           <button
             type="button"
             onClick={() => setShowClienteModal(true)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 text-amber-400 text-xs font-black uppercase tracking-wide transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-black uppercase tracking-wide transition-colors"
           >
             <UserPlus size={16} /> Adicionar cliente
           </button>
         ) : (
-          <div className="flex items-start gap-2 rounded-xl bg-zinc-800/80 border border-zinc-700 px-3 py-2.5">
+          <div className="flex items-start gap-2 rounded-xl bg-fp-secondary border border-fp-border px-3 py-2.5">
             <div className="flex-1 min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">Cliente</p>
-              <p className="text-sm font-bold text-zinc-100 truncate">{posCliente.nome || 'Cliente'}</p>
-              <p className="text-xs text-zinc-400 tabular-nums">{posCliente.telefone}</p>
+              <p className="text-[9px] font-bold uppercase tracking-wider text-fptext-muted">Cliente</p>
+              <p className="text-sm font-bold text-fptext-primary truncate">{posCliente.nome || 'Cliente'}</p>
+              <p className="text-xs text-fptext-secondary tabular-nums">{posCliente.telefone}</p>
               {posCliente.metricas && (
-                <p className="text-[10px] text-zinc-500 mt-1 leading-snug">
-                  <span className="font-semibold text-zinc-400">{posCliente.metricas.total_pedidos}</span> pedidos
-                  <span className="text-zinc-600 mx-1">·</span>
+                <p className="text-[10px] text-fptext-muted mt-1 leading-snug">
+                  <span className="font-semibold text-fptext-secondary">{posCliente.metricas.total_pedidos}</span> pedidos
+                  <span className="text-fptext-muted mx-1">·</span>
                   <span className="tabular-nums">
                     {posCliente.metricas.total_gasto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                   {posCliente.fidelizacao?.label ? (
                     <>
-                      <span className="text-zinc-600 mx-1">·</span>
-                      <span className="text-amber-500/90 font-semibold">{posCliente.fidelizacao.label}</span>
+                      <span className="text-fptext-muted mx-1">·</span>
+                      <span className="text-amber-700 dark:text-amber-500/90 font-semibold">{posCliente.fidelizacao.label}</span>
                     </>
                   ) : null}
                 </p>
@@ -809,7 +809,7 @@ export default function POSScreen({
             <button
               type="button"
               onClick={() => setShowClienteModal(true)}
-              className="shrink-0 text-[10px] font-black uppercase text-amber-400 hover:text-amber-300 px-2 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-600"
+              className="shrink-0 text-[10px] font-black uppercase text-amber-800 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 px-2 py-1.5 rounded-lg bg-fp-hover border border-fp-border"
             >
               Trocar
             </button>
@@ -817,40 +817,40 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-zinc-950 px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:py-1.5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-fp-secondary px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:py-1.5">
         {cart.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-8 px-4">
-            <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center mb-3">
-              <ShoppingCart size={28} className="text-zinc-500" />
+            <div className="w-14 h-14 rounded-2xl bg-fp-card border border-fp-border flex items-center justify-center mb-3">
+              <ShoppingCart size={28} className="text-fptext-muted" />
             </div>
-            <p className="font-bold text-zinc-300 text-sm">Carrinho vazio</p>
-            <p className="text-xs text-zinc-500 mt-1">Toque nos produtos para adicionar ao pedido</p>
+            <p className="font-bold text-fptext-primary text-sm">Carrinho vazio</p>
+            <p className="text-xs text-fptext-muted mt-1">Toque nos produtos para adicionar ao pedido</p>
           </div>
         ) : (
           <div className="space-y-2">
             {cart.map((item, index) => (
               <motion.div key={index} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
                 onClick={() => setSelectedCartIndex(index)}
-                className={`flex items-center gap-2 bg-zinc-800 rounded-lg border p-2 transition-all cursor-pointer ${
+                className={`flex items-center gap-2 bg-fp-card rounded-lg border p-2 transition-all cursor-pointer ${
                   selectedCartIndex === index
-                    ? 'border-amber-400 ring-1 ring-amber-400/30'
-                    : 'border-zinc-700 hover:border-zinc-600'
+                    ? 'border-amber-500 ring-1 ring-amber-400/40 dark:border-amber-400 dark:ring-amber-400/30'
+                    : 'border-fp-border hover:border-zinc-400 dark:hover:border-zinc-600'
                 }`}>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-zinc-100 text-xs leading-snug line-clamp-2">{item.product_name}</p>
+                  <p className="font-bold text-fptext-primary text-xs leading-snug line-clamp-2">{item.product_name}</p>
                   {(item as any).observation ? (
-                    <p className="text-[9px] text-zinc-500 line-clamp-2 mt-0.5">{(item as any).observation}</p>
+                    <p className="text-[9px] text-fptext-muted line-clamp-2 mt-0.5">{(item as any).observation}</p>
                   ) : null}
                   {selectedCartIndex === index && (
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mt-0.5">Selecionado</p>
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mt-0.5">Selecionado</p>
                   )}
-                  <p className="text-amber-400 font-black text-xs mt-0.5">R$ {(item.price_at_time * item.quantity).toFixed(2)}</p>
+                  <p className="text-amber-600 dark:text-amber-400 font-black text-xs mt-0.5">R$ {(item.price_at_time * item.quantity).toFixed(2)}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Minus size={11} /></button>
-                  <span className="w-8 lg:w-6 text-center font-black text-xs text-zinc-100">{item.quantity}</span>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-all text-zinc-200"><Plus size={11} /></button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center text-zinc-500 hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-fp-hover hover:bg-fp-active border border-fp-border rounded-lg transition-all text-fptext-primary"><Minus size={11} /></button>
+                  <span className="w-8 lg:w-6 text-center font-black text-xs text-fptext-primary">{item.quantity}</span>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-fp-hover hover:bg-fp-active border border-fp-border rounded-lg transition-all text-fptext-primary"><Plus size={11} /></button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
                 </div>
               </motion.div>
             ))}
@@ -858,16 +858,16 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="shrink-0 space-y-2.5 border-t border-zinc-800 bg-zinc-950 px-2.5 pb-2.5 pt-2.5 md:space-y-3 md:px-3 md:pb-3 md:pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4 [@media(max-height:700px)]:space-y-2 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
-        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Pagamentos Adicionados</p>
+      <div className="shrink-0 space-y-2.5 border-t border-fp-border bg-fp-card px-2.5 pb-2.5 pt-2.5 md:space-y-3 md:px-3 md:pb-3 md:pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4 [@media(max-height:700px)]:space-y-2 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
+        <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Pagamentos Adicionados</p>
         {payments.length > 0 && (
           <div className="space-y-1.5">
             {payments.map((p, i) => (
-              <div key={i} className="flex justify-between items-center bg-zinc-800 px-2.5 py-2 rounded-lg border border-zinc-700 text-xs">
-                <span className="font-bold text-zinc-400">{p.method}</span>
+              <div key={i} className="flex justify-between items-center bg-fp-secondary px-2.5 py-2 rounded-lg border border-fp-border text-xs">
+                <span className="font-bold text-fptext-secondary">{p.method}</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-black text-zinc-100">R$ {p.amount_paid.toFixed(2)}</span>
-                  <button type="button" onClick={() => removePayment(i)} className="text-zinc-500 hover:text-red-400 transition-colors p-1 min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center"><Trash2 size={11} /></button>
+                  <span className="font-black text-fptext-primary">R$ {p.amount_paid.toFixed(2)}</span>
+                  <button type="button" onClick={() => removePayment(i)} className="text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center"><Trash2 size={11} /></button>
                 </div>
               </div>
             ))}
@@ -878,12 +878,12 @@ export default function POSScreen({
             <button key={m} type="button" onClick={() => setCurrentPaymentMethod(m)}
               className={`py-2 lg:py-1.5 rounded-lg text-[10px] font-bold border transition-all min-h-[40px] lg:min-h-0 ${
                 currentPaymentMethod === m
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-800 dark:text-amber-400'
+                  : 'bg-fp-secondary border-fp-border text-fptext-muted hover:border-zinc-400 hover:text-fptext-primary dark:hover:border-zinc-600 dark:hover:text-zinc-300'
               }`}>
               <span>{m}</span>
               {getTaxa(m) > 0 && (
-                <span className={`block text-[9px] font-bold mt-0.5 ${currentPaymentMethod === m ? 'text-amber-400/80' : 'text-amber-500'}`}>
+                <span className={`block text-[9px] font-bold mt-0.5 ${currentPaymentMethod === m ? 'text-amber-700/90 dark:text-amber-400/80' : 'text-amber-600 dark:text-amber-500'}`}>
                   +{getTaxa(m)}%
                 </span>
               )}
@@ -895,47 +895,47 @@ export default function POSScreen({
             type="number" placeholder="Valor"
             value={currentAmount || ''}
             onChange={e => setCurrentAmount(parseFloat(e.target.value) || 0)}
-            className="flex-1 min-h-[44px] px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-base md:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 transition-all"
+            className="flex-1 min-h-[44px] px-3 py-2 bg-fp-input border border-fp-border rounded-lg text-base md:text-sm text-fptext-primary placeholder:text-fptext-muted focus:outline-none focus:border-amber-500/50 transition-all"
           />
           <button type="button" onClick={addPayment} disabled={currentAmount <= 0}
-            className="px-4 py-2 min-h-[44px] bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-400 font-bold rounded-lg text-sm disabled:opacity-30 transition-all">
+            className="px-4 py-2 min-h-[44px] bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-800 dark:text-amber-400 font-bold rounded-lg text-sm disabled:opacity-30 transition-all">
             Adicionar
           </button>
         </div>
         {remaining > 0 && (
           <button type="button" onClick={() => setCurrentAmount(remaining)}
-            className="w-full py-2 md:py-1.5 text-[10px] font-bold text-zinc-500 hover:text-zinc-300 border border-dashed border-zinc-700 hover:border-zinc-600 rounded-lg transition-all">
+            className="w-full py-2 md:py-1.5 text-[10px] font-bold text-fptext-muted hover:text-fptext-primary border border-dashed border-fp-border hover:border-zinc-400 dark:hover:border-zinc-600 rounded-lg transition-all">
             Preencher valor exato — R$ {remaining.toFixed(2)}
           </button>
         )}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">Restante</p>
-            <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${remaining > 0 ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>
+            <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Restante</p>
+            <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${remaining > 0 ? 'bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400' : 'bg-fp-secondary text-fptext-muted border-fp-border'}`}>
               R$ {Math.max(0, remaining).toFixed(2)}
             </div>
           </div>
           <div>
-            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">Troco</p>
-            <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${change > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>
+            <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Troco</p>
+            <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${change > 0 ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400' : 'bg-fp-secondary text-fptext-muted border-fp-border'}`}>
               R$ {change.toFixed(2)}
             </div>
           </div>
         </div>
         <div>
-          <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">Observações</p>
+          <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Observações</p>
           <input
             placeholder="Ex: Sem feijão, mais carne..."
             value={observation}
             onChange={(e: any) => setObservation(e.target.value)}
-            className="w-full min-h-[44px] px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-base md:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 transition-all"
+            className="w-full min-h-[44px] px-3 py-2 bg-fp-input border border-fp-border rounded-lg text-base md:text-sm text-fptext-primary placeholder:text-fptext-muted focus:outline-none focus:border-amber-500/50 transition-all"
           />
         </div>
         <div className="pt-2 space-y-2 md:pt-3 md:space-y-3 [@media(max-height:700px)]:pt-1.5 [@media(max-height:700px)]:space-y-2">
-          <div className="bg-zinc-800 rounded-lg md:rounded-xl border-2 border-zinc-600 ring-2 ring-amber-400/25 p-3 space-y-1.5 md:p-4 md:space-y-2 [@media(max-height:700px)]:p-2.5">
+          <div className="bg-fp-secondary rounded-lg md:rounded-xl border-2 border-fp-border ring-2 ring-amber-400/20 dark:border-zinc-600 dark:ring-amber-400/25 p-3 space-y-1.5 md:p-4 md:space-y-2 [@media(max-height:700px)]:p-2.5">
             <div className="flex justify-between items-center gap-2 min-w-0">
-              <span className="text-zinc-400 font-medium text-[10px] md:text-xs truncate">Subtotal</span>
-              <span className="text-xs font-black text-zinc-200 tabular-nums shrink-0 md:text-sm">R$ {total.toFixed(2)}</span>
+              <span className="text-fptext-muted font-medium text-[10px] md:text-xs truncate">Subtotal</span>
+              <span className="text-xs font-black text-fptext-primary tabular-nums shrink-0 md:text-sm">R$ {total.toFixed(2)}</span>
             </div>
             {payments.map((p, i) => {
               const perc = getTaxa(p.method as PaymentMethod);
@@ -953,9 +953,9 @@ export default function POSScreen({
                 <span className="text-[10px] font-bold text-amber-500">+ R$ {taxaPreviewPOS.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between items-center pt-2 mt-1.5 border-t-2 border-zinc-600 gap-2 min-w-0 md:pt-3 md:mt-2">
-              <span className="text-zinc-200 font-bold text-xs md:text-sm truncate">Total do Pedido</span>
-              <span className="text-lg font-black text-amber-400 tabular-nums shrink-0 min-[340px]:text-xl xl:text-2xl">
+            <div className="flex justify-between items-center pt-2 mt-1.5 border-t-2 border-fp-border dark:border-zinc-600 gap-2 min-w-0 md:pt-3 md:mt-2">
+              <span className="text-fptext-primary font-bold text-xs md:text-sm truncate">Total do Pedido</span>
+              <span className="text-lg font-black text-amber-600 tabular-nums shrink-0 min-[340px]:text-xl xl:text-2xl dark:text-amber-400">
                 R$ {totalComTaxas.toFixed(2)}
               </span>
             </div>
@@ -983,7 +983,7 @@ export default function POSScreen({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col overflow-hidden bg-zinc-950 pb-[env(safe-area-inset-bottom)] md:flex-row md:pb-0">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col overflow-hidden bg-fp-app pb-[env(safe-area-inset-bottom)] md:flex-row md:pb-0">
 
       {/* ═══════════════════════════════════════════════════════════════
           PAINEL ESQUERDO — Catálogo
@@ -993,16 +993,16 @@ export default function POSScreen({
         {/* Busca */}
         <div className="shrink-0 px-2.5 pb-1.5 pt-2 md:px-3 md:pb-2 md:pt-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-1 [@media(max-height:640px)]:pt-1.5">
           <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none md:left-4 size-[14px] md:size-[15px]" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fptext-muted pointer-events-none md:left-4 size-[14px] md:size-[15px]" />
             <input
               ref={searchRef} type="text" value={searchTerm}
               onChange={e => { setSearchTerm(e.target.value); setSelectedCategory('Todas'); }}
               placeholder="Buscar por nome, marca... ou bipe o código"
-              className="w-full min-h-[44px] pl-10 pr-9 py-2.5 bg-zinc-800/80 border border-zinc-600 rounded-lg text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 transition-all md:min-h-[42px] md:rounded-xl md:pl-11 md:pr-10 md:py-2.5 md:text-sm max-md:text-base [@media(max-height:640px)]:min-h-[40px] [@media(max-height:640px)]:py-2 [@media(max-height:640px)]:text-sm"
+              className="w-full min-h-[44px] pl-10 pr-9 py-2.5 bg-fp-input border border-fp-border rounded-lg text-sm text-fptext-primary placeholder:text-fptext-muted focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-500 transition-all md:min-h-[42px] md:rounded-xl md:pl-11 md:pr-10 md:py-2.5 md:text-sm max-md:text-base [@media(max-height:640px)]:min-h-[40px] [@media(max-height:640px)]:py-2 [@media(max-height:640px)]:text-sm"
             />
             {searchTerm && (
               <button onClick={() => { setSearchTerm(''); searchRef.current?.focus(); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 md:right-4">
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-fptext-muted hover:text-fptext-primary md:right-4">
                 <X size={14} />
               </button>
             )}
@@ -1011,17 +1011,17 @@ export default function POSScreen({
 
         {topShortcutProducts.length > 0 && (
           <div className="hidden md:block px-2.5 pb-1.5 shrink-0 md:px-3 md:pb-2 [@media(max-height:640px)]:pb-1">
-            <div className="rounded-lg md:rounded-xl border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 md:px-3 md:py-2 [@media(max-height:640px)]:py-1.5">
+            <div className="rounded-lg md:rounded-xl border border-fp-border bg-fp-card px-2.5 py-1.5 md:px-3 md:py-2 [@media(max-height:640px)]:py-1.5">
               <div className="flex items-center justify-between gap-2 min-w-0">
-                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider md:text-[10px] shrink-0">Atalhos</p>
-                <p className="text-[9px] text-zinc-500 truncate min-w-0 md:text-[10px]">Ctrl+F • Ctrl+Enter</p>
+                <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider md:text-[10px] shrink-0">Atalhos</p>
+                <p className="text-[9px] text-fptext-muted truncate min-w-0 md:text-[10px]">Ctrl+F • Ctrl+Enter</p>
               </div>
-              <p className="mt-1 text-[9px] text-zinc-500 [@media(max-height:640px)]:hidden md:text-[10px]">Alt+↑/↓ item • Ctrl+Backspace limpa</p>
+              <p className="mt-1 text-[9px] text-fptext-muted [@media(max-height:640px)]:hidden md:text-[10px]">Alt+↑/↓ item • Ctrl+Backspace limpa</p>
               <div className="mt-1.5 flex flex-wrap gap-1 md:mt-2 md:gap-1.5 [@media(max-height:640px)]:mt-1">
                 {topShortcutProducts.map((product, index) => (
                   <span
                     key={product.id}
-                    className="max-w-[140px] min-[1100px]:max-w-[180px] truncate rounded-md border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium text-zinc-300 md:px-2 md:py-1 md:text-[10px]"
+                    className="max-w-[140px] min-[1100px]:max-w-[180px] truncate rounded-md border border-fp-border bg-fp-secondary px-1.5 py-0.5 text-[9px] font-medium text-fptext-secondary md:px-2 md:py-1 md:text-[10px]"
                     title={product.name}
                   >
                     F{index + 1} {product.name}
@@ -1042,7 +1042,7 @@ export default function POSScreen({
                 className={`px-3 py-2 min-h-[40px] text-xs rounded-md border transition-all duration-200 shrink-0 max-md:min-h-[44px] max-md:px-4 max-md:py-2.5 max-md:text-sm max-md:rounded-lg md:min-h-0 md:px-3 md:py-1.5 md:text-sm md:rounded-lg flex items-center font-bold whitespace-nowrap [@media(max-height:640px)]:min-h-0 [@media(max-height:640px)]:px-2.5 [@media(max-height:640px)]:py-1 [@media(max-height:640px)]:text-xs ${
                   selectedCategory === cat
                     ? 'bg-amber-400 border-amber-400 text-zinc-900 shadow-md shadow-amber-500/20 ring-2 ring-amber-300/50'
-                    : 'bg-zinc-800/70 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
+                    : 'bg-fp-secondary/90 border-fp-border text-fptext-muted hover:border-zinc-400 hover:text-fptext-primary hover:bg-fp-hover dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-200 dark:hover:bg-zinc-800'
                 }`}
               >
                 {cat}
@@ -1054,10 +1054,10 @@ export default function POSScreen({
         {/* Grade de Produtos */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-24 md:px-3 md:pb-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-2">
           {displayProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-zinc-500 md:py-12 [@media(max-height:640px)]:py-6" role="status">
+            <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-fptext-muted md:py-12 [@media(max-height:640px)]:py-6" role="status">
               <ScanLine size={36} className="mb-3 opacity-40" aria-hidden />
-              <p className="text-base font-semibold text-zinc-300">Nenhum produto encontrado</p>
-              {searchTerm && <p className="text-sm mt-1.5 text-zinc-500">Termo: {searchTerm}</p>}
+              <p className="text-base font-semibold text-fptext-primary">Nenhum produto encontrado</p>
+              {searchTerm && <p className="text-sm mt-1.5 text-fptext-muted">Termo: {searchTerm}</p>}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-1.5 min-[480px]:gap-2 md:grid-cols-3 md:gap-2 min-[960px]:grid-cols-4 min-[960px]:gap-2.5 xl:grid-cols-5 xl:gap-3 min-[1440px]:grid-cols-6 min-[1800px]:grid-cols-7 min-[2400px]:grid-cols-8">
@@ -1090,29 +1090,28 @@ export default function POSScreen({
 
       {/* ═══════════════════════════════════════════════════════════════
           PAINEL DIREITO — Pedido + Pagamento (tablet/desktop)
-          Usa bg-zinc-950 para evitar override .flowpdv-dark .bg-zinc-900 → #f0f0f0
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-zinc-800 bg-zinc-950 shadow-[0_0_40px_rgba(0,0,0,0.5)] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] md:flex md:w-[min(236px,27vw)] md:flex-col md:min-w-[220px] lg:w-[min(252px,23vw)] xl:w-[min(288px,20vw)] 2xl:w-[min(336px,16vw)] min-[2200px]:w-[min(380px,14vw)]">
+      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-fp-border bg-fp-card shadow-sm shadow-zinc-950/[0.06] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] dark:shadow-[0_0_40px_rgba(0,0,0,0.45)] md:flex md:w-[min(236px,27vw)] md:flex-col md:min-w-[220px] lg:w-[min(252px,23vw)] xl:w-[min(288px,20vw)] 2xl:w-[min(336px,16vw)] min-[2200px]:w-[min(380px,14vw)]">
         {renderCartColumn('desktop')}
       </div>
 
       {/* Mobile: CTA fixo + sheet do pedido (max-md) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-fp-border bg-fp-card/95 backdrop-blur-sm pb-[max(0.35rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => setMobileCartOpen(true)}
-          className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[56px] text-left active:bg-zinc-900/80"
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[56px] text-left active:bg-fp-hover"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <ShoppingCart size={20} className="text-amber-400 shrink-0" />
+            <ShoppingCart size={20} className="text-amber-600 dark:text-amber-400 shrink-0" />
             <div className="min-w-0">
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Pedido atual</p>
-              <p className="text-sm font-black text-zinc-100 truncate">{cart.length === 0 ? 'Vazio' : `${cart.length} item(ns)`}</p>
+              <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Pedido atual</p>
+              <p className="text-sm font-black text-fptext-primary truncate">{cart.length === 0 ? 'Vazio' : `${cart.length} item(ns)`}</p>
             </div>
           </div>
           <div className="text-right shrink-0">
-            <p className="text-[10px] text-zinc-500">Total</p>
-            <p className="text-lg font-black text-amber-400 tabular-nums">R$ {totalComTaxas.toFixed(2)}</p>
+            <p className="text-[10px] text-fptext-muted">Total</p>
+            <p className="text-lg font-black text-amber-600 tabular-nums dark:text-amber-400">R$ {totalComTaxas.toFixed(2)}</p>
           </div>
           <span className="text-xs font-black text-amber-500 shrink-0">Abrir →</span>
         </button>
@@ -1126,22 +1125,22 @@ export default function POSScreen({
             className="absolute inset-0 bg-black/60"
             onClick={() => setMobileCartOpen(false)}
           />
-          <div className="relative mx-0 flex max-h-[min(92dvh,100%)] flex-col overflow-hidden rounded-t-2xl border border-b-0 border-zinc-800 bg-zinc-950 pb-[env(safe-area-inset-bottom)] shadow-2xl">
-            <div className="flex items-center justify-between px-3 py-3 border-b border-zinc-800 shrink-0">
+          <div className="relative mx-0 flex max-h-[min(92dvh,100%)] flex-col overflow-hidden rounded-t-2xl border border-b-0 border-fp-border bg-fp-card pb-[env(safe-area-inset-bottom)] shadow-2xl">
+            <div className="flex items-center justify-between px-3 py-3 border-b border-fp-border shrink-0">
               <button
                 type="button"
                 onClick={() => setMobileCartOpen(false)}
-                className="p-2 rounded-xl text-zinc-300 min-h-[44px] min-w-[44px] flex items-center justify-center active:bg-zinc-800"
+                className="p-2 rounded-xl text-fptext-secondary min-h-[44px] min-w-[44px] flex items-center justify-center active:bg-fp-hover"
                 aria-label="Fechar pedido"
               >
                 <X size={22} />
               </button>
-              <h2 className="text-base font-black text-zinc-100">Pedido e pagamento</h2>
+              <h2 className="text-base font-black text-fptext-primary">Pedido e pagamento</h2>
               {cart.length > 0 ? (
                 <button
                   type="button"
                   onClick={() => setConfirmLimpar(true)}
-                  className="text-[10px] font-bold text-zinc-400 hover:text-red-400 px-2 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  className="text-[10px] font-bold text-fptext-muted hover:text-red-500 dark:hover:text-red-400 px-2 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
                   title="Limpar carrinho"
                 >
                   <Trash2 size={16} />
@@ -1172,11 +1171,11 @@ export default function POSScreen({
                     />
                   </div>
                 )}
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{pendingProduct.category}</p>
+                <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-widest mb-1">{pendingProduct.category}</p>
                 <h3 className="text-2xl font-black text-fptext-primary">{pendingSelection?.product_name || pendingProduct.name}</h3>
                 <p className="text-xl font-black text-amber-500 mt-1">R$ {Number(pendingSelection?.price_at_time ?? pendingProduct.price).toFixed(2)}</p>
               </div>
-              <p className="text-center text-sm text-zinc-500 mb-6 font-medium">Como será este item?</p>
+              <p className="text-center text-sm text-fptext-muted mb-6 font-medium">Como será este item?</p>
               <div className={`grid gap-4 ${cfg.tiposItem.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {cfg.tiposItem.map(tipo => {
                   const paleta: Record<string, string> = { blue:'bg-blue-50 hover:bg-blue-100 border-blue-200 hover:border-blue-400 text-blue-700', amber:'bg-amber-50 hover:bg-amber-100 border-amber-200 hover:border-amber-400 text-amber-700', green:'bg-green-50 hover:bg-green-100 border-green-200 hover:border-green-400 text-green-700', purple:'bg-purple-50 hover:bg-purple-100 border-purple-200 hover:border-purple-400 text-purple-700' };
@@ -1188,7 +1187,7 @@ export default function POSScreen({
                   );
                 })}
               </div>
-              <button onClick={() => { setPendingProduct(null); setPendingSelection(null); }} className="w-full mt-4 py-2 text-zinc-400 hover:text-zinc-600 text-sm font-medium transition-colors">Cancelar</button>
+              <button onClick={() => { setPendingProduct(null); setPendingSelection(null); }} className="w-full mt-4 py-2 text-fptext-muted hover:text-fptext-primary text-sm font-medium transition-colors">Cancelar</button>
             </motion.div>
           </div>
         )}
@@ -1265,15 +1264,15 @@ export default function POSScreen({
                 <CheckCircle2 size={28} />
               </div>
               <h3 className="text-lg font-black text-fptext-primary">Venda Finalizada!</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">#{showSuccess.number}</p>
+              <p className="text-xs text-fptext-muted mt-0.5">#{showSuccess.number}</p>
 
               {/* Senha */}
               {showSuccess.senha > 0 && (
-                <div className="mt-3 mx-auto inline-flex flex-col items-center gap-0.5 px-5 py-2.5 rounded-xl bg-zinc-900">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+                <div className="mt-3 mx-auto inline-flex flex-col items-center gap-0.5 px-5 py-2.5 rounded-xl bg-fp-secondary border border-fp-border dark:bg-zinc-900 dark:border-transparent">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-fptext-muted">
                     {showSuccess.tipo === 'levar' ? '🛍️ Para Levar' : '🪑 Local'} — Senha
                   </span>
-                  <span className="text-4xl font-black tabular-nums text-white leading-none">
+                  <span className="text-4xl font-black tabular-nums text-fptext-primary leading-none dark:text-white">
                     {String(showSuccess.senha).padStart(2, '0')}
                   </span>
                 </div>
@@ -1358,7 +1357,7 @@ export default function POSScreen({
                 <Trash2 size={22} className="text-red-600 dark:text-red-300" />
               </div>
               <h3 className="mb-1 text-base font-black text-fptext-primary">Limpar carrinho?</h3>
-              <p className="text-xs text-zinc-400 mb-5">
+              <p className="text-xs text-fptext-muted mb-5">
                 {cart.length} item{cart.length !== 1 ? 's' : ''} será{cart.length !== 1 ? 'ão' : ''} removido{cart.length !== 1 ? 's' : ''}.
                 Esta ação não pode ser desfeita.
               </p>
