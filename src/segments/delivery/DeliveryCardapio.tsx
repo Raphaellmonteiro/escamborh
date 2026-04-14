@@ -603,6 +603,32 @@ function observacaoComModoConsumo(m: ModoRecebimentoPedido, obs: string): string
   return t ? `Consumo no local. ${t}` : 'Consumo no local.';
 }
 
+const MAX_CHECKOUT_NOME_RECEBE_LEN = 80;
+const MAX_CHECKOUT_OBS_ENTREGA_LEN = 200;
+
+/** Bloco operacional da entrega (vai para `observation` do pedido; mesma tag de contato que o backend já usava no merge). */
+function buildDeliveryCheckoutObservationBlock(parts: {
+  nomeQuemRecebe: string;
+  contatoDigits: string | null;
+  obsEntrega: string;
+}): string {
+  const lines: string[] = [];
+  const nome = parts.nomeQuemRecebe.trim().slice(0, MAX_CHECKOUT_NOME_RECEBE_LEN);
+  if (nome) lines.push(`Quem recebe: ${nome}`);
+  if (parts.contatoDigits) lines.push(`[Contato no local] ${parts.contatoDigits}`);
+  const ent = parts.obsEntrega.trim().slice(0, MAX_CHECKOUT_OBS_ENTREGA_LEN);
+  if (ent) lines.push(`Entrega: ${ent}`);
+  return lines.join('\n');
+}
+
+function mergeDeliveryObservationWithBase(block: string, base: string): string {
+  const b = base.trim();
+  const bl = block.trim();
+  if (!bl) return b;
+  if (!b) return bl;
+  return `${bl}\n${b}`;
+}
+
 function labelModoRecebimento(m: ModoRecebimentoPedido): string {
   if (m === 'entrega') return 'Receber no endereço';
   if (m === 'retirada') return 'Retirar no estabelecimento';
@@ -4322,8 +4348,13 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const [pag, setPag] = useState('pix');
   const [pixCheckoutCopiado, setPixCheckoutCopiado] = useState(false);
   const [obs, setObs] = useState('');
-  /** Opcional: quem recebe/atende difere da conta logada (enviado como `contato_recebimento_tel`). */
+  /** Opcional: quem recebe no endereço (só entrega; vai para observation). */
+  const [nomeQuemRecebe, setNomeQuemRecebe] = useState('');
+  /** Opcional: contato no local (só entrega; consolidado em observation, sem `contato_recebimento_tel` para evitar duplicar merge no servidor). */
   const [contatoRecebimento, setContatoRecebimento] = useState('');
+  /** Observação curta só da entrega (portaria, campainha, etc.). */
+  const [obsEntrega, setObsEntrega] = useState('');
+  const enderecoEntregaScrollRef = useRef<HTMLDivElement | null>(null);
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [troco, setTroco] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -4448,7 +4479,13 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
         )}`
       : null;
 
-  const aplicarEntrega = () => { setModoRecebimento('entrega'); onTipoAtendimentoChange('entrega'); };
+  const aplicarEntrega = () => {
+    setModoRecebimento('entrega');
+    onTipoAtendimentoChange('entrega');
+    window.setTimeout(() => {
+      enderecoEntregaScrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
   const aplicarRetirada = () => { setModoRecebimento('retirada'); onTipoAtendimentoChange('retirada'); };
   const aplicarConsumoLocal = () => { setModoRecebimento('consumo_local'); onTipoAtendimentoChange('retirada'); };
 
@@ -4660,9 +4697,21 @@ const finalizar = async () => {
         return;
       }
 
-      let obsCompleta = obs;
+      let obsCompleta = obs.trim();
+      if (tipoAtendimento === 'entrega') {
+        const cdRaw = contatoRecebimento.trim();
+        const cd = cdRaw ? normalizeBrazilDeliveryPhoneDigits(cdRaw) : '';
+        const cdOk = cd.length >= 10 && cd.length <= 11 ? cd : null;
+        const bloco = buildDeliveryCheckoutObservationBlock({
+          nomeQuemRecebe,
+          contatoDigits: cdOk,
+          obsEntrega,
+        });
+        obsCompleta = mergeDeliveryObservationWithBase(bloco, obsCompleta);
+      }
       if (pag==='dinheiro' && precisaTroco && troco) {
-        obsCompleta = `Troco para R$ ${troco}${obs ? ` | ${obs}` : ''}`;
+        const rest = obsCompleta.trim();
+        obsCompleta = `Troco para R$ ${troco}${rest ? ` | ${rest}` : ''}`;
       }
       obsCompleta = observacaoComModoConsumo(modoRecebimento, obsCompleta);
       const body: any = {
@@ -4687,8 +4736,6 @@ const finalizar = async () => {
             : bairroAtual.trim() || undefined,
         cupom_codigo: cupomValido ? cupomValido.cupom.codigo : undefined,
       };
-      const contatoRecTrim = contatoRecebimento.trim();
-      if (contatoRecTrim) body.contato_recebimento_tel = contatoRecTrim;
       if (tipoAtendimento === 'entrega' && enderecoIdFinal != null) body.endereco_id = enderecoIdFinal;
       const r = await fetch(`/public/delivery/${slug}/pedido`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d = await r.json();
@@ -4746,6 +4793,14 @@ const finalizar = async () => {
           return false;
         }
       }
+      const cr = contatoRecebimento.trim();
+      if (cr) {
+        const cd = normalizeBrazilDeliveryPhoneDigits(cr);
+        if (cd.length < 10 || cd.length > 11) {
+          setErro('Número para contato: use DDD + telefone (10 ou 11 dígitos), ou deixe em branco.');
+          return false;
+        }
+      }
     }
     return true;
   };
@@ -4756,14 +4811,6 @@ const finalizar = async () => {
       const trocoVal = parseFloat(troco.replace(',', '.'));
       if (!trocoVal || trocoVal <= tot) {
         setErro(`Troco deve ser maior que ${fmt(tot)}`);
-        return false;
-      }
-    }
-    const cr = contatoRecebimento.trim();
-    if (cr) {
-      const cd = normalizeBrazilDeliveryPhoneDigits(cr);
-      if (cd.length < 10 || cd.length > 11) {
-        setErro('Número para contato: use DDD + telefone (10 ou 11 dígitos), ou deixe em branco.');
         return false;
       }
     }
@@ -4979,7 +5026,10 @@ const finalizar = async () => {
             <p className={cx.cardMuted}>O pedido sera preparado para consumo no estabelecimento. Use a observacao se precisar de mesa ou detalhe.</p>
           </div>
         )}
-        <div className={`${cx.card} ${tipoAtendimento !== 'entrega' || modalStep !== 1 ? 'hidden' : ''}`}> 
+        <div
+          ref={enderecoEntregaScrollRef}
+          className={`${cx.card} ${tipoAtendimento !== 'entrega' || modalStep !== 1 ? 'hidden' : ''}`}
+        >
           <p className={`font-black mb-3 flex items-center gap-2 ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}><MapPin size={15} className={checkoutTheme.mode === 'light_red' ? 'text-red-600' : 'text-cyan-300'}/>Endereço de entrega</p>
           {temZonas && (
             <div
@@ -5145,6 +5195,71 @@ const finalizar = async () => {
               <span>{MENSAGEM_ENTREGA_FORA_DA_AREA}</span>
             </div>
           )}
+
+          <div
+            className={
+              isLightCheckout
+                ? 'mt-4 space-y-3 border-t border-zinc-200 pt-4'
+                : 'mt-4 space-y-3 border-t border-white/10 pt-4'
+            }
+          >
+            <p
+              className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
+            >
+              Quem recebe e observações da entrega
+            </p>
+            <div>
+              <label
+                className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
+              >
+                Nome de quem vai receber <span className="font-normal normal-case">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                autoComplete="name"
+                maxLength={MAX_CHECKOUT_NOME_RECEBE_LEN}
+                value={nomeQuemRecebe}
+                onChange={(e) => setNomeQuemRecebe(e.target.value)}
+                placeholder="Ex.: Maria Souza"
+                className={`${inp} text-sm`}
+              />
+            </div>
+            <div>
+              <label
+                className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
+              >
+                Número para contato <span className="font-normal normal-case">(opcional)</span>
+              </label>
+              <p className={`mb-2 text-xs leading-relaxed ${isLightCheckout ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                Se outra pessoa for receber ou atender o motoboy, informe DDD + número (10 ou 11 dígitos). Não altera o telefone da sua conta.
+              </p>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                maxLength={40}
+                value={contatoRecebimento}
+                onChange={(e) => setContatoRecebimento(e.target.value)}
+                placeholder="Ex.: (11) 99999-9999"
+                className={`${inp} text-sm`}
+              />
+            </div>
+            <div>
+              <label
+                className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
+              >
+                Observação curta da entrega <span className="font-normal normal-case">(opcional)</span>
+              </label>
+              <textarea
+                value={obsEntrega}
+                onChange={(e) => setObsEntrega(e.target.value)}
+                placeholder="Ex.: deixar na portaria, campainha não funciona"
+                rows={2}
+                maxLength={MAX_CHECKOUT_OBS_ENTREGA_LEN}
+                className={`${inp} resize-none text-sm`}
+              />
+            </div>
+          </div>
         </div>
         {/* ── Pagamento ── */}
         <div className={`space-y-2 ${modalStep !== 2 ? 'hidden' : ''}`}>
@@ -5475,28 +5590,25 @@ const finalizar = async () => {
           </div>
         )}
 
-        {/* Obs geral + contato opcional no local */}
+        {/* Observação geral do pedido (entrega: detalhes de quem recebe ficam na etapa Entrega) */}
         <div className={`${cx.obsBox} ${modalStep !== 2 ? 'hidden' : ''}`}>
           <p className={`mb-2 text-sm font-black ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>Observação <span className={`text-xs font-normal ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-400'}`}>(opcional)</span></p>
-          <textarea value={obs} onChange={e=>setObs(e.target.value)} placeholder="Deixar na portaria, campainha não funciona..." rows={2} className={`${inp} resize-none text-sm`}/>
-          <div className="mt-4">
-            <p className={`mb-2 text-sm font-black ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>
-              Número para contato <span className={`text-xs font-normal ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-400'}`}>(opcional)</span>
-            </p>
+          {tipoAtendimento === 'entrega' ? (
             <p className={`mb-2 text-xs leading-relaxed ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-400'}`}>
-              Se outra pessoa for receber ou atender o pedido, informe DDD + número (10 ou 11 dígitos). Não altera o telefone da sua conta.
+              Endereço, quem recebe e observações da entrega foram informados na etapa anterior. Use este campo só para outra observação geral do pedido, se precisar.
             </p>
-            <input
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              maxLength={40}
-              value={contatoRecebimento}
-              onChange={(e) => setContatoRecebimento(e.target.value)}
-              placeholder="Ex.: (11) 99999-9999"
-              className={`${inp} text-sm`}
-            />
-          </div>
+          ) : null}
+          <textarea
+            value={obs}
+            onChange={(e) => setObs(e.target.value)}
+            placeholder={
+              tipoAtendimento === 'entrega'
+                ? 'Outra observação do pedido (opcional)'
+                : 'Mesa, preferências, detalhes da retirada...'
+            }
+            rows={2}
+            className={`${inp} resize-none text-sm`}
+          />
         </div>
         {erro && (
           <div
@@ -5556,16 +5668,42 @@ const finalizar = async () => {
             <div className={`${cx.resumoCard} text-xs ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-300'}`}>
               Confira subtotal, taxa, descontos e total antes de confirmar.
             </div>
-            {contatoRecebimento.trim() && (
+            {tipoAtendimento === 'entrega' &&
+              (nomeQuemRecebe.trim() || contatoRecebimento.trim() || obsEntrega.trim()) && (
               <div className={cx.resumoCard}>
                 <p className={`text-[11px] font-bold uppercase tracking-wider ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                  Contato no local
+                  Entrega — quem recebe / contato / obs.
                 </p>
-                <p className={`mt-1 text-sm font-semibold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>
-                  {contatoRecebimento.trim()}
-                </p>
+                <div className={`mt-2 space-y-1.5 text-sm ${checkoutTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>
+                  {nomeQuemRecebe.trim() ? (
+                    <p>
+                      <span className={`font-bold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-400'}`}>Quem recebe: </span>
+                      {nomeQuemRecebe.trim()}
+                    </p>
+                  ) : null}
+                  {contatoRecebimento.trim() ? (
+                    <p>
+                      <span className={`font-bold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-400'}`}>Contato no local: </span>
+                      {contatoRecebimento.trim()}
+                    </p>
+                  ) : null}
+                  {obsEntrega.trim() ? (
+                    <p>
+                      <span className={`font-bold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-400'}`}>Obs. entrega: </span>
+                      {obsEntrega.trim()}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             )}
+            {obs.trim() ? (
+              <div className={cx.resumoCard}>
+                <p className={`text-[11px] font-bold uppercase tracking-wider ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                  {tipoAtendimento === 'entrega' ? 'Outras observações do pedido' : 'Observação'}
+                </p>
+                <p className={`mt-1 text-sm ${checkoutTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>{obs.trim()}</p>
+              </div>
+            ) : null}
             {pag === 'pix' && (
               <div className={`${cx.resumoCard} text-xs ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-300'}`}>
                 O QR Code final e o copia e cola deste pedido serao exibidos logo apos confirmar.
