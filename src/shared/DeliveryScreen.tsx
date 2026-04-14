@@ -11,6 +11,7 @@ import {
 import { openPrintPreview } from '../utils/print';
 import { getOrderItemDetailText, orderHasAnyItemCustomization, splitOrderItemDetailLines } from '../utils/orderItemDisplay';
 import { getDeliveryNextStatus } from '../utils/deliveryStatusNext';
+import { playNewOrderSound } from '../utils/sound';
 import { DEFAULT_TENANT_AUTOMATION, type TenantAutomationConfig } from '../services/automationConfig';
 import { OrderAutomationBadges } from '../components/OrderAutomationBadges';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -19,25 +20,6 @@ import { Spinner } from '../components/ui/Spinner';
 import { StatusChip } from '../components/ui/StatusChip';
 import { adminOpsDashedWellClass, adminOpsInsetPanelClass, adminOpsSurfaceCardClass } from '../components/ui/screenChrome';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
-
-// ─── Sound utils (inline — sem dep externa) ───────────────────────────────────
-function playNewOrderSound() {
-  try {
-    const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-    const beep = (freq: number, start: number, dur: number, vol: number) => {
-      const o = ctx.createOscillator(); const g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.type = 'sine'; o.frequency.value = freq;
-      g.gain.setValueAtTime(0, ctx.currentTime + start);
-      g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-      o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.05);
-    };
-    beep(440, 0.00, 0.14, 0.35);
-    beep(660, 0.18, 0.14, 0.40);
-    beep(880, 0.36, 0.22, 0.50);
-  } catch {}
-}
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface DeliveryPedidoItem {
