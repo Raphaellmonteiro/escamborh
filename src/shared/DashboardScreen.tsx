@@ -246,9 +246,14 @@ export default function DashboardScreen({
                   </div>
                 );
               })}
-              <div className="pt-3 mt-1 border-t-2 border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Total recebido</span>
-                <span className="text-base font-black text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(cashReport?.total || 0)}</span>
+              <div className="pt-3 mt-1 border-t-2 border-zinc-100 dark:border-zinc-800 space-y-1">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Pagamentos lançados</span>
+                  <span className="text-base font-black text-zinc-900 dark:text-zinc-100 tabular-nums shrink-0">{fmt(cashReport?.total || 0)}</span>
+                </div>
+                <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                  Soma por data de registro do pagamento no período; pode diferir da receita ou do lucro (baseadas em pedidos).
+                </p>
               </div>
             </div>
           </div>
