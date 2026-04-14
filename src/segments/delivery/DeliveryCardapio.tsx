@@ -4347,7 +4347,6 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const [modoRecebimento, setModoRecebimento] = useState<ModoRecebimentoPedido | null>(null);
   const [pag, setPag] = useState('pix');
   const [pixCheckoutCopiado, setPixCheckoutCopiado] = useState(false);
-  const [obs, setObs] = useState('');
   /** Opcional: quem recebe no endereço (só entrega; vai para observation). */
   const [nomeQuemRecebe, setNomeQuemRecebe] = useState('');
   /** Opcional: contato no local (só entrega; consolidado em observation, sem `contato_recebimento_tel` para evitar duplicar merge no servidor). */
@@ -4697,7 +4696,7 @@ const finalizar = async () => {
         return;
       }
 
-      let obsCompleta = obs.trim();
+      let obsCompleta = '';
       if (tipoAtendimento === 'entrega') {
         const cdRaw = contatoRecebimento.trim();
         const cd = cdRaw ? normalizeBrazilDeliveryPhoneDigits(cdRaw) : '';
@@ -5590,26 +5589,6 @@ const finalizar = async () => {
           </div>
         )}
 
-        {/* Observação geral do pedido (entrega: detalhes de quem recebe ficam na etapa Entrega) */}
-        <div className={`${cx.obsBox} ${modalStep !== 2 ? 'hidden' : ''}`}>
-          <p className={`mb-2 text-sm font-black ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>Observação <span className={`text-xs font-normal ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-400'}`}>(opcional)</span></p>
-          {tipoAtendimento === 'entrega' ? (
-            <p className={`mb-2 text-xs leading-relaxed ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-400'}`}>
-              Endereço, quem recebe e observações da entrega foram informados na etapa anterior. Use este campo só para outra observação geral do pedido, se precisar.
-            </p>
-          ) : null}
-          <textarea
-            value={obs}
-            onChange={(e) => setObs(e.target.value)}
-            placeholder={
-              tipoAtendimento === 'entrega'
-                ? 'Outra observação do pedido (opcional)'
-                : 'Mesa, preferências, detalhes da retirada...'
-            }
-            rows={2}
-            className={`${inp} resize-none text-sm`}
-          />
-        </div>
         {erro && (
           <div
             className={
@@ -5696,14 +5675,6 @@ const finalizar = async () => {
                 </div>
               </div>
             )}
-            {obs.trim() ? (
-              <div className={cx.resumoCard}>
-                <p className={`text-[11px] font-bold uppercase tracking-wider ${checkoutTheme.mode === 'light_red' ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                  {tipoAtendimento === 'entrega' ? 'Outras observações do pedido' : 'Observação'}
-                </p>
-                <p className={`mt-1 text-sm ${checkoutTheme.mode === 'light_red' ? 'text-zinc-800' : 'text-zinc-100'}`}>{obs.trim()}</p>
-              </div>
-            ) : null}
             {pag === 'pix' && (
               <div className={`${cx.resumoCard} text-xs ${checkoutTheme.mode === 'light_red' ? 'text-zinc-600' : 'text-zinc-300'}`}>
                 O QR Code final e o copia e cola deste pedido serao exibidos logo apos confirmar.
