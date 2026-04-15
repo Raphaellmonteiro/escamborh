@@ -10,7 +10,7 @@ export const Card = ({
   key?: React.Key;
 }) => (
   <div
-    className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-fp-border bg-fp-card shadow-sm shadow-zinc-950/[0.04] ring-1 ring-black/[0.03] dark:ring-white/[0.04] [.admin-dark_&]:!rounded-xl [.admin-dark_&]:!border-zinc-800 [.admin-dark_&]:!bg-zinc-900 [.admin-dark_&]:!shadow-md [.admin-dark_&]:ring-0 ${className}`}
+      className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-fp-border bg-fp-card shadow-sm shadow-[#3f3e3e]/[0.06] ring-1 ring-black/[0.03] dark:ring-white/[0.05] [.admin-dark_&]:!rounded-xl [.admin-dark_&]:!border-zinc-800 [.admin-dark_&]:!bg-zinc-900 [.admin-dark_&]:!shadow-md [.admin-dark_&]:ring-0 ${className}`}
   >
     {children}
   </div>
@@ -33,7 +33,7 @@ export const Button = ({
 }) => {
   const variants = {
     primary:
-      'bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 active:bg-zinc-900 [.admin-dark_&]:bg-emerald-600 [.admin-dark_&]:hover:bg-emerald-500 [.admin-dark_&]:active:bg-emerald-600 [.admin-dark_&]:shadow-emerald-900/20',
+      'bg-[#EA1D2C] text-white shadow-sm hover:bg-[#9C050B] active:bg-[#A02331] [.admin-dark_&]:bg-[#EA1D2C] [.admin-dark_&]:hover:bg-[#9C050B] [.admin-dark_&]:active:bg-[#A02331] [.admin-dark_&]:shadow-[#EA1D2C]/20',
     secondary:
       'border border-fp-border bg-fp-secondary text-fptext-primary shadow-sm hover:bg-fp-hover active:bg-fp-active [.admin-dark_&]:bg-zinc-800 [.admin-dark_&]:text-zinc-200 [.admin-dark_&]:hover:bg-zinc-700 [.admin-dark_&]:active:bg-zinc-800',
     danger:
@@ -49,7 +49,7 @@ export const Button = ({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-[2.5rem] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fp-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-fp-card disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] disabled:active:scale-100 [.admin-dark_&]:focus-visible:ring-emerald-500/35 [.admin-dark_&]:ring-offset-zinc-950 ${variants[variant]} ${className}`}
+      className={`inline-flex min-h-[2.5rem] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fp-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-fp-card disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] disabled:active:scale-100 [.admin-dark_&]:focus-visible:ring-red-500/35 [.admin-dark_&]:ring-offset-zinc-950 ${variants[variant]} ${className}`}
     >
       {children}
     </button>

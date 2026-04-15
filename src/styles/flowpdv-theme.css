@@ -1,71 +1,77 @@
 /**
  * FlowPDV — tema global (light + dark)
- * Tokens semânticos (--fp-*) e aliases legados (--bg-card, --text-main, …) para RH e telas existentes.
+ * Base clara alinhada à identidade Pratori (neutros quentes + vermelho).
  * Ative o escuro com `flowpdv-dark` + `dark` no <html> (ver App.tsx).
  */
 
 :root {
   color-scheme: light;
-  /* Tokens principais */
-  --fp-bg-primary: #fafafa;
-  --fp-bg-secondary: #f4f4f5;
+  --pratori-red: #ea1d2c;
+  --pratori-red-dark: #a02331;
+  --pratori-red-hover: #9c050b;
+  --pratori-bg: #f5f0eb;
+  --pratori-bg-alt: #f5e9da;
+  --pratori-text: #3f3e3e;
+  --pratori-text-muted: #a6a29f;
+  --fp-bg-primary: var(--pratori-bg);
+  --fp-bg-secondary: var(--pratori-bg-alt);
   --fp-bg-card: #ffffff;
-  --fp-bg-input: #fafafa;
-  --fp-bg-hover: #f4f4f5;
-  --fp-bg-active: #e4e4e7;
-  --fp-text-primary: #18181b;
-  --fp-text-secondary: #52525b;
-  --fp-text-muted: #71717a;
-  --fp-border-default: #e4e4e7;
-  --fp-border-soft: #f4f4f4;
-  --fp-accent: #18181b;
-  --fp-ring: rgba(24, 24, 27, 0.12);
-  /* Aliases legado */
-  --bg-app: #fafafa;
-  --bg-panel: #f4f4f5;
-  --bg-main: #fafafa;
+  --fp-bg-input: #ffffff;
+  --fp-bg-hover: #ede6dc;
+  --fp-bg-active: #e5dcd0;
+  --fp-text-primary: var(--pratori-text);
+  --fp-text-secondary: var(--pratori-text-muted);
+  --fp-text-muted: var(--pratori-text-muted);
+  --fp-border-default: #ddd7ce;
+  --fp-border-soft: #ebe4db;
+  --fp-accent: var(--pratori-red);
+  --fp-ring: rgba(234, 29, 44, 0.22);
+  --bg-app: var(--pratori-bg);
+  --bg-panel: var(--pratori-bg-alt);
+  --bg-main: var(--pratori-bg);
   --bg-card: #ffffff;
-  --bg-input: #fafafa;
-  --bg-hover: #f4f4f5;
-  --bg-active: #e4e4e7;
-  --border: #e4e4e7;
-  --border-soft: #f4f4f4;
-  --text-primary: #18181b;
-  --text-secondary: #52525b;
-  --text-muted: #71717a;
-  --text-main: #18181b;
-  --accent: #18181b;
+  --bg-input: #ffffff;
+  --bg-hover: #ede6dc;
+  --bg-active: #e5dcd0;
+  --border: #ddd7ce;
+  --border-soft: #ebe4db;
+  --text-primary: var(--pratori-text);
+  --text-secondary: var(--pratori-text-muted);
+  --text-muted: var(--pratori-text-muted);
+  --text-main: var(--pratori-text);
+  --accent: var(--pratori-red);
 }
 
 html.flowpdv-dark {
   color-scheme: dark;
-  --fp-bg-primary: #070708;
-  --fp-bg-secondary: #0c0c10;
-  --fp-bg-card: #12121a;
-  --fp-bg-input: #1a1a24;
-  --fp-bg-hover: #1f1f28;
-  --fp-bg-active: #26262f;
-  --fp-text-primary: #f4f4f5;
-  --fp-text-secondary: #a1a1aa;
-  --fp-text-muted: #8b8b96;
-  --fp-border-default: #2a2a35;
-  --fp-border-soft: #1a1a22;
-  --fp-accent: #34d399;
-  --fp-ring: rgba(52, 211, 153, 0.22);
-  --bg-app: #070708;
-  --bg-panel: #0c0c10;
-  --bg-main: #070708;
-  --bg-card: #12121a;
-  --bg-input: #1a1a24;
-  --bg-hover: #1f1f28;
-  --bg-active: #26262f;
-  --border: #2a2a35;
-  --border-soft: #1a1a22;
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #8b8b96;
-  --text-main: #f4f4f5;
-  --accent: #34d399;
+  /* Escuro mais quente e menos “preto frio”; acento vermelho Pratori (substitui o verde esmeralda genérico). */
+  --fp-bg-primary: #141210;
+  --fp-bg-secondary: #1c1916;
+  --fp-bg-card: #211e1a;
+  --fp-bg-input: #2a2622;
+  --fp-bg-hover: #322e29;
+  --fp-bg-active: #3a3530;
+  --fp-text-primary: #f5f3f0;
+  --fp-text-secondary: #b8b3ad;
+  --fp-text-muted: #8a8580;
+  --fp-border-default: #3d3833;
+  --fp-border-soft: #2a2622;
+  --fp-accent: #ea1d2c;
+  --fp-ring: rgba(248, 113, 113, 0.28);
+  --bg-app: #141210;
+  --bg-panel: #1c1916;
+  --bg-main: #141210;
+  --bg-card: #211e1a;
+  --bg-input: #2a2622;
+  --bg-hover: #322e29;
+  --bg-active: #3a3530;
+  --border: #3d3833;
+  --border-soft: #2a2622;
+  --text-primary: #f5f3f0;
+  --text-secondary: #b8b3ad;
+  --text-muted: #8a8580;
+  --text-main: #f5f3f0;
+  --accent: #ea1d2c;
 }
 
 /* Layout base (--bg-app espelha o canvas; mantém legado) */
@@ -497,4 +503,120 @@ html.flowpdv-dark {
 }
 .flowpdv-dark ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
+}
+
+/* Superfícies públicas Pratori (landing / login): paleta fixa + leitura clara com html.flowpdv-dark */
+.pratori-public-light {
+  color-scheme: light;
+  --pratori-red: #ea1d2c;
+  --pratori-red-dark: #a02331;
+  --pratori-red-hover: #9c050b;
+  --pratori-red-soft: #da5d69;
+  --pratori-bg: #f5f0eb;
+  --pratori-bg-alt: #f5e9da;
+  --pratori-bg-accent: #ffdebb;
+  --pratori-text: #3f3e3e;
+  --pratori-text-muted: #a6a29f;
+  --pratori-white: #ffffff;
+  --pratori-black: #000000;
+
+  --fp-bg-primary: var(--pratori-bg);
+  --fp-bg-secondary: var(--pratori-bg-alt);
+  --fp-bg-card: var(--pratori-white);
+  --fp-bg-input: var(--pratori-white);
+  --fp-bg-hover: #ede6dc;
+  --fp-bg-active: #e5dcd0;
+  --fp-text-primary: var(--pratori-text);
+  --fp-text-secondary: var(--pratori-text-muted);
+  --fp-text-muted: var(--pratori-text-muted);
+  --fp-border-default: #ddd7ce;
+  --fp-border-soft: #ebe4db;
+  --fp-accent: var(--pratori-red);
+  --fp-ring: rgba(234, 29, 44, 0.22);
+  --bg-app: var(--pratori-bg);
+  --bg-panel: var(--pratori-bg-alt);
+  --bg-main: var(--pratori-bg);
+  --bg-card: var(--pratori-white);
+  --bg-input: var(--pratori-white);
+  --bg-hover: #ede6dc;
+  --bg-active: #e5dcd0;
+  --border: #ddd7ce;
+  --border-soft: #ebe4db;
+  --text-primary: var(--pratori-text);
+  --text-secondary: var(--pratori-text-muted);
+  --text-muted: var(--pratori-text-muted);
+  --text-main: var(--pratori-text);
+  --accent: var(--pratori-red);
+}
+
+.pratori-public-light .pratori-btn-primary {
+  background-color: var(--pratori-red);
+  color: var(--pratori-white);
+  box-shadow: 0 1px 2px rgba(63, 62, 62, 0.06);
+}
+.pratori-public-light .pratori-btn-primary:hover:not(:disabled) {
+  background-color: var(--pratori-red-hover);
+}
+.pratori-public-light .pratori-btn-primary:active:not(:disabled) {
+  background-color: var(--pratori-red-dark);
+}
+
+.pratori-public-light .pratori-btn-secondary {
+  background-color: var(--pratori-white);
+  color: var(--pratori-text);
+  border: 1px solid var(--fp-border-default);
+}
+.pratori-public-light .pratori-btn-secondary:hover {
+  background-color: var(--pratori-bg-alt);
+  border-color: #cfc8be;
+}
+
+.pratori-public-light .pratori-text-brand {
+  color: var(--pratori-red);
+}
+.pratori-public-light .pratori-text-eyebrow {
+  color: var(--pratori-red-soft);
+  letter-spacing: 0.06em;
+}
+.pratori-public-light .pratori-mark {
+  color: var(--pratori-red-soft);
+}
+
+.pratori-public-light .pratori-bullet {
+  background-color: var(--pratori-red);
+}
+
+.pratori-public-light .pratori-card-accent-bar {
+  height: 4px;
+  background-color: var(--pratori-red);
+}
+
+.pratori-public-light .pratori-alert {
+  border: 1px solid rgba(218, 93, 105, 0.42);
+  background-color: #fff5ed;
+  color: var(--pratori-text);
+}
+.pratori-public-light .pratori-alert svg {
+  color: var(--pratori-red-dark);
+}
+
+.pratori-public-light .pratori-card-soft {
+  background-color: var(--pratori-bg-alt);
+  border: 1px solid var(--fp-border-soft);
+}
+
+.pratori-public-light .pratori-cta-band {
+  background: linear-gradient(180deg, var(--pratori-bg-alt) 0%, var(--pratori-bg) 100%);
+  border-top: 1px solid var(--fp-border-soft);
+  border-bottom: 1px solid var(--fp-border-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.pratori-public-light .pratori-footer-links a,
+.pratori-public-light .pratori-footer-links button {
+  color: var(--pratori-text-muted);
+}
+.pratori-public-light .pratori-footer-links a:hover,
+.pratori-public-light .pratori-footer-links button:hover {
+  color: var(--pratori-red);
 }

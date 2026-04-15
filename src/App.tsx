@@ -104,8 +104,15 @@ function setDocumentMeta(name: string, content: string, attr: 'name' | 'property
 function getPublicMeta(path: string): PublicMeta {
   if (path === '/login') {
     return {
-      title: 'Entrar no FlowPDV | Acesso da operação',
-      description: 'Acesse o FlowPDV para operar caixa, pedidos, cozinha, mesas, retirada e delivery da sua operação de food service.',
+      title: 'Entrar | Pratori',
+      description: 'Acesse o Pratori com seu usuário: caixa, pedidos, cozinha, mesas e delivery na sua loja.',
+    };
+  }
+  if (path === '/') {
+    return {
+      title: 'Pratori | Caixa, pedidos e delivery para sua loja',
+      description:
+        'Sistema para restaurante e delivery: PDV, cozinha, cardápio online, mesas, retirada e caixa num lugar só.',
     };
   }
   if (path === '/privacidade') {
@@ -897,14 +904,14 @@ const handleAuth = async (e: React.FormEvent) => {
           ${activeTab === 'central'
             ? 'lg:w-[11rem] xl:w-48 2xl:w-60'
             : 'lg:w-[13rem] xl:w-56 2xl:w-60'}
-          bg-white border-r border-zinc-200 flex flex-col h-screen min-h-0 shrink-0
+          bg-fp-card border-r border-fp-border flex flex-col h-screen min-h-0 shrink-0
           transition-[transform,width] duration-200 ease-out
           ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
-        <div className="border-b border-zinc-100 bg-zinc-50 p-3 sm:p-4 lg:p-3 xl:p-4">
-          <div className="rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm lg:p-3 xl:p-3.5">
+        <div className="border-b border-fp-border-soft bg-fp-secondary p-3 sm:p-4 lg:p-3 xl:p-4">
+          <div className="rounded-3xl border border-fp-border bg-fp-card p-3 shadow-sm lg:p-3 xl:p-3.5">
             <div className="flex items-start gap-3">
             <label className="cursor-pointer group relative" title="Clique para trocar a logo">
               <input
@@ -926,7 +933,7 @@ const handleAuth = async (e: React.FormEvent) => {
                 }}
               />
               {logoUrl ? (
-                <div className="h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-transparent transition-all group-hover:ring-zinc-400">
+                <div className="h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-transparent transition-all group-hover:ring-[#DA5D69]/60">
                   <img
                     src={logoUrl}
                     alt="Logo"
@@ -934,7 +941,7 @@ const handleAuth = async (e: React.FormEvent) => {
                   />
                 </div>
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 text-sm font-black uppercase tracking-[0.18em] text-white transition-colors group-hover:bg-zinc-700">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EA1D2C] text-sm font-black uppercase tracking-[0.18em] text-white transition-colors group-hover:bg-[#9C050B]">
                   {estabelecimentoMonogram}
                 </div>
               )}
@@ -947,10 +954,10 @@ const handleAuth = async (e: React.FormEvent) => {
               </div>
             </label>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Seu painel</p>
-              <h1 className="mt-1 truncate text-lg font-black leading-tight text-zinc-900">{estabelecimentoNome}</h1>
-              <p className="mt-2 truncate text-sm font-semibold text-zinc-700">{userDisplayName}</p>
-              <p className="mt-1 text-xs text-zinc-500">{userSecondaryLine}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-fptext-muted">Seu painel</p>
+              <h1 className="mt-1 truncate text-lg font-black leading-tight text-fptext-primary">{estabelecimentoNome}</h1>
+              <p className="mt-2 truncate text-sm font-semibold text-fptext-primary">{userDisplayName}</p>
+              <p className="mt-1 text-xs text-fptext-muted">{userSecondaryLine}</p>
             </div>
           </div>
             <div className="mt-4">
@@ -960,19 +967,19 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
 
         {/* Status do Caixa */}
-        <div className="border-b border-zinc-100 px-3 py-2.5 lg:px-3 lg:py-3 xl:px-5 xl:py-3.5">
+        <div className="border-b border-fp-border-soft px-3 py-2.5 lg:px-3 lg:py-3 xl:px-5 xl:py-3.5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${currentCaixa?.status === 'aberto' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-xs font-bold text-zinc-900">
+              <span className="text-xs font-bold text-fptext-primary">
                 {currentCaixa?.status === 'aberto' ? 'Caixa Aberto' : 'Caixa Fechado'}
               </span>
             </div>
           </div>
           {currentCaixa?.status === 'aberto' ? (
             <div className="space-y-1 mb-3">
-              <p className="text-[10px] text-zinc-400 uppercase font-bold">Início: {new Date(currentCaixa.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-              <p className="text-[10px] text-zinc-400 uppercase font-bold">Fundo: R$ {currentCaixa.fundo_inicial.toFixed(2)}</p>
+              <p className="text-[10px] text-fptext-muted uppercase font-bold">Início: {new Date(currentCaixa.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+              <p className="text-[10px] text-fptext-muted uppercase font-bold">Fundo: R$ {currentCaixa.fundo_inicial.toFixed(2)}</p>
             </div>
           ) : null}
           
@@ -1045,7 +1052,7 @@ const handleAuth = async (e: React.FormEvent) => {
           {canAccess('nfse') && (
             <a href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer"
               onClick={() => setMobileNavOpen(false)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 min-h-[44px]">
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-fptext-muted hover:bg-fp-hover hover:text-fptext-primary min-h-[44px]">
               <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[16px] leading-none" aria-hidden>📄</span>
               <span className="font-medium">NFS-e</span>
             </a>
@@ -1057,10 +1064,10 @@ const handleAuth = async (e: React.FormEvent) => {
           {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon="⚙️"        label="Configurações" />}
         </nav>
 
-        <div className="flex-shrink-0 space-y-2 border-t border-zinc-100 p-2.5 lg:p-2.5 xl:space-y-2.5 xl:p-3">
+        <div className="flex-shrink-0 space-y-2 border-t border-fp-border-soft p-2.5 lg:p-2.5 xl:space-y-2.5 xl:p-3">
           <div className="flex items-center justify-between px-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Utilitários</p>
-            <p className="text-[10px] text-zinc-400">Tema, alertas e sessão</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-fptext-muted">Utilitários</p>
+            <p className="text-[10px] text-fptext-muted">Tema, alertas e sessão</p>
           </div>
           <div className={`grid gap-2 ${alertsEnabled ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {alertsEnabled && (
@@ -1069,7 +1076,7 @@ const handleAuth = async (e: React.FormEvent) => {
                 onClick={() => setNotifCenterOpen(true)}
                 title="Alertas"
                 aria-label="Alertas"
-                className="relative flex min-h-[48px] w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-2 text-[18px] leading-none text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
+                className="relative flex min-h-[48px] w-full items-center justify-center rounded-xl border border-fp-border bg-fp-card px-2 text-[18px] leading-none text-fptext-secondary transition-all hover:border-fp-border hover:bg-fp-hover hover:text-fptext-primary active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
               >
                 <span className="select-none" aria-hidden>🔔</span>
                 {avisosNaoLidos > 0 && (
@@ -1086,8 +1093,8 @@ const handleAuth = async (e: React.FormEvent) => {
               aria-label={operationalSoundEnabled ? 'Desativar som da Operação' : 'Ativar som da Operação'}
               className={`flex min-h-[48px] w-full items-center justify-center rounded-xl border px-2 text-[18px] leading-none transition-all active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3 ${
                 operationalSoundEnabled
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100'
-                  : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900'
+                  ? 'border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100 [.flowpdv-dark_&]:border-red-900/50 [.flowpdv-dark_&]:bg-red-950/35 [.flowpdv-dark_&]:text-red-200 [.flowpdv-dark_&]:hover:border-red-800 [.flowpdv-dark_&]:hover:bg-red-950/50'
+                  : 'border-fp-border bg-fp-card text-fptext-secondary hover:border-fp-border hover:bg-fp-hover hover:text-fptext-primary'
               }`}
             >
               <span className="select-none" aria-hidden>{operationalSoundEnabled ? '🔊' : '🔇'}</span>
@@ -1097,7 +1104,7 @@ const handleAuth = async (e: React.FormEvent) => {
               onClick={() => setDarkMode(v => !v)}
               title={darkMode ? 'Modo claro' : 'Modo escuro'}
               aria-label={darkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
-              className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-2 text-[18px] leading-none text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
+              className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-fp-border bg-fp-card px-2 text-[18px] leading-none text-fptext-secondary transition-all hover:border-fp-border hover:bg-fp-hover hover:text-fptext-primary active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
             >
               <span className="select-none" aria-hidden>{darkMode ? '🌙' : '☀️'}</span>
             </button>
@@ -1106,7 +1113,7 @@ const handleAuth = async (e: React.FormEvent) => {
               onClick={handleLogout}
               title="Sair do sistema"
               aria-label="Sair do sistema"
-              className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-zinc-200 bg-white px-2 text-[18px] leading-none text-zinc-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3"
+              className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-fp-border bg-fp-card px-2 text-[18px] leading-none text-fptext-secondary transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-700 active:scale-[0.98] lg:min-h-[52px] lg:rounded-2xl lg:px-3 [.flowpdv-dark_&]:hover:bg-red-950/40 [.flowpdv-dark_&]:hover:text-red-300"
             >
               <span className="select-none" aria-hidden>🚪</span>
             </button>
@@ -1115,18 +1122,18 @@ const handleAuth = async (e: React.FormEvent) => {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center gap-2 border-b border-zinc-200 bg-white px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
+        <header className="flex shrink-0 items-center gap-2 border-b border-fp-border bg-fp-card px-2.5 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
-            className="p-2.5 rounded-xl border border-zinc-200 text-zinc-800 min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 active:bg-zinc-100"
+            className="p-2.5 rounded-xl border border-fp-border text-fptext-primary min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 active:bg-fp-hover"
             aria-label="Abrir menu"
           >
             <Menu size={22} strokeWidth={2} />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-zinc-900 truncate leading-tight">{estabelecimentoNome}</p>
-            <p className="text-[11px] text-zinc-500 truncate">{`${userDisplayName} · ${userSecondaryLine}`}</p>
+            <p className="font-bold text-fptext-primary truncate leading-tight">{estabelecimentoNome}</p>
+            <p className="text-[11px] text-fptext-muted truncate">{`${userDisplayName} · ${userSecondaryLine}`}</p>
           </div>
         </header>
 

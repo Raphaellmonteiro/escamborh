@@ -45,7 +45,7 @@ export const adminScreenMetaHintClass =
 
 /** Card principal com elevação leve (pedido ativo, painel, tabela embutida). */
 export const adminOpsSurfaceCardClass =
-  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-card shadow-sm shadow-zinc-950/[0.04]';
+  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-card shadow-sm shadow-[#3f3e3e]/[0.06]';
 
 /**
  * Linha ou célula de grade sem sombra marcada (lista densa, card de produto em grade).
@@ -70,7 +70,7 @@ export const adminOpsDashedEmptyClass =
  * Faixa de filtros agrupados — evita o `ring` do `Card` e alinha sombra/borda aos demais blocos operacionais.
  */
 export const adminOpsFilterCardClass =
-  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-secondary shadow-sm shadow-zinc-950/[0.04]';
+  'min-w-0 max-w-full rounded-2xl border border-fp-border bg-fp-secondary shadow-sm shadow-[#3f3e3e]/[0.05]';
 
 /** Blocos de formulário / resumo em fundo zinc (painéis internos em Produtos). */
 export const adminOpsMutedBlockClass =
