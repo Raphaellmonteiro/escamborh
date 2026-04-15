@@ -1,7 +1,7 @@
 {
-  "name": "FlowPDV — PDV para Food Service",
-  "short_name": "FlowPDV",
-  "description": "PDV para food service com pedidos, delivery, cardápio online, cozinha, mesas e estoque.",
+  "name": "Pratori — PDV para restaurante e delivery",
+  "short_name": "Pratori",
+  "description": "Caixa, pedidos, cozinha, cardápio online, delivery e mesas num sistema só.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080c14",

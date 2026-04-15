@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { fieldInputClass, fieldLabelClass } from '../components/ui/fieldStyles';
 import LandingPage from './LandingPage';
 
@@ -57,10 +56,10 @@ export default function LoginScreen({
       } else if (data.status === 'trial_expirado' || data.message === 'Trial expirado') {
         onLicenseError('trial_expirado');
       } else {
-        setError(data.message || 'Usuário ou senha incorretos');
+        setError(data.message || 'Usuário ou senha não conferem');
       }
     } catch {
-      setError('Erro de conexão com o servidor');
+      setError('Não foi possível conectar. Tente de novo.');
     } finally {
       setLoading(false);
     }
@@ -72,36 +71,19 @@ export default function LoginScreen({
 
   if (view === 'login') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-fp-app px-4 py-8">
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-sm"
-        >
-          <div className="mb-7 flex flex-col items-center gap-2">
-            <div
-              className="text-fptext-primary"
-              style={{
-                fontFamily: "'Syne', system-ui, sans-serif",
-                fontSize: '1.75rem',
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Flow<span style={{ color: '#06b6d4' }}>PDV</span>
-            </div>
-            <span className="rounded-md border border-fp-border bg-fp-secondary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fptext-muted">
-              RM Tecnologia
-            </span>
+      <div className="pratori-public-light flex min-h-screen items-center justify-center bg-fp-app px-4 py-8">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex flex-col items-center gap-1.5 text-center">
+            <div className="pratori-text-brand text-2xl font-bold tracking-tight">Pratori</div>
+            <p className="text-xs font-medium text-fptext-secondary">Entrar na sua loja · RM Tecnologia</p>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-fp-border bg-fp-card shadow-xl">
-            <div className="h-[3px] w-full bg-zinc-900" />
-            <div className="p-7">
-              <h2 className="mb-1 text-base font-bold text-fptext-primary">Acessar o sistema</h2>
-              <p className="mb-6 text-sm leading-relaxed text-fptext-muted">
-                Use seu usuário e senha para entrar no FlowPDV da sua operação.
+          <div className="overflow-hidden rounded-2xl border border-fp-border bg-fp-card shadow-[0_8px_28px_rgba(63,62,62,0.07)]">
+            <div className="pratori-card-accent-bar w-full" />
+            <div className="p-6 sm:p-8">
+              <h2 className="mb-1 text-lg font-bold tracking-tight text-fptext-primary">Entrar</h2>
+              <p className="mb-6 text-sm leading-relaxed text-fptext-secondary">
+                Digite o usuário e a senha da sua loja (fornecidos pela RM Tecnologia).
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -125,7 +107,7 @@ export default function LoginScreen({
                       type={showPass ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Digite sua senha"
+                      placeholder="Sua senha"
                       autoComplete="current-password"
                       required
                       className={`${fieldInputClass} pr-11`}
@@ -142,29 +124,22 @@ export default function LoginScreen({
                   </div>
                 </div>
 
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-3.5 py-3 text-xs font-medium text-red-600"
-                    >
-                      <AlertCircle size={14} className="shrink-0" />
-                      {error}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {error ? (
+                  <div className="pratori-alert flex items-center gap-2 rounded-xl px-3.5 py-3 text-xs font-medium">
+                    <AlertCircle size={14} className="shrink-0" />
+                    {error}
+                  </div>
+                ) : null}
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:pointer-events-none disabled:opacity-50"
+                  className="pratori-btn-primary flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50"
                 >
                   {loading ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Verificando...
+                      Entrando...
                     </>
                   ) : (
                     'Entrar'
@@ -207,42 +182,32 @@ export default function LoginScreen({
             </a>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-fp-border bg-fp-secondary p-4 text-center shadow-sm">
-            <p className="text-sm font-semibold text-fptext-primary">Ainda não usa o FlowPDV?</p>
-            <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-              Solicite acesso para conhecer o sistema na sua operação.
+          <div className="pratori-card-soft mt-4 rounded-2xl p-4 text-center">
+            <p className="text-sm font-semibold text-fptext-primary">Quer testar o Pratori?</p>
+            <p className="mt-1 text-xs leading-relaxed text-fptext-secondary">
+              Peça acesso e a gente explica certinho para o seu negócio.
             </p>
             <button
               type="button"
               onClick={onShowSolicitacao}
-              className="mt-3 inline-flex min-h-[42px] items-center justify-center rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-700"
+              className="pratori-btn-secondary mt-3 inline-flex min-h-[42px] w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors"
             >
-              Solicitar acesso
+              Pedir acesso
             </button>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-fptext-muted">
-            <a
-              href="/privacidade"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-fptext-primary"
-            >
+          <div className="pratori-footer-links mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium">
+            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="hover:underline">
               Política de Privacidade
             </a>
             <span className="text-fp-border" aria-hidden>
               ·
             </span>
-            <a
-              href="/termos"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-fptext-primary"
-            >
+            <a href="/termos" target="_blank" rel="noopener noreferrer" className="hover:underline">
               Termos de Uso
             </a>
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   }
