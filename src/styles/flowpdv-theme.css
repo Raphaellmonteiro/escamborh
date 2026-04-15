@@ -1,6 +1,6 @@
 /**
  * FlowPDV — tema global (light + dark)
- * Base clara alinhada à identidade Pratori (neutros quentes + vermelho).
+ * Base clara alinhada à identidade Pratori (branco dominante + vermelho).
  * Ative o escuro com `flowpdv-dark` + `dark` no <html> (ver App.tsx).
  */
 
@@ -9,21 +9,21 @@
   --pratori-red: #ea1d2c;
   --pratori-red-dark: #a02331;
   --pratori-red-hover: #9c050b;
-  --pratori-bg: #f5f0eb;
-  --pratori-bg-alt: #f5e9da;
+  --pratori-bg: #ffffff;
+  --pratori-bg-alt: #f7f7f8;
   --pratori-text: #3f3e3e;
   --pratori-text-muted: #a6a29f;
   --fp-bg-primary: var(--pratori-bg);
   --fp-bg-secondary: var(--pratori-bg-alt);
   --fp-bg-card: #ffffff;
   --fp-bg-input: #ffffff;
-  --fp-bg-hover: #ede6dc;
-  --fp-bg-active: #e5dcd0;
+  --fp-bg-hover: #f5f5f5;
+  --fp-bg-active: #ededee;
   --fp-text-primary: var(--pratori-text);
   --fp-text-secondary: var(--pratori-text-muted);
   --fp-text-muted: var(--pratori-text-muted);
-  --fp-border-default: #ddd7ce;
-  --fp-border-soft: #ebe4db;
+  --fp-border-default: #e5e5e7;
+  --fp-border-soft: #f1f1f3;
   --fp-accent: var(--pratori-red);
   --fp-ring: rgba(234, 29, 44, 0.22);
   --bg-app: var(--pratori-bg);
@@ -31,10 +31,10 @@
   --bg-main: var(--pratori-bg);
   --bg-card: #ffffff;
   --bg-input: #ffffff;
-  --bg-hover: #ede6dc;
-  --bg-active: #e5dcd0;
-  --border: #ddd7ce;
-  --border-soft: #ebe4db;
+  --bg-hover: #f5f5f5;
+  --bg-active: #ededee;
+  --border: #e5e5e7;
+  --border-soft: #f1f1f3;
   --text-primary: var(--pratori-text);
   --text-secondary: var(--pratori-text-muted);
   --text-muted: var(--pratori-text-muted);
@@ -511,10 +511,10 @@ html.flowpdv-dark {
   --pratori-red: #ea1d2c;
   --pratori-red-dark: #a02331;
   --pratori-red-hover: #9c050b;
-  --pratori-red-soft: #da5d69;
-  --pratori-bg: #f5f0eb;
-  --pratori-bg-alt: #f5e9da;
-  --pratori-bg-accent: #ffdebb;
+  --pratori-red-soft: #c84a56;
+  --pratori-bg: #ffffff;
+  --pratori-bg-alt: #f7f7f8;
+  --pratori-bg-accent: #fff4f5;
   --pratori-text: #3f3e3e;
   --pratori-text-muted: #a6a29f;
   --pratori-white: #ffffff;
@@ -524,13 +524,13 @@ html.flowpdv-dark {
   --fp-bg-secondary: var(--pratori-bg-alt);
   --fp-bg-card: var(--pratori-white);
   --fp-bg-input: var(--pratori-white);
-  --fp-bg-hover: #ede6dc;
-  --fp-bg-active: #e5dcd0;
+  --fp-bg-hover: #f5f5f5;
+  --fp-bg-active: #ededee;
   --fp-text-primary: var(--pratori-text);
   --fp-text-secondary: var(--pratori-text-muted);
   --fp-text-muted: var(--pratori-text-muted);
-  --fp-border-default: #ddd7ce;
-  --fp-border-soft: #ebe4db;
+  --fp-border-default: #e5e5e7;
+  --fp-border-soft: #f1f1f3;
   --fp-accent: var(--pratori-red);
   --fp-ring: rgba(234, 29, 44, 0.22);
   --bg-app: var(--pratori-bg);
@@ -538,10 +538,10 @@ html.flowpdv-dark {
   --bg-main: var(--pratori-bg);
   --bg-card: var(--pratori-white);
   --bg-input: var(--pratori-white);
-  --bg-hover: #ede6dc;
-  --bg-active: #e5dcd0;
-  --border: #ddd7ce;
-  --border-soft: #ebe4db;
+  --bg-hover: #f5f5f5;
+  --bg-active: #ededee;
+  --border: #e5e5e7;
+  --border-soft: #f1f1f3;
   --text-primary: var(--pratori-text);
   --text-secondary: var(--pratori-text-muted);
   --text-muted: var(--pratori-text-muted);
@@ -567,8 +567,8 @@ html.flowpdv-dark {
   border: 1px solid var(--fp-border-default);
 }
 .pratori-public-light .pratori-btn-secondary:hover {
-  background-color: var(--pratori-bg-alt);
-  border-color: #cfc8be;
+  background-color: #fafafa;
+  border-color: #d7d7da;
 }
 
 .pratori-public-light .pratori-text-brand {
@@ -592,8 +592,8 @@ html.flowpdv-dark {
 }
 
 .pratori-public-light .pratori-alert {
-  border: 1px solid rgba(218, 93, 105, 0.42);
-  background-color: #fff5ed;
+  border: 1px solid rgba(234, 29, 44, 0.18);
+  background-color: #fff7f8;
   color: var(--pratori-text);
 }
 .pratori-public-light .pratori-alert svg {
@@ -601,12 +601,12 @@ html.flowpdv-dark {
 }
 
 .pratori-public-light .pratori-card-soft {
-  background-color: var(--pratori-bg-alt);
-  border: 1px solid var(--fp-border-soft);
+  background-color: #fafafb;
+  border: 1px solid var(--fp-border-default);
 }
 
 .pratori-public-light .pratori-cta-band {
-  background: linear-gradient(180deg, var(--pratori-bg-alt) 0%, var(--pratori-bg) 100%);
+  background: linear-gradient(180deg, #fff7f8 0%, var(--pratori-bg) 100%);
   border-top: 1px solid var(--fp-border-soft);
   border-bottom: 1px solid var(--fp-border-soft);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);

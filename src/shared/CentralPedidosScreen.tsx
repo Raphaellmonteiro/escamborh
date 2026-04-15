@@ -337,34 +337,34 @@ function getCentralStatusChipTone(columnId: CentralColumnId, statusRaw: string):
 function getColumnTone(columnId: CentralColumnId): { shell: string; header: string; count: string; empty: string } {
   if (columnId === 'entrada') {
     return {
-      shell: 'border-sky-200/80 dark:border-sky-400/35 bg-white dark:bg-zinc-900/90',
-      header: 'border-b border-sky-100 dark:border-sky-400/30 bg-sky-50/70 dark:bg-sky-500/15',
-      count: 'bg-sky-100 text-sky-700 dark:bg-sky-500/25 dark:text-sky-100 dark:ring-1 dark:ring-inset dark:ring-sky-400/35',
-      empty: 'border-sky-100/80 text-sky-300 dark:border-sky-400/25 dark:text-sky-300',
+      shell: 'border-fp-border bg-white dark:border-sky-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-fp-border bg-[#FAFAFB] dark:border-sky-400/30 dark:bg-sky-500/15',
+      count: 'bg-[#FFF1F2] text-[#9C050B] dark:bg-sky-500/25 dark:text-sky-100 dark:ring-1 dark:ring-inset dark:ring-sky-400/35',
+      empty: 'border-fp-border text-fptext-muted dark:border-sky-400/25 dark:text-sky-300',
     };
   }
   if (columnId === 'em_preparo') {
     return {
-      shell: 'border-amber-200/80 dark:border-amber-400/35 bg-white dark:bg-zinc-900/90',
-      header: 'border-b border-amber-100 dark:border-amber-400/30 bg-amber-50/70 dark:bg-amber-500/15',
-      count: 'bg-amber-100 text-amber-700 dark:bg-amber-500/25 dark:text-amber-100 dark:ring-1 dark:ring-inset dark:ring-amber-400/35',
-      empty: 'border-amber-100/80 text-amber-300 dark:border-amber-400/25 dark:text-amber-300',
+      shell: 'border-fp-border bg-white dark:border-amber-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-fp-border bg-[#FFF7F8] dark:border-amber-400/30 dark:bg-amber-500/15',
+      count: 'bg-[#FFE5E8] text-[#9C050B] dark:bg-amber-500/25 dark:text-amber-100 dark:ring-1 dark:ring-inset dark:ring-amber-400/35',
+      empty: 'border-fp-border text-fptext-muted dark:border-amber-400/25 dark:text-amber-300',
     };
   }
   if (columnId === 'pronto') {
     return {
-      shell: 'border-violet-200/80 dark:border-violet-400/35 bg-white dark:bg-zinc-900/90',
-      header: 'border-b border-violet-100 dark:border-violet-400/30 bg-violet-50/70 dark:bg-violet-500/15',
-      count: 'bg-violet-100 text-violet-700 dark:bg-violet-500/25 dark:text-violet-100 dark:ring-1 dark:ring-inset dark:ring-violet-400/35',
-      empty: 'border-violet-100/80 text-violet-300 dark:border-violet-400/25 dark:text-violet-300',
+      shell: 'border-fp-border bg-white dark:border-violet-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-fp-border bg-[#FAFAFB] dark:border-violet-400/30 dark:bg-violet-500/15',
+      count: 'bg-zinc-100 text-zinc-700 dark:bg-violet-500/25 dark:text-violet-100 dark:ring-1 dark:ring-inset dark:ring-violet-400/35',
+      empty: 'border-fp-border text-fptext-muted dark:border-violet-400/25 dark:text-violet-300',
     };
   }
   if (columnId === 'rota') {
     return {
-      shell: 'border-orange-200/80 dark:border-orange-400/35 bg-white dark:bg-zinc-900/90',
-      header: 'border-b border-orange-100 dark:border-orange-400/30 bg-orange-50/70 dark:bg-orange-500/15',
+      shell: 'border-fp-border bg-white dark:border-orange-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-fp-border bg-[#FAFAFB] dark:border-orange-400/30 dark:bg-orange-500/15',
       count: 'bg-orange-100 text-orange-700 dark:bg-orange-500/25 dark:text-orange-100 dark:ring-1 dark:ring-inset dark:ring-orange-400/35',
-      empty: 'border-orange-100/80 text-orange-300 dark:border-orange-400/25 dark:text-orange-300',
+      empty: 'border-fp-border text-fptext-muted dark:border-orange-400/25 dark:text-orange-300',
     };
   }
   if (columnId === 'encerrado') {
@@ -710,8 +710,8 @@ export default function CentralPedidosScreen({
   const hasHorizontalOverflow = boardCanScrollLeft || boardCanScrollRight;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-900 sm:px-4 sm:py-2 lg:px-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-full min-h-0 flex-col bg-white dark:bg-zinc-950">
+      <div className="min-w-0 shrink-0 border-b border-fp-border bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900 sm:px-4 sm:py-2.5 lg:px-6">
         <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col">
         <ScreenHeader
           titleAs="h1"
@@ -756,8 +756,8 @@ export default function CentralPedidosScreen({
                 onClick={() => setChannelFilter(f.id)}
                 className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide min-h-[36px] sm:min-h-[38px] transition-colors ${
                   channelFilter === f.id
-                    ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                    : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    ? 'border-[#EA1D2C] bg-[#EA1D2C] text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                    : 'border-fp-border bg-white text-fptext-secondary dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700 hover:bg-[#FAFAFB] dark:hover:bg-zinc-800'
                 }`}
               >
                 {f.label}
@@ -768,8 +768,8 @@ export default function CentralPedidosScreen({
               onClick={() => setShowClosed((current) => !current)}
               className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[38px] transition-colors ${
                 showClosed
-                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                  : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  ? 'border-[#EA1D2C] bg-[#EA1D2C] text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                  : 'border-fp-border bg-transparent text-fptext-secondary dark:text-zinc-400 dark:border-zinc-700 hover:bg-[#FAFAFB] dark:hover:bg-zinc-800'
               }`}
               title={showClosed ? 'Ocultar pedidos encerrados' : 'Mostrar pedidos encerrados'}
             >
@@ -780,8 +780,8 @@ export default function CentralPedidosScreen({
               onClick={() => setCompactMode((current) => !current)}
               className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold min-h-[36px] sm:min-h-[38px] transition-colors ${
                 compactMode
-                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                  : 'bg-transparent text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  ? 'border-[#EA1D2C] bg-[#EA1D2C] text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                  : 'border-fp-border bg-transparent text-fptext-secondary dark:text-zinc-400 dark:border-zinc-700 hover:bg-[#FAFAFB] dark:hover:bg-zinc-800'
               }`}
               title={compactMode ? 'Voltar ao modo normal' : 'Reduzir altura dos cards'}
             >
@@ -800,8 +800,8 @@ export default function CentralPedidosScreen({
                 onClick={() => setQuickFilter(f.id)}
                 className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold min-h-[36px] transition-colors sm:min-h-0 sm:py-1 ${
                   quickFilter === f.id
-                    ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
-                    : 'bg-white/80 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
+                    ? 'border-[#EA1D2C] bg-[#EA1D2C] text-white dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100'
+                    : 'border-fp-border bg-white text-fptext-secondary hover:bg-[#FAFAFB] dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-800'
                 }`}
               >
                 {f.label}
@@ -844,16 +844,16 @@ export default function CentralPedidosScreen({
                 <>
                   <div
                     aria-hidden="true"
-                    className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-7 bg-gradient-to-r from-zinc-50 via-zinc-50/90 to-transparent transition-opacity dark:from-zinc-950 dark:via-zinc-950/90 lg:hidden ${boardCanScrollLeft ? 'opacity-100' : 'opacity-0'}`}
+                    className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-7 bg-gradient-to-r from-white via-white/90 to-transparent transition-opacity dark:from-zinc-950 dark:via-zinc-950/90 lg:hidden ${boardCanScrollLeft ? 'opacity-100' : 'opacity-0'}`}
                   />
                   <div
                     aria-hidden="true"
-                    className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-9 bg-gradient-to-l from-zinc-50 via-zinc-50/95 to-transparent transition-opacity dark:from-zinc-950 dark:via-zinc-950/95 lg:hidden ${boardCanScrollRight ? 'opacity-100' : 'opacity-0'}`}
+                    className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-9 bg-gradient-to-l from-white via-white/95 to-transparent transition-opacity dark:from-zinc-950 dark:via-zinc-950/95 lg:hidden ${boardCanScrollRight ? 'opacity-100' : 'opacity-0'}`}
                   />
                 </>
               )}
               {showBoardSwipeHint && (
-                <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-full border border-zinc-200/80 bg-white/92 px-2.5 py-1 text-[10px] font-semibold text-zinc-500 shadow-sm backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/88 dark:text-zinc-300 lg:hidden">
+                <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-full border border-fp-border bg-white/92 px-2.5 py-1 text-[10px] font-semibold text-fptext-secondary shadow-sm backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-900/88 dark:text-zinc-300 lg:hidden">
                   Arraste o quadro
                 </div>
               )}
@@ -873,9 +873,9 @@ export default function CentralPedidosScreen({
                     return (
                       <div
                         key={col.id}
-                        className={`snap-start flex w-[min(calc(100vw-1rem),252px)] flex-shrink-0 flex-col rounded-lg border shadow-sm shadow-zinc-950/[0.02] min-h-[min(220px,40vh)] max-h-none sm:w-[262px] md:w-[274px] lg:w-full lg:min-h-[min(256px,42vh)] lg:max-h-[min(58vh,34rem)] ${tone.shell}`}
+                        className={`snap-start flex w-[min(calc(100vw-1rem),252px)] flex-shrink-0 flex-col rounded-2xl border shadow-sm shadow-zinc-950/[0.03] min-h-[min(220px,40vh)] max-h-none sm:w-[262px] md:w-[274px] lg:w-full lg:min-h-[min(256px,42vh)] lg:max-h-[min(58vh,34rem)] ${tone.shell}`}
                       >
-                        <div className={`shrink-0 px-2.5 py-1.5 ${tone.header}`}>
+                        <div className={`shrink-0 px-3 py-2 ${tone.header}`}>
                           <div className="flex items-center gap-1.5">
                             <span className="min-w-0 truncate text-[13px] font-black leading-tight text-zinc-800 dark:text-zinc-100">
                               {col.title}
@@ -888,9 +888,9 @@ export default function CentralPedidosScreen({
                             <p className="mt-0.5 hidden text-[9px] leading-tight text-zinc-400 dark:text-zinc-400 xl:block">{col.hint}</p>
                           )}
                         </div>
-                        <div className="min-h-0 flex-1 space-y-1.5 p-1 lg:overflow-y-auto lg:overscroll-y-contain lg:space-y-1.5 lg:p-1.5">
+                        <div className="min-h-0 flex-1 space-y-1.5 bg-[#FCFCFD] p-1.5 lg:overflow-y-auto lg:overscroll-y-contain lg:space-y-1.5 lg:p-1.5">
                           {col.items.length === 0 ? (
-                            <div className={`mx-0.5 rounded-lg border border-dashed px-2 py-6 text-center text-[10px] leading-snug ${tone.empty}`}>
+                            <div className={`mx-0.5 rounded-xl border border-dashed px-2 py-6 text-center text-[10px] leading-snug ${tone.empty}`}>
                               Sem pedidos nesta etapa
                             </div>
                           ) : (
