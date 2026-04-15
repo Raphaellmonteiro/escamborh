@@ -334,37 +334,57 @@ function getCentralStatusChipTone(columnId: CentralColumnId, statusRaw: string):
   return `border-zinc-200 bg-zinc-50 text-zinc-800 ${DARK_NEUTRAL_TONE}`;
 }
 
-function getColumnTone(columnId: CentralColumnId): { shell: string; header: string; count: string; empty: string } {
+function getColumnTone(columnId: CentralColumnId): {
+  shell: string;
+  header: string;
+  count: string;
+  empty: string;
+  body: string;
+  title: string;
+  hint: string;
+} {
   if (columnId === 'entrada') {
     return {
-      shell: 'border-fp-border bg-white dark:border-sky-400/35 dark:bg-zinc-900/90',
-      header: 'border-b border-fp-border bg-[#FAFAFB] dark:border-sky-400/30 dark:bg-sky-500/15',
-      count: 'bg-[#FFF1F2] text-[#9C050B] dark:bg-sky-500/25 dark:text-sky-100 dark:ring-1 dark:ring-inset dark:ring-sky-400/35',
-      empty: 'border-fp-border text-fptext-muted dark:border-sky-400/25 dark:text-sky-300',
+      shell: 'border-sky-200/70 bg-white dark:border-sky-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-sky-100 bg-sky-50/65 dark:border-sky-400/30 dark:bg-sky-500/15',
+      count: 'bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200/80 dark:bg-sky-500/25 dark:text-sky-100 dark:ring-sky-400/35',
+      empty: 'border-sky-200/75 text-zinc-500 dark:border-sky-400/25 dark:text-sky-300',
+      body: 'bg-sky-50/[0.28] dark:bg-zinc-950/55',
+      title: 'text-sky-900 dark:text-zinc-100',
+      hint: 'text-sky-700/75 dark:text-zinc-400',
     };
   }
   if (columnId === 'em_preparo') {
     return {
-      shell: 'border-fp-border bg-white dark:border-amber-400/35 dark:bg-zinc-900/90',
-      header: 'border-b border-fp-border bg-[#FFF7F8] dark:border-amber-400/30 dark:bg-amber-500/15',
-      count: 'bg-[#FFE5E8] text-[#9C050B] dark:bg-amber-500/25 dark:text-amber-100 dark:ring-1 dark:ring-inset dark:ring-amber-400/35',
-      empty: 'border-fp-border text-fptext-muted dark:border-amber-400/25 dark:text-amber-300',
+      shell: 'border-amber-200/70 bg-white dark:border-amber-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-amber-100 bg-amber-50/65 dark:border-amber-400/30 dark:bg-amber-500/15',
+      count: 'bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200/80 dark:bg-amber-500/25 dark:text-amber-100 dark:ring-amber-400/35',
+      empty: 'border-amber-200/75 text-zinc-500 dark:border-amber-400/25 dark:text-amber-300',
+      body: 'bg-amber-50/[0.30] dark:bg-zinc-950/55',
+      title: 'text-amber-900 dark:text-zinc-100',
+      hint: 'text-amber-700/75 dark:text-zinc-400',
     };
   }
   if (columnId === 'pronto') {
     return {
-      shell: 'border-fp-border bg-white dark:border-violet-400/35 dark:bg-zinc-900/90',
-      header: 'border-b border-fp-border bg-[#FAFAFB] dark:border-violet-400/30 dark:bg-violet-500/15',
-      count: 'bg-zinc-100 text-zinc-700 dark:bg-violet-500/25 dark:text-violet-100 dark:ring-1 dark:ring-inset dark:ring-violet-400/35',
-      empty: 'border-fp-border text-fptext-muted dark:border-violet-400/25 dark:text-violet-300',
+      shell: 'border-violet-200/70 bg-white dark:border-violet-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-violet-100 bg-violet-50/65 dark:border-violet-400/30 dark:bg-violet-500/15',
+      count: 'bg-violet-100 text-violet-800 ring-1 ring-inset ring-violet-200/80 dark:bg-violet-500/25 dark:text-violet-100 dark:ring-violet-400/35',
+      empty: 'border-violet-200/75 text-zinc-500 dark:border-violet-400/25 dark:text-violet-300',
+      body: 'bg-violet-50/[0.28] dark:bg-zinc-950/55',
+      title: 'text-violet-900 dark:text-zinc-100',
+      hint: 'text-violet-700/75 dark:text-zinc-400',
     };
   }
   if (columnId === 'rota') {
     return {
-      shell: 'border-fp-border bg-white dark:border-orange-400/35 dark:bg-zinc-900/90',
-      header: 'border-b border-fp-border bg-[#FAFAFB] dark:border-orange-400/30 dark:bg-orange-500/15',
-      count: 'bg-orange-100 text-orange-700 dark:bg-orange-500/25 dark:text-orange-100 dark:ring-1 dark:ring-inset dark:ring-orange-400/35',
-      empty: 'border-fp-border text-fptext-muted dark:border-orange-400/25 dark:text-orange-300',
+      shell: 'border-orange-200/70 bg-white dark:border-orange-400/35 dark:bg-zinc-900/90',
+      header: 'border-b border-orange-100 bg-orange-50/65 dark:border-orange-400/30 dark:bg-orange-500/15',
+      count: 'bg-orange-100 text-orange-800 ring-1 ring-inset ring-orange-200/80 dark:bg-orange-500/25 dark:text-orange-100 dark:ring-orange-400/35',
+      empty: 'border-orange-200/75 text-zinc-500 dark:border-orange-400/25 dark:text-orange-300',
+      body: 'bg-orange-50/[0.30] dark:bg-zinc-950/55',
+      title: 'text-orange-900 dark:text-zinc-100',
+      hint: 'text-orange-700/75 dark:text-zinc-400',
     };
   }
   if (columnId === 'encerrado') {
@@ -373,6 +393,9 @@ function getColumnTone(columnId: CentralColumnId): { shell: string; header: stri
       header: 'border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-900',
       count: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-1 dark:ring-inset dark:ring-zinc-700/80',
       empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-700 dark:text-zinc-500',
+      body: 'bg-zinc-50/60 dark:bg-zinc-950/45',
+      title: 'text-zinc-700 dark:text-zinc-100',
+      hint: 'text-zinc-400 dark:text-zinc-400',
     };
   }
   return {
@@ -380,6 +403,9 @@ function getColumnTone(columnId: CentralColumnId): { shell: string; header: stri
     header: 'border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-900',
     count: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-1 dark:ring-inset dark:ring-zinc-700/80',
     empty: 'border-zinc-200/80 text-zinc-300 dark:border-zinc-700 dark:text-zinc-500',
+    body: 'bg-zinc-50/65 dark:bg-zinc-950/45',
+    title: 'text-zinc-800 dark:text-zinc-100',
+    hint: 'text-zinc-400 dark:text-zinc-400',
   };
 }
 
@@ -877,7 +903,7 @@ export default function CentralPedidosScreen({
                       >
                         <div className={`shrink-0 px-3 py-2 ${tone.header}`}>
                           <div className="flex items-center gap-1.5">
-                            <span className="min-w-0 truncate text-[13px] font-black leading-tight text-zinc-800 dark:text-zinc-100">
+                            <span className={`min-w-0 truncate text-[13px] font-black leading-tight ${tone.title}`}>
                               {col.title}
                             </span>
                             <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${tone.count}`}>
@@ -885,10 +911,10 @@ export default function CentralPedidosScreen({
                             </span>
                           </div>
                           {col.hint && (
-                            <p className="mt-0.5 hidden text-[9px] leading-tight text-zinc-400 dark:text-zinc-400 xl:block">{col.hint}</p>
+                            <p className={`mt-0.5 hidden text-[9px] leading-tight xl:block ${tone.hint}`}>{col.hint}</p>
                           )}
                         </div>
-                        <div className="min-h-0 flex-1 space-y-1.5 bg-[#FCFCFD] p-1.5 lg:overflow-y-auto lg:overscroll-y-contain lg:space-y-1.5 lg:p-1.5">
+                        <div className={`min-h-0 flex-1 space-y-1.5 p-1.5 lg:overflow-y-auto lg:overscroll-y-contain lg:space-y-1.5 lg:p-1.5 ${tone.body}`}>
                           {col.items.length === 0 ? (
                             <div className={`mx-0.5 rounded-xl border border-dashed px-2 py-6 text-center text-[10px] leading-snug ${tone.empty}`}>
                               Sem pedidos nesta etapa
