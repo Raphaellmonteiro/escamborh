@@ -195,7 +195,8 @@ export default function App() {
   );
   const operationalAlertSnapshotRef = React.useRef('');
   const operationalAlertLoadedRef = React.useRef(false);
-  const operationalSoundPlayedAtRef = React.useRef(0);
+  const operationalSoundRepeatTimeoutRef = React.useRef<ReturnType<typeof window.setTimeout> | undefined>(undefined);
+  const shouldRepeatOperationalSoundRef = React.useRef(false);
 
   const [openMesasCount, setOpenMesasCount] = useState(0);
 
@@ -381,6 +382,23 @@ export default function App() {
   const permiteMesas = segmentoOperacional === 'Restaurante/Food' || segmentoOperacional === 'Bar/Pub';
   const permiteDelivery = permiteMesas;
   const isOperationTab = activeTab === 'orders' || activeTab === 'central';
+  /** Som operacional: repetir a cada 10s enquanto houver pedido acionável fora da aba Operação/Pedidos. */
+  const OPERATIONAL_ALERT_REPEAT_MS = 10_000;
+  const shouldRepeatOperationalSound =
+    Boolean(token)
+    && !isAdmin
+    && operationalAlertCount > 0
+    && !isOperationTab
+    && operationalSoundEnabled;
+  shouldRepeatOperationalSoundRef.current = shouldRepeatOperationalSound;
+
+  const clearOperationalSoundRepeat = React.useCallback(() => {
+    if (operationalSoundRepeatTimeoutRef.current !== undefined) {
+      window.clearTimeout(operationalSoundRepeatTimeoutRef.current);
+      operationalSoundRepeatTimeoutRef.current = undefined;
+    }
+  }, []);
+
   const mesasNavAttentionEligible = Boolean(
     token && !isAdmin && permiteMesas && canAccess('mesas'),
   );
@@ -434,11 +452,6 @@ React.useEffect(() => {
 
         if (hasNewOperationalItem) {
           setOperationalNeedsAttention(true);
-          const currentTime = Date.now();
-          if (operationalSoundEnabled && currentTime - operationalSoundPlayedAtRef.current > 3000) {
-            operationalSoundPlayedAtRef.current = currentTime;
-            playNewOrderSound();
-          }
         }
 
         document.title = actionableOrders.length > 0
@@ -458,7 +471,29 @@ React.useEffect(() => {
       window.clearTimeout(bootTimer);
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [token, isAdmin, isOperationTab, operationalSoundEnabled, segCfg.statusConcluido]);
+  }, [token, isAdmin, isOperationTab, segCfg.statusConcluido]);
+
+  useEffect(() => {
+    if (!shouldRepeatOperationalSound) {
+      clearOperationalSoundRepeat();
+      return;
+    }
+    if (operationalSoundRepeatTimeoutRef.current !== undefined) {
+      return;
+    }
+    const tick = () => {
+      if (!shouldRepeatOperationalSoundRef.current) {
+        clearOperationalSoundRepeat();
+        return;
+      }
+      playNewOrderSound();
+      operationalSoundRepeatTimeoutRef.current = window.setTimeout(tick, OPERATIONAL_ALERT_REPEAT_MS);
+    };
+    tick();
+    return () => {
+      clearOperationalSoundRepeat();
+    };
+  }, [shouldRepeatOperationalSound, clearOperationalSoundRepeat]);
 
   useEffect(() => {
     if (isOperationTab) {
