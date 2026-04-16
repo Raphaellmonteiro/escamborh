@@ -18,7 +18,7 @@ import {
   sanitizePlanFeatures,
   type PlanFeature,
 } from './config/planFeatures';
-import { FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, mapOrderToCentralColumn } from './utils/orderCentralBoard';
+import { mapOrderToCentralColumn } from './utils/orderCentralBoard';
 import type { PlanProfileInfo } from './utils/planStatus';
 import { playNewOrderSound } from './utils/sound';
 
@@ -1236,16 +1236,7 @@ const handleAuth = async (e: React.FormEvent) => {
             )}
             {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
             {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
-              <DeliveryScreen
-                token={token}
-                hasMotoboyFeature={tenantHasMotoboyFeature}
-                slug={slugAtual}
-                onOpenCentralBalcao={() => {
-                  sessionStorage.setItem(FLOWPDV_CENTRAL_CHANNEL_FILTER_KEY, 'balcao');
-                  handleTabChange('central');
-                  setMobileNavOpen(false);
-                }}
-              />
+              <DeliveryScreen token={token} hasMotoboyFeature={tenantHasMotoboyFeature} slug={slugAtual} />
             )}
             {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
             {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
