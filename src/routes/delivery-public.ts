@@ -143,6 +143,8 @@ type DeliveryConfig = {
   /** Até 4 URLs de banner do topo (`/uploads/delivery/...`), índices 0–3. */
   cardapio_online_banner_urls?: string[];
   cardapio_banner_slots?: string[] | Record<string, string> | string;
+  /** Dias da semana sem delivery (0=domingo … 6=sábado, mesmo critério de `Date#getDay`). */
+  dias_folga_entrega?: number[];
 };
 
 type DeliveryAddressRecord = {
@@ -358,6 +360,54 @@ function getCurrentMinutesInTimeZone() {
   const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
   const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0);
   return (hour * 60) + minute;
+}
+
+const WEEKDAY_SHORT_TO_JS: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function getCurrentWeekdayJsInTimeZone(): number {
+  const short = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short' })
+    .formatToParts(new Date())
+    .find((p) => p.type === 'weekday')?.value;
+  if (short && Object.prototype.hasOwnProperty.call(WEEKDAY_SHORT_TO_JS, short)) {
+    return WEEKDAY_SHORT_TO_JS[short];
+  }
+  return new Date().getDay();
+}
+
+function normalizeDiasFolgaEntrega(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const out = new Set<number>();
+  for (const x of raw) {
+    const n = Number(x);
+    if (Number.isInteger(n) && n >= 0 && n <= 6) out.add(n);
+  }
+  return Array.from(out).sort((a, b) => a - b);
+}
+
+/** Horário de funcionamento (se cadastrado) e dias recorrentes de folga no fuso `TZ`. */
+function computeDeliveryCardapioAberto(dcfg: DeliveryConfig): { aberto: boolean; dia_folga_hoje: boolean } {
+  const diasFolga = normalizeDiasFolgaEntrega(dcfg.dias_folga_entrega);
+  const diaFolgaHoje = diasFolga.length > 0 && diasFolga.includes(getCurrentWeekdayJsInTimeZone());
+  if (diaFolgaHoje) return { aberto: false, dia_folga_hoje: true };
+
+  let abertoHorario = true;
+  if (dcfg.horario_abertura && dcfg.horario_fechamento) {
+    const [ah, am] = dcfg.horario_abertura.split(':').map(Number);
+    const [fh, fm] = dcfg.horario_fechamento.split(':').map(Number);
+    const t = getCurrentMinutesInTimeZone();
+    const ini = ah * 60 + am;
+    const fim = fh * 60 + fm;
+    abertoHorario = ini <= fim ? (t >= ini && t <= fim) : (t >= ini || t <= fim);
+  }
+  return { aberto: abertoHorario, dia_folga_hoje: false };
 }
 
 function validateCupom(
@@ -1031,15 +1081,8 @@ export function createDeliveryPublicRouter() {
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
       if (!tenant.delivery_ativo) return res.status(403).json({ error: 'Delivery nao esta ativo', aberto: false });
 
-      let aberto = true;
-      if (dcfg.horario_abertura && dcfg.horario_fechamento) {
-        const [ah, am] = dcfg.horario_abertura.split(':').map(Number);
-        const [fh, fm] = dcfg.horario_fechamento.split(':').map(Number);
-        const t = getCurrentMinutesInTimeZone();
-        const ini = ah * 60 + am;
-        const fim = fh * 60 + fm;
-        aberto = ini <= fim ? (t >= ini && t <= fim) : (t >= ini || t <= fim);
-      }
+      const { aberto, dia_folga_hoje } = computeDeliveryCardapioAberto(dcfg);
+      const diasFolgaCfg = normalizeDiasFolgaEntrega(dcfg.dias_folga_entrega);
 
       const produtos = await qAll('SELECT * FROM produtos WHERE tenant_id=? AND active=1 ORDER BY COALESCE(ordem,0) ASC, name ASC', [tenant.id]);
       let produtosComOpcoes: any[];
@@ -1089,6 +1132,7 @@ export function createDeliveryPublicRouter() {
         logo_url,
         ativo: aberto,
         aberto,
+        dia_folga_hoje,
         config: {
           taxa_entrega: dcfg.taxa_entrega ?? 0,
           modelo_entrega: 'bairro_fixo',
@@ -1111,6 +1155,7 @@ export function createDeliveryPublicRouter() {
           cardapio_online_logo_url: cardapioOnlineLogoUrl,
           cardapio_online_banner_urls: cardapioBannerSlots,
           cardapio_banner_slots: cardapioBannerSlots,
+          dias_folga_entrega: diasFolgaCfg,
         },
         categorias,
       });
@@ -1348,6 +1393,15 @@ export function createDeliveryPublicRouter() {
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
 
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
+      const { aberto: deliveryAberto } = computeDeliveryCardapioAberto(dcfg);
+      if (!deliveryAberto) {
+        return res.status(403).json({
+          success: false,
+          error: 'Delivery fechado no momento',
+          aberto: false,
+          code: 'DELIVERY_FECHADO',
+        });
+      }
       const summary = await buildCheckoutSummary({
         tenantId: tenant.id,
         config: dcfg,
@@ -1535,6 +1589,15 @@ export function createDeliveryPublicRouter() {
       const tenant = await getTenant(req.params.slug);
       if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
+      const { aberto: deliveryAberto } = computeDeliveryCardapioAberto(dcfg);
+      if (!deliveryAberto) {
+        return res.status(403).json({
+          success: false,
+          error: 'Delivery fechado no momento',
+          aberto: false,
+          code: 'DELIVERY_FECHADO',
+        });
+      }
       const automation = parseAutomationFromDeliveryConfigJson(dcfg as Record<string, unknown>);
       const {
         items,

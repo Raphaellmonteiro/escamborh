@@ -97,6 +97,8 @@ interface Config {
   cardapio_online_banner_urls?: string[];
   /** @deprecated Preferir `cardapio_online_banner_urls` (mesmo conteúdo na API pública). */
   cardapio_banner_slots?: string[];
+  /** 0=domingo … 6=sábado. Eco do painel; aberto/fechado vem de `ativo` / `dia_folga_hoje`. */
+  dias_folga_entrega?: number[];
 }
 interface CheckoutResumo {
   modelo_entrega: 'bairro_fixo';
@@ -1193,6 +1195,7 @@ export default function DeliveryCardapio() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [config, setConfig] = useState<Config>({ taxa_entrega:0, pedido_minimo:0, tempo_preparo:40 });
   const [ativo, setAtivo] = useState(true);
+  const [diaFolgaHoje, setDiaFolgaHoje] = useState(false);
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [tela, setTela] = useState<Tela>('cardapio');
@@ -1239,6 +1242,7 @@ export default function DeliveryCardapio() {
         return r.json() as Promise<{
           estabelecimento?: string;
           ativo?: boolean;
+          dia_folga_hoje?: boolean;
           logo_url?: string | null;
           categorias?: Categoria[];
           config?: Config;
@@ -1248,6 +1252,7 @@ export default function DeliveryCardapio() {
         if (cancelled) return;
         setNome(d.estabelecimento || '');
         setAtivo(d.ativo !== false);
+        setDiaFolgaHoje(d.dia_folga_hoje === true);
         setLogoUrl(d.logo_url || null);
         setCategorias(Array.isArray(d.categorias) ? d.categorias : []);
         setConfig((prev) => ({
@@ -1434,8 +1439,9 @@ export default function DeliveryCardapio() {
     if (ativo) {
       return config.horario_fechamento ? `Aberto até às ${config.horario_fechamento}` : 'Loja aberta agora';
     }
+    if (diaFolgaHoje) return 'Fechado hoje (folga semanal)';
     return config.horario_abertura ? `Fechado agora · abre às ${config.horario_abertura}` : 'Loja fechada no momento';
-  }, [ativo, config.horario_abertura, config.horario_fechamento]);
+  }, [ativo, diaFolgaHoje, config.horario_abertura, config.horario_fechamento]);
   const cardapioTheme = useMemo(
     () => buildDeliveryCardapioTheme(normalizeDeliveryCardapioThemeMode(config.theme_mode)),
     [config.theme_mode]
@@ -1702,6 +1708,7 @@ export default function DeliveryCardapio() {
     setTela('identificar');
   }, []);
   const abrirCheckoutAPartirDaSacola = useCallback(() => {
+    if (!ativo) return;
     if (!cliente) {
       abrirIdentificacao('checkout');
       return;
@@ -1709,7 +1716,7 @@ export default function DeliveryCardapio() {
     setSacolaOpen(false);
     setCheckoutOpen(true);
     setCheckoutStep(1);
-  }, [cliente, abrirIdentificacao]);
+  }, [ativo, cliente, abrirIdentificacao]);
   const abrirPromocoesPublicas = useCallback(() => {
     setSearch('');
     setAbaCardapio('promocoes');
@@ -2115,8 +2122,10 @@ export default function DeliveryCardapio() {
           if (posIdentificacao === 'checkout') {
             setTela('cardapio');
             setSacolaOpen(false);
-            setCheckoutOpen(true);
-            setCheckoutStep(1);
+            if (ativo) {
+              setCheckoutOpen(true);
+              setCheckoutStep(1);
+            }
             return;
           }
           if (abaDest === 'meus_pedidos') {
@@ -2238,7 +2247,9 @@ export default function DeliveryCardapio() {
 
       {!ativo && (
         <div className="bg-rose-600 px-4 py-2.5 text-center text-sm font-semibold text-white">
-          Delivery fechado no momento {config.horario_abertura && `• Abre às ${config.horario_abertura}`}
+          {diaFolgaHoje
+            ? 'Hoje a loja está fechada (folga semanal). Pedidos pelo cardápio não estão disponíveis.'
+            : <>Delivery fechado no momento {config.horario_abertura && `• Abre às ${config.horario_abertura}`}</>}
         </div>
       )}
 
@@ -3299,6 +3310,7 @@ export default function DeliveryCardapio() {
               } as CartItem);
             }}
             onRemove={(key) => removeCart(key)}
+            aceitaPedidos={ativo}
           />
         )}
       </AnimatePresence>
@@ -3319,7 +3331,7 @@ export default function DeliveryCardapio() {
               onStepChange: setCheckoutStep,
               onClose: () => {
                 fecharCheckoutModal();
-                setSacolaOpen(true);
+                if (ativo) setSacolaOpen(true);
               },
             }}
           />
@@ -3839,7 +3851,7 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
   );
 }
 
-function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, suggestionsReady, suggestionsPending, suggestionRequestKey, onAdd, onAddSuggestion, onRemove }: {
+function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart, config, tipoAtendimento, suggestions, loadingSuggestions, showSuggestions, suggestionsReady, suggestionsPending, suggestionRequestKey, onAdd, onAddSuggestion, onRemove, aceitaPedidos = true }: {
   open: boolean;
   onClose: () => void;
   onContinuarCheckout: () => void;
@@ -3857,6 +3869,8 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
   onAdd: (p: CartItem) => void;
   onAddSuggestion: (item: SuggestionItem) => void;
   onRemove: (key: string) => void;
+  /** Quando false, a sacola abre mas não segue para o checkout (loja fechada / fora do horário). */
+  aceitaPedidos?: boolean;
 }) {
   const sub = cart.reduce((a, i) => a + i.preco_final * i.qty, 0);
   const pedidoMinimoAplicavel = tipoAtendimento === 'entrega' ? Number(config.pedido_minimo || 0) : 0;
@@ -3889,9 +3903,9 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
       ? 'As sugestoes demoraram. Voce pode seguir para o checkout abaixo.'
       : null;
   const handleContinuarCheckout = useCallback(() => {
-    if (checkoutLockedBySuggestions) return;
+    if (checkoutLockedBySuggestions || !aceitaPedidos) return;
     onContinuarCheckout();
-  }, [checkoutLockedBySuggestions, onContinuarCheckout]);
+  }, [aceitaPedidos, checkoutLockedBySuggestions, onContinuarCheckout]);
 
   if (!open) return null;
   return (
@@ -3977,10 +3991,21 @@ function SacolaModal({ open, onClose, onContinuarCheckout, slug, cliToken, cart,
                 {footerHint}
               </p>
             ) : null}
+            {!aceitaPedidos ? (
+              <p
+                className={
+                  th.mode === 'light_red'
+                    ? 'mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-bold text-rose-900'
+                    : 'mb-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-center text-xs font-bold text-rose-100'
+                }
+              >
+                A loja nao esta aceitando pedidos agora. Volte quando estiver aberta.
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={handleContinuarCheckout}
-              disabled={sub < pedidoMinimoAplicavel || checkoutLockedBySuggestions}
+              disabled={sub < pedidoMinimoAplicavel || checkoutLockedBySuggestions || !aceitaPedidos}
               className={sb.primaryBtn}
             >
               {checkoutLockedBySuggestions ? 'Carregando sugestoes...' : 'Continuar para finalizar'}

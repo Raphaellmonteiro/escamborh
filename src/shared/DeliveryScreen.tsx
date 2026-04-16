@@ -50,6 +50,8 @@ interface DeliveryConfig {
   cardapio_link_curto?: string;
   pix_nome?: string; pix_cidade?: string; pix_payload_estatico?: string;
   desconto_pix?: number; horario_abertura?: string; horario_fechamento?: string;
+  /** 0=domingo … 6=sábado (`Date#getDay`). Dias em que o cardápio não aceita pedidos. */
+  dias_folga_entrega?: number[];
   payment_provider?: string;
   provider_enabled?: boolean;
   api_key?: string;
@@ -2359,6 +2361,47 @@ export function DeliveryConfigPanel({
                 <Field label="Horário fechamento" value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>
                 <Field label="Tempo de preparo (min)" value={String(cfg.tempo_preparo||'')} onChange={v=>setCfg(c=>({...c,tempo_preparo:parseInt(v)||0}))} type="number" placeholder="40"/>
                 <Field label="Pedido mínimo (R$)" value={String(cfg.pedido_minimo||'')} onChange={v=>setCfg(c=>({...c,pedido_minimo:parseFloat(v)||0}))} type="number" placeholder="0"/>
+              </div>
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-black text-zinc-800 dark:text-zinc-100">Folga fixa na semana</p>
+                  <p className="text-xs text-zinc-500 mt-1">Marque os dias em que o cardápio online fica fechado (ex.: quarta e domingo). Mesmo horário que você configurar acima: nesses dias não aceita pedido.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 1, label: 'Seg' },
+                    { value: 2, label: 'Ter' },
+                    { value: 3, label: 'Qua' },
+                    { value: 4, label: 'Qui' },
+                    { value: 5, label: 'Sex' },
+                    { value: 6, label: 'Sáb' },
+                    { value: 0, label: 'Dom' },
+                  ].map((dia) => {
+                    const marcados = new Set<number>(cfg.dias_folga_entrega || []);
+                    const on = marcados.has(dia.value);
+                    return (
+                      <button
+                        key={dia.value}
+                        type="button"
+                        onClick={() =>
+                          setCfg((c) => {
+                            const s = new Set<number>(c.dias_folga_entrega || []);
+                            if (s.has(dia.value)) s.delete(dia.value);
+                            else s.add(dia.value);
+                            return { ...c, dias_folga_entrega: Array.from(s).sort((a, b) => a - b) };
+                          })
+                        }
+                        className={`min-h-[40px] rounded-xl border px-3 py-2 text-xs font-bold transition-colors ${
+                          on
+                            ? 'border-rose-400 bg-rose-100 text-rose-900 dark:border-rose-500/50 dark:bg-rose-500/20 dark:text-rose-100'
+                            : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-zinc-500'
+                        }`}
+                      >
+                        {dia.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
