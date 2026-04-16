@@ -43,7 +43,7 @@ const SolicitacaoModal      = lazy(() => import('./shared/modals/SolicitacaoModa
 const RHScreen              = lazy(() => import('./shared/RHScreen'));
 const SystemLogsScreen      = lazy(() => import('./shared/SystemLogsScreen'));
 const DeliveryScreen        = lazy(() => import('./shared/DeliveryScreen'));
-const WhatsAppIAScreen      = lazy(() => import('./shared/WhatsAppIAScreen'));
+const TabClientes = lazy(() => import('./shared/DeliveryScreen').then((m) => ({ default: m.TabClientes })));
 const DeliveryCardapio      = lazy(() => import('./segments/delivery/DeliveryCardapio'));
 const PedidoRastreamento    = lazy(() => import('./shared/PedidoRastreamento'));
 const KDSScreen             = lazy(() => import('./segments/restaurante/KDSScreen'));
@@ -161,7 +161,7 @@ export default function App() {
   const OPERATIONAL_ALERT_SOUND_KEY = 'flowpdv_operational_alert_sound';
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [estabelecimentoSegmento, setEstabelecimentoSegmento] = useState('Restaurante/Food');
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery' | 'whatsapp-ia'>('pos')
+  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery' | 'clientes'>('pos')
   const [floatPos, setFloatPos]   = React.useState(() => {
     const saved = localStorage.getItem('orders_float_pos');
     return saved ? JSON.parse(saved) : { x: window.innerWidth - 80, y: window.innerHeight - 120 };
@@ -214,8 +214,8 @@ export default function App() {
   };
   const normalizeAccessFeature = (tab: string): string => {
     if (tab === 'central') return 'orders';
-    // Enquanto o modulo nao tem permissao/plano proprios, reaproveita o gate atual de delivery.
-    if (tab === 'whatsapp-ia') return 'delivery';
+    // Clientes (cadastro delivery) e WhatsApp IA reutilizam o mesmo gate de delivery.
+    if (tab === 'clientes' || tab === 'whatsapp-ia') return 'delivery';
     return tab;
   };
   const planAllows = (tab: string): boolean => {
@@ -304,10 +304,10 @@ export default function App() {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
         setActiveTab('estoque');
-      } else if (nav === 'whatsapp-ia' && canAccess('whatsapp-ia')) {
+      } else if (nav === 'whatsapp-ia' && canAccess('delivery')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
-        setActiveTab('whatsapp-ia');
+        setActiveTab('delivery');
       } else if (nav === 'orders' && canAccess('orders')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
@@ -1044,8 +1044,11 @@ const handleAuth = async (e: React.FormEvent) => {
               />
             )}
             {canAccess('products') && <NavItem active={activeTab === 'products'} onClick={() => handleTabChange('products')} icon="📖" label={segCfg.labelSidebarProdutos} />}
+            {canAccess('clientes') && permiteDelivery && (
+              <NavItem active={activeTab === 'clientes'} onClick={() => handleTabChange('clientes')} icon="👥" label="Clientes" />
+            )}
             {canAccess('whatsapp-ia') && permiteDelivery && (
-              <NavItem active={activeTab === 'whatsapp-ia'} onClick={() => handleTabChange('whatsapp-ia')} icon="💬" label="WhatsApp IA" />
+              <NavItem disabled title="Funcionalidade em preparação — ainda não disponível" icon="💬" label="Em breve" />
             )}
             {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon="📦"  label="Estoque" />}
           </>); })()}
@@ -1228,11 +1231,8 @@ const handleAuth = async (e: React.FormEvent) => {
                 deliverySlug={slugAtual}
               />
             )}
-            {activeTab === 'whatsapp-ia' && canAccess('whatsapp-ia') && permiteDelivery && (
-              <WhatsAppIAScreen
-                token={token}
-                slug={slugAtual}
-              />
+            {activeTab === 'clientes' && canAccess('clientes') && permiteDelivery && (
+              <TabClientes token={token} />
             )}
             {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
             {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (

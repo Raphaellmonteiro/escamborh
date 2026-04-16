@@ -251,7 +251,7 @@ const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
 const deliverySecondaryButtonActiveClass = 'bg-zinc-900 dark:bg-zinc-700 text-white';
 const deliverySecondaryButtonInactiveClass =
   'bg-zinc-50 border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-700 dark:hover:border-zinc-600';
-type DeliveryRootTab = 'painel' | 'clientes' | 'motoboys' | 'relatorio' | 'config';
+type DeliveryRootTab = 'painel' | 'motoboys' | 'relatorio' | 'config';
 type DeliveryConfigSection = 'loja' | 'zonas' | 'cupons' | 'evolution';
 type DeliveryScreenMode = 'default' | 'whatsapp-ia';
 
@@ -287,7 +287,7 @@ export default function DeliveryScreen({
               {isWhatsAppIAMode ? 'WhatsApp IA' : 'Delivery'}
             </>
           }
-          subtitle={isWhatsAppIAMode ? 'Canal dedicado da IA, configuracao do provider e webhook inbound' : 'Canal delivery, clientes, motoboys e configuracoes'}
+          subtitle={isWhatsAppIAMode ? 'Canal dedicado da IA, configuracao do provider e webhook inbound' : 'Canal delivery, motoboys e configuracoes'}
           actions={
             !isWhatsAppIAMode && slug ? (
               <a
@@ -309,51 +309,21 @@ export default function DeliveryScreen({
             {/* Tabs — mobile: scroll horizontal, toque confortável; desktop: inline */}
             <div className="flex bg-fp-card border border-fp-border rounded-xl p-1 gap-0.5 w-full sm:w-fit overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-pl-1 scroll-pr-1 sm:scroll-pl-0 sm:scroll-pr-0 [-webkit-overflow-scrolling:touch]">
               {([
-                { key: 'painel', label: 'Painel', icon: <Package size={14} />, emphasize: false, disabled: false },
-                { key: 'clientes', label: 'Clientes', icon: <Users size={14} />, emphasize: true, disabled: false },
-                {
-                  key: 'whatsapp',
-                  label: 'WhatsApp',
-                  icon: <MessageCircle size={14} />,
-                  emphasize: false,
-                  disabled: true,
-                },
-                { key: 'motoboys', label: 'Motoboys', icon: <Truck size={14} />, emphasize: false, disabled: false },
-                { key: 'relatorio', label: 'Relatório', icon: <BarChart2 size={14} />, emphasize: false, disabled: false },
-                { key: 'config', label: 'Configurações', icon: <Settings size={14} />, emphasize: false, disabled: false },
+                { key: 'painel', label: 'Painel', icon: <Package size={14} /> },
+                { key: 'motoboys', label: 'Motoboys', icon: <Truck size={14} /> },
+                { key: 'relatorio', label: 'Relatório', icon: <BarChart2 size={14} /> },
+                { key: 'config', label: 'Configurações', icon: <Settings size={14} /> },
               ] as const).map((t) => {
                 if (t.key === 'motoboys' && !hasMotoboyFeature) return null;
-                if (t.disabled) {
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      disabled
-                      title="Em breve — canal ainda não disponível como área principal aqui"
-                      className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold shrink-0 snap-start whitespace-nowrap cursor-not-allowed opacity-55 text-fptext-muted border border-dashed border-fp-border bg-fp-secondary/40"
-                    >
-                      {t.icon}
-                      <span className="flex flex-col items-start leading-tight sm:flex-row sm:items-center sm:gap-1.5">
-                        <span>{t.label}</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-fptext-muted/80">em breve</span>
-                      </span>
-                    </button>
-                  );
-                }
-                const isActive = tab === t.key;
-                const emphasizeInactive =
-                  t.emphasize &&
-                  !isActive &&
-                  'text-fptext-primary border border-emerald-500/35 bg-emerald-500/[0.08] hover:bg-emerald-500/14 active:bg-emerald-500/20';
                 return (
                   <button
                     key={t.key}
                     type="button"
                     onClick={() => setTab(t.key)}
                     className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-bold transition-all shrink-0 snap-start whitespace-nowrap ${
-                      isActive
+                      tab === t.key
                         ? 'bg-zinc-900 text-white dark:bg-zinc-800'
-                        : emphasizeInactive || 'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'
+                        : 'text-fptext-muted hover:bg-fp-hover active:bg-fp-active'
                     }`}
                   >
                     {t.icon}
@@ -364,7 +334,6 @@ export default function DeliveryScreen({
             </div>
 
             {tab === 'painel' && <TabPainel token={token} hasMotoboyFeature={hasMotoboyFeature} />}
-            {tab === 'clientes'  && <TabClientes token={token} />}
             {tab === 'motoboys'  && hasMotoboyFeature && <TabMotoboys token={token} />}
             {tab === 'relatorio' && <TabRelatorio token={token} />}
             {tab === 'config'    && <DeliveryConfigPanel token={token} slug={slug} />}
@@ -1192,7 +1161,7 @@ function DCard({ label, value, color, icon }: { label:string; value:string; colo
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA CLIENTES
 // ═══════════════════════════════════════════════════════════════════════════════
-function TabClientes({ token }: { token: string }) {
+export function TabClientes({ token }: { token: string }) {
   const [clientes, setClientes]   = useState<DeliveryCustomer[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
