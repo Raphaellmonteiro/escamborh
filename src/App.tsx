@@ -451,6 +451,10 @@ React.useEffect(() => {
         operationalAlertLoadedRef.current = true;
         setOperationalAlertCount(actionableOrders.length);
 
+        if (hasNewOperationalItem && operationalSoundEnabled) {
+          playNewOrderSound();
+        }
+
         if (isOperationTab) {
           setOperationalNeedsAttention(false);
           document.title = 'FlowPDV';
@@ -478,7 +482,7 @@ React.useEffect(() => {
       window.clearTimeout(bootTimer);
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [token, isAdmin, isOperationTab, segCfg.statusConcluido]);
+  }, [token, isAdmin, isOperationTab, operationalSoundEnabled, segCfg.statusConcluido]);
 
   useEffect(() => {
     if (!shouldRepeatOperationalSound) {
