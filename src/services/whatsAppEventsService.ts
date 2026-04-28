@@ -241,7 +241,16 @@ async function registerWhatsAppOrderEvent(
   try {
     const tenantId = parsePositiveInt(input.tenantId);
     const orderId = parsePositiveInt(input.orderId);
-    if (!tenantId || !orderId) return;
+    if (!tenantId || !orderId) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'invalid_identifiers',
+        event: eventName,
+        source: input.source || null,
+        tenantId: input.tenantId,
+        orderId: input.orderId,
+      });
+      return;
+    }
 
     const config = await q1<TenantWhatsAppConfigRow>(
       `SELECT whatsapp_enabled,
@@ -254,14 +263,46 @@ async function registerWhatsAppOrderEvent(
        WHERE tenant_id=?`,
       [tenantId]
     );
-    if (!config || !toBool(config.whatsapp_enabled, false)) return;
+    if (!config || !toBool(config.whatsapp_enabled, false)) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'channel_disconnected',
+        detail: 'tenant_whatsapp_disabled_or_missing',
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+      });
+      return;
+    }
 
     const autoNotifyFlag = CONFIG_FLAG_BY_NAME[eventName];
     const autoNotifyEnabled = toBool(config[autoNotifyFlag], false);
-    if (!autoNotifyEnabled) return;
+    if (!autoNotifyEnabled) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'auto_notify_disabled',
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+        flag: autoNotifyFlag,
+      });
+      return;
+    }
 
     const connectionInfo = await getConnectionInfo(tenantId);
     if (!connectionInfo.supported || !connectionInfo.configured || !connectionInfo.status?.connected) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'channel_disconnected',
+        detail: {
+          supported: Boolean(connectionInfo.supported),
+          configured: Boolean(connectionInfo.configured),
+          connected: Boolean(connectionInfo.status?.connected),
+        },
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+      });
       return;
     }
 
@@ -286,8 +327,38 @@ async function registerWhatsAppOrderEvent(
        WHERE p.id=? AND p.tenant_id=?`,
       [orderId, tenantId]
     );
-    if (!order || !shouldDispatchTransactionalEvent(eventName, order)) return;
-    if (await hasAlreadyProcessedOrderEvent(tenantId, orderId, eventName)) return;
+    if (!order) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'order_not_found',
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+      });
+      return;
+    }
+    if (!shouldDispatchTransactionalEvent(eventName, order)) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'event_not_supported',
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+        channel: normalizeOptionalText(order.canal),
+        pickup_type: normalizeOptionalText(order.tipo_retirada),
+      });
+      return;
+    }
+    if (await hasAlreadyProcessedOrderEvent(tenantId, orderId, eventName)) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'deduplicated',
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+      });
+      return;
+    }
 
     const payload: WhatsAppMessagePayload = {
       tenant_id: Number(order.tenant_id),
@@ -302,6 +373,17 @@ async function registerWhatsAppOrderEvent(
       pickup_type: normalizeOptionalText(order.tipo_retirada),
       estimated_minutes: parseEstimatedMinutesFromDeliveryConfig(order.delivery_config),
     };
+    if (!payload.customer_phone) {
+      logInfo('whatsAppEventsService.skip', {
+        reason: 'invalid_customer_phone',
+        detail: 'empty_or_missing',
+        event: eventName,
+        source: input.source || null,
+        tenantId,
+        orderId,
+      });
+      return;
+    }
 
     const message = buildDefaultOrderStatusMessage(eventName, payload);
 
@@ -420,5 +502,19 @@ export async function emitWhatsAppOrderStatusEvent(input: RegisterWhatsAppOrderE
 
   if (normalizedStatus === 'pronto') {
     await registerWhatsAppOrderEvent('order_ready_for_pickup', input);
+    return;
   }
+
+  if (normalizedStatus === 'pronto para entrega' || normalizedStatus === 'pronto para retirada') {
+    await registerWhatsAppOrderEvent('order_ready_for_pickup', input);
+    return;
+  }
+
+  logInfo('whatsAppEventsService.skip', {
+    reason: 'event_not_supported',
+    source: input.source || null,
+    tenantId: input.tenantId,
+    orderId: input.orderId,
+    status: normalizeOptionalText(input.status),
+  });
 }
