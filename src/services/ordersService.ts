@@ -36,6 +36,7 @@ import { requireProductInventoryTargets } from './stockIdentification';
 import { parseAutomationFromDeliveryConfigJson, shouldAutoPrintForBalcaoOrder } from './automationConfig';
 import { runAutomatedKitchenPrintForOrder } from './operationalAutomationService';
 import { createPixPayment } from './paymentsService';
+import { revalidatePixPaymentByOrder } from './pixPaymentRevalidationService';
 import { touchStoreCustomerPurchase } from './storeCustomerService';
 import { tenantHasInventoryFeature } from './tenantPlan';
 import { notifyTenantOrderStreams } from '../sse';
@@ -1835,6 +1836,44 @@ export async function getOrders(filters: GetOrdersFilters) {
           return;
         }
         logError('ordersService.getOrders.confirmPendingPix', result.reason, {
+          tenantId: filters.tenantId,
+          orderId: order.id,
+        });
+      });
+    }
+
+    const pendingRetiradaPixOrders = orders.filter((order) => {
+      if (String(order.canal || '').trim().toLowerCase() !== 'retirada') return false;
+      if (String(order.pagamento_tipo || '').trim().toLowerCase() !== 'pix') return false;
+      if (normalizePaymentStatusKey(order.pagamento_status) === 'pago') return false;
+      return true;
+    });
+
+    if (pendingRetiradaPixOrders.length > 0) {
+      const pixRevalidationResults = await Promise.allSettled(
+        pendingRetiradaPixOrders.map((order) =>
+          revalidatePixPaymentByOrder({
+            orderId: order.id,
+            tenantId: filters.tenantId,
+          })
+        )
+      );
+
+      pixRevalidationResults.forEach((result, index) => {
+        const order = pendingRetiradaPixOrders[index];
+        if (result.status === 'fulfilled') {
+          const approvedLike =
+            normalizePaymentStatusKey(result.value.externalStatus) === 'approved' ||
+            normalizePaymentStatusKey(result.value.externalStatus) === 'paid';
+          if (approvedLike || result.value.orderUpdated) {
+            order.pagamento_status = 'pago';
+            if (result.value.paidAt) {
+              order.pagamento_confirmado_at = result.value.paidAt;
+            }
+          }
+          return;
+        }
+        logError('ordersService.getOrders.revalidatePendingRetiradaPix', result.reason, {
           tenantId: filters.tenantId,
           orderId: order.id,
         });
