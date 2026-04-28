@@ -92,6 +92,13 @@ type WhatsAppHumanHandoffRow = {
   handoff_created_at?: string | null;
 };
 
+type RecentTransactionalOrderEventRow = {
+  tipo?: string | null;
+  status_novo?: string | null;
+  payload?: string | null;
+  created_at?: string | null;
+};
+
 export type RegisterInboundWhatsAppMessagesResult = {
   accepted: boolean;
   reason: string | null;
@@ -102,6 +109,15 @@ export type RegisterInboundWhatsAppMessagesResult = {
 
 const HUMAN_HANDOFF_TTL_HOURS = 4;
 const EVOLUTION_SUPPORTED_INBOUND_EVENTS = new Set(['messages.upsert', 'message.upsert']);
+const TRANSACTIONAL_CONTEXT_WINDOW_MINUTES = 8;
+const PASSIVE_TRANSACTIONAL_ACKNOWLEDGEMENTS = new Set([
+  'ok',
+  'certo',
+  'obrigado',
+  'obrigada',
+  'blz',
+  'beleza',
+]);
 
 const HUMAN_HANDOFF_KEYWORDS = [
   'cancelar',
@@ -476,6 +492,65 @@ function parseDateMs(value: string | null | undefined) {
   const parsed = new Date(value);
   const time = parsed.getTime();
   return Number.isNaN(time) ? null : time;
+}
+
+function extractTransactionalEventCustomerPhone(payloadRaw: unknown) {
+  const payload = getJsonRecordCandidate(payloadRaw);
+  const nestedPayload = getRecord(payload?.payload);
+  return normalizeWhatsAppPhone(nestedPayload?.customer_phone);
+}
+
+function normalizePassiveAcknowledgementText(messageText: string) {
+  return normalizeTextForMatch(messageText)
+    .replace(/[\s!.?,;:]+/g, ' ')
+    .trim();
+}
+
+function isPassiveTransactionalAcknowledgement(messageText: string) {
+  const normalized = normalizePassiveAcknowledgementText(messageText);
+  if (!normalized) return false;
+
+  if (PASSIVE_TRANSACTIONAL_ACKNOWLEDGEMENTS.has(normalized)) {
+    return true;
+  }
+
+  return /^(?:👍|🙏)+$/u.test(normalized.replace(/\s+/g, ''));
+}
+
+async function getRecentTransactionalOrderEventForPhone(input: {
+  tenantId: number;
+  customerPhone: string;
+}) {
+  const rows = await qAll<RecentTransactionalOrderEventRow>(
+    `SELECT tipo, status_novo, payload, created_at
+       FROM pedido_eventos
+      WHERE tenant_id=?
+        AND tipo IN (
+          'WHATSAPP_TXN_ORDER_CONFIRMED',
+          'WHATSAPP_TXN_ORDER_READY_FOR_DELIVERY',
+          'WHATSAPP_TXN_ORDER_OUT_FOR_DELIVERY',
+          'WHATSAPP_TXN_ORDER_READY_FOR_PICKUP'
+        )
+        AND created_at >= NOW() - INTERVAL '${TRANSACTIONAL_CONTEXT_WINDOW_MINUTES} minutes'
+      ORDER BY created_at DESC
+      LIMIT 30`,
+    [input.tenantId]
+  );
+
+  for (const row of rows) {
+    const eventPhone = extractTransactionalEventCustomerPhone(row.payload);
+    if (!eventPhone || !phonesMatch(eventPhone, input.customerPhone)) {
+      continue;
+    }
+
+    return {
+      type: normalizeOptionalText(row.tipo),
+      status: normalizeOptionalText(row.status_novo),
+      createdAt: row.created_at || null,
+    };
+  }
+
+  return null;
 }
 
 function resolveHumanHandoffReason(messageText: string, intent: SimpleInboundIntent | null) {
@@ -1255,6 +1330,11 @@ async function processInboundAutoReply(input: {
   const intent = classifySimpleIntent(input.message.message_text);
   const handoffReason = resolveHumanHandoffReason(input.message.message_text, intent);
   const shouldActivateHumanHandoff = Boolean(handoffReason);
+  const recentTransactionalEvent = await getRecentTransactionalOrderEventForPhone({
+    tenantId: input.tenantId,
+    customerPhone: input.message.customer_phone,
+  });
+  const passiveTransactionalAck = isPassiveTransactionalAcknowledgement(input.message.message_text);
 
   logInfo('whatsAppInboundService.message.received', {
     tenantId: input.tenantId,
@@ -1263,6 +1343,8 @@ async function processInboundAutoReply(input: {
     text: summarizeText(input.message.message_text),
     intent,
     provider: input.message.provider,
+    transactionalContextActive: Boolean(recentTransactionalEvent),
+    passiveTransactionalAck,
   });
 
   if (shouldActivateHumanHandoff) {
@@ -1288,6 +1370,27 @@ async function processInboundAutoReply(input: {
       handoffReason,
       recipient: maskPhone(input.message.customer_phone),
       ttlHours: HUMAN_HANDOFF_TTL_HOURS,
+    });
+    return;
+  }
+
+  if (recentTransactionalEvent && passiveTransactionalAck) {
+    await updateInboundMessageAutomation(input.message.id, {
+      intent,
+      autoReplyStatus: 'ignored_transactional_passive_ack',
+      autoReplyError: null,
+    });
+
+    logInfo('whatsAppInboundService.autoReply.ignoredTransactionalPassiveAck', {
+      tenantId: input.tenantId,
+      inboundMessageId: input.message.id,
+      phone: input.message.customer_phone,
+      text: summarizeText(input.message.message_text),
+      intent,
+      transactionalEventType: recentTransactionalEvent.type,
+      transactionalEventStatus: recentTransactionalEvent.status,
+      transactionalEventCreatedAt: recentTransactionalEvent.createdAt,
+      recipient: maskPhone(input.message.customer_phone),
     });
     return;
   }
