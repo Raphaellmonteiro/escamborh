@@ -152,6 +152,20 @@ function resolveDeliveryBackgroundDecor(cfg: DeliveryVisualConfig): { url: strin
   return { url, opacity };
 }
 
+function normalizeHeroImageSrc(raw: unknown): string {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  const normalized = normalizeProductPhotoPublicUrl(text);
+  if (normalized) return normalized;
+  const unixPath = text.replace(/\\/g, '/');
+  if (/^https?:\/\//i.test(unixPath) || unixPath.startsWith('//') || unixPath.startsWith('data:') || unixPath.startsWith('blob:')) {
+    return unixPath;
+  }
+  const cleanRelative = unixPath.replace(/^\.\//, '');
+  if (!cleanRelative) return '';
+  return cleanRelative.startsWith('/') ? cleanRelative : `/${cleanRelative}`;
+}
+
 type HeroGalleryItem = {
   key: string;
   src: string;
@@ -181,9 +195,10 @@ function resolveDeliveryHeroGallery(
     return [0, 1, 2, 3].map((index) => {
       const configured = String(slots[index] || '').trim();
       if (configured) {
+        const src = normalizeHeroImageSrc(configured);
         return {
           key: `cover-slot-${index}`,
-          src: configured,
+          src,
           alt: nome || 'Loja',
           tipo: 'banner' as const,
         };
@@ -208,12 +223,19 @@ function resolveDeliveryHeroGallery(
 
   const capasConfig = [...(cfg.coverImages || [])].map(String).filter((s) => s.trim());
   if (capasConfig.length > 0) {
-    const imagens: HeroGalleryItem[] = capasConfig.slice(0, 4).map((src, index) => ({
-      key: `cover-config-${index}`,
-      src: src.trim(),
-      alt: nome || 'Loja',
-      tipo: 'destaque' as const,
-    }));
+    const imagens: HeroGalleryItem[] = capasConfig
+      .slice(0, 4)
+      .map((src, index): HeroGalleryItem | null => {
+        const normalized = normalizeHeroImageSrc(src);
+        if (!normalized) return null;
+        return {
+          key: `cover-config-${index}`,
+          src: normalized,
+          alt: nome || 'Loja',
+          tipo: 'destaque' as const,
+        };
+      })
+      .filter((item): item is HeroGalleryItem => item != null);
     const base = imagens[0];
     while (imagens.length < 4 && base) {
       imagens.push({
@@ -1231,6 +1253,7 @@ export default function DeliveryCardapio() {
   const [prefetchedSuggestions, setPrefetchedSuggestions] = useState<SuggestionItem[]>([]);
   const [suggestionsReadySignature, setSuggestionsReadySignature] = useState('');
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [heroBrokenKeys, setHeroBrokenKeys] = useState<Record<string, true>>({});
 
   useEffect(() => {
     if (!slug) return;
@@ -1428,6 +1451,9 @@ export default function DeliveryCardapio() {
     () => resolveDeliveryHeroGallery(deliveryVisualFromConfig, produtosDestaque, logoResolvido, nome),
     [deliveryVisualFromConfig, produtosDestaque, logoResolvido, nome]
   );
+  useEffect(() => {
+    setHeroBrokenKeys({});
+  }, [galeriaTopo]);
   const resumoVitrine = useMemo(() => createFallbackCheckoutResumo({
     config,
     subtotal,
@@ -2261,7 +2287,7 @@ export default function DeliveryCardapio() {
             <div className={cardapioTheme.hero.gridBg}>
               {galeriaTopo.slice(0, 4).map((item, heroIdx) => (
                 <div key={item.key} className={cardapioTheme.hero.cellBg}>
-                  {item.tipo === 'fallback' ? (
+                  {item.tipo === 'fallback' || !item.src || heroBrokenKeys[item.key] ? (
                     <div className={cardapioTheme.hero.fallbackLetter}>
                       <span className={`text-base font-black sm:text-5xl ${cardapioTheme.mode === 'light_red' ? 'text-zinc-300' : 'text-zinc-300'}`}>{(nome || 'F').slice(0, 1).toUpperCase()}</span>
                     </div>
@@ -2273,6 +2299,9 @@ export default function DeliveryCardapio() {
                       loading={heroIdx === 0 ? 'eager' : 'lazy'}
                       decoding="async"
                       fetchPriority={heroIdx === 0 ? 'high' : 'low'}
+                      onError={() => {
+                        setHeroBrokenKeys((prev) => (prev[item.key] ? prev : { ...prev, [item.key]: true }));
+                      }}
                     />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent max-sm:from-black/20" />
