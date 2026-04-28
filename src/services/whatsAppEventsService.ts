@@ -107,9 +107,9 @@ function getOrderDisplayLabel(payload: WhatsAppMessagePayload) {
 }
 
 function getCustomerGreeting(name: string | null) {
-  if (!name) return 'Ola!';
+  if (!name) return 'Olá!';
   const firstName = String(name).trim().split(/\s+/)[0];
-  return firstName ? `Ola, ${firstName}!` : 'Ola!';
+  return firstName ? `Olá, ${firstName}!` : 'Olá!';
 }
 
 function resolvePublicBaseUrl() {
@@ -155,23 +155,33 @@ function buildDefaultOrderStatusMessage(
   const etaLine = payload.estimated_minutes ? `Prazo estimado da loja: ${payload.estimated_minutes} min.` : null;
 
   if (eventName === 'order_confirmed') {
-    return [greeting, `${storeLabel}: ${orderLabel} foi aceito com sucesso.`, etaLine, trackingLine]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  if (eventName === 'order_out_for_delivery') {
     return [
-      greeting,
-      `${storeLabel}: ${orderLabel} saiu para entrega.`,
-      'Fique atento, o entregador chegara em instantes.',
+      `${greeting} 🍔`,
+      `A ${storeLabel} aceitou seu ${orderLabel.toLowerCase()} com sucesso.`,
+      etaLine ? `Prazo estimado: ${payload.estimated_minutes} min.` : null,
+      trackingLine ? 'Acompanhe seu pedido pelo link da loja.' : null,
       trackingLine,
     ]
       .filter(Boolean)
       .join('\n');
   }
 
-  return [greeting, `${storeLabel}: ${orderLabel} esta pronto para retirada.`, trackingLine]
+  if (eventName === 'order_out_for_delivery') {
+    return [
+      `${greeting} 🛵`,
+      `Seu ${orderLabel.toLowerCase()} saiu para entrega.`,
+      'Fique atento, o entregador chegará em instantes.',
+      trackingLine,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return [
+    `${greeting} 📦`,
+    `Seu ${orderLabel.toLowerCase()} está pronto para retirada na ${storeLabel}.`,
+    trackingLine,
+  ]
     .filter(Boolean)
     .join('\n');
 }
