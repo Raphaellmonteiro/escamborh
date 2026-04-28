@@ -20,6 +20,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { StatusChip } from '../components/ui/StatusChip';
 import { adminOpsDashedWellClass, adminOpsInsetPanelClass, adminOpsSurfaceCardClass } from '../components/ui/screenChrome';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
+import WhatsAppConnectionPanel from './WhatsAppConnectionPanel';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface DeliveryPedidoItem {
@@ -71,6 +72,7 @@ interface DeliveryConfig {
   evolution_channel_id?: string;
   whatsapp_provider?: string | null;
   whatsapp_enabled?: boolean;
+  whatsapp_order_notifications_enabled?: boolean;
   whatsapp_active_number?: string | null;
   whatsapp_inbound_webhook_path?: string | null;
   theme_mode?: 'dark_premium' | 'light_red';
@@ -2956,7 +2958,17 @@ export function DeliveryConfigPanel({
 
       {/* ── EVOLUTION API (WhatsApp automático) ─────────────────── */}
       {activeSection === 'evolution' && (
-        <div className="bg-fp-card border border-fp-border rounded-2xl p-6 space-y-5">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
+            <p className="font-bold">Canal de notificacoes automaticas do pedido</p>
+            <p className="mt-1">
+              A conexao abaixo define o WhatsApp operacional da loja para envio de notificacoes automaticas. O fluxo de
+              pedido nao e alterado nesta etapa.
+            </p>
+          </div>
+          <WhatsAppConnectionPanel token={token} />
+
+          <div className="bg-fp-card border border-fp-border rounded-2xl p-6 space-y-5">
           <div>
             <h3 className="text-base font-black text-fptext-primary flex items-center gap-2"><Zap size={16}/>WhatsApp IA</h3>
             <p className="text-xs text-fptext-muted mt-0.5">
@@ -3044,6 +3056,33 @@ export function DeliveryConfigPanel({
           </div>
 
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-fp-border bg-fp-card p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-fptext-muted">Notificacoes automaticas</p>
+                <p className="mt-1 text-xs text-fptext-muted">
+                  Envia WhatsApp ao cliente quando o pedido for aceito, sair para entrega e, quando aplicavel, ficar pronto para retirada.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setCfg((c) => ({
+                    ...c,
+                    whatsapp_order_notifications_enabled: !Boolean(c.whatsapp_order_notifications_enabled),
+                  }))
+                }
+                className={`relative h-7 w-12 rounded-full transition-colors ${
+                  cfg.whatsapp_order_notifications_enabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+                aria-label="Ativar notificacoes automaticas por WhatsApp"
+              >
+                <span
+                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                    cfg.whatsapp_order_notifications_enabled ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
             <p><strong>Canal atual:</strong> {whatsappProviderLabel} {whatsappAiNumber ? `- ${whatsappAiNumber}` : ''} {whatsappAiInstance ? `- instancia ${whatsappAiInstance}` : ''}</p>
             <p className="mt-1"><strong>Channel ID:</strong> {whatsappChannelIdentifier || 'Nao informado'}</p>
           </div>
@@ -3063,6 +3102,7 @@ export function DeliveryConfigPanel({
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-200">Evolution API configurada. Mensagens serão enviadas automaticamente.</p>
             </div>
           )}
+          </div>
         </div>
       )}
 

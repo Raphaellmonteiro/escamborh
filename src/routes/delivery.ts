@@ -24,7 +24,6 @@ import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomat
 import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
 import {
   emitWhatsAppOrderStatusEvent,
-  orderCreatedWhatsAppEvent,
 } from '../services/whatsAppEventsService';
 import { isAppError } from '../utils/errors';
 import { logError } from '../utils/logger';
@@ -1588,18 +1587,6 @@ router.get('/clientes', async (req: Request, res) => {
           origemCadastro: 'pedido_manual',
         });
       }
-
-      await orderCreatedWhatsAppEvent({
-        tenantId,
-        orderId,
-        source: 'routes.delivery.createOrder',
-      });
-      await emitWhatsAppOrderStatusEvent({
-        tenantId,
-        orderId,
-        status: 'Pedido Recebido',
-        source: 'routes.delivery.createOrder.initialStatus',
-      });
 
       const cfgRow = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [req.tenantId]);
       const parsed = coerceDeliveryConfigRow(cfgRow?.delivery_config ?? null);

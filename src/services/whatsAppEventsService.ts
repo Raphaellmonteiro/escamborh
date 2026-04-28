@@ -1,6 +1,7 @@
 import { q1, qRun } from '../db';
 import { logError, logInfo } from '../utils/logger';
 import { sendWhatsAppMessage } from './whatsAppSenderService';
+import { getConnectionInfo } from './whatsappService';
 
 type TenantId = number | string;
 
@@ -30,6 +31,7 @@ type OrderWhatsAppRow = {
   tipo_retirada?: string | null;
   loja_nome?: string | null;
   loja_slug?: string | null;
+  delivery_config?: string | null;
 };
 
 type RegisterWhatsAppOrderEventInput = {
@@ -49,6 +51,7 @@ type WhatsAppMessagePayload = {
   status: string | null;
   channel: string | null;
   pickup_type: string | null;
+  estimated_minutes: number | null;
 };
 
 const SUCCESS_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {
@@ -119,19 +122,25 @@ function resolvePublicBaseUrl() {
     : `https://${explicit}`.replace(/\/+$/, '');
 }
 
-function resolveOrderTypeLabel(payload: WhatsAppMessagePayload) {
-  const channel = String(payload.channel || '').trim().toLowerCase();
-  if (channel === 'delivery') return 'Entrega';
-  if (channel === 'retirada' || String(payload.pickup_type || '').trim().toLowerCase() === 'levar') {
-    return 'Retirada';
-  }
-  return null;
-}
-
 function buildTrackingLink(payload: WhatsAppMessagePayload) {
   const baseUrl = resolvePublicBaseUrl();
   if (!baseUrl || !payload.store_slug) return null;
   return `${baseUrl}/delivery/${encodeURIComponent(payload.store_slug)}/pedido/${payload.order_id}`;
+}
+
+function parseEstimatedMinutesFromDeliveryConfig(rawValue: string | null | undefined) {
+  const raw = normalizeOptionalText(rawValue);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const minutes = Number(parsed.tempo_preparo);
+    if (!Number.isFinite(minutes) || minutes <= 0) return null;
+    return Math.round(minutes);
+  } catch {
+    return null;
+  }
 }
 
 function buildDefaultOrderStatusMessage(
@@ -140,30 +149,29 @@ function buildDefaultOrderStatusMessage(
 ) {
   const greeting = getCustomerGreeting(payload.customer_name);
   const orderLabel = getOrderDisplayLabel(payload);
-  const orderTypeLabel = resolveOrderTypeLabel(payload);
-  const orderTypeLine = orderTypeLabel ? `Tipo: ${orderTypeLabel}` : null;
-  const storeLine = payload.store_name ? `Loja: ${payload.store_name}` : null;
-  const trackingLine = buildTrackingLink(payload) ? `Acompanhe: ${buildTrackingLink(payload)}` : null;
+  const storeLabel = payload.store_name || 'sua loja';
+  const trackingLink = buildTrackingLink(payload);
+  const trackingLine = trackingLink ? `Acompanhe aqui: ${trackingLink}` : null;
+  const etaLine = payload.estimated_minutes ? `Prazo estimado da loja: ${payload.estimated_minutes} min.` : null;
 
   if (eventName === 'order_confirmed') {
-    return [greeting, `${orderLabel} confirmado com sucesso.`, orderTypeLine, storeLine, trackingLine]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  if (eventName === 'order_ready_for_delivery') {
-    return [greeting, `${orderLabel} esta pronto e saira para entrega em breve.`, orderTypeLine, storeLine, trackingLine]
+    return [greeting, `${storeLabel}: ${orderLabel} foi aceito com sucesso.`, etaLine, trackingLine]
       .filter(Boolean)
       .join('\n');
   }
 
   if (eventName === 'order_out_for_delivery') {
-    return [greeting, `${orderLabel} saiu para entrega.`, orderTypeLine, storeLine, trackingLine]
+    return [
+      greeting,
+      `${storeLabel}: ${orderLabel} saiu para entrega.`,
+      'Fique atento, o entregador chegara em instantes.',
+      trackingLine,
+    ]
       .filter(Boolean)
       .join('\n');
   }
 
-  return [greeting, `${orderLabel} esta pronto para retirada.`, orderTypeLine, storeLine, trackingLine]
+  return [greeting, `${storeLabel}: ${orderLabel} esta pronto para retirada.`, trackingLine]
     .filter(Boolean)
     .join('\n');
 }
@@ -252,6 +260,11 @@ async function registerWhatsAppOrderEvent(
     const autoNotifyEnabled = toBool(config[autoNotifyFlag], false);
     if (!autoNotifyEnabled) return;
 
+    const connectionInfo = await getConnectionInfo(tenantId);
+    if (!connectionInfo.supported || !connectionInfo.configured || !connectionInfo.status?.connected) {
+      return;
+    }
+
     const order = await q1<OrderWhatsAppRow>(
       `SELECT p.id,
               p.tenant_id,
@@ -262,7 +275,8 @@ async function registerWhatsAppOrderEvent(
               p.canal,
               p.tipo_retirada,
               c.nome_estabelecimento AS loja_nome,
-              c.usuario AS loja_slug
+              c.usuario AS loja_slug,
+              c.delivery_config
        FROM pedidos p
        LEFT JOIN delivery_clientes dc
          ON dc.id = COALESCE(p.cliente_id, p.delivery_cliente_id)
@@ -286,6 +300,7 @@ async function registerWhatsAppOrderEvent(
       status: normalizeOptionalText(order.status),
       channel: normalizeOptionalText(order.canal),
       pickup_type: normalizeOptionalText(order.tipo_retirada),
+      estimated_minutes: parseEstimatedMinutesFromDeliveryConfig(order.delivery_config),
     };
 
     const message = buildDefaultOrderStatusMessage(eventName, payload);
@@ -374,7 +389,8 @@ export async function orderAcceptedWhatsAppEvent(input: RegisterWhatsAppOrderEve
 }
 
 export async function orderPreparingWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_ready_for_delivery', input);
+  void input;
+  return;
 }
 
 export async function orderOutForDeliveryWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
@@ -394,11 +410,6 @@ export async function emitWhatsAppOrderStatusEvent(input: RegisterWhatsAppOrderE
 
   if (normalizedStatus === 'pedido recebido') {
     await registerWhatsAppOrderEvent('order_confirmed', input);
-    return;
-  }
-
-  if (normalizedStatus === 'pronto para entrega') {
-    await registerWhatsAppOrderEvent('order_ready_for_delivery', input);
     return;
   }
 
