@@ -2230,7 +2230,6 @@ export function DeliveryConfigPanel({
           <SectionBtn k="loja"      label="Loja"        icon={<Settings size={14}/>}/>
           <SectionBtn k="zonas"     label="Zonas"       icon={<Map size={14}/>}/>
           <SectionBtn k="cupons"    label="Cupons"      icon={<Tag size={14}/>}/>
-          <SectionBtn k="evolution" label="WhatsApp IA" icon={<Zap size={14}/>}/>
         </div>
       )}
 
@@ -2957,7 +2956,7 @@ export function DeliveryConfigPanel({
       )}
 
       {/* ── EVOLUTION API (WhatsApp automático) ─────────────────── */}
-      {activeSection === 'evolution' && (
+      {activeSection === 'evolution' && hasStandaloneSection && (
         <div className="space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
             <p className="font-bold">Canal de notificacoes automaticas do pedido</p>

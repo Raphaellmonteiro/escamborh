@@ -44,6 +44,7 @@ const RHScreen              = lazy(() => import('./shared/RHScreen'));
 const SystemLogsScreen      = lazy(() => import('./shared/SystemLogsScreen'));
 const DeliveryScreen        = lazy(() => import('./shared/DeliveryScreen'));
 const TabClientes = lazy(() => import('./shared/DeliveryScreen').then((m) => ({ default: m.TabClientes })));
+const WhatsAppIAScreen      = lazy(() => import('./shared/WhatsAppIAScreen'));
 const DeliveryCardapio      = lazy(() => import('./segments/delivery/DeliveryCardapio'));
 const PedidoRastreamento    = lazy(() => import('./shared/PedidoRastreamento'));
 const KDSScreen             = lazy(() => import('./segments/restaurante/KDSScreen'));
@@ -161,7 +162,7 @@ export default function App() {
   const OPERATIONAL_ALERT_SOUND_KEY = 'flowpdv_operational_alert_sound';
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [estabelecimentoSegmento, setEstabelecimentoSegmento] = useState('Restaurante/Food');
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery' | 'clientes'>('pos')
+  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'products' | 'orders' | 'central' | 'finance' | 'estoque' | 'mesas' | 'funcionarios' | 'configuracoes' | 'logs' | 'delivery' | 'clientes' | 'whatsapp-ia'>('pos')
   const [floatPos, setFloatPos]   = React.useState(() => {
     const saved = localStorage.getItem('orders_float_pos');
     return saved ? JSON.parse(saved) : { x: window.innerWidth - 80, y: window.innerHeight - 120 };
@@ -304,10 +305,10 @@ export default function App() {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
         setActiveTab('estoque');
-      } else if (nav === 'whatsapp-ia' && canAccess('delivery')) {
+      } else if (nav === 'whatsapp-ia' && canAccess('whatsapp-ia')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
-        setActiveTab('delivery');
+        setActiveTab('whatsapp-ia');
       } else if (nav === 'orders' && canAccess('orders')) {
         localStorage.removeItem('flowpdv_initial_nav_tab');
         sessionStorage.removeItem('flowpdv_initial_nav_tab');
@@ -1052,7 +1053,7 @@ const handleAuth = async (e: React.FormEvent) => {
               <NavItem active={activeTab === 'clientes'} onClick={() => handleTabChange('clientes')} icon="👥" label="Clientes" />
             )}
             {canAccess('whatsapp-ia') && permiteDelivery && (
-              <NavItem disabled title="Funcionalidade em preparação — ainda não disponível" icon="💬" label="Em breve" />
+              <NavItem active={activeTab === 'whatsapp-ia'} onClick={() => handleTabChange('whatsapp-ia')} icon="💬" label="WhatsApp IA" />
             )}
             {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon="📦"  label="Estoque" />}
           </>); })()}
@@ -1241,6 +1242,9 @@ const handleAuth = async (e: React.FormEvent) => {
             {activeTab === 'estoque' && canAccess('estoque') && <EstoqueScreen token={token} segmento={segmentoOperacional} />}
             {activeTab === 'delivery' && canAccess('delivery') && permiteDelivery && (
               <DeliveryScreen token={token} hasMotoboyFeature={tenantHasMotoboyFeature} slug={slugAtual} />
+            )}
+            {activeTab === 'whatsapp-ia' && canAccess('whatsapp-ia') && permiteDelivery && (
+              <WhatsAppIAScreen token={token} slug={slugAtual} />
             )}
             {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
             {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
