@@ -3060,7 +3060,7 @@ export function DeliveryConfigPanel({
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-fptext-muted">Notificacoes automaticas</p>
                 <p className="mt-1 text-xs text-fptext-muted">
-                  Envia WhatsApp ao cliente quando o pedido for aceito, sair para entrega e, quando aplicavel, ficar pronto para retirada.
+                  Envia mensagens automaticas quando o pedido for aceito, sair para entrega ou ficar pronto para retirada. Requer o WhatsApp da loja conectado.
                 </p>
               </div>
               <button
