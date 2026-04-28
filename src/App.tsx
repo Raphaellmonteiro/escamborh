@@ -44,7 +44,6 @@ const RHScreen              = lazy(() => import('./shared/RHScreen'));
 const SystemLogsScreen      = lazy(() => import('./shared/SystemLogsScreen'));
 const DeliveryScreen        = lazy(() => import('./shared/DeliveryScreen'));
 const TabClientes = lazy(() => import('./shared/DeliveryScreen').then((m) => ({ default: m.TabClientes })));
-const WhatsAppIAScreen      = lazy(() => import('./shared/WhatsAppIAScreen'));
 const DeliveryCardapio      = lazy(() => import('./segments/delivery/DeliveryCardapio'));
 const PedidoRastreamento    = lazy(() => import('./shared/PedidoRastreamento'));
 const KDSScreen             = lazy(() => import('./segments/restaurante/KDSScreen'));
@@ -1244,7 +1243,7 @@ const handleAuth = async (e: React.FormEvent) => {
               <DeliveryScreen token={token} hasMotoboyFeature={tenantHasMotoboyFeature} slug={slugAtual} />
             )}
             {activeTab === 'whatsapp-ia' && canAccess('whatsapp-ia') && permiteDelivery && (
-              <WhatsAppIAScreen token={token} slug={slugAtual} />
+              <DeliveryScreen token={token} hasMotoboyFeature={tenantHasMotoboyFeature} slug={slugAtual} mode="whatsapp-ia" />
             )}
             {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
             {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
