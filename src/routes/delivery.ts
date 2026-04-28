@@ -153,6 +153,9 @@ type TenantWhatsAppConfigSyncRow = {
   whatsapp_number?: string | null;
   instance_name?: string | null;
   channel_identifier?: string | null;
+  auto_notify_order_accepted?: number | boolean | string | null;
+  auto_notify_order_preparing?: number | boolean | string | null;
+  auto_notify_order_out_for_delivery?: number | boolean | string | null;
 };
 
 const DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS = [
@@ -348,6 +351,9 @@ function buildTenantWhatsAppConfigState(
     evolutionInstance,
     whatsappNumber,
     channelIdentifier,
+    autoNotifyOrderAccepted: toFlag(tenantWhatsAppConfig.auto_notify_order_accepted),
+    autoNotifyOrderPreparing: toFlag(tenantWhatsAppConfig.auto_notify_order_preparing),
+    autoNotifyOrderOutForDelivery: toFlag(tenantWhatsAppConfig.auto_notify_order_out_for_delivery),
   };
 }
 
@@ -595,7 +601,10 @@ export function createDeliveryRouter() {
                 provider_config_json,
                 whatsapp_number,
                 instance_name,
-                channel_identifier
+                channel_identifier,
+                auto_notify_order_accepted,
+                auto_notify_order_preparing,
+                auto_notify_order_out_for_delivery
            FROM tenant_whatsapp_config
           WHERE tenant_id=?`,
         [req.tenantId]
@@ -620,6 +629,11 @@ export function createDeliveryRouter() {
         ...transportConfig,
         whatsapp_provider: resolvedProvider,
         whatsapp_enabled: toFlag(tenantWhatsAppConfig?.whatsapp_enabled),
+        whatsapp_order_notifications_enabled: tenantWhatsAppState
+          ? (tenantWhatsAppState.autoNotifyOrderAccepted ||
+            tenantWhatsAppState.autoNotifyOrderPreparing ||
+            tenantWhatsAppState.autoNotifyOrderOutForDelivery)
+          : false,
         whatsapp_active_number: tenantWhatsAppState?.whatsappNumber || resolvedWhatsApp.whatsappNumber,
         whatsapp_inbound_webhook_path: buildTenantWhatsAppInboundWebhookPath(Number(req.tenantId)),
       });
@@ -632,10 +646,15 @@ export function createDeliveryRouter() {
         ativo,
         whatsapp_provider: _whatsappProvider,
         whatsapp_enabled: _whatsappEnabled,
+        whatsapp_order_notifications_enabled: whatsappOrderNotificationsEnabledRaw,
         whatsapp_active_number: _whatsappActiveNumber,
         whatsapp_inbound_webhook_path: _whatsappInboundWebhookPath,
         ...rest
       } = req.body;
+      const whatsappOrderNotificationsEnabled =
+        whatsappOrderNotificationsEnabledRaw === undefined
+          ? undefined
+          : toFlag(whatsappOrderNotificationsEnabledRaw);
       const [row, tenantWhatsAppConfig] = await Promise.all([
         q1<{ delivery_config: string | null; whatsapp?: string | null }>(
           'SELECT delivery_config, whatsapp FROM clientes WHERE id=?',
@@ -647,7 +666,10 @@ export function createDeliveryRouter() {
                   provider_config_json,
                   whatsapp_number,
                   instance_name,
-                  channel_identifier
+                  channel_identifier,
+                  auto_notify_order_accepted,
+                  auto_notify_order_preparing,
+                  auto_notify_order_out_for_delivery
              FROM tenant_whatsapp_config
             WHERE tenant_id=?`,
           [req.tenantId]
@@ -699,6 +721,30 @@ export function createDeliveryRouter() {
         tenantWhatsAppConfig,
         row?.whatsapp
       );
+      if (whatsappOrderNotificationsEnabled !== undefined) {
+        await qRun(
+          `INSERT INTO tenant_whatsapp_config (
+              tenant_id,
+              whatsapp_enabled,
+              auto_notify_order_accepted,
+              auto_notify_order_preparing,
+              auto_notify_order_out_for_delivery,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, NOW())
+            ON CONFLICT (tenant_id) DO UPDATE SET
+              auto_notify_order_accepted=EXCLUDED.auto_notify_order_accepted,
+              auto_notify_order_preparing=EXCLUDED.auto_notify_order_preparing,
+              auto_notify_order_out_for_delivery=EXCLUDED.auto_notify_order_out_for_delivery,
+              updated_at=NOW()`,
+          [
+            Number(req.tenantId),
+            tenantWhatsAppConfig?.whatsapp_enabled ? 1 : 0,
+            whatsappOrderNotificationsEnabled ? 1 : 0,
+            whatsappOrderNotificationsEnabled ? 1 : 0,
+            whatsappOrderNotificationsEnabled ? 1 : 0,
+          ]
+        );
+      }
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
   });

@@ -5,24 +5,18 @@ import { sendWhatsAppMessage } from './whatsAppSenderService';
 type TenantId = number | string;
 
 type WhatsAppOrderEventName =
-  | 'order_created'
-  | 'payment_confirmed'
-  | 'order_accepted'
-  | 'order_preparing'
+  | 'order_confirmed'
+  | 'order_ready_for_delivery'
   | 'order_out_for_delivery'
-  | 'order_delivered'
-  | 'order_cancelled';
+  | 'order_ready_for_pickup';
 
 type TenantWhatsAppConfigRow = {
   whatsapp_enabled?: number | boolean | string | null;
   provider?: string | null;
   provider_config_json?: string | null;
-  auto_notify_order_created?: number | boolean | string | null;
   auto_notify_order_accepted?: number | boolean | string | null;
   auto_notify_order_preparing?: number | boolean | string | null;
   auto_notify_order_out_for_delivery?: number | boolean | string | null;
-  auto_notify_order_delivered?: number | boolean | string | null;
-  auto_notify_order_cancelled?: number | boolean | string | null;
 };
 
 type OrderWhatsAppRow = {
@@ -32,8 +26,10 @@ type OrderWhatsAppRow = {
   cliente_nome: string | null;
   cliente_tel: string | null;
   status: string | null;
-  total_amount: number | string | null;
+  canal?: string | null;
+  tipo_retirada?: string | null;
   loja_nome?: string | null;
+  loja_slug?: string | null;
 };
 
 type RegisterWhatsAppOrderEventInput = {
@@ -47,50 +43,42 @@ type WhatsAppMessagePayload = {
   order_id: number;
   order_number: string | null;
   store_name: string | null;
+  store_slug: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   status: string | null;
-  total_amount: number;
+  channel: string | null;
+  pickup_type: string | null;
 };
 
 const SUCCESS_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {
-  order_created: 'WHATSAPP_ORDER_CREATED',
-  payment_confirmed: 'WHATSAPP_ORDER_PAYMENT_CONFIRMED',
-  order_accepted: 'WHATSAPP_ORDER_ACCEPTED',
-  order_preparing: 'WHATSAPP_ORDER_PREPARING',
-  order_out_for_delivery: 'WHATSAPP_ORDER_OUT_FOR_DELIVERY',
-  order_delivered: 'WHATSAPP_ORDER_DELIVERED',
-  order_cancelled: 'WHATSAPP_ORDER_CANCELLED',
+  order_confirmed: 'WHATSAPP_TXN_ORDER_CONFIRMED',
+  order_ready_for_delivery: 'WHATSAPP_TXN_ORDER_READY_FOR_DELIVERY',
+  order_out_for_delivery: 'WHATSAPP_TXN_ORDER_OUT_FOR_DELIVERY',
+  order_ready_for_pickup: 'WHATSAPP_TXN_ORDER_READY_FOR_PICKUP',
 };
 
 const ERROR_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {
-  order_created: 'WHATSAPP_ORDER_CREATED_ERROR',
-  payment_confirmed: 'WHATSAPP_ORDER_PAYMENT_CONFIRMED_ERROR',
-  order_accepted: 'WHATSAPP_ORDER_ACCEPTED_ERROR',
-  order_preparing: 'WHATSAPP_ORDER_PREPARING_ERROR',
-  order_out_for_delivery: 'WHATSAPP_ORDER_OUT_FOR_DELIVERY_ERROR',
-  order_delivered: 'WHATSAPP_ORDER_DELIVERED_ERROR',
-  order_cancelled: 'WHATSAPP_ORDER_CANCELLED_ERROR',
+  order_confirmed: 'WHATSAPP_TXN_ORDER_CONFIRMED_ERROR',
+  order_ready_for_delivery: 'WHATSAPP_TXN_ORDER_READY_FOR_DELIVERY_ERROR',
+  order_out_for_delivery: 'WHATSAPP_TXN_ORDER_OUT_FOR_DELIVERY_ERROR',
+  order_ready_for_pickup: 'WHATSAPP_TXN_ORDER_READY_FOR_PICKUP_ERROR',
 };
 
 const CONFIG_FLAG_BY_NAME: Record<
   WhatsAppOrderEventName,
   keyof TenantWhatsAppConfigRow
 > = {
-  order_created: 'auto_notify_order_created',
-  payment_confirmed: 'auto_notify_order_accepted',
-  order_accepted: 'auto_notify_order_accepted',
-  order_preparing: 'auto_notify_order_preparing',
+  order_confirmed: 'auto_notify_order_accepted',
+  order_ready_for_delivery: 'auto_notify_order_preparing',
   order_out_for_delivery: 'auto_notify_order_out_for_delivery',
-  order_delivered: 'auto_notify_order_delivered',
-  order_cancelled: 'auto_notify_order_cancelled',
+  order_ready_for_pickup: 'auto_notify_order_preparing',
 };
 
 function toBool(value: unknown, fallback = false) {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;
-
   const normalized = String(value).trim().toLowerCase();
   if (['1', 'true', 'sim', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'nao', 'no', 'off'].includes(normalized)) return false;
@@ -109,10 +97,6 @@ function normalizeOptionalText(value: unknown) {
   return normalized || null;
 }
 
-function formatMoneyBr(value: number) {
-  return value.toFixed(2).replace('.', ',');
-}
-
 function getOrderDisplayLabel(payload: WhatsAppMessagePayload) {
   return payload.order_number
     ? `Pedido #${payload.order_number}`
@@ -125,55 +109,63 @@ function getCustomerGreeting(name: string | null) {
   return firstName ? `Ola, ${firstName}!` : 'Ola!';
 }
 
+function resolvePublicBaseUrl() {
+  const explicit =
+    normalizeOptionalText(process.env.FLOWPDV_PUBLIC_URL) ||
+    normalizeOptionalText(process.env.RAILWAY_PUBLIC_DOMAIN);
+  if (!explicit) return normalizeOptionalText(process.env.PUBLIC_BASE_URL);
+  return /^https?:\/\//i.test(explicit)
+    ? explicit.replace(/\/+$/, '')
+    : `https://${explicit}`.replace(/\/+$/, '');
+}
+
+function resolveOrderTypeLabel(payload: WhatsAppMessagePayload) {
+  const channel = String(payload.channel || '').trim().toLowerCase();
+  if (channel === 'delivery') return 'Entrega';
+  if (channel === 'retirada' || String(payload.pickup_type || '').trim().toLowerCase() === 'levar') {
+    return 'Retirada';
+  }
+  return null;
+}
+
+function buildTrackingLink(payload: WhatsAppMessagePayload) {
+  const baseUrl = resolvePublicBaseUrl();
+  if (!baseUrl || !payload.store_slug) return null;
+  return `${baseUrl}/delivery/${encodeURIComponent(payload.store_slug)}/pedido/${payload.order_id}`;
+}
+
 function buildDefaultOrderStatusMessage(
   eventName: WhatsAppOrderEventName,
   payload: WhatsAppMessagePayload
 ) {
   const greeting = getCustomerGreeting(payload.customer_name);
   const orderLabel = getOrderDisplayLabel(payload);
-  const totalLine = `Total: R$ ${formatMoneyBr(payload.total_amount)}`;
+  const orderTypeLabel = resolveOrderTypeLabel(payload);
+  const orderTypeLine = orderTypeLabel ? `Tipo: ${orderTypeLabel}` : null;
   const storeLine = payload.store_name ? `Loja: ${payload.store_name}` : null;
+  const trackingLine = buildTrackingLink(payload) ? `Acompanhe: ${buildTrackingLink(payload)}` : null;
 
-  switch (eventName) {
-    case 'order_created':
-      return [greeting, `${orderLabel} foi recebido com sucesso.`, totalLine, storeLine]
-        .filter(Boolean)
-        .join('\n');
-    case 'payment_confirmed':
-      return [
-        greeting,
-        `Recebemos o pagamento do ${orderLabel}.`,
-        `${orderLabel} foi confirmado e seguira para preparo.`,
-        totalLine,
-        storeLine,
-      ]
-        .filter(Boolean)
-        .join('\n');
-    case 'order_accepted':
-      return [greeting, `${orderLabel} foi aceito e entrou em atendimento.`, storeLine]
-        .filter(Boolean)
-        .join('\n');
-    case 'order_preparing':
-      return [greeting, `${orderLabel} esta em preparo.`, storeLine]
-        .filter(Boolean)
-        .join('\n');
-    case 'order_out_for_delivery':
-      return [greeting, `${orderLabel} saiu para entrega.`, storeLine]
-        .filter(Boolean)
-        .join('\n');
-    case 'order_delivered':
-      return [greeting, `${orderLabel} foi entregue. Obrigado pela preferencia!`, storeLine]
-        .filter(Boolean)
-        .join('\n');
-    case 'order_cancelled':
-      return [greeting, `${orderLabel} foi cancelado. Se precisar, fale com a loja.`, storeLine]
-        .filter(Boolean)
-        .join('\n');
-    default:
-      return [greeting, `${orderLabel} teve atualizacao de status.`, storeLine]
-        .filter(Boolean)
-        .join('\n');
+  if (eventName === 'order_confirmed') {
+    return [greeting, `${orderLabel} confirmado com sucesso.`, orderTypeLine, storeLine, trackingLine]
+      .filter(Boolean)
+      .join('\n');
   }
+
+  if (eventName === 'order_ready_for_delivery') {
+    return [greeting, `${orderLabel} esta pronto e saira para entrega em breve.`, orderTypeLine, storeLine, trackingLine]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (eventName === 'order_out_for_delivery') {
+    return [greeting, `${orderLabel} saiu para entrega.`, orderTypeLine, storeLine, trackingLine]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return [greeting, `${orderLabel} esta pronto para retirada.`, orderTypeLine, storeLine, trackingLine]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function maskPhone(rawPhone: string | null) {
@@ -191,22 +183,47 @@ async function insertPedidoWhatsAppEvent(input: {
   orderId: number;
   eventType: string;
   statusNovo: string | null;
-  totalAmount: number;
   payload: Record<string, unknown>;
 }) {
   await qRun(
     `INSERT INTO pedido_eventos
       (pedido_id, tenant_id, tipo, status_novo, valor, estoque_reposto, payload, usuario_id)
-     VALUES (?, ?, ?, ?, ?, 0, ?, NULL)`,
-    [
-      input.orderId,
-      input.tenantId,
-      input.eventType,
-      input.statusNovo,
-      input.totalAmount,
-      JSON.stringify(input.payload),
-    ]
+     VALUES (?, ?, ?, ?, 0, 0, ?, NULL)`,
+    [input.orderId, input.tenantId, input.eventType, input.statusNovo, JSON.stringify(input.payload)]
   );
+}
+
+async function hasAlreadyProcessedOrderEvent(
+  tenantId: number,
+  orderId: number,
+  eventName: WhatsAppOrderEventName
+) {
+  const successType = SUCCESS_EVENT_TYPE_BY_NAME[eventName];
+  const errorType = ERROR_EVENT_TYPE_BY_NAME[eventName];
+  const row = await q1<{ id: number }>(
+    `SELECT id
+       FROM pedido_eventos
+      WHERE pedido_id=? AND tenant_id=? AND tipo IN (?, ?)
+      LIMIT 1`,
+    [orderId, tenantId, successType, errorType]
+  );
+  return Boolean(row?.id);
+}
+
+function shouldDispatchTransactionalEvent(
+  eventName: WhatsAppOrderEventName,
+  order: OrderWhatsAppRow
+) {
+  const channel = String(order.canal || '').trim().toLowerCase();
+  const pickupType = String(order.tipo_retirada || '').trim().toLowerCase();
+
+  if (eventName === 'order_ready_for_pickup') {
+    return channel === 'retirada' || pickupType === 'levar';
+  }
+  if (eventName === 'order_ready_for_delivery' || eventName === 'order_out_for_delivery') {
+    return channel === 'delivery';
+  }
+  return true;
 }
 
 async function registerWhatsAppOrderEvent(
@@ -216,34 +233,24 @@ async function registerWhatsAppOrderEvent(
   try {
     const tenantId = parsePositiveInt(input.tenantId);
     const orderId = parsePositiveInt(input.orderId);
-
-    if (!tenantId || !orderId) {
-      return;
-    }
+    if (!tenantId || !orderId) return;
 
     const config = await q1<TenantWhatsAppConfigRow>(
       `SELECT whatsapp_enabled,
               provider,
               provider_config_json,
-              auto_notify_order_created,
               auto_notify_order_accepted,
               auto_notify_order_preparing,
-              auto_notify_order_out_for_delivery,
-              auto_notify_order_delivered,
-              auto_notify_order_cancelled
+              auto_notify_order_out_for_delivery
        FROM tenant_whatsapp_config
        WHERE tenant_id=?`,
       [tenantId]
     );
-
-    if (!config || !toBool(config.whatsapp_enabled, false)) {
-      return;
-    }
+    if (!config || !toBool(config.whatsapp_enabled, false)) return;
 
     const autoNotifyFlag = CONFIG_FLAG_BY_NAME[eventName];
-    if (!toBool(config[autoNotifyFlag], false)) {
-      return;
-    }
+    const autoNotifyEnabled = toBool(config[autoNotifyFlag], false);
+    if (!autoNotifyEnabled) return;
 
     const order = await q1<OrderWhatsAppRow>(
       `SELECT p.id,
@@ -252,8 +259,10 @@ async function registerWhatsAppOrderEvent(
               COALESCE(NULLIF(BTRIM(p.cliente_nome), ''), NULLIF(BTRIM(dc.nome), '')) AS cliente_nome,
               COALESCE(NULLIF(BTRIM(p.cliente_tel), ''), NULLIF(BTRIM(dc.telefone), '')) AS cliente_tel,
               p.status,
-              p.total_amount,
-              c.nome_estabelecimento AS loja_nome
+              p.canal,
+              p.tipo_retirada,
+              c.nome_estabelecimento AS loja_nome,
+              c.usuario AS loja_slug
        FROM pedidos p
        LEFT JOIN delivery_clientes dc
          ON dc.id = COALESCE(p.cliente_id, p.delivery_cliente_id)
@@ -263,20 +272,20 @@ async function registerWhatsAppOrderEvent(
        WHERE p.id=? AND p.tenant_id=?`,
       [orderId, tenantId]
     );
-
-    if (!order) {
-      return;
-    }
+    if (!order || !shouldDispatchTransactionalEvent(eventName, order)) return;
+    if (await hasAlreadyProcessedOrderEvent(tenantId, orderId, eventName)) return;
 
     const payload: WhatsAppMessagePayload = {
       tenant_id: Number(order.tenant_id),
       order_id: Number(order.id),
       order_number: normalizeOptionalText(order.order_number),
       store_name: normalizeOptionalText(order.loja_nome),
+      store_slug: normalizeOptionalText(order.loja_slug),
       customer_name: normalizeOptionalText(order.cliente_nome),
       customer_phone: normalizeOptionalText(order.cliente_tel),
       status: normalizeOptionalText(order.status),
-      total_amount: Number(order.total_amount || 0),
+      channel: normalizeOptionalText(order.canal),
+      pickup_type: normalizeOptionalText(order.tipo_retirada),
     };
 
     const message = buildDefaultOrderStatusMessage(eventName, payload);
@@ -294,7 +303,6 @@ async function registerWhatsAppOrderEvent(
         orderId,
         eventType: SUCCESS_EVENT_TYPE_BY_NAME[eventName],
         statusNovo: payload.status,
-        totalAmount: payload.total_amount,
         payload: {
           source: input.source || null,
           channel: 'whatsapp',
@@ -323,7 +331,6 @@ async function registerWhatsAppOrderEvent(
         orderId,
         eventType: ERROR_EVENT_TYPE_BY_NAME[eventName],
         statusNovo: payload.status,
-        totalAmount: payload.total_amount,
         payload: {
           source: input.source || null,
           channel: 'whatsapp',
@@ -355,19 +362,19 @@ async function registerWhatsAppOrderEvent(
 }
 
 export async function orderCreatedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_created', input);
+  await registerWhatsAppOrderEvent('order_confirmed', input);
 }
 
 export async function orderPaymentConfirmedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('payment_confirmed', input);
+  await registerWhatsAppOrderEvent('order_confirmed', input);
 }
 
 export async function orderAcceptedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_accepted', input);
+  await registerWhatsAppOrderEvent('order_confirmed', input);
 }
 
 export async function orderPreparingWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_preparing', input);
+  await registerWhatsAppOrderEvent('order_ready_for_delivery', input);
 }
 
 export async function orderOutForDeliveryWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
@@ -375,37 +382,32 @@ export async function orderOutForDeliveryWhatsAppEvent(input: RegisterWhatsAppOr
 }
 
 export async function orderDeliveredWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_delivered', input);
+  await registerWhatsAppOrderEvent('order_ready_for_pickup', input);
 }
 
-export async function orderCancelledWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_cancelled', input);
+export async function orderCancelledWhatsAppEvent(_input: RegisterWhatsAppOrderEventInput) {
+  return;
 }
 
 export async function emitWhatsAppOrderStatusEvent(input: RegisterWhatsAppOrderEventInput & { status?: string | null }) {
   const normalizedStatus = String(input.status || '').trim().toLowerCase();
 
   if (normalizedStatus === 'pedido recebido') {
-    await orderAcceptedWhatsAppEvent(input);
+    await registerWhatsAppOrderEvent('order_confirmed', input);
     return;
   }
 
-  if (normalizedStatus === 'em preparo') {
-    await orderPreparingWhatsAppEvent(input);
+  if (normalizedStatus === 'pronto para entrega') {
+    await registerWhatsAppOrderEvent('order_ready_for_delivery', input);
     return;
   }
 
   if (normalizedStatus === 'saiu para entrega') {
-    await orderOutForDeliveryWhatsAppEvent(input);
+    await registerWhatsAppOrderEvent('order_out_for_delivery', input);
     return;
   }
 
-  if (normalizedStatus === 'entregue') {
-    await orderDeliveredWhatsAppEvent(input);
-    return;
-  }
-
-  if (normalizedStatus === 'cancelado') {
-    await orderCancelledWhatsAppEvent(input);
+  if (normalizedStatus === 'pronto') {
+    await registerWhatsAppOrderEvent('order_ready_for_pickup', input);
   }
 }

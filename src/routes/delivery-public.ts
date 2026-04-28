@@ -392,6 +392,31 @@ function normalizeDiasFolgaEntrega(raw: unknown): number[] {
   return Array.from(out).sort((a, b) => a - b);
 }
 
+/** Normaliza método de pagamento (trim + lower + NFD sem diacríticos). */
+function normalizePaymentMethodKey(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
+
+type CanonicalPaymentMethod = 'dinheiro' | 'pix' | 'cartao' | 'debito' | 'credito';
+
+/**
+ * Normaliza variações do checkout público para chaves canônicas persistidas.
+ * - `cartao_credito` / `cartao_debito` → `cartao` (checkout público não discrimina no fluxo operacional)
+ */
+function normalizeDeliveryPublicPaymentMethod(value: unknown): CanonicalPaymentMethod | null {
+  const k = normalizePaymentMethodKey(value);
+  if (k === 'pix') return 'pix';
+  if (k === 'dinheiro') return 'dinheiro';
+  if (k === 'cartao' || k === 'cartao_credito' || k === 'cartao_debito') return 'cartao';
+  if (k === 'debito') return 'debito';
+  if (k === 'credito') return 'credito';
+  return null;
+}
+
 /** Horário de funcionamento (se cadastrado) e dias recorrentes de folga no fuso `TZ`. */
 function computeDeliveryCardapioAberto(dcfg: DeliveryConfig): { aberto: boolean; dia_folga_hoje: boolean } {
   const diasFolga = normalizeDiasFolgaEntrega(dcfg.dias_folga_entrega);
@@ -860,7 +885,7 @@ async function buildCheckoutSummary(params: {
     enderecoId: params.enderecoId,
   });
   const { subtotal, itensValidados } = await validateDeliveryItems(params.tenantId, params.items);
-  const pagamentoTipo = String(params.pagamentoTipo || 'pix').trim().toLowerCase();
+  const pagamentoTipo = normalizeDeliveryPublicPaymentMethod(params.pagamentoTipo);
   const fee = await resolveDeliveryFee({
     tenantId: params.tenantId,
     clienteId,
@@ -1723,6 +1748,10 @@ export function createDeliveryPublicRouter() {
       const d = String(dateObj.getDate()).padStart(2, '0');
       const prefix = `D${y}${m}${d}`;
 
+      const pagamentoTipoCanon = normalizeDeliveryPublicPaymentMethod(pagamento_tipo);
+      const pagamentoStatusInicial =
+        pagamentoTipoCanon === 'pix' ? 'aguardando_confirmacao' : 'pendente';
+
       const initialOrderStatus =
         canalPedido === 'delivery' && automation.delivery_auto_accept_orders ? 'Pedido Recebido' : 'Criado';
       const inventoryEnabled = await tenantHasInventoryFeature(tenant.id);
@@ -1759,8 +1788,8 @@ export function createDeliveryPublicRouter() {
             cliente_nome || null,
             String(cliente_tel || '').replace(/\D/g, '') || null,
             enderecoFinal,
-            pagamento_tipo || 'pix',
-            pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente',
+            pagamentoTipoCanon,
+            pagamentoStatusInicial,
             initialOrderStatus,
             clienteId,
             clienteId,
@@ -1839,13 +1868,16 @@ export function createDeliveryPublicRouter() {
             tipo_retirada: tipoRetirada,
             auto_accept:
               canalPedido === 'delivery' && Boolean(automation.delivery_auto_accept_orders),
+            pagamento_tipo_raw: pagamento_tipo ?? null,
+            pagamento_tipo_normalized: pagamentoTipoCanon,
+            pagamento_status_initial: pagamentoStatusInicial,
           },
         });
 
         return { orderId, orderNumber };
       });
 
-      const isPixPayment = String(pagamento_tipo || '').trim().toLowerCase() === 'pix';
+      const isPixPayment = pagamentoTipoCanon === 'pix';
       const hasStaticPixFallback = Boolean(
         String(dcfg.pix_payload_estatico || '').trim() || String(dcfg.pix_chave || '').trim()
       );
@@ -1923,15 +1955,17 @@ export function createDeliveryPublicRouter() {
         const detSuffix = det ? ` — ${det}` : '';
         return `- ${item.quantity}x ${name}${detSuffix} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;
       }));
-      const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao' };
+      const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao', debito: 'Debito', credito: 'Credito' };
+      const paymentLabelKey = pagamentoTipoCanon || normalizePaymentMethodKey(pagamento_tipo);
+      const paymentLabel = pagLabel[paymentLabelKey] || String(pagamento_tipo ?? '').trim() || 'Pagamento';
       const mapsUrl = canalPedido === 'delivery'
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoFinal || '')}`
         : null;
       const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const data = new Date().toLocaleDateString('pt-BR');
       const msg = canalPedido === 'retirada'
-        ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`
-        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
+        ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${paymentLabel}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`
+        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${paymentLabel}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;
 
       if (canalPedido === 'delivery' && automation.delivery_auto_accept_orders) {
@@ -1969,7 +2003,7 @@ export function createDeliveryPublicRouter() {
         orderNumber: result.orderNumber,
         total: totalFinal,
         canal: canalPedido,
-        pagamento_status: String(pagamento_tipo || '').trim().toLowerCase() === 'pix' ? 'aguardando_confirmacao' : 'pendente',
+        pagamento_status: pagamentoTipoCanon === 'pix' ? 'aguardando_confirmacao' : 'pendente',
         waLink,
         mapsUrl,
         payment_pix: buildPublicPixPayment(
