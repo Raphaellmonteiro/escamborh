@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { getSegCfg } from '../config/segmentos';
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingBag,
-  BarChart2, Clock, CreditCard, Banknote, Smartphone,
+  BarChart2, CreditCard, Banknote, Smartphone,
   Package, AlertTriangle, RefreshCw, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 
@@ -33,10 +33,6 @@ interface CashReport {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
-const fmtShort = (v: number) => {
-  if (v >= 1000) return `R$ ${(v / 1000).toFixed(1)}k`;
-  return fmt(v);
-};
 
 export default function DashboardScreen({
   token, segmento, onGoToPOS,
@@ -111,6 +107,13 @@ export default function DashboardScreen({
   const lucro = receitaLiquida - (stats?.totalExpenses || 0) - (stats?.totalRepassesPagos || 0);
   const margem = receitaLiquida ? (lucro / receitaLiquida) * 100 : 0;
   const totalPagamentos = cashReport ? (cashReport.cash + cashReport.pix + cashReport.debit + cashReport.credit) : 0;
+  const paymentMethods = [
+    { label: 'Dinheiro', value: cashReport?.cash || 0, icon: <Banknote size={16} />, color: 'bg-emerald-500' },
+    { label: 'PIX', value: cashReport?.pix || 0, icon: <Smartphone size={16} />, color: 'bg-red-500' },
+    { label: 'Débito', value: cashReport?.debit || 0, icon: <CreditCard size={16} />, color: 'bg-zinc-700' },
+    { label: 'Crédito', value: cashReport?.credit || 0, icon: <CreditCard size={16} />, color: 'bg-amber-500' },
+  ];
+  const dominantPayment = paymentMethods.reduce((acc, method) => method.value > acc.value ? method : acc, paymentMethods[0]);
 
   const periodoLabel =
     filterType === 'day' ? new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
@@ -119,6 +122,7 @@ export default function DashboardScreen({
 
   const panelClass = 'rounded-[24px] border border-zinc-200/90 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-all hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)] dark:bg-zinc-900 dark:border-zinc-800';
   const softSurfaceClass = 'rounded-2xl border border-zinc-200/80 bg-zinc-50/80 dark:bg-zinc-800 dark:border-zinc-700';
+  const kpiTicketMedio = stats?.ticketMedio || (stats?.totalPedidos ? (receitaOperacional / stats.totalPedidos) : 0);
 
   return (
     <motion.div
@@ -126,10 +130,10 @@ export default function DashboardScreen({
       animate={{ opacity: 1, y: 0 }}
       className="h-full overflow-y-auto bg-zinc-50 dark:bg-zinc-950"
     >
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-5">
+      <div className="max-w-7xl mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-red-600/80 dark:text-red-400">Visao geral</p>
             <h1 className="text-2xl sm:text-[30px] font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Dashboard</h1>
@@ -153,13 +157,13 @@ export default function DashboardScreen({
                 className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300 dark:focus:ring-red-500/20" />
             )}
             {filterType === 'month' && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
-                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300">
+                  className="flex-1 sm:flex-none bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300">
                   {meses.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
                 </select>
                 <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300">
+                  className="flex-1 sm:flex-none bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-300">
                   {anos.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
@@ -179,27 +183,29 @@ export default function DashboardScreen({
         </div>
 
         {/* ── KPIs principais ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           <KpiCard
             label="Receita Operacional"
             value={fmt(receitaOperacional)}
-            sub={`${stats?.totalPedidos || 0} pedidos`}
+            sub={`${stats?.totalPedidos || 0} pedidos antes dos ajustes`}
             icon={<DollarSign size={22} />}
             color="emerald"
             trend={null}
-            highlight
+            highlight={false}
           />
           <KpiCard
             label="Receita Líquida"
-            value={fmtShort(receitaLiquida)}
-            sub={totalRefunded > 0 ? `${fmtShort(totalRefunded)} reembolsados` : 'sem reembolsos'}
+            value={fmt(receitaLiquida)}
+            sub={totalRefunded > 0 ? `${fmt(totalRefunded)} em reembolsos` : 'sem reembolsos'}
             icon={receitaLiquida >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
             color={receitaLiquida >= 0 ? 'emerald' : 'red'}
             trend={null}
+            highlight
+            badge="Principal"
           />
           <KpiCard
             label="Despesas"
-            value={fmtShort(stats?.totalExpenses || 0)}
+            value={fmt(stats?.totalExpenses || 0)}
             sub="custos operacionais"
             icon={<TrendingDown size={20} />}
             color="red"
@@ -207,8 +213,8 @@ export default function DashboardScreen({
           />
           <KpiCard
             label="Ticket Médio"
-            value={fmtShort(stats?.ticketMedio || (stats?.totalPedidos ? (receitaOperacional / stats.totalPedidos) : 0))}
-            sub="por pedido"
+            value={fmt(kpiTicketMedio)}
+            sub="média por pedido"
             icon={<ShoppingBag size={20} />}
             color="blue"
             trend={null}
@@ -216,7 +222,7 @@ export default function DashboardScreen({
         </div>
 
         {/* ── Linha 2: Métodos + Top Produtos ────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
 
           {/* Métodos de pagamento */}
           <div className={panelClass}>
@@ -232,40 +238,44 @@ export default function DashboardScreen({
                 <CreditCard size={18} />
               </div>
             </div>
-            <div className="space-y-3">
-              {[
-                { label: 'Dinheiro', value: cashReport?.cash || 0, icon: <Banknote size={16} />, color: 'bg-emerald-500' },
-                { label: 'PIX', value: cashReport?.pix || 0, icon: <Smartphone size={16} />, color: 'bg-red-500' },
-                { label: 'Débito', value: cashReport?.debit || 0, icon: <CreditCard size={16} />, color: 'bg-zinc-700' },
-                { label: 'Crédito', value: cashReport?.credit || 0, icon: <CreditCard size={16} />, color: 'bg-amber-500' },
-              ].map(({ label, value, icon, color }) => {
+            <div className="space-y-2.5 sm:space-y-3">
+              {paymentMethods.map(({ label, value, icon, color }) => {
                 const pct = totalPagamentos > 0 ? (value / totalPagamentos) * 100 : 0;
+                const isDominant = label === dominantPayment.label && value > 0;
                 return (
-                  <div key={label} className={`${softSurfaceClass} p-3`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 text-xs font-semibold">
+                  <div key={label} className={`${softSurfaceClass} p-3 sm:p-3.5 ${isDominant ? 'ring-1 ring-red-300/70 dark:ring-red-800/70 border-red-200 dark:border-red-900/60' : ''}`}>
+                    <div className="flex items-start justify-between mb-2 gap-2">
+                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 text-xs font-semibold min-w-0">
                         <span className="h-8 w-8 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-500 flex items-center justify-center">{icon}</span>
-                        {label}
+                        <span className="truncate">{label}</span>
+                        {isDominant && (
+                          <span className="text-[9px] uppercase tracking-wide font-bold text-red-600 dark:text-red-400">Líder</span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(value)}</span>
-                        <span className="text-[10px] font-semibold text-zinc-500 w-8 text-right">{pct.toFixed(0)}%</span>
+                      <div className="flex items-baseline gap-2 shrink-0">
+                        <span className="text-[10px] font-semibold text-zinc-500 w-8 text-right tabular-nums">{pct.toFixed(0)}%</span>
+                        <span className="text-[11px] sm:text-xs font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(value)}</span>
                       </div>
                     </div>
-                    <div className="h-2 bg-white/90 dark:bg-zinc-900 rounded-full overflow-hidden border border-zinc-200/70 dark:border-zinc-800">
+                    <div className="h-2.5 bg-white/90 dark:bg-zinc-900 rounded-full overflow-hidden border border-zinc-200/70 dark:border-zinc-800">
                       <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
               })}
-              <div className="pt-4 mt-1 border-t border-zinc-200 dark:border-zinc-800 space-y-1">
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Pagamentos lancados</span>
-                  <span className="text-lg font-black text-zinc-900 dark:text-zinc-100 tabular-nums shrink-0">{fmt(cashReport?.total || 0)}</span>
+              <div className="pt-4 mt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                <div className="flex justify-between items-end gap-2">
+                  <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wide">Total de pagamentos lançados</span>
+                  <span className="text-xl font-black text-zinc-900 dark:text-zinc-100 tabular-nums shrink-0">{fmt(cashReport?.total || 0)}</span>
                 </div>
                 <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-snug">
                   Soma por data de registro do pagamento no período; pode diferir da receita ou do lucro (baseadas em pedidos).
                 </p>
+                {dominantPayment.value > 0 && (
+                  <p className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">
+                    Método dominante: {dominantPayment.label} ({((dominantPayment.value / Math.max(totalPagamentos, 1)) * 100).toFixed(0)}%).
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -296,17 +306,22 @@ export default function DashboardScreen({
                   const pct = (item.quantity / maxQty) * 100;
                   const colors = ['bg-red-600', 'bg-zinc-800', 'bg-red-400', 'bg-amber-500', 'bg-rose-500'];
                   return (
-                    <div key={i} className={`${softSurfaceClass} flex items-center gap-3 p-3`}>
-                      <span className="w-7 h-7 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-[10px] font-black text-zinc-500 flex items-center justify-center shrink-0">{i+1}</span>
+                    <div key={i} className={`${softSurfaceClass} flex items-start gap-3 p-3 sm:p-3.5 ${i === 0 ? 'ring-1 ring-red-300/70 dark:ring-red-800/70 border-red-200 dark:border-red-900/60' : ''}`}>
+                      <span className="w-7 h-7 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-[10px] font-black text-zinc-500 flex items-center justify-center shrink-0 mt-0.5">{i+1}</span>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate">{item.name}</span>
-                          <div className="flex items-center gap-3 ml-2 shrink-0">
-                            <span className="text-[11px] text-zinc-500">{item.quantity} un</span>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 mb-1.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate">{item.name}</span>
+                            {i === 0 && <span className="text-[9px] uppercase tracking-wide font-bold text-red-600 dark:text-red-400 shrink-0">Líder</span>}
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-[10px] text-zinc-500">Qtd</span>
+                            <span className="text-[11px] text-zinc-700 dark:text-zinc-300 tabular-nums">{item.quantity} un</span>
+                            <span className="text-[10px] text-zinc-500">Valor</span>
                             <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmt(item.total || 0)}</span>
                           </div>
                         </div>
-                        <div className="h-2 bg-white/90 dark:bg-zinc-900 rounded-full overflow-hidden border border-zinc-200/70 dark:border-zinc-800">
+                        <div className="h-2.5 bg-white/90 dark:bg-zinc-900 rounded-full overflow-hidden border border-zinc-200/70 dark:border-zinc-800">
                           <div className={`h-full ${colors[i % colors.length]} rounded-full`} style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -319,7 +334,7 @@ export default function DashboardScreen({
         </div>
 
         {/* ── Linha 3: Resumo financeiro + Comparativo ───────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
 
           {/* DRE simplificado */}
           <div className={panelClass}>
@@ -328,14 +343,26 @@ export default function DashboardScreen({
               <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Resumo financeiro consolidado sem alterar regras de cálculo.</p>
             </div>
             <div className="space-y-2">
-              <DreRow label="Receita Operacional" value={receitaOperacional} type="positive" />
+              <p className="text-[10px] uppercase tracking-wide font-bold text-zinc-500 px-1">Entradas</p>
+              <div className={`${softSurfaceClass} p-3`}>
+                <DreRow label="Receita Operacional" value={receitaOperacional} type="positive" />
+              </div>
               {totalRefunded > 0 && (
-                <DreRow label="(-) Reembolsos" value={-totalRefunded} type="negative" />
+                <div className={`${softSurfaceClass} p-3`}>
+                  <DreRow label="(-) Reembolsos" value={-totalRefunded} type="negative" />
+                </div>
               )}
-              <DreRow label="Receita Líquida" value={receitaLiquida} type="positive" />
-              <DreRow label="(-) Despesas" value={-(stats?.totalExpenses || 0)} type="negative" />
+              <div className={`${softSurfaceClass} p-3 border-emerald-200/80 dark:border-emerald-900/60`}>
+                <DreRow label="Receita Líquida" value={receitaLiquida} type="positive" />
+              </div>
+              <p className="text-[10px] uppercase tracking-wide font-bold text-zinc-500 px-1 pt-1">Saídas</p>
+              <div className={`${softSurfaceClass} p-3`}>
+                <DreRow label="(-) Despesas" value={-(stats?.totalExpenses || 0)} type="negative" />
+              </div>
               {(stats?.totalRepassesPagos || 0) > 0 && (
-                <DreRow label="(-) Repasses" value={-(stats?.totalRepassesPagos || 0)} type="negative" />
+                <div className={`${softSurfaceClass} p-3`}>
+                  <DreRow label="(-) Repasses" value={-(stats?.totalRepassesPagos || 0)} type="negative" />
+                </div>
               )}
               <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4 mt-3 rounded-t-2xl">
                 <div className="flex items-center justify-between">
@@ -368,7 +395,7 @@ export default function DashboardScreen({
             </div>
 
             {/* Mini KPIs */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 mb-5">
               {[
                 { label: 'Hoje',        value: stats?.today || 0, active: false },
                 { label: 'Esta Semana', value: stats?.week  || 0, active: false },
@@ -376,7 +403,7 @@ export default function DashboardScreen({
               ].map(({ label, value, active }) => (
                 <div key={label} className={`rounded-2xl p-3 text-center bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm ${active ? 'ring-2 ring-red-500/15 border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20' : ''}`}>
                   <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">{label}</p>
-                  <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 mt-1 tabular-nums">{fmtShort(value)}</p>
+                  <p className="text-base sm:text-lg font-black text-zinc-900 dark:text-zinc-100 mt-1 tabular-nums">{fmt(value)}</p>
                 </div>
               ))}
             </div>
@@ -386,8 +413,9 @@ export default function DashboardScreen({
               const maxVal = Math.max(...weeklyData.map(d => d.total), 1);
               const H = 130;
               return (
-                <div className="w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200/80 dark:border-zinc-800 shadow-inner" style={{ height: 170 }}>
-                  <svg width="100%" height="100%" viewBox={`0 0 ${weeklyData.length * 52} ${H + 36}`} preserveAspectRatio="xMidYMid meet">
+                <div className="w-full overflow-x-auto">
+                  <div className="min-w-[360px] bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-3 sm:p-4 border border-zinc-200/80 dark:border-zinc-800 shadow-inner" style={{ height: 170 }}>
+                    <svg width="100%" height="100%" viewBox={`0 0 ${weeklyData.length * 52} ${H + 36}`} preserveAspectRatio="xMidYMid meet">
                     {weeklyData.map((d, i) => {
                       const barH   = Math.max(6, Math.round((d.total / maxVal) * H));
                       const x      = i * 52 + 6;
@@ -409,8 +437,9 @@ export default function DashboardScreen({
                         </g>
                       );
                     })}
-                    <line x1={0} y1={H} x2={weeklyData.length * 52} y2={H} stroke="#d4d4d8" strokeWidth={1.5} />
-                  </svg>
+                      <line x1={0} y1={H} x2={weeklyData.length * 52} y2={H} stroke="#d4d4d8" strokeWidth={1.5} />
+                    </svg>
+                  </div>
                 </div>
               );
             })() : (
@@ -444,11 +473,12 @@ export default function DashboardScreen({
 
 // ─── Componentes auxiliares ───────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, color, trend, highlight }: {
+function KpiCard({ label, value, sub, icon, color, trend, highlight, badge }: {
   label: string; value: string; sub: string;
   icon: React.ReactNode; color: 'emerald' | 'red' | 'blue' | 'amber';
   trend: number | null;
   highlight?: boolean;
+  badge?: string;
 }) {
   const colorMap = {
     emerald: { bg: 'bg-emerald-500/12', text: 'text-emerald-600 dark:text-emerald-400', accent: 'from-emerald-500 to-emerald-400' },
@@ -458,12 +488,12 @@ function KpiCard({ label, value, sub, icon, color, trend, highlight }: {
   };
   const c = colorMap[color];
   return (
-    <div className={`relative overflow-hidden bg-white dark:bg-zinc-900 rounded-[24px] p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] border transition-all hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)] ${
+    <div className={`relative overflow-hidden bg-white dark:bg-zinc-900 rounded-[24px] p-4 sm:p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] border transition-all hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)] min-h-[150px] ${
       highlight ? 'border-red-200 bg-red-50/60 dark:bg-red-950/20 dark:border-red-900/50' : 'border-zinc-200 dark:border-zinc-800'
     }`}>
       <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${highlight ? 'from-red-600 via-red-500 to-red-400' : c.accent}`} />
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-12 h-12 ${c.bg} rounded-2xl flex items-center justify-center ${c.text} border border-white/60 dark:border-zinc-800`}>
+      <div className="flex items-start justify-between mb-3 gap-3">
+        <div className={`w-11 h-11 sm:w-12 sm:h-12 ${c.bg} rounded-2xl flex items-center justify-center ${c.text} border border-white/60 dark:border-zinc-800 shrink-0`}>
           {icon}
         </div>
         {trend !== null && (
@@ -472,11 +502,16 @@ function KpiCard({ label, value, sub, icon, color, trend, highlight }: {
             {Math.abs(trend).toFixed(1)}%
           </span>
         )}
+        {trend === null && badge && (
+          <span className="text-[9px] uppercase tracking-wide font-bold px-2 py-1 rounded-full bg-red-50 text-red-600 border border-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900/50">
+            {badge}
+          </span>
+        )}
       </div>
-      <p className={`font-black tabular-nums ${highlight ? 'text-3xl text-zinc-900 dark:text-zinc-100' : 'text-2xl text-zinc-900 dark:text-zinc-100'}`}>{value}</p>
-      <div className="flex items-center justify-between gap-3 mt-2">
-        <p className="text-xs font-bold text-zinc-500 uppercase tracking-[0.14em]">{label}</p>
-        <p className="text-[10px] text-zinc-500 text-right">{sub}</p>
+      <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-[0.14em]">{label}</p>
+      <p className={`font-black tabular-nums mt-1 break-words ${highlight ? 'text-[26px] sm:text-3xl text-zinc-900 dark:text-zinc-100' : 'text-2xl text-zinc-900 dark:text-zinc-100'}`}>{value}</p>
+      <div className="mt-2 pt-2 border-t border-zinc-200/80 dark:border-zinc-800">
+        <p className="text-[11px] text-zinc-500">{sub}</p>
       </div>
     </div>
   );
@@ -484,8 +519,8 @@ function KpiCard({ label, value, sub, icon, color, trend, highlight }: {
 
 function DreRow({ label, value, type }: { label: string; value: number; type: 'positive' | 'negative' }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-xs font-medium text-zinc-500">{label}</span>
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs font-semibold text-zinc-500">{label}</span>
       <span className={`text-sm font-bold tabular-nums ${type === 'positive' ? 'text-zinc-800 dark:text-zinc-200' : 'text-red-600 dark:text-red-400'}`}>
         {type === 'positive' ? '' : ''}{`R$ ${Math.abs(value).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`}
       </span>
