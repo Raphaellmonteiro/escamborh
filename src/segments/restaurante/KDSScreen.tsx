@@ -348,7 +348,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
 
       {/* ── FOOTER ──────────────────────────────────────────────── */}
       <footer style={S.footer}>
-        <span>FlowPDV · Tela da Cozinha</span>
+        <span>Pratory · Tela da Cozinha</span>
         <span style={{ color: '#475569' }}>·</span>
         <span>Atualização a cada 10 segundos</span>
         <span style={{ color: '#475569' }}>·</span>

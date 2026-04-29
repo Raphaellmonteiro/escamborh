@@ -14,9 +14,9 @@ export default function LegalPublicDocumentPage({
   sections: LegalDocSection[];
 }) {
   useEffect(() => {
-    document.title = `${title} — FlowPDV`;
+    document.title = `${title} — Pratory`;
     return () => {
-      document.title = 'FlowPDV';
+      document.title = 'Pratory';
     };
   }, [title]);
 
@@ -29,7 +29,7 @@ export default function LegalPublicDocumentPage({
             className="text-sm font-bold text-fptext-primary transition-colors hover:text-fp-accent"
             style={{ fontFamily: "'Syne', system-ui, sans-serif" }}
           >
-            Flow<span className="text-fp-accent">PDV</span>
+            Pra<span className="text-fp-accent">tory</span>
           </a>
           <div className="flex flex-wrap items-center gap-3 text-xs text-fptext-muted">
             <span className="rounded-full border border-fp-border bg-fp-secondary px-2.5 py-1 font-medium text-fptext-secondary">
@@ -75,7 +75,7 @@ export default function LegalPublicDocumentPage({
         </div>
 
         <footer className="mt-16 border-t border-fp-border pt-8 text-center text-xs text-fptext-muted">
-          <p>FlowPDV — documento para fins informativos. Ajuste dados do controlador e foro no texto publicado pela sua empresa.</p>
+          <p>Pratory — documento para fins informativos. Ajuste dados do controlador e foro no texto publicado pela sua empresa.</p>
         </footer>
       </article>
     </div>

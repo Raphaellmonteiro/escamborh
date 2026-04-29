@@ -9,7 +9,7 @@ import { motion } from 'motion/react';
 import { Card, Button } from '../components/ui/Card';
 
 const WA_NUMBER = '5500000000000'; // ← substitua pelo número real
-const WA_LINK = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20FlowPDV`;
+const WA_LINK = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20Pratory`;
 
 export default function LicenseBlockedScreen({ type, onBack }: { type: 'bloqueado' | 'trial_expirado', onBack: () => void }) {
   return (

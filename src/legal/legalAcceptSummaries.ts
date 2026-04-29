@@ -1,7 +1,7 @@
 import { LEGAL_BUNDLE_VERSION } from './legalBundleVersion';
 
 /** Texto curto exibido no fluxo de primeiro acesso (modal). */
-export const LEGAL_ACCEPTANCE_SUMMARY = `O FlowPDV é um serviço para restaurantes e operações de alimentação (PDV, delivery, cardápio online, pedidos, RH, ponto, relatórios e administração).
+export const LEGAL_ACCEPTANCE_SUMMARY = `O Pratory é um serviço para restaurantes e operações de alimentação (PDV, delivery, cardápio online, pedidos, RH, ponto, relatórios e administração).
 
 Quem aceita: a empresa que utiliza o sistema e as pessoas por ela autorizadas. O estabelecimento também pode ser responsável pelos dados de clientes e funcionários que cadastrar.
 
@@ -11,7 +11,7 @@ Finalidades: prestar o serviço, cumprir a lei, proteger a conta e a plataforma,
 
 Compartilhamento: fornecedores essenciais (hospedagem, banco de dados, armazenamento, mensageria, pagamentos), sob contrato. Não vendemos seus dados pessoais.
 
-Uso do sistema: de forma lícita; você é responsável por senhas e pelo conteúdo e decisões da operação. O software e a marca FlowPDV são da plataforma; o conteúdo que você cadastra é seu.
+Uso do sistema: de forma lícita; você é responsável por senhas e pelo conteúdo e decisões da operação. O software e a marca Pratory são da plataforma; o conteúdo que você cadastra é seu.
 
 Menores: pedidos em delivery em geral são feitos por responsáveis. Cookies e sessão são usados para login e funcionamento técnico.
 

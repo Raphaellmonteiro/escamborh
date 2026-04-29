@@ -2563,7 +2563,7 @@ export function DeliveryConfigPanel({
               <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 p-4">
                 <p className="font-bold text-blue-900 dark:text-blue-300">Modelo atual da entrega</p>
                 <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                  O FlowPDV calcula o delivery por bairro com taxa fixa. A taxa padrão (aba Entrega) entra quando nenhum bairro cadastrado casar com o endereço. Zonas são editadas na aba <strong>Zonas</strong>.
+                  O Pratory calcula o delivery por bairro com taxa fixa. A taxa padrão (aba Entrega) entra quando nenhum bairro cadastrado casar com o endereço. Zonas são editadas na aba <strong>Zonas</strong>.
                 </p>
               </div>
               <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
@@ -2782,7 +2782,7 @@ export function DeliveryConfigPanel({
                     <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 mt-1">{isAutomaticPix ? 'PIX automatico' : 'QR manual'}</p>
                     <p className="text-[11px] text-blue-900/80 dark:text-blue-100/80 mt-1">
                       {isAutomaticPix
-                        ? 'O FlowPDV tenta gerar o PIX do pedido usando o provider configurado.'
+                        ? 'O Pratory tenta gerar o PIX do pedido usando o provider configurado.'
                         : 'O checkout mostra o QR manual salvo para o cliente pagar.'}
                     </p>
                   </div>

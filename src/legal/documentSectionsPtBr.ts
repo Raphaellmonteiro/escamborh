@@ -6,15 +6,15 @@ export const PRIVACY_POLICY_SECTIONS: LegalDocSection[] = [
   {
     heading: 'Introdução',
     paragraphs: [
-      'Esta Política de Privacidade descreve como tratamos dados pessoais no contexto da plataforma FlowPDV, destinada a restaurantes, hamburguerias, lanchonetes, bares e operações semelhantes, incluindo cardápio online, delivery, pedidos, RH (como ponto de funcionário), relatórios e painel administrativo.',
+      'Esta Política de Privacidade descreve como tratamos dados pessoais no contexto da plataforma Pratory, destinada a restaurantes, hamburguerias, lanchonetes, bares e operações semelhantes, incluindo cardápio online, delivery, pedidos, RH (como ponto de funcionário), relatórios e painel administrativo.',
       'Ao utilizar o site, o sistema ou os serviços relacionados, você declara que leu e compreendeu esta política. Em caso de dúvida, utilize o canal de contato indicado ao final.',
     ],
   },
   {
     heading: 'Quem é o controlador dos dados',
     paragraphs: [
-      'O controlador dos dados pessoais tratados em nome da plataforma FlowPDV é a empresa responsável pela operação do serviço, conforme identificada no site, no contrato ou no cadastro do produto (razão social, CNPJ e contatos devem ser mantidos atualizados pelo operador da plataforma).',
-      'Os estabelecimentos clientes do FlowPDV também podem atuar como controladores dos dados de seus clientes (por exemplo, pedidos de delivery), seus funcionários e sua operação, utilizando o sistema como ferramenta. Nesses casos, o FlowPDV pode atuar como operador, tratando dados conforme instruções do estabelecimento e esta política, sem prejuízo das obrigações legais de cada parte.',
+      'O controlador dos dados pessoais tratados em nome da plataforma Pratory é a empresa responsável pela operação do serviço, conforme identificada no site, no contrato ou no cadastro do produto (razão social, CNPJ e contatos devem ser mantidos atualizados pelo operador da plataforma).',
+      'Os estabelecimentos clientes do Pratory também podem atuar como controladores dos dados de seus clientes (por exemplo, pedidos de delivery), seus funcionários e sua operação, utilizando o sistema como ferramenta. Nesses casos, o Pratory pode atuar como operador, tratando dados conforme instruções do estabelecimento e esta política, sem prejuízo das obrigações legais de cada parte.',
     ],
   },
   {
@@ -64,26 +64,26 @@ export const PRIVACY_POLICY_SECTIONS: LegalDocSection[] = [
   {
     heading: 'Canal de contato',
     paragraphs: [
-      'Utilize o e-mail de privacidade divulgado pelo operador da plataforma FlowPDV no site ou na documentação contratual. Inclua no assunto referência a “Privacidade / LGPD — FlowPDV” para agilizar o encaminhamento.',
+      'Utilize o e-mail de privacidade divulgado pelo operador da plataforma Pratory no site ou na documentação contratual. Inclua no assunto referência a “Privacidade / LGPD — Pratory” para agilizar o encaminhamento.',
     ],
   },
   {
     heading: 'Clientes do sistema e usuários do delivery',
     paragraphs: [
       'Estabelecimentos são responsáveis pela veracidade dos dados inseridos e pela legalidade do tratamento em relação aos seus clientes e funcionários, incluindo avisos próprios quando exigidos.',
-      'Usuários finais do cardápio ou delivery fornecem dados para execução do pedido e operação do estabelecimento, também conforme esta política na parte relativa à infraestrutura do FlowPDV.',
+      'Usuários finais do cardápio ou delivery fornecem dados para execução do pedido e operação do estabelecimento, também conforme esta política na parte relativa à infraestrutura do Pratory.',
     ],
   },
   {
     heading: 'Dados de funcionários (RH)',
     paragraphs: [
-      'O módulo de RH trata dados inseridos pelo estabelecimento, em geral vinculados à relação de trabalho e obrigações legais. O estabelecimento define o que cadastra e para quais finalidades; o FlowPDV viabiliza a ferramenta e o tratamento necessário à prestação do serviço.',
+      'O módulo de RH trata dados inseridos pelo estabelecimento, em geral vinculados à relação de trabalho e obrigações legais. O estabelecimento define o que cadastra e para quais finalidades; o Pratory viabiliza a ferramenta e o tratamento necessário à prestação do serviço.',
     ],
   },
   {
     heading: 'Menores de idade',
     paragraphs: [
-      'O FlowPDV não é direcionado a crianças para coletar dados de forma intencional. Em pedidos de delivery, quem informa dados costuma ser o responsável pelo pedido. Se houver tratamento inadequado de dados de menores sem base legal adequada, adotaremos medidas de revisão ou eliminação, conforme aplicável.',
+      'O Pratory não é direcionado a crianças para coletar dados de forma intencional. Em pedidos de delivery, quem informa dados costuma ser o responsável pelo pedido. Se houver tratamento inadequado de dados de menores sem base legal adequada, adotaremos medidas de revisão ou eliminação, conforme aplicável.',
     ],
   },
   {
@@ -99,21 +99,21 @@ export const TERMS_OF_USE_SECTIONS: LegalDocSection[] = [
   {
     heading: 'Objeto',
     paragraphs: [
-      'Estes Termos de Uso regulam o acesso e o uso da plataforma FlowPDV (SaaS) para operação de restaurantes, lanchonetes, bares e delivery/balcão, com recursos como painel administrativo, pedidos, PDV, delivery, cardápio online, RH, ponto de funcionário, relatórios e configurações.',
+      'Estes Termos de Uso regulam o acesso e o uso da plataforma Pratory (SaaS) para operação de restaurantes, lanchonetes, bares e delivery/balcão, com recursos como painel administrativo, pedidos, PDV, delivery, cardápio online, RH, ponto de funcionário, relatórios e configurações.',
       'O detalhamento comercial (plano, preço, prazo) pode constar em proposta, pedido ou contrato separado. Em caso de conflito sobre matéria estritamente comercial, prevalece o documento específico, salvo disposição legal imperativa em contrário.',
     ],
   },
   {
     heading: 'Usuário e cliente',
     paragraphs: [
-      'Cliente: pessoa jurídica (ou empreendedor individual, quando aplicável) que contrata ou utiliza o FlowPDV em nome do estabelecimento.',
+      'Cliente: pessoa jurídica (ou empreendedor individual, quando aplicável) que contrata ou utiliza o Pratory em nome do estabelecimento.',
       'Usuário: pessoa física autorizada pelo Cliente a acessar a plataforma. O Cliente é responsável por todos os atos praticados por seus Usuários.',
     ],
   },
   {
     heading: 'Acesso, login e senha',
     paragraphs: [
-      'O Cliente e cada Usuário são responsáveis pela confidencialidade das credenciais. Comunique imediatamente qualquer uso suspeito. O FlowPDV pode adotar medidas razoáveis de segurança (por exemplo, bloqueio temporário após tentativas falhas).',
+      'O Cliente e cada Usuário são responsáveis pela confidencialidade das credenciais. Comunique imediatamente qualquer uso suspeito. O Pratory pode adotar medidas razoáveis de segurança (por exemplo, bloqueio temporário após tentativas falhas).',
     ],
   },
   {
@@ -133,8 +133,8 @@ export const TERMS_OF_USE_SECTIONS: LegalDocSection[] = [
   {
     heading: 'Responsabilidades da plataforma',
     paragraphs: [
-      'O FlowPDV compromete-se a disponibilizar a plataforma conforme estes Termos e o documento comercial, com esforço razoável de manutenção e suporte nos termos contratados.',
-      'O FlowPDV não substitui assessoria jurídica, contábil ou fiscal. Relatórios e telas são ferramentas de apoio; a conferência final de obrigações é do Cliente.',
+      'O Pratory compromete-se a disponibilizar a plataforma conforme estes Termos e o documento comercial, com esforço razoável de manutenção e suporte nos termos contratados.',
+      'O Pratory não substitui assessoria jurídica, contábil ou fiscal. Relatórios e telas são ferramentas de apoio; a conferência final de obrigações é do Cliente.',
     ],
   },
   {
@@ -154,14 +154,14 @@ export const TERMS_OF_USE_SECTIONS: LegalDocSection[] = [
   {
     heading: 'Propriedade intelectual',
     paragraphs: [
-      'A plataforma, software, marca e materiais associados são de propriedade do FlowPDV ou licenciadores. É concedida licença de uso não exclusiva, intransferível e limitada ao período e escopo contratados.',
+      'A plataforma, software, marca e materiais associados são de propriedade do Pratory ou licenciadores. É concedida licença de uso não exclusiva, intransferível e limitada ao período e escopo contratados.',
       'O conteúdo inserido pelo Cliente permanece de sua titularidade ou de terceiros de quem detenha direitos; o Cliente concede licença limitada para hospedar e processar esse conteúdo para prestar o serviço.',
     ],
   },
   {
     heading: 'Limites de responsabilidade',
     paragraphs: [
-      'Na máxima extensão permitida em lei, o FlowPDV não se responsabiliza por lucros cessantes, danos indiretos ou consequenciais, decisões comerciais do Cliente ou disputas entre o Cliente e terceiros.',
+      'Na máxima extensão permitida em lei, o Pratory não se responsabiliza por lucros cessantes, danos indiretos ou consequenciais, decisões comerciais do Cliente ou disputas entre o Cliente e terceiros.',
       'Quando houver responsabilidade cabível, poderá haver limitação ao valor pago pelo serviço em período contratual definido no instrumento comercial ou nestes Termos, exceto onde a lei proíba.',
     ],
   },
@@ -169,7 +169,7 @@ export const TERMS_OF_USE_SECTIONS: LegalDocSection[] = [
     heading: 'Cancelamento, suspensão e bloqueio',
     paragraphs: [
       'Cancelamento ou não renovação segue as regras do documento comercial.',
-      'O FlowPDV pode suspender o acesso em caso de inadimplemento relevante, risco à segurança, uso indevido destes Termos ou da lei, ou ordem judicial, com aviso quando possível salvo urgência ou fraude evidente.',
+      'O Pratory pode suspender o acesso em caso de inadimplemento relevante, risco à segurança, uso indevido destes Termos ou da lei, ou ordem judicial, com aviso quando possível salvo urgência ou fraude evidente.',
     ],
   },
   {

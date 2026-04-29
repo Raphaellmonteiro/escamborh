@@ -280,7 +280,7 @@ function buildEscPos(dados: string, largura = 48): Buffer {
   const BOLD_ON = Buffer.from([ESC, 0x45, 0x01]);
   const BOLD_OFF = Buffer.from([ESC, 0x45, 0x00]);
   const CUT = Buffer.from([GS, 0x56, 0x41, 0x10]);
-  const parts: Buffer[] = [INIT, CENTER, BOLD_ON, Buffer.from('FlowPDV\n'), BOLD_OFF, LEFT];
+  const parts: Buffer[] = [INIT, CENTER, BOLD_ON, Buffer.from('Pratory\n'), BOLD_OFF, LEFT];
   const linhas = dados.split('\n');
 
   for (const linha of linhas) {
@@ -565,7 +565,7 @@ export function createPrintRouter() {
       if (!cfg.ip) return res.json({ success: false, message: 'IP nao configurado' });
 
       const dados = buildEscPos(
-        `TESTE DE IMPRESSAO\nFlowPDV funcionando!\n${new Date().toLocaleString('pt-BR')}`,
+        `TESTE DE IMPRESSAO\nPratory funcionando!\n${new Date().toLocaleString('pt-BR')}`,
         getProfilePaperColumns(cfg, 'caixa')
       );
       await enviarParaImpressora(dados, cfg.ip, cfg.porta || 9100);

@@ -191,7 +191,7 @@ export function createKioskRouter() {
     res.setHeader('Pragma','no-cache');
     res.send(`<!DOCTYPE html><html lang="pt-BR"><head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Bater Ponto — FlowPDV</title>
+<title>Bater Ponto — Pratory</title>
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}

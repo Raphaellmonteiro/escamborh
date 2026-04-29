@@ -1,5 +1,5 @@
 /**
- * App.tsx - Roteador principal do FlowPDV.
+ * App.tsx - Roteador principal do Pratory.
  */
 
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
@@ -104,55 +104,55 @@ function setDocumentMeta(name: string, content: string, attr: 'name' | 'property
 function getPublicMeta(path: string): PublicMeta {
   if (path === '/login') {
     return {
-      title: 'Entrar | Pratori',
-      description: 'Acesse o Pratori com seu usuário: caixa, pedidos, cozinha, mesas e delivery na sua loja.',
+      title: 'Entrar | Pratory',
+      description: 'Acesse o Pratory com seu usuário: caixa, pedidos, cozinha, mesas e delivery na sua loja.',
     };
   }
   if (path === '/') {
     return {
-      title: 'Pratori | Caixa, pedidos e delivery para sua loja',
+      title: 'Pratory | Caixa, pedidos e delivery para sua loja',
       description:
         'Sistema para restaurante e delivery: PDV, cozinha, cardápio online, mesas, retirada e caixa num lugar só.',
     };
   }
   if (path === '/privacidade') {
     return {
-      title: 'Política de Privacidade | FlowPDV',
-      description: 'Consulte a política de privacidade do FlowPDV e as informações aplicáveis à operação da plataforma.',
+      title: 'Política de Privacidade | Pratory',
+      description: 'Consulte a política de privacidade do Pratory e as informações aplicáveis à operação da plataforma.',
     };
   }
   if (path === '/termos') {
     return {
-      title: 'Termos de Uso | FlowPDV',
-      description: 'Consulte os termos de uso do FlowPDV para estabelecimentos e usuários autorizados.',
+      title: 'Termos de Uso | Pratory',
+      description: 'Consulte os termos de uso do Pratory para estabelecimentos e usuários autorizados.',
     };
   }
   if (/^\/delivery\/[^/]+\/pedido\/\d+$/.test(path)) {
     return {
-      title: 'Acompanhe seu pedido | FlowPDV',
+      title: 'Acompanhe seu pedido | Pratory',
       description: 'Acompanhe o andamento do seu pedido online em tempo real.',
     };
   }
   if (/^\/delivery\/[^/]+$/.test(path)) {
     return {
-      title: 'Cardápio online e pedidos | FlowPDV',
-      description: 'Peça online com cardápio digital, retirada ou delivery direto pelo FlowPDV.',
+      title: 'Cardápio online e pedidos | Pratory',
+      description: 'Peça online com cardápio digital, retirada ou delivery direto pelo Pratory.',
     };
   }
   if (/^\/display\/[^/]+$/.test(path)) {
     return {
-      title: 'Painel de pedidos | FlowPDV',
+      title: 'Painel de pedidos | Pratory',
       description: 'Acompanhe a chamada e o andamento dos pedidos em tempo real.',
     };
   }
   if (/^\/mesa\/[^/]+\/[^/]+$/.test(path)) {
     return {
-      title: 'Mesa digital | FlowPDV',
+      title: 'Mesa digital | Pratory',
       description: 'Acompanhe e interaja com o pedido da sua mesa.',
     };
   }
   return {
-    title: 'FlowPDV | PDV, cozinha e delivery para food service',
+    title: 'Pratory | PDV, cozinha e delivery para food service',
     description: 'Sistema para food service que integra PDV, pedidos, cozinha, cardápio online, delivery, mesas, retirada, caixa, estoque e relatórios na mesma operação.',
   };
 }
@@ -192,7 +192,7 @@ export default function App() {
     try { const p = localStorage.getItem('user_permissoes'); return p ? JSON.parse(p) : null; } catch { return null; }
   });
   const [userName, setUserName] = useState<string>(() => localStorage.getItem('user_nome') || '');
-  const [estabelecimentoNome, setEstabelecimentoNome] = useState('FlowPDV');
+  const [estabelecimentoNome, setEstabelecimentoNome] = useState('Pratory');
   const [planFeatures, setPlanFeatures] = useState<PlanFeature[]>(() => readStoredPlanFeatures());
   const [planProfile, setPlanProfile] = useState<PlanProfileInfo | null>(null);
   const [operationalAlertCount, setOperationalAlertCount] = useState(0);
@@ -362,19 +362,19 @@ export default function App() {
   useEffect(() => {
     const meta = getPublicMeta(path);
     if (isAdmin) {
-      document.title = 'Admin — FlowPDV';
+      document.title = 'Admin — Pratory';
       return;
     }
     if (kdsSlug) {
-      document.title = 'Tela de Pedidos — FlowPDV';
+      document.title = 'Tela de Pedidos — Pratory';
       return;
     }
     if (bookingSlug) {
-      document.title = 'Página pública indisponível — FlowPDV';
+      document.title = 'Página pública indisponível — Pratory';
       return;
     }
     if (isPonto) {
-      document.title = 'Sistema de Ponto — FlowPDV';
+      document.title = 'Sistema de Ponto — Pratory';
       return;
     }
 
@@ -457,7 +457,7 @@ React.useEffect(() => {
 
         if (isOperationTab) {
           setOperationalNeedsAttention(false);
-          document.title = 'FlowPDV';
+          document.title = 'Pratory';
           return;
         }
 
@@ -466,8 +466,8 @@ React.useEffect(() => {
         }
 
         document.title = actionableOrders.length > 0
-          ? `Operação (${actionableOrders.length}) — FlowPDV`
-          : 'FlowPDV';
+          ? `Operação (${actionableOrders.length}) — Pratory`
+          : 'Pratory';
       } catch {}
     };
 
@@ -1378,7 +1378,7 @@ const handleAuth = async (e: React.FormEvent) => {
 
 // Constante global para contato comercial
 const WA_NUMBER = '5500000000000';
-const WA_LINK = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20FlowPDV`;
+const WA_LINK = `https://wa.me/${WA_NUMBER}?text=Olá!%20Tenho%20interesse%20no%20Pratory`;
 
 function SegmentDisabledNotice() {
   return (
@@ -1389,7 +1389,7 @@ function SegmentDisabledNotice() {
         </div>
         <h1 className="text-2xl font-black text-zinc-900">Página pública indisponível</h1>
         <p className="mt-3 text-sm leading-6 text-zinc-500">
-          Este link público não está disponível nesta versão do FlowPDV para operações de food service.
+          Este link público não está disponível nesta versão do Pratory para operações de food service.
         </p>
         <a
           href="/"

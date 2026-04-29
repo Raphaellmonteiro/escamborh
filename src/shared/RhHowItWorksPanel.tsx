@@ -52,7 +52,7 @@ type AdvancedCard = BasicCard;
 const ADVANCED_CARDS: AdvancedCard[] = [
   {
     title: 'Acesso ao sistema',
-    text: 'Ative só se a pessoa for usar o FlowPDV (caixa, telas internas). Sem acesso, ela ainda pode bater ponto com PIN no quiosque.',
+    text: 'Ative só se a pessoa for usar o Pratory (caixa, telas internas). Sem acesso, ela ainda pode bater ponto com PIN no quiosque.',
     icon: Shield,
     iconClass: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
   },

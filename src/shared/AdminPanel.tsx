@@ -3056,7 +3056,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                           </button>
                           <button 
                             onClick={() => {
-                              const text = `Olá, sua licença do FlowPDV vence em ${new Date(v.vencimento).toLocaleDateString()}. Deseja renovar?`;
+                              const text = `Olá, sua licença do Pratory vence em ${new Date(v.vencimento).toLocaleDateString()}. Deseja renovar?`;
                               window.open(`https://wa.me/${v.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
                             }}
                             className="p-2 bg-emerald-900 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors"
@@ -3951,7 +3951,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     const expira = showCreds.trial_fim || showCreds.vencimento
                       ? new Date(showCreds.trial_fim ?? showCreds.vencimento).toLocaleDateString('pt-BR')
                       : 'Sem trial definido';
-                    const text = `FlowPDV - Credenciais de Acesso\n\nPlano: ${showCreds.plano}\nUsuário: ${showCreds.usuario}\nSenha: ${showCreds.senha}\nExpira em: ${expira}`;
+                    const text = `Pratory - Credenciais de Acesso\n\nPlano: ${showCreds.plano}\nUsuário: ${showCreds.usuario}\nSenha: ${showCreds.senha}\nExpira em: ${expira}`;
                     navigator.clipboard.writeText(text);
                     alert("Copiado para a área de transferência!");
                   }}

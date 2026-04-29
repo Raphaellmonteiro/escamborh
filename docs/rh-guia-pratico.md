@@ -1,7 +1,7 @@
-# FlowPDV - Guia Rapido do Modulo RH
+# Pratory - Guia Rapido do Modulo RH
 
 ## Visao geral
-O RH do FlowPDV hoje se organiza assim:
+O RH do Pratory hoje se organiza assim:
 
 1. `Funcionarios`: cadastro e ficha completa do colaborador.
 2. `Gestao RH`: painel de triagem para alertas e pendencias.

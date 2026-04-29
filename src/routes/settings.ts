@@ -30,7 +30,7 @@ export function createSettingsRouter() {
         subsenhaPerfilPrecisaAtencao(cliente?.senha_caixa);
       const logo_url = await resolveTenantLogoPublicUrl(req.tenantId);
       res.json({
-        nome_estabelecimento: cliente?.nome_estabelecimento || 'FlowPDV',
+        nome_estabelecimento: cliente?.nome_estabelecimento || 'Pratory',
         logo_url,
         senha_padrao: senhaPadrao,
         segmento:     cliente?.segmento    || 'Restaurante/Food',
@@ -152,7 +152,7 @@ export function createSettingsRouter() {
   router.get('/watermark', async (req: Request, res) => {
     try {
       const row = await q1('SELECT nome_estabelecimento FROM clientes WHERE id=?', [req.tenantId]);
-      res.json({ watermark: row?.nome_estabelecimento || 'FlowPDV' });
+      res.json({ watermark: row?.nome_estabelecimento || 'Pratory' });
     } catch (e: unknown) { sendInternalError(res, 'routes/settings', e); }
   });
 

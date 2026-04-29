@@ -340,7 +340,7 @@ export default function NotificationCenter({
 
             <div className="border-t border-white/8 bg-black/10 px-5 py-3">
               <p className="text-center text-[10px] text-zinc-500">
-                Notificacoes dos ultimos 30 dias - Geradas automaticamente pelo FlowPDV
+                Notificacoes dos ultimos 30 dias - Geradas automaticamente pelo Pratory
               </p>
             </div>
           </motion.aside>

@@ -819,7 +819,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                     <div className="min-w-0">
                       <p className="text-lg font-black text-zinc-900 sm:text-xl dark:text-white">Como funciona o estoque</p>
                       <p className="mt-1 max-w-3xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-                        Este tutorial mostra o jeito mais simples e o jeito mais completo de trabalhar com estoque no FlowPDV. A ideia e ler uma vez, entender o fluxo e depois ocultar sem medo.
+                        Este tutorial mostra o jeito mais simples e o jeito mais completo de trabalhar com estoque no Pratory. A ideia e ler uma vez, entender o fluxo e depois ocultar sem medo.
                       </p>
                     </div>
                   </div>
@@ -964,7 +964,7 @@ export default function EstoqueScreen({ token, segmento: _segmento }: { token: s
                   <div className="min-w-0">
                     <p className="text-base font-black text-zinc-900 dark:text-white">Como o sistema identifica o item de estoque na venda</p>
                     <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-                      A baixa automatica so acontece quando existe um vinculo valido entre o produto vendido e o estoque. Hoje a logica do FlowPDV segue esta ordem:
+                      A baixa automatica so acontece quando existe um vinculo valido entre o produto vendido e o estoque. Hoje a logica do Pratory segue esta ordem:
                     </p>
                   </div>
                 </div>

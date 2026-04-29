@@ -1202,7 +1202,7 @@ function TabLista({
               <p className="text-xs mt-2 leading-relaxed text-amber-900/90">
                 {isEvento(normalizeTipoContrato(selected.tipo_contrato))
                   ? 'Colaborador por evento não utiliza folha mensal CLT no sistema. Use a aba Folha para registrar pagamentos por competência e o Espelho para ponto. Serviços por evento podem ser controlados externamente; aqui o foco é histórico financeiro e presença.'
-                  : '13º e férias gerenciais automáticos não se aplicam a diarista no FlowPDV. Use Espelho e Folha (folha simplificada, sem INSS automático) e pagamentos na competência.'}
+                  : '13º e férias gerenciais automáticos não se aplicam a diarista no Pratory. Use Espelho e Folha (folha simplificada, sem INSS automático) e pagamentos na competência.'}
               </p>
             </div>
           )}
@@ -1638,7 +1638,7 @@ function TabLista({
                     <p className="text-[10px] font-black uppercase tracking-wider text-violet-800">{label}</p>
                     <p className="text-2xl font-black text-violet-900">{fmt(valor)}</p>
                     <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                      Ao confirmar, o FlowPDV marca esta parcela como <strong>paga no controle gerencial</strong> (data de
+                      Ao confirmar, o Pratory marca esta parcela como <strong>paga no controle gerencial</strong> (data de
                       hoje). Não há integração bancária: o pagamento efetivo continua sendo feito por você fora do
                       sistema.
                     </p>

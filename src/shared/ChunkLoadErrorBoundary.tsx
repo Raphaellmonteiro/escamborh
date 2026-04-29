@@ -44,7 +44,7 @@ export default class ChunkLoadErrorBoundary extends Component<Props, State> {
               : 'Algo inesperado impediu de exibir esta tela.'}
           </p>
           <p className="max-w-md text-xs text-fptext-muted">
-            Recarregar a página costuma resolver, principalmente após uma nova versão do FlowPDV.
+            Recarregar a página costuma resolver, principalmente após uma nova versão do Pratory.
           </p>
           <button
             type="button"

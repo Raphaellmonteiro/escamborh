@@ -7,7 +7,7 @@ export default function TermsOfUsePublicPage() {
     <LegalPublicDocumentPage
       title="Termos de Uso"
       updatedLabel="Última atualização: consulte a versão no rodapé do sistema ou comunique-se com o suporte."
-      intro="Estes termos regulam o uso da plataforma FlowPDV pelos estabelecimentos e usuários autorizados. Complemente com razão social, CNPJ, foro e contatos conforme seu contrato ou site institucional."
+      intro="Estes termos regulam o uso da plataforma Pratory pelos estabelecimentos e usuários autorizados. Complemente com razão social, CNPJ, foro e contatos conforme seu contrato ou site institucional."
       sections={TERMS_OF_USE_SECTIONS}
     />
   );

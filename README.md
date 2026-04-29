@@ -1,4 +1,4 @@
-# FlowPDV — Sistema de Gestão Multi-Segmento
+# Pratory — Sistema de Gestão Multi-Segmento
 
 > Sistema POS multi-tenant com suporte a diferentes tipos de negócio.
 
