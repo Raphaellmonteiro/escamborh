@@ -1562,6 +1562,7 @@ router.get('/clientes', async (req: Request, res) => {
           .filter((id): id is number => Number.isInteger(id) && id > 0)
       )].slice(0, 100);
       const sendWithMenuImage = toFlag(req.body?.send_with_menu_image);
+      const operatorId = (req as Request & { user?: { id?: number } }).user?.id || null;
 
       if (customerIds.length === 0) {
         return res.status(400).json({ success: false, error: 'Selecione pelo menos um cliente valido' });
@@ -1600,8 +1601,10 @@ router.get('/clientes', async (req: Request, res) => {
         id: number;
         nome: string | null;
         telefone: string | null;
+        whatsapp_reativacao_last_sent_at?: string | null;
+        whatsapp_reativacao_last_status?: string | null;
       }>(
-        `SELECT id, nome, telefone
+        `SELECT id, nome, telefone, whatsapp_reativacao_last_sent_at, whatsapp_reativacao_last_status
            FROM delivery_clientes
           WHERE tenant_id=?
             AND id IN (${placeholders})
@@ -1731,6 +1734,15 @@ router.get('/clientes', async (req: Request, res) => {
               sendResult.externalId || null,
             ]
           );
+          await qRun(
+            `UPDATE delivery_clientes
+                SET whatsapp_reativacao_last_sent_at = NOW(),
+                    whatsapp_reativacao_last_status = 'sent',
+                    whatsapp_reativacao_last_operator_id = ?,
+                    updated_at = NOW()
+              WHERE tenant_id=? AND id=?`,
+            [operatorId, req.tenantId, customerId]
+          );
 
           results.push({
             customer_id: customerId,
@@ -1779,6 +1791,15 @@ router.get('/clientes', async (req: Request, res) => {
               errorMessage,
               whatsappConfig.provider || null,
             ]
+          );
+          await qRun(
+            `UPDATE delivery_clientes
+                SET whatsapp_reativacao_last_sent_at = NOW(),
+                    whatsapp_reativacao_last_status = 'failed',
+                    whatsapp_reativacao_last_operator_id = ?,
+                    updated_at = NOW()
+              WHERE tenant_id=? AND id=?`,
+            [operatorId, req.tenantId, customerId]
           );
 
           results.push({

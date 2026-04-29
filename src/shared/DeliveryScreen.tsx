@@ -127,6 +127,9 @@ interface DeliveryCustomer {
   total_pedidos_validos?: number;
   total_gasto?: number;
   sem_historico?: boolean;
+  whatsapp_reativacao_last_sent_at?: string | null;
+  whatsapp_reativacao_last_status?: 'sent' | 'failed' | string | null;
+  whatsapp_reativacao_last_operator_id?: number | null;
 }
 interface CustomerOrderHistory {
   id: number;
@@ -251,6 +254,82 @@ const getDaysWithoutPurchaseLabel = (dias?: number | null) => {
 };
 const getCustomerPurchaseSummary = (customer: DeliveryCustomer) =>
   customer.ultima_compra_at || customer.ultimo_pedido ? getDaysWithoutPurchaseLabel(customer.dias_sem_comprar) : 'Sem compras registradas';
+const fmtDateTime = (d?: string | null) => {
+  const value = parseDateValue(d);
+  if (!value) return '—';
+  return value.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+const isSameCalendarDay = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+const getReactivationStatusMeta = (customer: DeliveryCustomer) => {
+  const sentAt = parseDateValue(customer.whatsapp_reativacao_last_sent_at);
+  const status = String(customer.whatsapp_reativacao_last_status || '').trim().toLowerCase();
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (status === 'failed') {
+    return {
+      key: 'failed',
+      label: 'Falhou',
+      detail: sentAt ? `Ultimo envio: ${fmtDateTime(customer.whatsapp_reativacao_last_sent_at)}` : 'Falha sem horario registrado',
+      tone: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30',
+    };
+  }
+  if (!sentAt) {
+    return {
+      key: 'never',
+      label: 'Nunca enviado',
+      detail: 'Sem disparo de reativacao',
+      tone: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:border-zinc-600',
+    };
+  }
+  if (isSameCalendarDay(sentAt, now)) {
+    return {
+      key: 'sent_today',
+      label: 'Enviado hoje',
+      detail: `Ultimo envio: ${fmtDateTime(customer.whatsapp_reativacao_last_sent_at)}`,
+      tone: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30',
+    };
+  }
+  if (isSameCalendarDay(sentAt, yesterday)) {
+    return {
+      key: 'sent_yesterday',
+      label: 'Enviado ontem',
+      detail: `Ultimo envio: ${fmtDateTime(customer.whatsapp_reativacao_last_sent_at)}`,
+      tone: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30',
+    };
+  }
+  return {
+    key: 'sent_before',
+    label: `Ultimo envio: ${fmtDateTime(customer.whatsapp_reativacao_last_sent_at)}`,
+    detail: status === 'sent' ? 'Reativacao enviada com sucesso' : 'Historico de reativacao',
+    tone: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30',
+  };
+};
+const wasReactivationSentInLastDays = (customer: DeliveryCustomer, days: number) => {
+  const sentAt = parseDateValue(customer.whatsapp_reativacao_last_sent_at);
+  if (!sentAt || days <= 0) return false;
+  const threshold = new Date();
+  threshold.setHours(0, 0, 0, 0);
+  threshold.setDate(threshold.getDate() - (days - 1));
+  return sentAt >= threshold;
+};
+const hasCustomerPhoneForWhatsApp = (customer: DeliveryCustomer) =>
+  String(customer.telefone || '').replace(/\D/g, '').length >= 10;
+const isReadyForReactivation = (customer: DeliveryCustomer) => {
+  const activity = String(customer.status_atividade || '').trim();
+  if (!['em_risco', 'inativo'].includes(activity)) return false;
+  if (!hasCustomerPhoneForWhatsApp(customer)) return false;
+  return getReactivationStatusMeta(customer).key !== 'sent_today';
+};
 
 const deliverySecondaryButtonActiveClass = 'bg-zinc-900 dark:bg-zinc-700 text-white';
 const deliverySecondaryButtonInactiveClass =
@@ -1183,6 +1262,11 @@ export function TabClientes({ token }: { token: string }) {
     | 'em_risco'
     | 'mais_pedidos'
     | 'maior_gasto'
+    | 'wa_never_sent'
+    | 'wa_sent_today'
+    | 'wa_sent_7d'
+    | 'wa_failed'
+    | 'wa_ready'
   >('all');
   const [sortBy, setSortBy] = useState<'recent_purchase' | 'long_without_purchase' | 'most_orders' | 'highest_spend'>('recent_purchase');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -1276,6 +1360,16 @@ export function TabClientes({ token }: { token: string }) {
         return totalPedidos > 0;
       case 'maior_gasto':
         return totalGasto > 0;
+      case 'wa_never_sent':
+        return getReactivationStatusMeta(customer).key === 'never';
+      case 'wa_sent_today':
+        return getReactivationStatusMeta(customer).key === 'sent_today';
+      case 'wa_sent_7d':
+        return wasReactivationSentInLastDays(customer, 7);
+      case 'wa_failed':
+        return getReactivationStatusMeta(customer).key === 'failed';
+      case 'wa_ready':
+        return isReadyForReactivation(customer);
       case 'all':
       default:
         return true;
@@ -1308,6 +1402,11 @@ export function TabClientes({ token }: { token: string }) {
   const visibleSelectedCount = sortedFilteredClientes.filter((c) => selectedIds.has(c.id)).length;
   const allVisibleSelected = sortedFilteredClientes.length > 0 && visibleSelectedCount === sortedFilteredClientes.length;
   const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+  const selectedSentTodayCount = clientes.filter((customer) => selectedIds.has(customer.id) && getReactivationStatusMeta(customer).key === 'sent_today').length;
+  const waSentTodayCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'sent_today').length;
+  const waNeverSentCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'never').length;
+  const waFailedCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'failed').length;
+  const waReadyCount = clientes.filter(isReadyForReactivation).length;
   useEffect(() => {
     if (selectAllRef.current) {
       selectAllRef.current.indeterminate = someVisibleSelected;
@@ -1336,6 +1435,7 @@ export function TabClientes({ token }: { token: string }) {
     if (selectedIds.size === 0 || sendingWhatsapp) return;
     const confirmed = window.confirm(
       `Enviar mensagem de reativacao por WhatsApp para ${selectedIds.size} cliente(s)?` +
+        (selectedSentTodayCount > 0 ? `\nAtencao: ${selectedSentTodayCount} selecionado(s) ja receberam reativacao hoje.` : '') +
         (sendWithCardapioImage && cardapioReactivationImageUrl ? '\nA imagem de cardapio sera enviada junto.' : '')
     );
     if (!confirmed) return;
@@ -1455,6 +1555,11 @@ export function TabClientes({ token }: { token: string }) {
             ['em_risco', 'Em risco'],
             ['mais_pedidos', 'Mais pedidos'],
             ['maior_gasto', 'Maior gasto'],
+            ['wa_never_sent', 'Nunca enviados'],
+            ['wa_sent_today', 'Enviados hoje'],
+            ['wa_sent_7d', 'Enviados 7 dias'],
+            ['wa_failed', 'Falharam'],
+            ['wa_ready', 'Prontos reativacao'],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1485,6 +1590,12 @@ export function TabClientes({ token }: { token: string }) {
           <span className="text-xs text-zinc-500 ml-auto">
             Selecionados: <strong className="text-zinc-700 dark:text-zinc-300">{selectedCount}</strong>
           </span>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">Enviados hoje: {waSentTodayCount}</span>
+          <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">Nunca enviados: {waNeverSentCount}</span>
+          <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Falharam: {waFailedCount}</span>
+          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">Prontos: {waReadyCount}</span>
         </div>
       </div>
 
@@ -1520,6 +1631,7 @@ export function TabClientes({ token }: { token: string }) {
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Cliente</th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Telefone</th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Relacionamento</th>
+                <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Reativacao WA</th>
                 <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Pedidos</th>
                 <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Total gasto</th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Ultima compra</th>
@@ -1582,6 +1694,19 @@ export function TabClientes({ token }: { token: string }) {
                               {status.label}
                             </StatusChip>
                             <p className="text-[11px] text-fptext-muted mt-1">{getDaysWithoutPurchaseLabel(c.dias_sem_comprar)}</p>
+                          </>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const reactivation = getReactivationStatusMeta(c);
+                        return (
+                          <>
+                            <StatusChip size="md" toneClassName={reactivation.tone}>
+                              {reactivation.label}
+                            </StatusChip>
+                            <p className="text-[11px] text-fptext-muted mt-1">{reactivation.detail}</p>
                           </>
                         );
                       })()}
@@ -1656,7 +1781,11 @@ export function TabClientes({ token }: { token: string }) {
                         </StatusChip>
                       )
                     )}
+                    <StatusChip size="md" toneClassName={getReactivationStatusMeta(c).tone}>
+                      {getReactivationStatusMeta(c).label}
+                    </StatusChip>
                   </div>
+                  <p className="mt-2 text-[11px] text-fptext-muted">{getReactivationStatusMeta(c).detail}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <div className={`${adminOpsInsetPanelClass} px-3 py-2`}>
                       <p className="text-zinc-400">Pedidos</p>

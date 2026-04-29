@@ -304,6 +304,9 @@ export async function runMigrations() {
         observacoes TEXT,
         primeira_compra_at TIMESTAMPTZ,
         ultima_compra_at TIMESTAMPTZ,
+        whatsapp_reativacao_last_sent_at TIMESTAMPTZ,
+        whatsapp_reativacao_last_status TEXT,
+        whatsapp_reativacao_last_operator_id INTEGER,
         UNIQUE(tenant_id, telefone)
       );
       CREATE TABLE IF NOT EXISTS delivery_enderecos (
@@ -718,6 +721,9 @@ export async function runMigrations() {
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS ativo INTEGER DEFAULT 1;
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS cpf TEXT;
       ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS whatsapp_reativacao_last_sent_at TIMESTAMPTZ;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS whatsapp_reativacao_last_status TEXT;
+      ALTER TABLE delivery_clientes ADD COLUMN IF NOT EXISTS whatsapp_reativacao_last_operator_id INTEGER;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cliente_id INTEGER;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS delivery_endereco_id INTEGER;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pagamento_confirmado_at TIMESTAMPTZ;
@@ -817,6 +823,7 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_prod_opcao_itens         ON produto_opcao_itens(grupo_id, tenant_id);
       CREATE INDEX IF NOT EXISTS idx_delivery_motoboys_tenant ON delivery_motoboys(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_delivery_clientes_recencia ON delivery_clientes(tenant_id, ultima_compra_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_delivery_clientes_wa_reativacao ON delivery_clientes(tenant_id, whatsapp_reativacao_last_sent_at DESC);
       CREATE INDEX IF NOT EXISTS idx_pedidos_delivery_cliente ON pedidos(tenant_id, delivery_cliente_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_pedidos_tenant_cliente_loja ON pedidos(tenant_id, cliente_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_prod_var_vend_produto ON produto_variacoes_vendaveis(tenant_id, produto_id, ativo, ordem);
