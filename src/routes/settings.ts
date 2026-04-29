@@ -84,7 +84,7 @@ export function createSettingsRouter() {
       }
 
       const senhaAtual = String(req.body?.senha_atual || '');
-      const novoUsuario = String(req.body?.novo_usuario || '').trim().toLowerCase();
+      const novoUsuario = String(req.body?.novo_usuario || '').trim();
       const novaSenha = String(req.body?.nova_senha || '');
       const confirmarNovaSenha = String(req.body?.confirmar_nova_senha || '');
 
@@ -102,8 +102,8 @@ export function createSettingsRouter() {
         if (novoUsuario.length < 3 || novoUsuario.length > 60) {
           return res.status(400).json({ success: false, message: 'Usuário deve ter entre 3 e 60 caracteres.' });
         }
-        if (!/^[a-z0-9._-]+$/.test(novoUsuario)) {
-          return res.status(400).json({ success: false, message: 'Usuário aceita apenas letras minúsculas, números, ponto, hífen e underscore.' });
+        if (!/^[A-Za-z0-9._-]+$/.test(novoUsuario)) {
+          return res.status(400).json({ success: false, message: 'Usuário aceita apenas letras, números, ponto, hífen e underscore.' });
         }
       }
 
@@ -142,9 +142,9 @@ export function createSettingsRouter() {
       const finalUsername = desejaTrocarUsuario ? novoUsuario : currentUser.username;
       if (desejaTrocarUsuario && finalUsername !== currentUser.username) {
         const collision = await q1<{ id: number }>(
-          `SELECT id FROM usuarios WHERE username=? AND id<>?
+          `SELECT id FROM usuarios WHERE LOWER(username)=LOWER(?) AND id<>?
            UNION ALL
-           SELECT id FROM clientes WHERE usuario=? AND id<>?
+           SELECT id FROM clientes WHERE LOWER(usuario)=LOWER(?) AND id<>?
            LIMIT 1`,
           [finalUsername, currentUser.id, finalUsername, req.tenantId]
         );
@@ -170,7 +170,7 @@ export function createSettingsRouter() {
       await qRun(`UPDATE usuarios SET ${updates.join(', ')} WHERE id=?`, [...params, currentUser.id]);
 
       if (desejaTrocarUsuario && finalUsername !== currentUser.username) {
-        await qRun('UPDATE clientes SET usuario=? WHERE id=? AND usuario=?', [finalUsername, req.tenantId, currentUser.username]);
+        await qRun('UPDATE clientes SET usuario=? WHERE id=? AND LOWER(usuario)=LOWER(?)', [finalUsername, req.tenantId, currentUser.username]);
       }
 
       return res.json({ success: true, relogin_required: true });

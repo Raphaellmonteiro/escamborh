@@ -31,7 +31,7 @@ export function createAuthRouter() {
       if (!body) return;
       const { username, password } = body;
 
-      const user = await q1('SELECT * FROM usuarios WHERE username=?', [username]);
+      const user = await q1('SELECT * FROM usuarios WHERE LOWER(username)=LOWER(?)', [username]);
       let senhaOk = false;
       if (user?.password?.startsWith('$2')) {
         try { senhaOk = bcrypt.compareSync(password, user.password); } catch {}
@@ -41,7 +41,7 @@ export function createAuthRouter() {
       if (user.ativo === 0)
         return res.status(403).json({ success: false, message: 'Acesso bloqueado', status: 'bloqueado' });
 
-      const clienteRecord = await q1('SELECT status, vencimento FROM clientes WHERE usuario=?', [username]);
+      const clienteRecord = await q1('SELECT status, vencimento FROM clientes WHERE LOWER(usuario)=LOWER(?)', [username]);
       if (clienteRecord) {
         if (clienteRecord.status === 'bloqueado')
           return res.status(403).json({ success: false, message: 'Acesso bloqueado', status: 'bloqueado' });

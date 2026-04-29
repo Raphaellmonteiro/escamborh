@@ -220,7 +220,7 @@ export default function ConfiguracoesScreen({
 
   const handleSavePerfil = async () => {
     if (!formPerfil.nome.trim()) { showToast('Nome não pode ser vazio', false); return; }
-    const wantsLoginChange = formPerfil.usuarioLogin.trim().toLowerCase() !== (perfil.usuario_login || '').trim().toLowerCase();
+    const wantsLoginChange = formPerfil.usuarioLogin.trim() !== (perfil.usuario_login || '').trim();
     const wantsPasswordChange = !!formPerfil.novaSenhaLogin.trim() || !!formPerfil.confirmarNovaSenhaLogin.trim();
     const wantsCredentialChange = wantsLoginChange || wantsPasswordChange;
     if (wantsCredentialChange) {
@@ -265,7 +265,7 @@ export default function ConfiguracoesScreen({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             senha_atual: formPerfil.senhaAtualLogin,
-            novo_usuario: wantsLoginChange ? formPerfil.usuarioLogin.trim().toLowerCase() : '',
+            novo_usuario: wantsLoginChange ? formPerfil.usuarioLogin.trim() : '',
             nova_senha: formPerfil.novaSenhaLogin,
             confirmar_nova_senha: formPerfil.confirmarNovaSenhaLogin,
           }),
@@ -289,7 +289,7 @@ export default function ConfiguracoesScreen({
         setPerfil(prev => ({
           ...prev,
           nome_estabelecimento: formPerfil.nome.trim(),
-          usuario_login: wantsLoginChange ? formPerfil.usuarioLogin.trim().toLowerCase() : prev.usuario_login,
+          usuario_login: wantsLoginChange ? formPerfil.usuarioLogin.trim() : prev.usuario_login,
         }));
         // Se trocou qualquer senha, re-verifica o flag senha_padrao no servidor
         if (formPerfil.senhaNova.trim() || formPerfil.senhaCaixaNova.trim()) {
@@ -682,7 +682,7 @@ export default function ConfiguracoesScreen({
           </div>
           <div>
             <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Usuário de Login</label>
-            <p className="text-[10px] text-fptext-muted mb-1">Letras minúsculas, números, ponto, hífen e underscore</p>
+            <p className="text-[10px] text-fptext-muted mb-1">Letras, números, ponto, hífen e underscore</p>
             <input value={formPerfil.usuarioLogin} onChange={e => setFormPerfil(p => ({ ...p, usuarioLogin: e.target.value }))}
               placeholder="seu.usuario"
               className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
