@@ -23,6 +23,11 @@ type MercadoPagoWebhookHeaders = {
   xRequestId?: unknown;
 };
 
+type ParsedMercadoPagoSignature = {
+  ts: string;
+  v1: string;
+};
+
 type MercadoPagoPaymentResponse = {
   id?: unknown;
   status?: unknown;
@@ -60,6 +65,22 @@ export type ProcessMercadoPagoWebhookResult = {
   ignoredReason?: string;
 };
 
+export class MercadoPagoWebhookSecurityError extends Error {
+  public readonly statusCode: number;
+  public readonly reason: string;
+
+  constructor(message: string, reason: string, statusCode = 401) {
+    super(message);
+    this.name = 'MercadoPagoWebhookSecurityError';
+    this.reason = reason;
+    this.statusCode = statusCode;
+  }
+}
+
+const MERCADO_PAGO_WEBHOOK_TS_MAX_AGE_MS = 5 * 60 * 1000;
+const MERCADO_PAGO_WEBHOOK_DEDUPE_TTL_MS = 10 * 60 * 1000;
+const mercadoPagoWebhookReplayCache = new Map<string, number>();
+
 function normalizeOptionalText(value: unknown) {
   if (value === null || value === undefined) return null;
 
@@ -86,7 +107,7 @@ function isMercadoPagoPaymentEvent(payload: MercadoPagoWebhookPayload) {
   return eventType === 'payment' || Boolean(action?.startsWith('payment.'));
 }
 
-function parseMercadoPagoSignature(value: string | null) {
+function parseMercadoPagoSignature(value: string | null): ParsedMercadoPagoSignature | null {
   if (!value) return null;
 
   const pairs = value
@@ -126,29 +147,148 @@ function secureStringEqual(left: string, right: string) {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+function isProductionEnvironment() {
+  return process.env.NODE_ENV === 'production';
+}
+
+function parseUnixTimestampMs(rawTs: string) {
+  if (!/^\d+$/.test(rawTs)) return null;
+  const parsed = Number(rawTs);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed * 1000;
+}
+
+function assertMercadoPagoSignatureFreshness(signature: ParsedMercadoPagoSignature) {
+  const tsMs = parseUnixTimestampMs(signature.ts);
+  if (!tsMs) {
+    throw new MercadoPagoWebhookSecurityError(
+      'Timestamp da assinatura do webhook invalido',
+      'invalid_signature_timestamp',
+      401
+    );
+  }
+
+  const ageMs = Math.abs(Date.now() - tsMs);
+  if (ageMs > MERCADO_PAGO_WEBHOOK_TS_MAX_AGE_MS) {
+    throw new MercadoPagoWebhookSecurityError(
+      'Timestamp da assinatura do webhook expirado',
+      'expired_signature_timestamp',
+      401
+    );
+  }
+}
+
+function buildMercadoPagoReplayKeys(input: {
+  requestId: string | null;
+  externalId: string | null;
+  payloadId: string | null;
+}) {
+  const keys: string[] = [];
+  if (input.requestId) keys.push(`request:${input.requestId}`);
+  if (input.externalId) keys.push(`event_external:${input.externalId}`);
+  if (input.payloadId) keys.push(`event_payload:${input.payloadId}`);
+  return keys;
+}
+
+function purgeExpiredMercadoPagoReplayEntries(now: number) {
+  for (const [key, expiresAt] of mercadoPagoWebhookReplayCache.entries()) {
+    if (expiresAt <= now) {
+      mercadoPagoWebhookReplayCache.delete(key);
+    }
+  }
+}
+
+function assertMercadoPagoWebhookNotReplay(input: {
+  requestId: string | null;
+  externalId: string | null;
+  payloadId: string | null;
+}) {
+  const keys = buildMercadoPagoReplayKeys(input);
+  if (keys.length === 0) return;
+
+  const now = Date.now();
+  purgeExpiredMercadoPagoReplayEntries(now);
+
+  const replayKey = keys.find((key) => {
+    const expiresAt = mercadoPagoWebhookReplayCache.get(key);
+    return typeof expiresAt === 'number' && expiresAt > now;
+  });
+
+  if (replayKey) {
+    throw new MercadoPagoWebhookSecurityError(
+      'Replay detectado no webhook do Mercado Pago',
+      'replay_detected',
+      409
+    );
+  }
+
+  const expiresAt = now + MERCADO_PAGO_WEBHOOK_DEDUPE_TTL_MS;
+  for (const key of keys) {
+    mercadoPagoWebhookReplayCache.set(key, expiresAt);
+  }
+}
+
 function validateMercadoPagoSignature(input: {
   secret?: string | null;
   externalId: string;
   headers?: MercadoPagoWebhookHeaders;
+  payloadId?: string | null;
 }) {
   const secret = normalizeOptionalText(input.secret);
-  if (!secret) return;
-
   const signature = parseMercadoPagoSignature(
     normalizeOptionalText(input.headers?.xSignature)
   );
   const requestId = normalizeOptionalText(input.headers?.xRequestId);
 
-  if (!signature || !requestId) {
-    throw new Error('Assinatura do webhook invalida');
+  if (!secret && isProductionEnvironment()) {
+    throw new MercadoPagoWebhookSecurityError(
+      'Webhook secret do Mercado Pago nao configurado em producao',
+      'missing_webhook_secret',
+      503
+    );
   }
+
+  if (!secret) {
+    logInfo('paymentWebhooksService.mercadoPagoWebhook.signatureValidationSkipped', {
+      reason: 'missing_webhook_secret_non_production',
+      hasSignature: Boolean(signature),
+      hasRequestId: Boolean(requestId),
+      externalId: input.externalId,
+    });
+    assertMercadoPagoWebhookNotReplay({
+      requestId,
+      externalId: input.externalId,
+      payloadId: input.payloadId ?? null,
+    });
+    return;
+  }
+
+  if (!signature || !requestId) {
+    throw new MercadoPagoWebhookSecurityError(
+      'Assinatura do webhook invalida',
+      'invalid_signature',
+      401
+    );
+  }
+
+  assertMercadoPagoSignatureFreshness(signature);
 
   const manifest = `id:${input.externalId.toLowerCase()};request-id:${requestId};ts:${signature.ts};`;
   const expected = createHmac('sha256', secret).update(manifest).digest('hex');
 
   if (!secureStringEqual(signature.v1, expected)) {
-    throw new Error('Assinatura do webhook invalida');
+    throw new MercadoPagoWebhookSecurityError(
+      'Assinatura do webhook invalida',
+      'invalid_signature',
+      401
+    );
   }
+
+  assertMercadoPagoWebhookNotReplay({
+    requestId,
+    externalId: input.externalId,
+    payloadId: input.payloadId ?? null,
+  });
 }
 
 function isExternalPaymentPaid(status: string | null) {
@@ -327,6 +467,12 @@ export async function processMercadoPagoPaymentWebhook(
       }),
       externalId,
       headers: input.headers,
+      payloadId: normalizeOptionalText(payload.id),
+    });
+
+    logInfo('paymentWebhooksService.mercadoPagoWebhook.securityAccepted', {
+      externalId,
+      requestId: normalizeOptionalText(input.headers?.xRequestId),
     });
 
     const accessToken = await resolveMercadoPagoAccessToken({
@@ -490,6 +636,15 @@ export async function processMercadoPagoPaymentWebhook(
       externalId,
     };
   } catch (error) {
+    if (error instanceof MercadoPagoWebhookSecurityError) {
+      logInfo('paymentWebhooksService.mercadoPagoWebhook.securityRejected', {
+        externalId,
+        queryDataId: input.queryDataId,
+        reason: error.reason,
+        statusCode: error.statusCode,
+      });
+    }
+
     logError('paymentWebhooksService.processMercadoPagoPaymentWebhook', error, {
       externalId,
       queryDataId: input.queryDataId,

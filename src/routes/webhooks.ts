@@ -1,5 +1,8 @@
 import { Request, Response, Router } from 'express';
-import { processMercadoPagoPaymentWebhook } from '../services/paymentWebhooksService';
+import {
+  MercadoPagoWebhookSecurityError,
+  processMercadoPagoPaymentWebhook,
+} from '../services/paymentWebhooksService';
 import { registerInboundWhatsAppMessages } from '../services/whatsAppInboundService';
 import { validateInboundWhatsAppWebhookAuth } from '../services/whatsAppWebhookAuthService';
 import { logError, logInfo } from '../utils/logger';
@@ -115,7 +118,7 @@ export function createWebhooksRouter() {
   // Webhook publico: Mercado Pago nao envia o JWT interno do sistema.
   router.post(
     '/payments/mercado-pago',
-    (req, res) => {
+    async (req, res) => {
       const payload = req.body;
       const queryDataId = req.query['data.id'];
       const headers = {
@@ -123,28 +126,42 @@ export function createWebhooksRouter() {
         xRequestId: req.header('x-request-id'),
       };
 
-      res.status(200).json({ received: true });
-
-      void processMercadoPagoPaymentWebhook({
-        payload,
-        queryDataId,
-        headers,
-      })
-        .then((result) => {
-          logInfo('webhooks.mercadoPagoPayment.result', {
-            path: req.originalUrl,
-            method: req.method,
-            queryDataId,
-            ...result,
-          });
-        })
-        .catch((error) => {
-          logError('webhooks.mercadoPagoPayment', error, {
-            path: req.originalUrl,
-            method: req.method,
-            queryDataId,
-          });
+      try {
+        const result = await processMercadoPagoPaymentWebhook({
+          payload,
+          queryDataId,
+          headers,
         });
+
+        logInfo('webhooks.mercadoPagoPayment.result', {
+          path: req.originalUrl,
+          method: req.method,
+          queryDataId,
+          ...result,
+        });
+
+        return res.status(200).json({ received: true });
+      } catch (error) {
+        if (error instanceof MercadoPagoWebhookSecurityError) {
+          logInfo('webhooks.mercadoPagoPayment.securityRejected', {
+            path: req.originalUrl,
+            method: req.method,
+            queryDataId,
+            reason: error.reason,
+            statusCode: error.statusCode,
+          });
+
+          return res.status(error.statusCode).json({ error: 'Webhook nao autorizado' });
+        }
+
+        logError('webhooks.mercadoPagoPayment', error, {
+          path: req.originalUrl,
+          method: req.method,
+          queryDataId,
+        });
+
+        return res.status(500).json({ error: 'Erro interno do servidor' });
+      }
     }
   );
 
