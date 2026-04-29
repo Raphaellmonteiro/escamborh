@@ -127,7 +127,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
               <div className="min-w-0">
                 <h2 className="text-lg font-black text-fptext-primary sm:text-xl">Solicitar acesso</h2>
                 <p className="mt-1 text-sm text-fptext-muted">
-                  Preencha os dados da sua operação para pedir avaliação do Pratori.
+                  Preencha os dados da sua operação para solicitar uma avaliação do Pratory.
                 </p>
               </div>
               <button
@@ -328,7 +328,7 @@ export default function SolicitacaoModal({ isOpen, onClose }: Props) {
                         required
                         value={form.cidade}
                         onChange={(e) => set('cidade', e.target.value)}
-                        placeholder="Sao Paulo - SP"
+                        placeholder="São Paulo - SP"
                         className={fieldInputClass}
                       />
                     </div>

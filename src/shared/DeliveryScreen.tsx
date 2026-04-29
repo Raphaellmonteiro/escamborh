@@ -2779,7 +2779,7 @@ export function DeliveryConfigPanel({
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <p className="text-xs font-black uppercase tracking-wider text-blue-900 dark:text-blue-300">Modo atual do PIX</p>
-                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 mt-1">{isAutomaticPix ? 'PIX automatico' : 'QR manual'}</p>
+                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 mt-1">{isAutomaticPix ? 'PIX automático' : 'QR manual'}</p>
                     <p className="text-[11px] text-blue-900/80 dark:text-blue-100/80 mt-1">
                       {isAutomaticPix
                         ? 'O Pratory tenta gerar o PIX do pedido usando o provider configurado.'
@@ -2806,7 +2806,7 @@ export function DeliveryConfigPanel({
                       {!isAutomaticPix ? <CheckCircle2 size={16} /> : <Smartphone size={16} />}
                     </div>
                     <p className={`text-[11px] mt-2 ${!isAutomaticPix ? 'text-white/80 dark:text-zinc-700' : 'text-zinc-500 dark:text-zinc-400'}`}>
-                      Usa chave Pix ou payload estatico ja salvo no checkout.
+                      Usa chave Pix ou payload estático já salvo no checkout.
                     </p>
                   </button>
                   <button
@@ -2819,16 +2819,16 @@ export function DeliveryConfigPanel({
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-black text-sm">PIX automatico</span>
+                      <span className="font-black text-sm">PIX automático</span>
                       {isAutomaticPix ? <CheckCircle2 size={16} /> : <RefreshCw size={16} />}
                     </div>
                     <p className={`text-[11px] mt-2 ${isAutomaticPix ? 'text-white/80 dark:text-zinc-700' : 'text-zinc-500 dark:text-zinc-400'}`}>
-                      Gera cobranca PIX automaticamente nos novos pedidos.
+                      Gera cobrança Pix automaticamente nos novos pedidos.
                     </p>
                   </button>
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Alternar o modo nao apaga o QR manual nem as credenciais do provider ja salvas.
+                  Alternar o modo não apaga o QR manual nem as credenciais do provider já salvas.
                 </p>
               </div>
 
@@ -2838,7 +2838,7 @@ export function DeliveryConfigPanel({
                     <div>
                       <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">QR manual</p>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
-                        Mesmo fluxo atual do checkout publico. Preencha a chave Pix ou o payload fixo.
+                        Mesmo fluxo atual do checkout público. Preencha a chave Pix ou o payload fixo.
                       </p>
                     </div>
                     <StatusChip
@@ -2857,7 +2857,7 @@ export function DeliveryConfigPanel({
                     <Field label="Cidade Pix" value={cfg.pix_cidade||''} onChange={v=>setCfg(c=>({...c,pix_cidade:v}))} placeholder="Cidade"/>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Payload PIX estatico (QR Code fixo)</label>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Payload PIX estático (QR Code fixo)</label>
                     <textarea
                       value={cfg.pix_payload_estatico||''}
                       onChange={e=>setCfg(c=>({...c,pix_payload_estatico:e.target.value}))}
@@ -2866,7 +2866,7 @@ export function DeliveryConfigPanel({
                       className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary resize-none"
                     />
                     <p className="text-[10px] text-zinc-400 mt-1">
-                      Quando preenchido, o cliente ve o QR com o valor do carrinho como hoje.
+                      Quando preenchido, o cliente vê o QR com o valor do carrinho, como hoje.
                     </p>
                   </div>
                 </div>
@@ -2876,9 +2876,9 @@ export function DeliveryConfigPanel({
                 <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 p-4 space-y-4">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">PIX automatico</p>
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">PIX automático</p>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
-                        As credenciais abaixo sao usadas para gerar o PIX automatico sem alterar o restante da configuracao.
+                        As credenciais abaixo são usadas para gerar o PIX automático sem alterar o restante da configuração.
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -2886,7 +2886,7 @@ export function DeliveryConfigPanel({
                         Provider: {providerLabel}
                       </StatusChip>
                       <StatusChip variant={cfg.provider_sandbox ? 'warning' : 'success'} size="md" rounded="xl" uppercase={false} emphasis="bold">
-                        {cfg.provider_sandbox ? 'Sandbox' : 'Producao'}
+                        {cfg.provider_sandbox ? 'Sandbox' : 'Produção'}
                       </StatusChip>
                     </div>
                   </div>
@@ -2894,7 +2894,7 @@ export function DeliveryConfigPanel({
                     <Field label="Provider" value={cfg.payment_provider||''} onChange={v=>setCfg(c=>({...c,payment_provider:v}))} placeholder="mercadopago"/>
                     <Field label="pix_key" value={cfg.pix_key||''} onChange={v=>setCfg(c=>({...c,pix_key:v}))} placeholder="Chave PIX do provider"/>
                     <Field label="api_key" value={cfg.api_key||''} onChange={v=>setCfg(c=>({...c,api_key:v}))} type="password" placeholder="Opcional"/>
-                    <Field label="Access token" value={cfg.access_token||''} onChange={v=>setCfg(c=>({...c,access_token:v}))} type="password" placeholder="Obrigatorio para Mercado Pago"/>
+                    <Field label="Access token" value={cfg.access_token||''} onChange={v=>setCfg(c=>({...c,access_token:v}))} type="password" placeholder="Obrigatório para Mercado Pago"/>
                     <Field label="webhook_secret" value={cfg.webhook_secret||''} onChange={v=>setCfg(c=>({...c,webhook_secret:v}))} type="password" placeholder="Opcional"/>
                     <div>
                       <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Ambiente</label>
@@ -2903,7 +2903,7 @@ export function DeliveryConfigPanel({
                         onChange={e=>setCfg(c=>({...c,provider_sandbox:e.target.value === 'sandbox'}))}
                         className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"
                       >
-                        <option value="production">Producao</option>
+                        <option value="production">Produção</option>
                         <option value="sandbox">Sandbox</option>
                       </select>
                     </div>
@@ -2916,10 +2916,10 @@ export function DeliveryConfigPanel({
                       className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                     >
                       <RefreshCw size={14} className={testingPixConfig ? 'animate-spin' : ''} />
-                      {testingPixConfig ? 'Validando...' : 'Testar configuracao'}
+                      {testingPixConfig ? 'Validando...' : 'Testar configuração'}
                     </button>
                     <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Teste simples e seguro: valida o modo automatico e os campos obrigatorios sem gerar cobranca real.
+                      Teste simples e seguro: valida o modo automático e os campos obrigatórios sem gerar cobrança real.
                     </p>
                   </div>
                   {pixTestResult && (
@@ -2930,7 +2930,7 @@ export function DeliveryConfigPanel({
                     }`}>
                       <div className="flex items-center gap-2 font-bold">
                         {pixTestResult.ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                        {pixTestResult.ok ? 'Teste concluido' : 'Ajuste necessario'}
+                        {pixTestResult.ok ? 'Teste concluído' : 'Ajuste necessário'}
                       </div>
                       <p className="mt-1 text-xs leading-relaxed">{pixTestResult.message}</p>
                     </div>
@@ -3266,10 +3266,10 @@ export function DeliveryConfigPanel({
       {activeSection === 'evolution' && hasStandaloneSection && (
         <div className="space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
-            <p className="font-bold">Canal de notificacoes automaticas do pedido</p>
+            <p className="font-bold">Canal de notificações automáticas do pedido</p>
             <p className="mt-1">
-              A conexao abaixo define o WhatsApp operacional da loja para envio de notificacoes automaticas. O fluxo de
-              pedido nao e alterado nesta etapa.
+              A conexão abaixo define o WhatsApp operacional da loja para envio de notificações automáticas. O fluxo do
+              pedido não é alterado nesta etapa.
             </p>
           </div>
           <WhatsAppConnectionPanel token={token} />
@@ -3288,19 +3288,19 @@ export function DeliveryConfigPanel({
               <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappProviderLabel}</p>
             </div>
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/40">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Numero usado pela IA</p>
-              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappAiNumber || 'Nao informado'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Número usado pela IA</p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappAiNumber || 'Não informado'}</p>
             </div>
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-900/40">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Instancia ativa</p>
-              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappAiInstance || 'Nao informada'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Instância ativa</p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-zinc-100">{whatsappAiInstance || 'Não informada'}</p>
             </div>
           </div>
 
           <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-xs text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
-            <p className="font-bold">Envio e recebimento usam a mesma configuracao</p>
+            <p className="font-bold">Envio e recebimento usam a mesma configuração</p>
             <p className="mt-1">
-              O numero e a instancia informados abaixo ficam vinculados ao tenant e serao usados pela IA tanto para enviar mensagens quanto para receber o inbound deste tenant.
+              O número e a instância informados abaixo ficam vinculados ao tenant e serão usados pela IA tanto para enviar mensagens quanto para receber o inbound deste tenant.
             </p>
           </div>
 
@@ -3334,12 +3334,12 @@ export function DeliveryConfigPanel({
                 className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Numero do WhatsApp da IA</label>
+              <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 dark:text-zinc-400">Número do WhatsApp da IA</label>
               <input value={cfg.evolution_phone_number||''} onChange={e=>setCfg(c=>({...c,evolution_phone_number:e.target.value}))}
                 placeholder="5511999999999"
                 className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
               <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                Numero exibido como canal ativo deste tenant. Se ficar vazio, o sistema usa o WhatsApp geral da loja apenas como fallback visual.
+                Número exibido como canal ativo deste tenant. Se ficar vazio, o sistema usa o WhatsApp geral da loja apenas como fallback visual.
               </p>
             </div>
             <div>
@@ -3348,7 +3348,7 @@ export function DeliveryConfigPanel({
                 placeholder={cfg.evolution_instance||'meu-restaurante'}
                 className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:border-zinc-400 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:focus:border-zinc-500"/>
               <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                Opcional. Se ficar vazio, o sistema usa o nome da instancia como identificador do canal.
+                Opcional. Se ficar vazio, o sistema usa o nome da instância como identificador do canal.
               </p>
             </div>
             <div>
@@ -3364,9 +3364,9 @@ export function DeliveryConfigPanel({
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
             <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-fp-border bg-fp-card p-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-fptext-muted">Notificacoes automaticas</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-fptext-muted">Notificações automáticas</p>
                 <p className="mt-1 text-xs text-fptext-muted">
-                  Envia mensagens automaticas quando o pedido for aceito, sair para entrega ou ficar pronto para retirada. Requer o WhatsApp da loja conectado.
+                  Envia mensagens automáticas quando o pedido for aceito, sair para entrega ou ficar pronto para retirada. Requer o WhatsApp da loja conectado.
                 </p>
               </div>
               <button
@@ -3380,7 +3380,7 @@ export function DeliveryConfigPanel({
                 className={`relative h-7 w-12 rounded-full transition-colors ${
                   cfg.whatsapp_order_notifications_enabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'
                 }`}
-                aria-label="Ativar notificacoes automaticas por WhatsApp"
+                aria-label="Ativar notificações automáticas por WhatsApp"
               >
                 <span
                   className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
@@ -3390,14 +3390,14 @@ export function DeliveryConfigPanel({
               </button>
             </div>
             <p><strong>Canal atual:</strong> {whatsappProviderLabel} {whatsappAiNumber ? `- ${whatsappAiNumber}` : ''} {whatsappAiInstance ? `- instancia ${whatsappAiInstance}` : ''}</p>
-            <p className="mt-1"><strong>Channel ID:</strong> {whatsappChannelIdentifier || 'Nao informado'}</p>
+            <p className="mt-1"><strong>Channel ID:</strong> {whatsappChannelIdentifier || 'Não informado'}</p>
           </div>
 
           {!whatsappConfigured && (
             <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl dark:bg-zinc-900/40 dark:border-zinc-700">
               <AlertCircle size={14} className="text-zinc-500 dark:text-zinc-400"/>
               <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">
-                Preencha URL, token e instancia para ativar o canal do tenant. O numero exibivel e o webhook acima ajudam a identificar o canal correto.
+                Preencha URL, token e instância para ativar o canal do tenant. O número exibível e o webhook acima ajudam a identificar o canal correto.
               </p>
             </div>
           )}

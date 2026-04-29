@@ -74,7 +74,7 @@ export default function LoginScreen({
       <div className="pratori-public-light flex min-h-screen items-center justify-center bg-fp-app px-4 py-8">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center gap-1.5 text-center">
-            <div className="pratori-text-brand text-2xl font-bold tracking-tight">Pratori</div>
+            <div className="pratori-text-brand text-2xl font-bold tracking-tight">Pratory</div>
             <p className="text-xs font-medium text-fptext-secondary">Entrar na sua loja · RM Tecnologia</p>
           </div>
 
@@ -183,7 +183,7 @@ export default function LoginScreen({
           </div>
 
           <div className="pratori-card-soft mt-4 rounded-2xl p-4 text-center">
-            <p className="text-sm font-semibold text-fptext-primary">Quer testar o Pratori?</p>
+            <p className="text-sm font-semibold text-fptext-primary">Quer testar o Pratory?</p>
             <p className="mt-1 text-xs leading-relaxed text-fptext-secondary">
               Peça acesso e a gente explica certinho para o seu negócio.
             </p>

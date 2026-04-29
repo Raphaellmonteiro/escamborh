@@ -37,7 +37,7 @@ export default function PublicLandingRevamp({
       <header className="sticky top-0 z-20 border-b border-fp-border bg-fp-card/96 shadow-[0_4px_20px_rgba(63,62,62,0.05)] backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
-            <div className="pratori-text-brand text-2xl font-extrabold tracking-tight sm:text-[1.7rem]">Pratori</div>
+            <div className="pratori-text-brand text-2xl font-extrabold tracking-tight sm:text-[1.7rem]">Pratory</div>
             <p className="mt-0.5 text-xs font-medium tracking-wide text-fptext-secondary">Restaurante e delivery</p>
           </div>
           <nav className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -148,7 +148,7 @@ export default function PublicLandingRevamp({
             id="lp-modulos-heading"
             className="text-center text-[1.5rem] font-extrabold tracking-tight text-fptext-primary sm:text-[1.95rem]"
           >
-            O que o sistema faz hoje
+            O que a plataforma entrega hoje
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-relaxed text-fptext-secondary sm:text-[0.97rem]">
             O que já vem pronto para usar.
@@ -216,7 +216,7 @@ export default function PublicLandingRevamp({
       <footer className="border-t border-fp-border bg-fp-card py-8">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-4 text-center text-sm text-fptext-secondary">
           <div>
-            <span className="pratori-text-brand font-bold">Pratori</span>
+            <span className="pratori-text-brand font-bold">Pratory</span>
             <span className="text-fptext-secondary"> · RM Tecnologia</span>
           </div>
           <p className="text-xs text-fptext-secondary">
