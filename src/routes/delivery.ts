@@ -14,6 +14,7 @@ import {
   requireAnyPermission,
   uploadDeliveryCardapioLogo,
   uploadDeliveryCardapioBanner,
+  uploadDeliveryCardapioReactivationMedia,
   hardenUploadedImageFile,
 } from '../middleware';
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
@@ -34,7 +35,7 @@ import {
   findOrCreateStoreCustomerByPhone,
   touchStoreCustomerPurchase,
 } from '../services/storeCustomerService';
-import { sendWhatsAppMessage } from '../services/whatsAppSenderService';
+import { sendWhatsAppMediaMessage, sendWhatsAppMessage } from '../services/whatsAppSenderService';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import {
@@ -54,6 +55,7 @@ import {
   isCloudinaryProductUploadEnabled,
   uploadDeliveryBannerToCloudinary,
   uploadDeliveryCardapioLogoToCloudinary,
+  uploadDeliveryReactivationMediaToCloudinary,
 } from '../services/cloudinaryProduct';
 
 const TZ = 'America/Sao_Paulo';
@@ -584,6 +586,32 @@ function removeAllDeliveryBannerFilesForSlot(tenantId: number, index: number) {
   }
 }
 
+function removeOtherDeliveryReactivationMediaVariants(tenantId: number, keepFilename: string) {
+  const dir = DELIVERY_UPLOAD_DIR;
+  if (!fs.existsSync(dir)) return;
+  const prefix = `delivery_${tenantId}_reativacao_cardapio`;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith(prefix) && f !== keepFilename) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {}
+    }
+  }
+}
+
+function removeAllDeliveryReactivationMediaFiles(tenantId: number) {
+  const dir = DELIVERY_UPLOAD_DIR;
+  if (!fs.existsSync(dir)) return;
+  const prefix = `delivery_${tenantId}_reativacao_cardapio`;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.startsWith(prefix)) {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+      } catch {}
+    }
+  }
+}
+
 export function createDeliveryRouter() {
   const router = Router();
 
@@ -719,6 +747,13 @@ export function createDeliveryRouter() {
               message: `Banner ${i}: não use caminho /uploads. Use o upload em Cardápio visual ou URL HTTPS externa.`,
             });
           }
+        }
+        if (isClientSuppliedLocalUploadImageUrl(merged.cardapio_reactivation_image_url)) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'cardapio_reactivation_image_url não pode apontar para /uploads. Use o upload em Cardápio visual ou uma URL HTTPS externa.',
+          });
         }
       }
       await qRun('UPDATE clientes SET delivery_ativo=?, delivery_config=? WHERE id=?', [ativo?1:0, JSON.stringify(merged), req.tenantId]);
@@ -955,6 +990,69 @@ export function createDeliveryRouter() {
       res.json({ success: true });
     } catch (e: any) {
       sendInternalError(res, 'routes/delivery', e);
+    }
+  });
+
+  router.post(
+    '/cardapio-visual/reativacao-imagem',
+    uploadDeliveryCardapioReactivationMedia.single('imagem'),
+    hardenUploadedImageFile({ allowGif: false }),
+    async (req: any, res) => {
+      try {
+        if (!req.file) return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+        const tenantId = req.tenantId as number;
+        const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+        const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
+        const oldUrl = String(prev.cardapio_reactivation_image_url || '').trim();
+        const newName = req.file.filename;
+        const useCloud = isCloudinaryProductUploadEnabled();
+        if (oldUrl && (useCloud || deliveryUploadBasename(oldUrl) !== newName)) {
+          await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+        }
+        if (!useCloud) {
+          removeOtherDeliveryReactivationMediaVariants(tenantId, newName);
+        }
+
+        let publicUrl: string;
+        try {
+          publicUrl = await persistMulterImageFile({
+            file: req.file,
+            uploadToCloudinary: () =>
+              uploadDeliveryReactivationMediaToCloudinary({ buffer: req.file.buffer as Buffer, tenantId }),
+            localPublicPath: `${DELIVERY_UPLOAD_URL_PREFIX}${req.file.filename}`,
+          });
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : '';
+          if (msg === 'EMPTY_IMAGE_BUFFER') {
+            return res.status(400).json({ success: false, message: 'Arquivo vazio ou não recebido' });
+          }
+          throw e;
+        }
+
+        await mergeDeliveryConfigJson(tenantId, (c) => {
+          c.cardapio_reactivation_image_url = publicUrl;
+        });
+        res.json({ success: true, url: publicUrl });
+      } catch (e: any) {
+        sendInternalError(res, 'routes/delivery.reactivationImageUpload', e);
+      }
+    }
+  );
+
+  router.delete('/cardapio-visual/reativacao-imagem', async (req: any, res) => {
+    try {
+      const tenantId = req.tenantId as number;
+      const row = await q1<{ delivery_config: string | null }>('SELECT delivery_config FROM clientes WHERE id=?', [tenantId]);
+      const prev = coerceDeliveryConfigRow(row?.delivery_config ?? null);
+      const oldUrl = String(prev.cardapio_reactivation_image_url || '').trim();
+      if (oldUrl) await unlinkDeliveryUploadIfOwned(oldUrl, tenantId);
+      removeAllDeliveryReactivationMediaFiles(tenantId);
+      await mergeDeliveryConfigJson(tenantId, (c) => {
+        delete c.cardapio_reactivation_image_url;
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      sendInternalError(res, 'routes/delivery.reactivationImageDelete', e);
     }
   });
 
@@ -1463,6 +1561,7 @@ router.get('/clientes', async (req: Request, res) => {
           .map((id: unknown) => Number(id))
           .filter((id): id is number => Number.isInteger(id) && id > 0)
       )].slice(0, 100);
+      const sendWithMenuImage = toFlag(req.body?.send_with_menu_image);
 
       if (customerIds.length === 0) {
         return res.status(400).json({ success: false, error: 'Selecione pelo menos um cliente valido' });
@@ -1493,6 +1592,8 @@ router.get('/clientes', async (req: Request, res) => {
       );
       const tenantDeliveryCfg = coerceDeliveryConfigRow(tenantDeliveryCfgRow?.delivery_config ?? null);
       const cardapioLink = normalizeOptionalText(tenantDeliveryCfg.cardapio_link_curto) || null;
+      const cardapioReactivationImageUrl =
+        normalizeOptionalText(tenantDeliveryCfg.cardapio_reactivation_image_url) || null;
 
       const placeholders = customerIds.map(() => '?').join(',');
       const customers = await qAll<{
@@ -1557,10 +1658,10 @@ router.get('/clientes', async (req: Request, res) => {
         }
 
         const message =
-          `Oi, ${customerName}! Sentimos sua falta.\n` +
-          `Estamos abertos hoje e será um prazer receber seu pedido novamente.\n` +
+          `Oi, ${customerName}! 😊 Sentimos sua falta por aqui.\n` +
+          `Estamos abertos hoje e sera um prazer receber seu pedido novamente 🍽️\n` +
           (cardapioLink
-            ? `Peça pelo cardápio: ${cardapioLink}`
+            ? `Peca pelo cardapio oficial: ${cardapioLink}`
             : 'Se preferir, responda esta mensagem e ajudamos no seu pedido.');
 
         try {
@@ -1570,6 +1671,22 @@ router.get('/clientes', async (req: Request, res) => {
             to: customerPhone,
             message,
           });
+          let mediaSendError: string | null = null;
+          let mediaSent = false;
+          if (sendWithMenuImage && cardapioReactivationImageUrl) {
+            try {
+              await sendWhatsAppMediaMessage({
+                provider: whatsappConfig.provider || null,
+                providerConfigJson: whatsappConfig.provider_config_json || null,
+                to: customerPhone,
+                mediaUrl: cardapioReactivationImageUrl,
+                caption: 'Cardapio da loja',
+              });
+              mediaSent = true;
+            } catch (mediaError) {
+              mediaSendError = mediaError instanceof Error ? mediaError.message : String(mediaError);
+            }
+          }
 
           await qRun(
             `INSERT INTO whatsapp_inbound_messages
@@ -1602,6 +1719,10 @@ router.get('/clientes', async (req: Request, res) => {
               JSON.stringify({
                 source: 'delivery_customers_reactivation',
                 customer_id: customerId,
+                send_with_menu_image: sendWithMenuImage,
+                menu_image_url: sendWithMenuImage ? cardapioReactivationImageUrl : null,
+                menu_image_sent: mediaSent,
+                menu_image_error: mediaSendError,
               }),
               message,
               'sent',
@@ -1684,8 +1805,10 @@ router.get('/clientes', async (req: Request, res) => {
           ignored,
         },
         message_template:
-          'Oi, {nome}! Sentimos sua falta.\nEstamos abertos hoje e será um prazer receber seu pedido novamente.\nPeça pelo cardápio: {link_loja}',
+          'Oi, {nome}! 😊 Sentimos sua falta por aqui.\nEstamos abertos hoje e sera um prazer receber seu pedido novamente 🍽️\nPeca pelo cardapio oficial: {link_loja}',
         link_loja: cardapioLink,
+        send_with_menu_image: sendWithMenuImage && Boolean(cardapioReactivationImageUrl),
+        cardapio_reactivation_image_url: cardapioReactivationImageUrl,
         results,
       });
     } catch (e: unknown) {

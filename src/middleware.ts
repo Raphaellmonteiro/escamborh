@@ -294,6 +294,28 @@ export const uploadDeliveryCardapioBanner = multer({
   },
 });
 
+const deliveryCardapioReactivationMediaStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(deliveryCardapioDir)) fs.mkdirSync(deliveryCardapioDir, { recursive: true });
+    cb(null, deliveryCardapioDir);
+  },
+  filename: (req: any, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `delivery_${req.tenantId}_reativacao_cardapio${ext}`);
+  },
+});
+
+/** Imagem opcional para campanhas de reativação via WhatsApp. */
+export const uploadDeliveryCardapioReactivationMedia = multer({
+  storage: useMulterMemoryForImageUploads() ? multer.memoryStorage() : deliveryCardapioReactivationMediaStorage,
+  limits: { fileSize: MAX_IMAGE_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    STATIC_MIME_FILTER_SET.has(normalizeClientMime(file.mimetype))
+      ? cb(null, true)
+      : cb(new Error('Apenas JPEG, PNG ou WEBP'));
+  },
+});
+
 // ── Multer — foto de funcionário ──────────────────────────────────────────────
 const fotoFuncStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {

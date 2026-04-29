@@ -5,6 +5,7 @@ export type SendWhatsAppMessageInput = {
   providerConfigJson?: string | null;
   to: string;
   message: string;
+  mediaUrl?: string | null;
 };
 
 export type SendWhatsAppMessageResult = {
@@ -562,6 +563,52 @@ function buildEvolutionApiRequest(config: ProviderConfigRecord, recipient: strin
   };
 }
 
+function buildEvolutionMediaApiRequest(
+  config: ProviderConfigRecord,
+  recipient: string,
+  mediaUrl: string,
+  caption?: string | null
+): HttpRequestConfig {
+  const baseUrl =
+    getConfigText(config, ['base_url', 'baseUrl', 'url', 'api_url']) ||
+    (() => {
+      throw new Error('provider_config_json sem base_url para evolution_api');
+    })();
+
+  const instance =
+    getConfigText(config, ['instance', 'instance_name', 'instanceName']) ||
+    (() => {
+      throw new Error('provider_config_json sem instance para evolution_api');
+    })();
+
+  const apiKey =
+    getConfigText(config, ['apikey', 'api_key', 'apiKey', 'token']) ||
+    (() => {
+      throw new Error('provider_config_json sem apikey para evolution_api');
+    })();
+
+  const endpoint =
+    getConfigText(config, ['media_endpoint', 'send_media_endpoint']) ||
+    `message/sendMedia/${encodeURIComponent(instance)}`;
+  const payload: Record<string, unknown> = {
+    number: recipient,
+    mediatype: 'image',
+    media: mediaUrl,
+  };
+  const normalizedCaption = normalizeOptionalText(caption);
+  if (normalizedCaption) payload.caption = normalizedCaption;
+
+  return {
+    url: buildUrl(baseUrl, endpoint),
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: apiKey,
+    },
+    body: payload,
+  };
+}
+
 function buildGenericHttpRequest(
   provider: string,
   config: ProviderConfigRecord,
@@ -635,26 +682,11 @@ function resolveProviderRequestTimeoutMs(config: ProviderConfigRecord) {
   );
 }
 
-export async function sendWhatsAppMessage(
-  input: SendWhatsAppMessageInput
-): Promise<SendWhatsAppMessageResult> {
-  const provider = normalizeProviderName(input.provider) || 'generic_http';
-  const config = parseProviderConfigJson(input.providerConfigJson);
-  const configuredWhatsAppNumbers = resolveConfiguredWhatsAppNumbers(config);
-  const timeoutMs = resolveProviderRequestTimeoutMs(config);
-  const recipient = await resolveRecipientForSend(
-    provider,
-    config,
-    input.to,
-    configuredWhatsAppNumbers,
-    timeoutMs
-  );
-
-  if (configuredWhatsAppNumbers.has(recipient)) {
-    throw new Error('Envio bloqueado: recipient igual ao numero da instancia configurada');
-  }
-
-  const requestConfig = resolveHttpRequestConfig(provider, config, recipient, input.message);
+async function performProviderRequest(
+  provider: string,
+  requestConfig: HttpRequestConfig,
+  timeoutMs: number
+) {
   const response = await fetchWithTimeout(
     requestConfig,
     timeoutMs,
@@ -682,10 +714,88 @@ export async function sendWhatsAppMessage(
   ]);
 
   return {
-    provider,
-    recipient,
     responseStatus: response.status,
     externalId,
     providerResponse,
+  };
+}
+
+export async function sendWhatsAppMessage(
+  input: SendWhatsAppMessageInput
+): Promise<SendWhatsAppMessageResult> {
+  const provider = normalizeProviderName(input.provider) || 'generic_http';
+  const config = parseProviderConfigJson(input.providerConfigJson);
+  const configuredWhatsAppNumbers = resolveConfiguredWhatsAppNumbers(config);
+  const timeoutMs = resolveProviderRequestTimeoutMs(config);
+  const recipient = await resolveRecipientForSend(
+    provider,
+    config,
+    input.to,
+    configuredWhatsAppNumbers,
+    timeoutMs
+  );
+
+  if (configuredWhatsAppNumbers.has(recipient)) {
+    throw new Error('Envio bloqueado: recipient igual ao numero da instancia configurada');
+  }
+
+  const requestConfig = resolveHttpRequestConfig(provider, config, recipient, input.message);
+  const requestResult = await performProviderRequest(provider, requestConfig, timeoutMs);
+
+  return {
+    provider,
+    recipient,
+    responseStatus: requestResult.responseStatus,
+    externalId: requestResult.externalId,
+    providerResponse: requestResult.providerResponse,
+  };
+}
+
+export async function sendWhatsAppMediaMessage(
+  input: Omit<SendWhatsAppMessageInput, 'message' | 'mediaUrl'> & {
+    mediaUrl: string;
+    caption?: string | null;
+  }
+): Promise<SendWhatsAppMessageResult> {
+  const provider = normalizeProviderName(input.provider) || 'generic_http';
+  const config = parseProviderConfigJson(input.providerConfigJson);
+  const configuredWhatsAppNumbers = resolveConfiguredWhatsAppNumbers(config);
+  const timeoutMs = resolveProviderRequestTimeoutMs(config);
+  const recipient = await resolveRecipientForSend(
+    provider,
+    config,
+    input.to,
+    configuredWhatsAppNumbers,
+    timeoutMs
+  );
+
+  if (configuredWhatsAppNumbers.has(recipient)) {
+    throw new Error('Envio bloqueado: recipient igual ao numero da instancia configurada');
+  }
+
+  const rawMediaUrl = normalizeOptionalText(input.mediaUrl);
+  if (!rawMediaUrl) {
+    throw new Error('mediaUrl obrigatoria');
+  }
+  const normalizedMediaUrl = ensureHttpUrl(rawMediaUrl, 'URL da imagem');
+
+  if (!isEvolutionProvider(provider)) {
+    throw new Error(`Provider ${provider} nao suporta envio de imagem neste fluxo`);
+  }
+
+  const requestConfig = buildEvolutionMediaApiRequest(
+    config,
+    recipient,
+    normalizedMediaUrl,
+    input.caption
+  );
+  const requestResult = await performProviderRequest(provider, requestConfig, timeoutMs);
+
+  return {
+    provider,
+    recipient,
+    responseStatus: requestResult.responseStatus,
+    externalId: requestResult.externalId,
+    providerResponse: requestResult.providerResponse,
   };
 }

@@ -138,6 +138,17 @@ export async function uploadDeliveryBannerToCloudinary(options: {
   });
 }
 
+export async function uploadDeliveryReactivationMediaToCloudinary(options: {
+  buffer: Buffer;
+  tenantId: number;
+}): Promise<string> {
+  return uploadBufferedImageToCloudinary({
+    buffer: options.buffer,
+    folder: `flowpdv/delivery/t${options.tenantId}`,
+    publicId: `reativacao_cardapio_${Date.now()}`,
+  });
+}
+
 export async function uploadEmployeePhotoToCloudinary(options: {
   buffer: Buffer;
   tenantId: number;

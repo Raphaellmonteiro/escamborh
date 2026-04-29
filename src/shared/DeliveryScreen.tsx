@@ -81,6 +81,8 @@ interface DeliveryConfig {
   cardapio_online_logo_url?: string;
   /** Quatro banners do topo; índices 0–3. */
   cardapio_online_banner_urls?: string[];
+  /** Imagem opcional usada na reativação de clientes via WhatsApp. */
+  cardapio_reactivation_image_url?: string;
 }
 interface Dashboard {
   pedidos_hoje: number; faturamento_hoje: number;
@@ -1185,6 +1187,8 @@ export function TabClientes({ token }: { token: string }) {
   const [sortBy, setSortBy] = useState<'recent_purchase' | 'long_without_purchase' | 'most_orders' | 'highest_spend'>('recent_purchase');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [sendWithCardapioImage, setSendWithCardapioImage] = useState(false);
+  const [cardapioReactivationImageUrl, setCardapioReactivationImageUrl] = useState<string | null>(null);
   const [sendFeedback, setSendFeedback] = useState<{
     tone: 'success' | 'error';
     sent: number;
@@ -1225,6 +1229,17 @@ export function TabClientes({ token }: { token: string }) {
   };
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/delivery/config', { headers: hdrs });
+        if (!res.ok) return;
+        const payload = await res.json().catch(() => ({}));
+        const imageUrl = String(payload?.cardapio_reactivation_image_url || '').trim();
+        setCardapioReactivationImageUrl(imageUrl || null);
+      } catch {}
+    })();
+  }, [token]);
 
   const ativos = clientes.filter((c) => c.status_atividade === 'ativo').length;
   const emRisco = clientes.filter((c) => c.status_atividade === 'em_risco').length;
@@ -1319,7 +1334,10 @@ export function TabClientes({ token }: { token: string }) {
   };
   const sendReactivationMessages = async () => {
     if (selectedIds.size === 0 || sendingWhatsapp) return;
-    const confirmed = window.confirm(`Enviar mensagem de reativacao por WhatsApp para ${selectedIds.size} cliente(s)?`);
+    const confirmed = window.confirm(
+      `Enviar mensagem de reativacao por WhatsApp para ${selectedIds.size} cliente(s)?` +
+        (sendWithCardapioImage && cardapioReactivationImageUrl ? '\nA imagem de cardapio sera enviada junto.' : '')
+    );
     if (!confirmed) return;
     setSendFeedback(null);
     setSendingWhatsapp(true);
@@ -1332,6 +1350,7 @@ export function TabClientes({ token }: { token: string }) {
         },
         body: JSON.stringify({
           customer_ids: [...selectedIds],
+          send_with_menu_image: sendWithCardapioImage,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -1390,7 +1409,19 @@ export function TabClientes({ token }: { token: string }) {
         >
           {sendingWhatsapp ? 'Enviando...' : 'Enviar no WhatsApp'}
         </button>
+        <label className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            checked={sendWithCardapioImage}
+            onChange={(e) => setSendWithCardapioImage(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+          />
+          Enviar com imagem do cardapio
+        </label>
       </div>
+      {sendWithCardapioImage && !cardapioReactivationImageUrl ? (
+        <p className="text-xs text-zinc-500">Nenhuma imagem de divulgação cadastrada no Cardápio. O envio seguirá só com mensagem.</p>
+      ) : null}
 
       {sendFeedback && (
         <div
@@ -2156,8 +2187,9 @@ export function DeliveryConfigPanel({
 
   const logoFileRef = useRef<HTMLInputElement>(null);
   const bannerInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+  const reactivationImageFileRef = useRef<HTMLInputElement>(null);
   const [fallbackLogoUrl, setFallbackLogoUrl] = useState<string | null>(null);
-  const [cvBusy, setCvBusy] = useState<'logo' | number | null>(null);
+  const [cvBusy, setCvBusy] = useState<'logo' | 'reativacao' | number | null>(null);
   const [testingPixConfig, setTestingPixConfig] = useState(false);
   const [pixTestResult, setPixTestResult] = useState<null | {
     ok: boolean;
@@ -2260,6 +2292,43 @@ export function DeliveryConfigPanel({
           slots[idx] = '';
           return { ...c, cardapio_online_banner_urls: slots };
         });
+      }
+    } catch {}
+    setCvBusy(null);
+  };
+
+  const onReactivationImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setCvBusy('reativacao');
+    try {
+      const fd = new FormData();
+      fd.append('imagem', f);
+      const res = await fetch('/api/delivery/cardapio-visual/reativacao-imagem', {
+        method: 'POST',
+        headers: hdrs,
+        body: fd,
+      });
+      const d = await res.json().catch(() => ({} as any));
+      if (res.ok && typeof d.url === 'string' && d.url.trim()) {
+        setCfg((c) => ({ ...c, cardapio_reactivation_image_url: d.url }));
+      } else {
+        alert(d.message || d.error || 'Falha no envio da imagem de divulgacao');
+      }
+    } catch {}
+    setCvBusy(null);
+  };
+
+  const removeReactivationImage = async () => {
+    setCvBusy('reativacao');
+    try {
+      const res = await fetch('/api/delivery/cardapio-visual/reativacao-imagem', {
+        method: 'DELETE',
+        headers: hdrs,
+      });
+      if (res.ok) {
+        setCfg((c) => ({ ...c, cardapio_reactivation_image_url: undefined }));
       }
     } catch {}
     setCvBusy(null);
@@ -3001,6 +3070,13 @@ export function DeliveryConfigPanel({
               </div>
 
               <input ref={logoFileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onCardapioLogoFile} />
+              <input
+                ref={reactivationImageFileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={onReactivationImageFile}
+              />
 
               <div>
                 <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Logo do cardápio online</p>
@@ -3097,6 +3173,48 @@ export function DeliveryConfigPanel({
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Imagem para reativação no WhatsApp</p>
+                <p className="text-[11px] text-fptext-muted mb-3">Opcional. Essa imagem pode ser enviada junto da mensagem de reativação na aba Clientes.</p>
+                <div className="flex flex-wrap items-start gap-4">
+                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 flex items-center justify-center">
+                    {cfg.cardapio_reactivation_image_url ? (
+                      <img
+                        src={cfg.cardapio_reactivation_image_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Image size={28} className="text-zinc-400" aria-hidden />
+                    )}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={cvBusy === 'reativacao'}
+                        onClick={() => reactivationImageFileRef.current?.click()}
+                        className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold text-zinc-800 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                      >
+                        <Upload size={14} />
+                        {cvBusy === 'reativacao' ? 'Enviando…' : 'Enviar imagem'}
+                      </button>
+                      {cfg.cardapio_reactivation_image_url ? (
+                        <button
+                          type="button"
+                          disabled={cvBusy === 'reativacao'}
+                          onClick={removeReactivationImage}
+                          className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+                        >
+                          <Trash2 size={14} />
+                          Remover imagem
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
 
