@@ -1592,12 +1592,13 @@ router.get('/clientes', async (req: Request, res) => {
                 created_at,
                 received_at
               )
-             VALUES (?, ?, NULL, ?, ?, NULL, ?, 'reativacao_manual', ?, ?, ?, ?, ?, NOW(), NOW(), NOW(), NOW())`,
+             VALUES (?, ?, NULL, ?, ?, ?, ?, 'reativacao_manual', ?, ?, ?, ?, ?, NOW(), NOW(), NOW(), NOW())`,
             [
               req.tenantId,
               sendResult.provider || null,
               sendResult.recipient,
               customerName,
+              message,
               JSON.stringify({
                 source: 'delivery_customers_reactivation',
                 customer_id: customerId,
@@ -1641,12 +1642,13 @@ router.get('/clientes', async (req: Request, res) => {
                 created_at,
                 received_at
               )
-             VALUES (?, ?, NULL, ?, ?, NULL, ?, 'reativacao_manual', ?, ?, ?, ?, NULL, NOW(), NULL, NOW(), NOW())`,
+             VALUES (?, ?, NULL, ?, ?, ?, ?, 'reativacao_manual', ?, ?, ?, ?, NULL, NOW(), NULL, NOW(), NOW())`,
             [
               req.tenantId,
               whatsappConfig.provider || null,
               customerPhone,
               customerName,
+              message,
               JSON.stringify({
                 source: 'delivery_customers_reactivation',
                 customer_id: customerId,
