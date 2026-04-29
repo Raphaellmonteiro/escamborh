@@ -4516,21 +4516,12 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
     setTimeout(() => setPixCheckoutCopiado(false), 4000);
   }, [pixPayloadCheckout]);
 
-  const waNumberCheckout = (config.whatsapp || '').replace(/\D/g, '');
-
   const ondePagaPresencial =
     tipoAtendimento === 'entrega'
       ? 'na entrega'
       : modoRecebimento === 'consumo_local'
         ? 'no local'
         : 'na retirada';
-
-  const waMsgPedidoPresencialCheckout =
-    waNumberCheckout && (pag === 'dinheiro' || pag === 'cartao')
-      ? `https://wa.me/55${waNumberCheckout}?text=${encodeURIComponent(
-          `Olá! Estou na confirmação do pedido pelo cardápio. Total *${fmt(tot)}* — pagamento ${pag === 'dinheiro' ? 'em dinheiro' : 'no cartão'} ${ondePagaPresencial}.`
-        )}`
-      : null;
 
   const aplicarEntrega = () => {
     setModoRecebimento('entrega');
@@ -5748,16 +5739,6 @@ const finalizar = async () => {
                   Já confirmei o pagamento
                 </button>
               </div>
-            )}
-            {(pag === 'dinheiro' || pag === 'cartao') && waMsgPedidoPresencialCheckout && (
-              <button
-                type="button"
-                onClick={() => window.open(waMsgPedidoPresencialCheckout, '_blank', 'noopener,noreferrer')}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-green-500/40 bg-green-600/90 py-3 text-sm font-bold text-white transition-colors hover:bg-green-500"
-              >
-                <MessageCircle size={18} />
-                Confirmar no WhatsApp
-              </button>
             )}
           </div>
         )}
