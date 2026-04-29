@@ -61,11 +61,21 @@ export type WhatsAppConversationMessage = {
   error: string | null;
 };
 
+export type WhatsAppConversationDetail = {
+  customer_phone: string;
+  customer_name: string | null;
+  send_recipient_phone: string | null;
+  handoff_active: boolean;
+  messages: WhatsAppConversationMessage[];
+};
+
 export type SendWhatsAppConversationMessageResult = {
   status: 'enviado' | 'erro';
   handoff_active: boolean;
   message: WhatsAppConversationMessage;
 };
+
+export type WhatsAppConversationPeriod = 'today' | '7d' | '30d' | 'all';
 
 const HUMAN_HANDOFF_ACTIVE_WINDOW_HOURS = 4;
 
@@ -150,7 +160,73 @@ const NORMALIZED_CONVERSATION_KEY_INNER_SQL = `COALESCE(
   ''
 )`;
 
-export async function listWhatsAppConversations(tenantId: number) {
+function resolvePeriodStart(period: WhatsAppConversationPeriod) {
+  if (period === 'all') return null;
+  if (period === 'today') return 'CURRENT_DATE';
+  if (period === '7d') return "NOW() - INTERVAL '7 days'";
+  return "NOW() - INTERVAL '30 days'";
+}
+
+function buildPhoneInClause(values: string[]) {
+  if (values.length === 0) {
+    return {
+      sql: "('')",
+      params: [] as string[],
+    };
+  }
+  return {
+    sql: `(${values.map(() => '?').join(',')})`,
+    params: values,
+  };
+}
+
+async function loadConversationPhoneAliases(
+  tenantId: number,
+  customerPhone: string,
+  normalizedCustomerPhone: string
+) {
+  const normalizedInput = normalizeOptionalText(normalizedCustomerPhone) || normalizeOptionalText(customerPhone) || '';
+  const searchByLid = normalizedInput.includes('@lid');
+  const rows = await qAll<{ customer_phone: string }>(
+    `SELECT DISTINCT m.customer_phone
+     FROM whatsapp_inbound_messages m
+     WHERE m.tenant_id=?
+       AND (
+         m.customer_phone=?
+         OR ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)}=?
+         ${searchByLid ? 'OR COALESCE(m.payload_json, \'\') ILIKE ?' : ''}
+       )
+     ORDER BY m.customer_phone ASC`,
+    searchByLid
+      ? [tenantId, customerPhone, normalizedCustomerPhone, `%${normalizedInput}%`]
+      : [tenantId, customerPhone, normalizedCustomerPhone]
+  );
+
+  const aliases = [
+    ...new Set(
+      [customerPhone, normalizedCustomerPhone, ...rows.map((row) => row.customer_phone)]
+        .map((value) => normalizeOptionalText(value))
+        .filter((value): value is string => Boolean(value))
+    ),
+  ];
+  return aliases;
+}
+
+function pickTrustedSendRecipient(aliases: string[]) {
+  for (const alias of aliases) {
+    const normalized = normalizeWhatsAppConversationPhone(alias);
+    if (!normalized || normalized.includes('@lid')) continue;
+    return normalized;
+  }
+  return null;
+}
+
+export async function listWhatsAppConversations(tenantId: number, period: WhatsAppConversationPeriod = '30d') {
+  const periodStart = resolvePeriodStart(period);
+  const inboundPeriodFilter = periodStart ? `AND m.created_at >= ${periodStart}` : '';
+  const outboundPeriodFilter = periodStart
+    ? `AND COALESCE(m.auto_reply_sent_at, m.auto_reply_attempted_at, m.created_at) >= ${periodStart}`
+    : '';
   const rows = await qAll<DbConversationSummaryRow>(
     `WITH timeline AS (
        SELECT m.customer_phone,
@@ -161,6 +237,7 @@ export async function listWhatsAppConversations(tenantId: number) {
        FROM whatsapp_inbound_messages m
        WHERE m.tenant_id=?
          AND NULLIF(BTRIM(COALESCE(m.message_text, '')), '') IS NOT NULL
+         ${inboundPeriodFilter}
 
        UNION ALL
 
@@ -172,6 +249,7 @@ export async function listWhatsAppConversations(tenantId: number) {
        FROM whatsapp_inbound_messages m
        WHERE m.tenant_id=?
          AND NULLIF(BTRIM(m.auto_reply_text), '') IS NOT NULL
+         ${outboundPeriodFilter}
      ),
      latest_messages AS (
        SELECT DISTINCT ON (timeline.conversation_key)
@@ -232,9 +310,25 @@ export async function listWhatsAppConversations(tenantId: number) {
   }));
 }
 
-export async function getWhatsAppConversationMessages(tenantId: number, customerPhone: string) {
+export async function getWhatsAppConversationMessages(
+  tenantId: number,
+  customerPhone: string,
+  period: WhatsAppConversationPeriod = '30d'
+): Promise<WhatsAppConversationDetail | null> {
   const normalizedCustomerPhone = normalizeWhatsAppConversationPhone(customerPhone);
   if (!normalizedCustomerPhone) return null;
+  const conversationAliases = await loadConversationPhoneAliases(
+    tenantId,
+    customerPhone,
+    normalizedCustomerPhone
+  );
+  const phoneInClause = buildPhoneInClause(conversationAliases);
+  const periodStart = resolvePeriodStart(period);
+  const inboundPeriodFilter = periodStart ? `AND m.created_at >= ${periodStart}` : '';
+  const outboundPeriodFilter = periodStart
+    ? `AND COALESCE(m.auto_reply_sent_at, m.auto_reply_attempted_at, m.created_at) >= ${periodStart}`
+    : '';
+  const sendRecipient = pickTrustedSendRecipient(conversationAliases);
 
   const [messages, handoffRow] = await Promise.all([
     qAll<DbConversationMessageRow>(
@@ -253,10 +347,11 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
          FROM whatsapp_inbound_messages m
          WHERE m.tenant_id=?
            AND (
-             m.customer_phone=?
+             m.customer_phone IN ${phoneInClause.sql}
              OR ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)}=?
            )
            AND NULLIF(BTRIM(COALESCE(m.message_text, '')), '') IS NOT NULL
+           ${inboundPeriodFilter}
 
          UNION ALL
 
@@ -280,10 +375,11 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
          FROM whatsapp_inbound_messages m
          WHERE m.tenant_id=?
            AND (
-             m.customer_phone=?
+             m.customer_phone IN ${phoneInClause.sql}
              OR ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)}=?
            )
            AND NULLIF(BTRIM(m.auto_reply_text), '') IS NOT NULL
+           ${outboundPeriodFilter}
        )
        SELECT source_message_id,
               customer_phone,
@@ -300,7 +396,14 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
        ORDER BY message_at ASC,
                 source_message_id ASC,
                 CASE WHEN direction = 'inbound' THEN 0 ELSE 1 END ASC`,
-      [tenantId, customerPhone, normalizedCustomerPhone, tenantId, customerPhone, normalizedCustomerPhone]
+      [
+        tenantId,
+        ...phoneInClause.params,
+        normalizedCustomerPhone,
+        tenantId,
+        ...phoneInClause.params,
+        normalizedCustomerPhone,
+      ]
     ),
     q1<DbHandoffRow>(
       `SELECT CASE
@@ -312,7 +415,7 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
        FROM whatsapp_human_handoffs
        WHERE tenant_id=?
          AND (
-           customer_phone=?
+           customer_phone IN ${phoneInClause.sql}
            OR (
              CASE
                WHEN POSITION('@lid' IN LOWER(BTRIM(customer_phone))) > 0 THEN LOWER(BTRIM(customer_phone))
@@ -330,7 +433,7 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
            )=?
          )
        LIMIT 1`,
-      [tenantId, customerPhone, normalizedCustomerPhone]
+      [tenantId, ...phoneInClause.params, normalizedCustomerPhone]
     ),
   ]);
 
@@ -347,6 +450,7 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
   return {
     customer_phone: normalizedCustomerPhone,
     customer_name: customerName,
+    send_recipient_phone: sendRecipient,
     handoff_active: toBool(handoffRow?.handoff_active, false),
     messages: messages.map<WhatsAppConversationMessage>((message) => ({
       id: `${message.direction}:${message.source_message_id}`,
@@ -435,6 +539,7 @@ export async function sendWhatsAppConversationMessage(input: {
   tenantId: number;
   customerPhone: string;
   message: string;
+  period?: WhatsAppConversationPeriod;
 }): Promise<SendWhatsAppConversationMessageResult> {
   const tenantId = Number(input.tenantId);
   if (!Number.isInteger(tenantId) || tenantId <= 0) {
@@ -446,7 +551,11 @@ export async function sendWhatsAppConversationMessage(input: {
     throw new AppError('Mensagem obrigatoria', 400);
   }
 
-  const conversation = await getWhatsAppConversationMessages(tenantId, input.customerPhone);
+  const conversation = await getWhatsAppConversationMessages(
+    tenantId,
+    input.customerPhone,
+    input.period || '30d'
+  );
   if (!conversation) {
     throw new AppError('Conversa nao encontrada', 404);
   }
@@ -476,7 +585,7 @@ export async function sendWhatsAppConversationMessage(input: {
     const sendResult = await sendWhatsAppMessage({
       provider: config.provider || null,
       providerConfigJson: config.provider_config_json || null,
-      to: input.customerPhone,
+      to: conversation.send_recipient_phone || input.customerPhone,
       message: messageText,
     });
 

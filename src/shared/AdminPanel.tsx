@@ -71,9 +71,12 @@ type SupportWhatsAppConversationMessage = {
 type SupportWhatsAppConversationDetail = {
   customer_phone: string;
   customer_name: string | null;
+  send_recipient_phone?: string | null;
   handoff_active: boolean;
   messages: SupportWhatsAppConversationMessage[];
 };
+
+type SupportWhatsAppPeriod = 'today' | '7d' | '30d' | 'all';
 
 const PLAN_OPTIONS = [
   { value: 'basico', label: 'Basico' },
@@ -241,6 +244,7 @@ export default function AdminPanel() {
   const [suporteWhatsAppDraft, setSuporteWhatsAppDraft] = useState('');
   const [suporteWhatsAppSending, setSuporteWhatsAppSending] = useState(false);
   const [suporteWhatsAppReloadKey, setSuporteWhatsAppReloadKey] = useState(0);
+  const [suporteWhatsAppPeriod, setSuporteWhatsAppPeriod] = useState<SupportWhatsAppPeriod>('7d');
 
   // ── Listas paginadas para performance em listas grandes ─────────────────────
   const clientesFiltrados = useMemo(() =>
@@ -563,6 +567,7 @@ export default function AdminPanel() {
     setSuporteWhatsAppConversationLoading(false);
     setSuporteWhatsAppConversationError(null);
     setSuporteWhatsAppDraft('');
+    setSuporteWhatsAppPeriod('7d');
   }, [suporteTenantId]);
 
   useEffect(() => {
@@ -580,7 +585,10 @@ export default function AdminPanel() {
           fetch(`/api/admin/cliente-overview?tenant_id=${suporteTenantId}`, { headers: h }),
           fetch(`/api/admin/logs?tenant_id=${suporteTenantId}&limit=100`, { headers: h }),
           fetch(`/api/admin/pedidos?tenant_id=${suporteTenantId}&limit=20`, { headers: h }),
-          fetch(`/api/admin/whatsapp/conversations?tenant_id=${suporteTenantId}`, { headers: h }),
+          fetch(
+            `/api/admin/whatsapp/conversations?tenant_id=${suporteTenantId}&period=${encodeURIComponent(suporteWhatsAppPeriod)}`,
+            { headers: h }
+          ),
         ]);
         if (cancelled) return;
         if ([resO, resL, resP, resW].some((response) => response.status === 401 || response.status === 403)) {
@@ -637,7 +645,7 @@ export default function AdminPanel() {
     return () => {
       cancelled = true;
     };
-  }, [token, activeTab, suporteTenantId, suporteWhatsAppReloadKey]);
+  }, [token, activeTab, suporteTenantId, suporteWhatsAppReloadKey, suporteWhatsAppPeriod]);
 
   useEffect(() => {
     if (!token || activeTab !== 'suporte' || !suporteTenantId || !suporteWhatsAppSelectedPhone) {
@@ -652,7 +660,7 @@ export default function AdminPanel() {
     setSuporteWhatsAppConversationError(null);
 
     fetch(
-      `/api/admin/whatsapp/conversations/${encodeURIComponent(suporteWhatsAppSelectedPhone)}?tenant_id=${suporteTenantId}`,
+      `/api/admin/whatsapp/conversations/${encodeURIComponent(suporteWhatsAppSelectedPhone)}?tenant_id=${suporteTenantId}&period=${encodeURIComponent(suporteWhatsAppPeriod)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
       .then(async (res) => {
@@ -682,7 +690,7 @@ export default function AdminPanel() {
     return () => {
       cancelled = true;
     };
-  }, [token, activeTab, suporteTenantId, suporteWhatsAppSelectedPhone, suporteWhatsAppReloadKey]);
+  }, [token, activeTab, suporteTenantId, suporteWhatsAppSelectedPhone, suporteWhatsAppReloadKey, suporteWhatsAppPeriod]);
 
   useEffect(() => {
     if (!suporteWhatsAppHistoryRef.current) return;
@@ -1239,7 +1247,7 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
       const res = await fetch(`/api/admin/whatsapp/conversations/${encodeURIComponent(suporteWhatsAppSelectedPhone)}/send`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant_id: suporteTenantId, message }),
+        body: JSON.stringify({ tenant_id: suporteTenantId, message, period: suporteWhatsAppPeriod }),
       });
       if (res.status === 401 || res.status === 403) {
         handleAuthError();
@@ -1392,6 +1400,20 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
               </button>
             </div>
 
+            <div className="mb-4 flex items-center gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Período</label>
+              <select
+                value={suporteWhatsAppPeriod}
+                onChange={(e) => setSuporteWhatsAppPeriod(e.target.value as SupportWhatsAppPeriod)}
+                className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-semibold text-zinc-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              >
+                <option value="today">Hoje</option>
+                <option value="7d">7 dias</option>
+                <option value="30d">30 dias</option>
+                <option value="all">Tudo</option>
+              </select>
+            </div>
+
             {suporteWhatsAppError && (
               <div className="mb-4 rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                 {suporteWhatsAppError}
@@ -1522,7 +1544,9 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     <form onSubmit={handleSuporteWhatsAppSend} className="border-t border-zinc-800 p-4 space-y-3">
                       <div className="flex items-center justify-between gap-3 text-xs text-zinc-500">
                         <span>Status do atendimento: {suporteWhatsAppConversation.handoff_active ? 'handoff ativo' : 'fluxo padrão'}</span>
-                        <span>Envio manual pelo endpoint existente</span>
+                        <span>
+                          Envio manual ({suporteWhatsAppConversation.send_recipient_phone ? formatWhatsAppPhone(suporteWhatsAppConversation.send_recipient_phone) : 'destinatário da conversa'})
+                        </span>
                       </div>
                       <textarea
                         value={suporteWhatsAppDraft}

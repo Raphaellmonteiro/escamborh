@@ -38,6 +38,7 @@ import {
   listWhatsAppConversations,
   normalizeWhatsAppConversationPhone,
   sendWhatsAppConversationMessage,
+  type WhatsAppConversationPeriod,
 } from '../services/whatsAppConversationService';
 
 const TZ = 'America/Sao_Paulo';
@@ -142,6 +143,14 @@ function normalizeAuditDateQuery(value: unknown, endOfDay = false): string | nul
     return `${normalized}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}-03:00`;
   }
   return normalized;
+}
+
+function normalizeWhatsAppPeriodQuery(value: unknown): WhatsAppConversationPeriod {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'today' || normalized === '7d' || normalized === '30d' || normalized === 'all') {
+    return normalized;
+  }
+  return '30d';
 }
 
 async function buildUniqueTenantUsername(
@@ -525,12 +534,12 @@ export function createAdminRouter() {
         nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,
         plano,valor_plano,vencimento,status,segmento,trial_inicio,trial_fim,usuario,
       } = req.body;
-      const usuarioNormalizado = String(usuario || '').trim().toLowerCase();
+      const usuarioNormalizado = String(usuario || '').trim();
       if (!usuarioNormalizado) {
         return res.status(400).json({ success: false, error: 'Usuário é obrigatório' });
       }
-      if (usuarioNormalizado.length < 3 || usuarioNormalizado.length > 60 || !/^[a-z0-9._-]+$/.test(usuarioNormalizado)) {
-        return res.status(400).json({ success: false, error: 'Usuário inválido (3-60, minúsculas, números, ponto, hífen e underscore)' });
+      if (usuarioNormalizado.length < 3 || usuarioNormalizado.length > 60 || !/^[A-Za-z0-9._-]+$/.test(usuarioNormalizado)) {
+        return res.status(400).json({ success: false, error: 'Usuário inválido (3-60, letras, números, ponto, hífen e underscore)' });
       }
       const planoFinal = normalizeAdminPlan(plano);
       await withTx(async (client) => {
@@ -564,12 +573,12 @@ export function createAdminRouter() {
           usuario: usuarioNormalizado,
         };
 
-        if (usuarioNormalizado !== String(ant.usuario || '').trim().toLowerCase()) {
+        if (usuarioNormalizado !== String(ant.usuario || '').trim()) {
           const conflito = await txQ1<{ id: number }>(
             client,
-            `SELECT id FROM clientes WHERE usuario=? AND id<>?
+            `SELECT id FROM clientes WHERE LOWER(usuario)=LOWER(?) AND id<>?
              UNION ALL
-             SELECT id FROM usuarios WHERE username=? AND cliente_id<>?
+             SELECT id FROM usuarios WHERE LOWER(username)=LOWER(?) AND cliente_id<>?
              LIMIT 1`,
             [usuarioNormalizado, req.params.id, usuarioNormalizado, req.params.id]
           );
@@ -601,11 +610,11 @@ export function createAdminRouter() {
             req.params.id,
           ]
         );
-        if (usuarioNormalizado !== String(ant.usuario || '').trim().toLowerCase()) {
-          await txRun(client, 'UPDATE usuarios SET username=? WHERE cliente_id=? AND username=?', [
+        if (usuarioNormalizado !== String(ant.usuario || '').trim()) {
+          await txRun(client, 'UPDATE usuarios SET username=? WHERE cliente_id=? AND LOWER(username)=LOWER(?)', [
             usuarioNormalizado,
             req.params.id,
-            String(ant.usuario || '').trim().toLowerCase(),
+            String(ant.usuario || '').trim(),
           ]);
         }
         if (vencimento !== ant?.vencimento || planoFinal !== ant?.plano) {
@@ -2445,7 +2454,8 @@ export function createAdminRouter() {
       const cliente = await q1('SELECT id FROM clientes WHERE id=?', [tenantId]);
       if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-      const conversations = await listWhatsAppConversations(tenantId);
+      const period = normalizeWhatsAppPeriodQuery(req.query.period);
+      const conversations = await listWhatsAppConversations(tenantId, period);
       res.json({ conversations });
     } catch (e: unknown) {
       sendAdminRouteError(res, 'routes/admin:whatsapp-conversations', e);
@@ -2466,7 +2476,8 @@ export function createAdminRouter() {
         return res.status(400).json({ error: 'Telefone inválido' });
       }
 
-      const conversation = await getWhatsAppConversationMessages(tenantId, customerPhone);
+      const period = normalizeWhatsAppPeriodQuery(req.query.period);
+      const conversation = await getWhatsAppConversationMessages(tenantId, customerPhone, period);
       if (!conversation) {
         return res.status(404).json({ error: 'Conversa não encontrada' });
       }
@@ -2495,6 +2506,7 @@ export function createAdminRouter() {
         tenantId,
         customerPhone,
         message: req.body?.message,
+        period: normalizeWhatsAppPeriodQuery(req.body?.period),
       });
 
       res.status(result.status === 'erro' ? 502 : 200).json(result);
