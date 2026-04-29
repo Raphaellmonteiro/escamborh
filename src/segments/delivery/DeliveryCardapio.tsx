@@ -6233,11 +6233,37 @@ function TelaConfirmado({ pedidoOk, config, slug, tipoAtendimento, clienteToken,
   );
 }
 
+const BR_MOBILE_NACIONAL_LEN = 11;
+
+function clampDeliveryCardapioMobileDigits(raw: string): string {
+  let d = normalizeBrazilDeliveryPhoneDigits(raw);
+  if (d.length > BR_MOBILE_NACIONAL_LEN) d = d.slice(0, BR_MOBILE_NACIONAL_LEN);
+  return d;
+}
+
+/** Máscara (XX) XXXXX-XXXX para celular BR (11 dígitos nacionais após normalização). */
+function formatDeliveryCardapioMobileDisplay(nacionalDigits: string): string {
+  const d = nacionalDigits.replace(/\D/g, '');
+  if (!d.length) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  const sub = d.slice(2);
+  return `(${d.slice(0, 2)}) ${sub.slice(0, 5)}-${sub.slice(5)}`;
+}
+
+/** Celular BR com DDD: 11 dígitos, nono dígito (primeiro da linha) = 9. */
+function isDeliveryCardapioMobileComplete(nacionalDigits: string): boolean {
+  const d = normalizeBrazilDeliveryPhoneDigits(nacionalDigits);
+  if (d.length !== BR_MOBILE_NACIONAL_LEN) return false;
+  if (d[0] === '0') return false;
+  return d[2] === '9';
+}
+
 function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }: { slug:string;tipoAtendimento: TipoAtendimento | null;contexto:'checkout'|'geral';onSuccess:(t:string,c:ClienteAuth)=>void;onBack:()=>void }) {
   const th = useDeliveryCardapioTheme();
   const isLightRed = th.mode === 'light_red';
   const [etapa, setEtapa] = useState<'tel'|'dados'>('tel');
-  const [tel, setTel] = useState('');
+  const [telDigits, setTelDigits] = useState('');
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [endLogradouro, setEndLogradouro] = useState('');
@@ -6250,9 +6276,10 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
   const inp="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3.5 text-base focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-50 transition-all sm:px-4 sm:text-sm";
 
   const verificarTel=async()=>{
+    if (!isDeliveryCardapioMobileComplete(telDigits)) return;
     setErro('');setLoad(true);
     try{
-      const r=await fetch(`/public/delivery/${slug}/auth/identificar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:tel})});
+      const r=await fetch(`/public/delivery/${slug}/auth/identificar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telefone:telDigits})});
       const d=await r.json();
       if(!d.success){setErro(d.error||'Erro');return;}
       if(d.novo){setTelNorm(d.telefone);setEtapa('dados');}else onSuccess(d.token,d.cliente);
@@ -6292,10 +6319,21 @@ function TelaIdentificar({ slug, tipoAtendimento, contexto, onSuccess, onBack }:
             </div>
             <div>
               <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Telefone / WhatsApp</label>
-              <input value={tel} onChange={e=>setTel(e.target.value)} placeholder="(85) 99999-0000" type="tel" className={inp} onKeyDown={e=>e.key==='Enter'&&verificarTel()}/>
+              <input
+                value={formatDeliveryCardapioMobileDisplay(telDigits)}
+                onChange={(e) => setTelDigits(clampDeliveryCardapioMobileDigits(e.target.value))}
+                placeholder="(85) 99999-0000"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                className={inp}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isDeliveryCardapioMobileComplete(telDigits)) void verificarTel();
+                }}
+              />
             </div>
             {erro&&<div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 flex items-center gap-2"><X size={14}/>{erro}</div>}
-            <button onClick={verificarTel} disabled={load||!tel.trim()} className={`w-full py-4 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:bg-zinc-300 ${isLightRed ? 'bg-red-600 hover:bg-red-700' : 'bg-zinc-900 hover:bg-zinc-800'}`}>
+            <button onClick={verificarTel} disabled={load||!isDeliveryCardapioMobileComplete(telDigits)} className={`w-full py-4 text-white rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:bg-zinc-300 ${isLightRed ? 'bg-red-600 hover:bg-red-700' : 'bg-zinc-900 hover:bg-zinc-800'}`}>
               {load?<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>:<>{contexto==='checkout'?'Continuar compra':'Continuar'}<ChevronRight size={16}/></>}
             </button>
             <p className="text-center text-xs text-zinc-400">{contexto==='checkout'?'Sem senha e sem complicacao: entre e volte direto para o fechamento.':'Sem senha — rápido e simples!'}</p>
