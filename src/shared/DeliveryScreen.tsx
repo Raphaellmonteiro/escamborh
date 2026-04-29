@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Bike, Package, Clock, CheckCircle2, XCircle, MapPin,
@@ -1169,6 +1169,30 @@ export function TabClientes({ token }: { token: string }) {
   const [search, setSearch]       = useState('');
   const [selected, setSelected]   = useState<DeliveryCustomer|null>(null);
   const [pedidos, setPedidos]     = useState<CustomerOrderHistory[]>([]);
+  const [quickFilter, setQuickFilter] = useState<
+    | 'all'
+    | 'comprou_hoje'
+    | 'd1_3'
+    | 'd4_7'
+    | 'd8_15'
+    | 'd15_plus'
+    | 'sem_compra'
+    | 'recorrentes'
+    | 'em_risco'
+    | 'mais_pedidos'
+    | 'maior_gasto'
+  >('all');
+  const [sortBy, setSortBy] = useState<'recent_purchase' | 'long_without_purchase' | 'most_orders' | 'highest_spend'>('recent_purchase');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [sendFeedback, setSendFeedback] = useState<{
+    tone: 'success' | 'error';
+    sent: number;
+    failed: number;
+    ignored: number;
+    message: string;
+  } | null>(null);
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
   const hdrs = { Authorization: `Bearer ${token}` };
 
   const fetchClientes = useCallback(async () => {
@@ -1178,7 +1202,12 @@ export function TabClientes({ token }: { token: string }) {
       const res = await fetch(`/api/delivery/clientes${q}`, { headers: hdrs });
       if (res.ok) {
         const d = await res.json();
-        setClientes(Array.isArray(d) ? d : []);
+        const nextClientes = Array.isArray(d) ? d : [];
+        setClientes(nextClientes);
+        setSelectedIds((prev) => {
+          const existing = new Set(nextClientes.map((c: DeliveryCustomer) => Number(c.id)));
+          return new Set([...prev].filter((id) => existing.has(id)));
+        });
       }
     } catch {}
     setLoading(false);
@@ -1202,10 +1231,145 @@ export function TabClientes({ token }: { token: string }) {
   const inativos = clientes.filter((c) => c.status_atividade === 'inativo').length;
   const semCompra = clientes.filter((c) => c.status_atividade === 'sem_compra').length;
   const recorrentes = clientes.filter((c) => c.cliente_recorrente).length;
+  const dateToTimestamp = (value?: string | null) => {
+    if (!value) return 0;
+    const date = parseDateValue(value);
+    return date ? date.getTime() : 0;
+  };
+  const matchesQuickFilter = useCallback((customer: DeliveryCustomer) => {
+    const dias = customer.dias_sem_comprar;
+    const totalPedidos = Number(customer.total_pedidos || 0);
+    const totalGasto = Number(customer.total_gasto || 0);
+    switch (quickFilter) {
+      case 'comprou_hoje':
+        return dias === 0;
+      case 'd1_3':
+        return dias !== null && dias !== undefined && dias >= 1 && dias <= 3;
+      case 'd4_7':
+        return dias !== null && dias !== undefined && dias >= 4 && dias <= 7;
+      case 'd8_15':
+        return dias !== null && dias !== undefined && dias >= 8 && dias <= 15;
+      case 'd15_plus':
+        return dias !== null && dias !== undefined && dias >= 15;
+      case 'sem_compra':
+        return customer.status_atividade === 'sem_compra' || customer.sem_historico || dias === null || dias === undefined;
+      case 'recorrentes':
+        return Boolean(customer.cliente_recorrente);
+      case 'em_risco':
+        return customer.status_atividade === 'em_risco';
+      case 'mais_pedidos':
+        return totalPedidos > 0;
+      case 'maior_gasto':
+        return totalGasto > 0;
+      case 'all':
+      default:
+        return true;
+    }
+  }, [quickFilter]);
+  const sortedFilteredClientes = useMemo(() => {
+    const filtered = clientes.filter(matchesQuickFilter);
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'recent_purchase') {
+        const diff = dateToTimestamp(b.ultima_compra_at || b.ultimo_pedido) - dateToTimestamp(a.ultima_compra_at || a.ultimo_pedido);
+        if (diff !== 0) return diff;
+      }
+      if (sortBy === 'long_without_purchase') {
+        const aDias = a.dias_sem_comprar ?? -1;
+        const bDias = b.dias_sem_comprar ?? -1;
+        if (bDias !== aDias) return bDias - aDias;
+      }
+      if (sortBy === 'most_orders' || quickFilter === 'mais_pedidos') {
+        const diff = Number(b.total_pedidos || 0) - Number(a.total_pedidos || 0);
+        if (diff !== 0) return diff;
+      }
+      if (sortBy === 'highest_spend' || quickFilter === 'maior_gasto') {
+        const diff = Number(b.total_gasto || 0) - Number(a.total_gasto || 0);
+        if (diff !== 0) return diff;
+      }
+      return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+    });
+  }, [clientes, matchesQuickFilter, sortBy, quickFilter]);
+  const selectedCount = selectedIds.size;
+  const visibleSelectedCount = sortedFilteredClientes.filter((c) => selectedIds.has(c.id)).length;
+  const allVisibleSelected = sortedFilteredClientes.length > 0 && visibleSelectedCount === sortedFilteredClientes.length;
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected;
+    }
+  }, [someVisibleSelected]);
+  const toggleSelectCustomer = (customerId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return next;
+    });
+  };
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        sortedFilteredClientes.forEach((customer) => next.delete(customer.id));
+      } else {
+        sortedFilteredClientes.forEach((customer) => next.add(customer.id));
+      }
+      return next;
+    });
+  };
+  const sendReactivationMessages = async () => {
+    if (selectedIds.size === 0 || sendingWhatsapp) return;
+    const confirmed = window.confirm(`Enviar mensagem de reativacao por WhatsApp para ${selectedIds.size} cliente(s)?`);
+    if (!confirmed) return;
+    setSendFeedback(null);
+    setSendingWhatsapp(true);
+    try {
+      const res = await fetch('/api/delivery/clientes/reativacao/whatsapp', {
+        method: 'POST',
+        headers: {
+          ...hdrs,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customer_ids: [...selectedIds],
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload?.success) {
+        setSendFeedback({
+          tone: 'error',
+          sent: 0,
+          failed: 0,
+          ignored: 0,
+          message: payload?.error || 'Nao foi possivel enviar as mensagens',
+        });
+        return;
+      }
+      const summary = payload?.summary || {};
+      setSendFeedback({
+        tone: Number(summary.failed || 0) > 0 ? 'error' : 'success',
+        sent: Number(summary.sent || 0),
+        failed: Number(summary.failed || 0),
+        ignored: Number(summary.ignored || 0),
+        message: 'Disparo concluido',
+      });
+      fetchClientes();
+    } catch {
+      setSendFeedback({
+        tone: 'error',
+        sent: 0,
+        failed: 0,
+        ignored: 0,
+        message: 'Erro ao enviar mensagens de reativacao',
+      });
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-start">
         <div className="relative w-full flex-1 min-w-0 sm:min-w-[240px] sm:max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
           <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&fetchClientes()}
@@ -1213,6 +1377,84 @@ export function TabClientes({ token }: { token: string }) {
             className="w-full min-h-[44px] pl-9 pr-4 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
         </div>
         <button onClick={fetchClientes} className="w-full min-h-[44px] px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-700 transition-colors sm:w-auto">Buscar</button>
+        <button
+          type="button"
+          onClick={sendReactivationMessages}
+          disabled={selectedCount === 0 || sendingWhatsapp}
+          aria-busy={sendingWhatsapp}
+          className={`w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold transition-colors sm:w-auto ${
+            selectedCount === 0 || sendingWhatsapp
+              ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700'
+              : 'bg-emerald-600 text-white hover:bg-emerald-500'
+          }`}
+        >
+          {sendingWhatsapp ? 'Enviando...' : 'Enviar no WhatsApp'}
+        </button>
+      </div>
+
+      {sendFeedback && (
+        <div
+          className={`rounded-xl border px-3 py-2.5 text-sm ${
+            sendFeedback.tone === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+              : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+          }`}
+          role="status"
+        >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="font-bold">{sendFeedback.message}</span>
+            <span>Enviados: <strong>{sendFeedback.sent}</strong></span>
+            <span>Ignorados: <strong>{sendFeedback.ignored}</strong></span>
+            <span>Falhados: <strong>{sendFeedback.failed}</strong></span>
+          </div>
+        </div>
+      )}
+
+      <div className={`${adminOpsSurfaceCardClass} p-3 space-y-3`}>
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            ['all', 'Todos'],
+            ['comprou_hoje', 'Comprou hoje'],
+            ['d1_3', '1 a 3 dias'],
+            ['d4_7', '4 a 7 dias'],
+            ['d8_15', '8 a 15 dias'],
+            ['d15_plus', '15+ dias'],
+            ['sem_compra', 'Sem compra'],
+            ['recorrentes', 'Recorrentes'],
+            ['em_risco', 'Em risco'],
+            ['mais_pedidos', 'Mais pedidos'],
+            ['maior_gasto', 'Maior gasto'],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setQuickFilter(key as typeof quickFilter)}
+              className={`min-h-[36px] px-3 rounded-full text-xs font-bold border transition-colors ${
+                quickFilter === key
+                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-700 dark:border-zinc-700'
+                  : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-xs font-bold text-zinc-500">Ordenar por</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="min-h-[36px] px-3 py-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold text-fptext-primary focus:outline-none"
+          >
+            <option value="recent_purchase">Ultima compra mais recente</option>
+            <option value="long_without_purchase">Ha mais tempo sem comprar</option>
+            <option value="most_orders">Mais pedidos</option>
+            <option value="highest_spend">Maior gasto</option>
+          </select>
+          <span className="text-xs text-zinc-500 ml-auto">
+            Selecionados: <strong className="text-zinc-700 dark:text-zinc-300">{selectedCount}</strong>
+          </span>
+        </div>
       </div>
 
       {!loading && (
@@ -1232,8 +1474,18 @@ export function TabClientes({ token }: { token: string }) {
       ) : (
         <div className={`${adminOpsSurfaceCardClass} overflow-hidden`}>
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm min-w-[980px]">
+            <table className="w-full text-sm min-w-[1020px]">
               <thead><tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700">
+                <th className="px-4 py-3">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+                    aria-label="Selecionar clientes visiveis"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Cliente</th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Telefone</th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Relacionamento</th>
@@ -1243,8 +1495,17 @@ export function TabClientes({ token }: { token: string }) {
                 <th className="px-4 py-3"/>
               </tr></thead>
               <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800">
-                {clientes.map(c => (
+                {sortedFilteredClientes.map(c => (
                   <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800">
+                    <td className="px-4 py-3 align-top">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelectCustomer(c.id)}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+                        aria-label={`Selecionar ${c.nome}`}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
                       <div className="flex flex-wrap gap-1.5 mt-1">
@@ -1312,21 +1573,36 @@ export function TabClientes({ token }: { token: string }) {
             </table>
           </div>
           <div className="md:hidden space-y-3 p-3">
-            {clientes.map(c => {
+            {sortedFilteredClientes.map(c => {
               const status = getCustomerActivityMeta(c.status_atividade);
               return (
-                <button
+                <div
                   key={c.id}
-                  type="button"
-                  onClick={() => { setSelected(c); fetchPedidos(c.id); }}
-                  className={`w-full ${adminOpsSurfaceCardClass} p-4 text-left transition-colors active:bg-zinc-50 active:bg-fp-active/80`}
+                  className={`w-full ${adminOpsSurfaceCardClass} p-4`}
                 >
                   <div className="flex items-start justify-between gap-3">
+                    <label className="inline-flex items-center gap-2 text-xs text-zinc-500">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelectCustomer(c.id)}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+                      />
+                      Selecionar
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setSelected(c); fetchPedidos(c.id); }}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-zinc-600 dark:text-zinc-300"
+                    >
+                      Ver historico <ChevronRight size={14} className="shrink-0 text-zinc-400" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
                       <p className="mt-1 text-xs font-mono text-fptext-muted">{c.telefone || '—'}</p>
                     </div>
-                    <ChevronRight size={16} className="shrink-0 text-zinc-400" />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     <StatusChip variant="info" size="md">
@@ -1360,11 +1636,11 @@ export function TabClientes({ token }: { token: string }) {
                       <p className="mt-1 font-black text-emerald-700">{fmt(c.total_gasto || 0)}</p>
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
-          {clientes.length===0 && (
+          {sortedFilteredClientes.length===0 && (
             <div className={adminOpsDashedWellClass}>
               <EmptyState
                 icon={Users}

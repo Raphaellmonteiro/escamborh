@@ -34,6 +34,7 @@ import {
   findOrCreateStoreCustomerByPhone,
   touchStoreCustomerPurchase,
 } from '../services/storeCustomerService';
+import { sendWhatsAppMessage } from '../services/whatsAppSenderService';
 import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import {
@@ -79,6 +80,13 @@ function isCanceledOrder(order?: { status?: string | null; cancelado_at?: string
 
 function normalizePhone(value: unknown) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function isLikelyValidCustomerPhone(value: unknown) {
+  const digits = normalizePhone(value);
+  if (!digits) return false;
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) return true;
+  return digits.length === 10 || digits.length === 11;
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -1445,6 +1453,242 @@ router.get('/clientes', async (req: Request, res) => {
 
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
+  });
+
+  router.post('/clientes/reativacao/whatsapp', async (req: Request, res) => {
+    try {
+      const customerIdsRaw = Array.isArray(req.body?.customer_ids) ? req.body.customer_ids : [];
+      const customerIds: number[] = [...new Set<number>(
+        customerIdsRaw
+          .map((id: unknown) => Number(id))
+          .filter((id): id is number => Number.isInteger(id) && id > 0)
+      )].slice(0, 100);
+
+      if (customerIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'Selecione pelo menos um cliente valido' });
+      }
+
+      const whatsappConfig = await q1<{
+        whatsapp_enabled?: boolean | number | string | null;
+        provider?: string | null;
+        provider_config_json?: string | null;
+      }>(
+        `SELECT whatsapp_enabled, provider, provider_config_json
+           FROM tenant_whatsapp_config
+          WHERE tenant_id=?`,
+        [req.tenantId]
+      );
+
+      const enabled = toFlag(whatsappConfig?.whatsapp_enabled);
+      if (!whatsappConfig || !enabled) {
+        return res.status(409).json({
+          success: false,
+          error: 'WhatsApp nao esta configurado ou habilitado para este tenant',
+        });
+      }
+
+      const tenantDeliveryCfgRow = await q1<{ delivery_config: string | null }>(
+        'SELECT delivery_config FROM clientes WHERE id=?',
+        [req.tenantId]
+      );
+      const tenantDeliveryCfg = coerceDeliveryConfigRow(tenantDeliveryCfgRow?.delivery_config ?? null);
+      const cardapioLink = normalizeOptionalText(tenantDeliveryCfg.cardapio_link_curto) || null;
+
+      const placeholders = customerIds.map(() => '?').join(',');
+      const customers = await qAll<{
+        id: number;
+        nome: string | null;
+        telefone: string | null;
+      }>(
+        `SELECT id, nome, telefone
+           FROM delivery_clientes
+          WHERE tenant_id=?
+            AND id IN (${placeholders})
+          ORDER BY nome ASC, id ASC`,
+        [req.tenantId, ...customerIds]
+      );
+
+      const foundIds = new Set(customers.map((customer) => Number(customer.id)));
+      const results: Array<{
+        customer_id: number;
+        nome: string;
+        telefone: string | null;
+        status: 'sent' | 'failed' | 'ignored_no_phone' | 'ignored_invalid_phone' | 'ignored_not_found';
+        error?: string | null;
+      }> = [];
+
+      for (const originalId of customerIds) {
+        if (!foundIds.has(originalId)) {
+          results.push({
+            customer_id: originalId,
+            nome: '',
+            telefone: null,
+            status: 'ignored_not_found',
+            error: 'Cliente nao encontrado no tenant',
+          });
+        }
+      }
+
+      for (const customer of customers) {
+        const customerId = Number(customer.id);
+        const customerName = normalizeOptionalText(customer.nome) || 'cliente';
+        const customerPhone = normalizeOptionalText(customer.telefone);
+
+        if (!customerPhone) {
+          results.push({
+            customer_id: customerId,
+            nome: customerName,
+            telefone: null,
+            status: 'ignored_no_phone',
+            error: 'Cliente sem telefone cadastrado',
+          });
+          continue;
+        }
+
+        if (!isLikelyValidCustomerPhone(customerPhone)) {
+          results.push({
+            customer_id: customerId,
+            nome: customerName,
+            telefone: customerPhone,
+            status: 'ignored_invalid_phone',
+            error: 'Telefone invalido para envio',
+          });
+          continue;
+        }
+
+        const message =
+          `Oi, ${customerName}! Sentimos sua falta.\n` +
+          `Estamos abertos hoje e será um prazer receber seu pedido novamente.\n` +
+          (cardapioLink
+            ? `Peça pelo cardápio: ${cardapioLink}`
+            : 'Se preferir, responda esta mensagem e ajudamos no seu pedido.');
+
+        try {
+          const sendResult = await sendWhatsAppMessage({
+            provider: whatsappConfig.provider || null,
+            providerConfigJson: whatsappConfig.provider_config_json || null,
+            to: customerPhone,
+            message,
+          });
+
+          await qRun(
+            `INSERT INTO whatsapp_inbound_messages
+              (
+                tenant_id,
+                provider,
+                provider_message_id,
+                customer_phone,
+                customer_name,
+                message_text,
+                payload_json,
+                intent,
+                auto_reply_text,
+                auto_reply_status,
+                auto_reply_error,
+                auto_reply_provider,
+                auto_reply_external_id,
+                auto_reply_attempted_at,
+                auto_reply_sent_at,
+                created_at,
+                received_at
+              )
+             VALUES (?, ?, NULL, ?, ?, NULL, ?, 'reativacao_manual', ?, ?, ?, ?, ?, NOW(), NOW(), NOW(), NOW())`,
+            [
+              req.tenantId,
+              sendResult.provider || null,
+              sendResult.recipient,
+              customerName,
+              JSON.stringify({
+                source: 'delivery_customers_reactivation',
+                customer_id: customerId,
+              }),
+              message,
+              'sent',
+              null,
+              sendResult.provider || null,
+              sendResult.externalId || null,
+            ]
+          );
+
+          results.push({
+            customer_id: customerId,
+            nome: customerName,
+            telefone: customerPhone,
+            status: 'sent',
+            error: null,
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          await qRun(
+            `INSERT INTO whatsapp_inbound_messages
+              (
+                tenant_id,
+                provider,
+                provider_message_id,
+                customer_phone,
+                customer_name,
+                message_text,
+                payload_json,
+                intent,
+                auto_reply_text,
+                auto_reply_status,
+                auto_reply_error,
+                auto_reply_provider,
+                auto_reply_external_id,
+                auto_reply_attempted_at,
+                auto_reply_sent_at,
+                created_at,
+                received_at
+              )
+             VALUES (?, ?, NULL, ?, ?, NULL, ?, 'reativacao_manual', ?, ?, ?, ?, NULL, NOW(), NULL, NOW(), NOW())`,
+            [
+              req.tenantId,
+              whatsappConfig.provider || null,
+              customerPhone,
+              customerName,
+              JSON.stringify({
+                source: 'delivery_customers_reactivation',
+                customer_id: customerId,
+              }),
+              message,
+              'error',
+              errorMessage,
+              whatsappConfig.provider || null,
+            ]
+          );
+
+          results.push({
+            customer_id: customerId,
+            nome: customerName,
+            telefone: customerPhone,
+            status: 'failed',
+            error: errorMessage,
+          });
+        }
+      }
+
+      const sent = results.filter((item) => item.status === 'sent').length;
+      const failed = results.filter((item) => item.status === 'failed').length;
+      const ignored = results.filter((item) => item.status.startsWith('ignored_')).length;
+
+      return res.json({
+        success: true,
+        summary: {
+          requested: customerIds.length,
+          processed: results.length,
+          sent,
+          failed,
+          ignored,
+        },
+        message_template:
+          'Oi, {nome}! Sentimos sua falta.\nEstamos abertos hoje e será um prazer receber seu pedido novamente.\nPeça pelo cardápio: {link_loja}',
+        link_loja: cardapioLink,
+        results,
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/delivery:clientesReativacaoWhatsapp', e);
+    }
   });
 
   router.get('/clientes/:id/pedidos', async (req: Request, res) => {
