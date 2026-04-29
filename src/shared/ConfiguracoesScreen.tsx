@@ -23,6 +23,7 @@ export default function ConfiguracoesScreen({
 
   const [perfil, setPerfil] = useState({
     nome_estabelecimento: '',
+    usuario_login: '',
     segmento: '',
     taxa_debito: 0,
     taxa_credito: 0,
@@ -37,6 +38,7 @@ export default function ConfiguracoesScreen({
       .then(d => {
         setPerfil({
           nome_estabelecimento: d.nome_estabelecimento || '',
+          usuario_login:         d.usuario_login || '',
           segmento:             d.segmento             || '',
           taxa_debito:          d.taxa_debito          || 0,
           taxa_credito:         d.taxa_credito         || 0,
@@ -130,7 +132,15 @@ export default function ConfiguracoesScreen({
 
   const [editando, setEditando]               = useState(false);
   const [savingPerfil, setSavingPerfil]       = useState(false);
-  const [formPerfil, setFormPerfil]           = useState({ nome: '', senhaNova: '', senhaCaixaNova: '' });
+  const [formPerfil, setFormPerfil]           = useState({
+    nome: '',
+    usuarioLogin: '',
+    senhaNova: '',
+    senhaCaixaNova: '',
+    senhaAtualLogin: '',
+    novaSenhaLogin: '',
+    confirmarNovaSenhaLogin: '',
+  });
 
   // ── Impressora Térmica ──────────────────────────────────────────────────────
   const [printerCfg, setPrinterCfg] = useState({
@@ -196,25 +206,91 @@ export default function ConfiguracoesScreen({
 
   // Abre formulário com valores atuais
   const abrirEdicao = () => {
-    setFormPerfil({ nome: perfil.nome_estabelecimento, senhaNova: '', senhaCaixaNova: '' });
+    setFormPerfil({
+      nome: perfil.nome_estabelecimento,
+      usuarioLogin: perfil.usuario_login || '',
+      senhaNova: '',
+      senhaCaixaNova: '',
+      senhaAtualLogin: '',
+      novaSenhaLogin: '',
+      confirmarNovaSenhaLogin: '',
+    });
     setEditando(true);
   };
 
   const handleSavePerfil = async () => {
     if (!formPerfil.nome.trim()) { showToast('Nome não pode ser vazio', false); return; }
+    const wantsLoginChange = formPerfil.usuarioLogin.trim().toLowerCase() !== (perfil.usuario_login || '').trim().toLowerCase();
+    const wantsPasswordChange = !!formPerfil.novaSenhaLogin.trim() || !!formPerfil.confirmarNovaSenhaLogin.trim();
+    const wantsCredentialChange = wantsLoginChange || wantsPasswordChange;
+    if (wantsCredentialChange) {
+      if (!formPerfil.senhaAtualLogin.trim()) {
+        showToast('Informe a senha atual para alterar credenciais', false);
+        return;
+      }
+      if (wantsPasswordChange) {
+        if (formPerfil.novaSenhaLogin.length < 6) {
+          showToast('Nova senha de login deve ter no mínimo 6 caracteres', false);
+          return;
+        }
+        if (formPerfil.novaSenhaLogin !== formPerfil.confirmarNovaSenhaLogin) {
+          showToast('Confirmação da nova senha não confere', false);
+          return;
+        }
+      }
+    }
     setSavingPerfil(true);
     try {
       const body: any = { nome_estabelecimento: formPerfil.nome.trim() };
       if (formPerfil.senhaNova.trim())      body.senha_admin = formPerfil.senhaNova.trim();
       if (formPerfil.senhaCaixaNova.trim()) body.senha_caixa = formPerfil.senhaCaixaNova.trim();
-      const r = await fetch('/api/settings/perfil', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      const d = await r.json();
-      if (d.success) {
-        setPerfil(prev => ({ ...prev, nome_estabelecimento: formPerfil.nome.trim() }));
+      let perfilOk = true;
+      if (body.nome_estabelecimento || body.senha_admin || body.senha_caixa) {
+        const r = await fetch('/api/settings/perfil', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        perfilOk = !!d.success;
+        if (!perfilOk) {
+          showToast(d.message || 'Erro ao salvar', false);
+        }
+      }
+
+      let credenciaisOk = true;
+      if (perfilOk && wantsCredentialChange) {
+        const credentialsRes = await fetch('/api/settings/perfil/credenciais', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            senha_atual: formPerfil.senhaAtualLogin,
+            novo_usuario: wantsLoginChange ? formPerfil.usuarioLogin.trim().toLowerCase() : '',
+            nova_senha: formPerfil.novaSenhaLogin,
+            confirmar_nova_senha: formPerfil.confirmarNovaSenhaLogin,
+          }),
+        });
+        const credentialsData = await credentialsRes.json().catch(() => ({} as any));
+        credenciaisOk = credentialsRes.ok && !!credentialsData.success;
+        if (!credenciaisOk) {
+          showToast(credentialsData.message || 'Erro ao atualizar credenciais', false);
+        } else {
+          showToast('Credenciais atualizadas. Faça login novamente.', true);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user_nome');
+          localStorage.removeItem('user_cargo');
+          localStorage.removeItem('user_permissoes');
+          window.location.href = '/login';
+          return;
+        }
+      }
+
+      if (perfilOk && credenciaisOk) {
+        setPerfil(prev => ({
+          ...prev,
+          nome_estabelecimento: formPerfil.nome.trim(),
+          usuario_login: wantsLoginChange ? formPerfil.usuarioLogin.trim().toLowerCase() : prev.usuario_login,
+        }));
         // Se trocou qualquer senha, re-verifica o flag senha_padrao no servidor
         if (formPerfil.senhaNova.trim() || formPerfil.senhaCaixaNova.trim()) {
           fetch('/api/settings/profile', { headers: { Authorization: `Bearer ${token}` } })
@@ -222,7 +298,7 @@ export default function ConfiguracoesScreen({
         }
         showToast('✓ Dados salvos');
         setEditando(false);
-      } else { showToast(d.message || 'Erro ao salvar', false); }
+      }
     } catch { showToast('Erro de conexão', false); }
     finally { setSavingPerfil(false); }
   };
@@ -350,6 +426,11 @@ export default function ConfiguracoesScreen({
                   Editar
                 </button>
               </div>
+            </Row>
+            <Row icon={<Lock size={16} />} label="Usuário de login" sub="Usado para acessar o sistema">
+              <span className="text-sm font-mono font-bold text-fptext-secondary truncate max-w-[160px]">
+                {perfil.usuario_login || '—'}
+              </span>
             </Row>
 
             <Row icon={<span className="text-base">🏪</span>} label="Segmento" sub="Tipo do seu negócio">
@@ -598,6 +679,37 @@ export default function ConfiguracoesScreen({
             <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Nome do Estabelecimento</label>
             <input value={formPerfil.nome} onChange={e => setFormPerfil(p => ({ ...p, nome: e.target.value }))}
               className="mt-1 w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Usuário de Login</label>
+            <p className="text-[10px] text-fptext-muted mb-1">Letras minúsculas, números, ponto, hífen e underscore</p>
+            <input value={formPerfil.usuarioLogin} onChange={e => setFormPerfil(p => ({ ...p, usuarioLogin: e.target.value }))}
+              placeholder="seu.usuario"
+              className="w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+          </div>
+          <div className="border-t border-fp-border pt-3 space-y-3">
+            <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Alterar senha de login</p>
+            <div>
+              <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Senha Atual</label>
+              <input type="password" value={formPerfil.senhaAtualLogin}
+                onChange={e => setFormPerfil(p => ({ ...p, senhaAtualLogin: e.target.value }))}
+                placeholder="Obrigatória para alterar login/senha"
+                className="mt-1 w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Nova senha de login</label>
+              <input type="password" value={formPerfil.novaSenhaLogin}
+                onChange={e => setFormPerfil(p => ({ ...p, novaSenhaLogin: e.target.value }))}
+                placeholder="Mínimo 6 caracteres"
+                className="mt-1 w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Confirmar nova senha</label>
+              <input type="password" value={formPerfil.confirmarNovaSenhaLogin}
+                onChange={e => setFormPerfil(p => ({ ...p, confirmarNovaSenhaLogin: e.target.value }))}
+                placeholder="Repita a nova senha"
+                className="mt-1 w-full px-3 py-2.5 bg-fp-input border border-fp-border rounded-xl text-sm text-fptext-primary focus:outline-none focus:ring-2 focus:ring-[var(--fp-ring)]" />
+            </div>
           </div>
           <div>
             <label className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Nova Senha Admin</label>

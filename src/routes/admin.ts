@@ -523,14 +523,21 @@ export function createAdminRouter() {
     try {
       const {
         nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,
-        plano,valor_plano,vencimento,status,segmento,trial_inicio,trial_fim,
+        plano,valor_plano,vencimento,status,segmento,trial_inicio,trial_fim,usuario,
       } = req.body;
+      const usuarioNormalizado = String(usuario || '').trim().toLowerCase();
+      if (!usuarioNormalizado) {
+        return res.status(400).json({ success: false, error: 'Usuário é obrigatório' });
+      }
+      if (usuarioNormalizado.length < 3 || usuarioNormalizado.length > 60 || !/^[a-z0-9._-]+$/.test(usuarioNormalizado)) {
+        return res.status(400).json({ success: false, error: 'Usuário inválido (3-60, minúsculas, números, ponto, hífen e underscore)' });
+      }
       const planoFinal = normalizeAdminPlan(plano);
       await withTx(async (client) => {
         const ant = await txQ1<any>(
           client,
           `SELECT id,nome_estabelecimento,razao_social,documento_tipo,documento_numero,nome_responsavel,email,whatsapp,cidade,
-                  plano,valor_plano,vencimento,status,segmento,trial_inicio,trial_fim
+                  plano,valor_plano,vencimento,status,segmento,trial_inicio,trial_fim,usuario
            FROM clientes WHERE id=?`,
           [req.params.id]
         );
@@ -554,11 +561,26 @@ export function createAdminRouter() {
           segmento: segmento || 'Restaurante/Food',
           trial_inicio: trial_inicio || null,
           trial_fim: trial_fim || null,
+          usuario: usuarioNormalizado,
         };
+
+        if (usuarioNormalizado !== String(ant.usuario || '').trim().toLowerCase()) {
+          const conflito = await txQ1<{ id: number }>(
+            client,
+            `SELECT id FROM clientes WHERE usuario=? AND id<>?
+             UNION ALL
+             SELECT id FROM usuarios WHERE username=? AND cliente_id<>?
+             LIMIT 1`,
+            [usuarioNormalizado, req.params.id, usuarioNormalizado, req.params.id]
+          );
+          if (conflito) {
+            throw new Error('Usuario ja em uso');
+          }
+        }
 
         await txRun(
           client,
-          `UPDATE clientes SET nome_estabelecimento=?,razao_social=?,documento_tipo=?,documento_numero=?,nome_responsavel=?,email=?,whatsapp=?,cidade=?,plano=?,valor_plano=?,vencimento=?,status=?,segmento=?,trial_inicio=?,trial_fim=? WHERE id=?`,
+          `UPDATE clientes SET nome_estabelecimento=?,razao_social=?,documento_tipo=?,documento_numero=?,nome_responsavel=?,email=?,whatsapp=?,cidade=?,usuario=?,plano=?,valor_plano=?,vencimento=?,status=?,segmento=?,trial_inicio=?,trial_fim=? WHERE id=?`,
           [
             nextSnapshot.nome_estabelecimento,
             nextSnapshot.razao_social,
@@ -568,6 +590,7 @@ export function createAdminRouter() {
             nextSnapshot.email,
             nextSnapshot.whatsapp,
             nextSnapshot.cidade,
+            nextSnapshot.usuario,
             nextSnapshot.plano,
             nextSnapshot.valor_plano,
             nextSnapshot.vencimento,
@@ -578,6 +601,13 @@ export function createAdminRouter() {
             req.params.id,
           ]
         );
+        if (usuarioNormalizado !== String(ant.usuario || '').trim().toLowerCase()) {
+          await txRun(client, 'UPDATE usuarios SET username=? WHERE cliente_id=? AND username=?', [
+            usuarioNormalizado,
+            req.params.id,
+            String(ant.usuario || '').trim().toLowerCase(),
+          ]);
+        }
         if (vencimento !== ant?.vencimento || planoFinal !== ant?.plano) {
           await txRun(
             client,
@@ -611,6 +641,7 @@ export function createAdminRouter() {
             segmento: ant.segmento,
             trial_inicio: ant.trial_inicio,
             trial_fim: ant.trial_fim,
+            usuario: ant.usuario,
           },
           after: nextSnapshot,
         });
@@ -618,6 +649,9 @@ export function createAdminRouter() {
       invalidateTenantPlanCache(req.params.id);
       res.json({ success: true });
     } catch (e: unknown) {
+      if (e instanceof Error && e.message === 'Usuario ja em uso') {
+        return res.status(409).json({ success: false, error: e.message });
+      }
       if (e instanceof Error && e.message === 'Cliente nao encontrado') {
         return res.status(404).json({ success: false, error: e.message });
       }

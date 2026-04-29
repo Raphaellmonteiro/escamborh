@@ -3735,6 +3735,14 @@ const handleUpdateSenha = async (e: React.FormEvent) => {
                     />
                   </div>
                   <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Usuário (login)</label>
+                    <input
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10 font-mono"
+                      value={editPlano.usuario || ''}
+                      onChange={e => setEditPlano({ ...editPlano, usuario: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">WhatsApp</label>
                     <input 
                       className="w-full px-4 py-3 bg-zinc-800 border border-zinc-800 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900/10"

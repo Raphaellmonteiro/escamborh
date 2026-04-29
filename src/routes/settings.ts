@@ -1,5 +1,6 @@
 // src/routes/settings.ts
 import { Router, Request } from 'express';
+import bcrypt from 'bcryptjs';
 import { pool, q1, qAll, qRun } from '../db';
 import { uploadLogo, hardenUploadedImageFile } from '../middleware';
 import { getTenantPlanContext } from '../services/tenantPlan';
@@ -21,6 +22,7 @@ export function createSettingsRouter() {
     try {
       const cliente = await q1('SELECT nome_estabelecimento, senha_admin, senha_caixa, segmento, taxa_debito, taxa_credito, taxa_pix, vencimento FROM clientes WHERE id=?', [req.tenantId]);
       const usuario = await q1('SELECT cargo, permissoes, nome FROM usuarios WHERE username=?', [(req as any).user?.username || '']);
+      const authUser = await q1('SELECT username FROM usuarios WHERE id=?', [(req as any).user?.id || 0]);
       const planContext = await getTenantPlanContext(req.tenantId || 0);
       const cargo      = (req as any).userCargo      || usuario?.cargo      || 'dono';
       const permissoes = (req as any).userPermissoes || (usuario?.permissoes ? JSON.parse(usuario.permissoes) : null);
@@ -43,6 +45,7 @@ export function createSettingsRouter() {
         trial_fim: planContext.trialFim,
         vencimento: cliente?.vencimento || null,
         cargo, permissoes, nome_usuario: nomeUsuario,
+        usuario_login: authUser?.username || (req as any).user?.username || '',
       });
     } catch (err: unknown) {
       sendInternalError(res, 'routes/settings:profile', err);
@@ -71,6 +74,109 @@ export function createSettingsRouter() {
       await qRun(`UPDATE clientes SET ${updates.join(',')} WHERE id=?`, params);
       res.json({ success: true });
     } catch (e: unknown) { sendInternalError(res, 'routes/settings', e); }
+  });
+
+  router.put('/perfil/credenciais', async (req: any, res) => {
+    try {
+      const userId = Number(req.user?.id || 0);
+      if (!Number.isFinite(userId) || userId <= 0) {
+        return res.status(401).json({ success: false, message: 'Sessão inválida.' });
+      }
+
+      const senhaAtual = String(req.body?.senha_atual || '');
+      const novoUsuario = String(req.body?.novo_usuario || '').trim().toLowerCase();
+      const novaSenha = String(req.body?.nova_senha || '');
+      const confirmarNovaSenha = String(req.body?.confirmar_nova_senha || '');
+
+      if (!senhaAtual.trim()) {
+        return res.status(400).json({ success: false, message: 'Senha atual é obrigatória.' });
+      }
+
+      const desejaTrocarUsuario = novoUsuario.length > 0;
+      const desejaTrocarSenha = novaSenha.length > 0 || confirmarNovaSenha.length > 0;
+      if (!desejaTrocarUsuario && !desejaTrocarSenha) {
+        return res.status(400).json({ success: false, message: 'Informe novo usuário e/ou nova senha.' });
+      }
+
+      if (desejaTrocarUsuario) {
+        if (novoUsuario.length < 3 || novoUsuario.length > 60) {
+          return res.status(400).json({ success: false, message: 'Usuário deve ter entre 3 e 60 caracteres.' });
+        }
+        if (!/^[a-z0-9._-]+$/.test(novoUsuario)) {
+          return res.status(400).json({ success: false, message: 'Usuário aceita apenas letras minúsculas, números, ponto, hífen e underscore.' });
+        }
+      }
+
+      if (desejaTrocarSenha) {
+        if (!novaSenha.trim()) {
+          return res.status(400).json({ success: false, message: 'Nova senha é obrigatória.' });
+        }
+        if (novaSenha.length < 6) {
+          return res.status(400).json({ success: false, message: 'Nova senha deve ter no mínimo 6 caracteres.' });
+        }
+        if (novaSenha !== confirmarNovaSenha) {
+          return res.status(400).json({ success: false, message: 'A confirmação da nova senha não confere.' });
+        }
+      }
+
+      const currentUser = await q1<{ id: number; username: string; password: string; cliente_id: number | null }>(
+        'SELECT id, username, password, cliente_id FROM usuarios WHERE id=?',
+        [userId]
+      );
+      if (!currentUser) {
+        return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
+      }
+
+      let senhaOk = false;
+      if (currentUser.password?.startsWith('$2')) {
+        try {
+          senhaOk = bcrypt.compareSync(senhaAtual, currentUser.password);
+        } catch {
+          senhaOk = false;
+        }
+      }
+      if (!senhaOk) {
+        return res.status(403).json({ success: false, message: 'Senha atual incorreta.' });
+      }
+
+      const finalUsername = desejaTrocarUsuario ? novoUsuario : currentUser.username;
+      if (desejaTrocarUsuario && finalUsername !== currentUser.username) {
+        const collision = await q1<{ id: number }>(
+          `SELECT id FROM usuarios WHERE username=? AND id<>?
+           UNION ALL
+           SELECT id FROM clientes WHERE usuario=? AND id<>?
+           LIMIT 1`,
+          [finalUsername, currentUser.id, finalUsername, req.tenantId]
+        );
+        if (collision) {
+          return res.status(409).json({ success: false, message: 'Este usuário já está em uso.' });
+        }
+      }
+
+      const updates: string[] = [];
+      const params: Array<string | number> = [];
+      if (desejaTrocarUsuario && finalUsername !== currentUser.username) {
+        updates.push('username=?');
+        params.push(finalUsername);
+      }
+      if (desejaTrocarSenha) {
+        updates.push('password=?');
+        params.push(bcrypt.hashSync(novaSenha, 10));
+      }
+
+      // força novo login para sessão antiga não continuar válida
+      updates.push('token_version=COALESCE(token_version,1)+1');
+
+      await qRun(`UPDATE usuarios SET ${updates.join(', ')} WHERE id=?`, [...params, currentUser.id]);
+
+      if (desejaTrocarUsuario && finalUsername !== currentUser.username) {
+        await qRun('UPDATE clientes SET usuario=? WHERE id=? AND usuario=?', [finalUsername, req.tenantId, currentUser.username]);
+      }
+
+      return res.json({ success: true, relogin_required: true });
+    } catch (e: unknown) {
+      sendInternalError(res, 'routes/settings:perfil-credenciais', e);
+    }
   });
 
   router.put('/taxas', async (req: Request, res) => {
