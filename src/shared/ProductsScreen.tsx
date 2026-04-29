@@ -1,11 +1,11 @@
-import React, { Fragment, useState, useEffect, useMemo } from 'react';
+import React, { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { useDebounce } from '../hooks/useDebounce';
 import { usePaginatedList } from '../hooks/usePaginatedList';
 import {
   Package, Plus, Trash2, Lock, AlertCircle, Image as ImageIcon,
   X, Barcode, Search, LayoutGrid, LayoutList, Copy,
   ChevronUp, ChevronDown, Star, Clock, Eye, EyeOff,
-  Download, Filter, Pencil, Settings2, ChevronRight, Minus, Award,
+  Download, Filter, Pencil, Settings2, ChevronRight, Minus, Award, Upload,
   CheckCircle2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -224,6 +224,9 @@ export default function ProductsScreen({
   const [destaqueFiltro, setDestaqueFiltro]   = useState(false);
   const [viewMode, setViewMode]               = useState<ViewMode>('list');
   const [cardapioPdfIncluirData, setCardapioPdfIncluirData] = useState(true);
+  const [whatsAppCardapioImageUrl, setWhatsAppCardapioImageUrl] = useState<string | null>(null);
+  const [whatsAppCardapioImageBusy, setWhatsAppCardapioImageBusy] = useState(false);
+  const whatsAppCardapioImageRef = useRef<HTMLInputElement>(null);
   /** Rascunho do campo "Pos." por produto (ordem global no cardápio). */
   const [posInputById, setPosInputById] = useState<Record<number, string>>({});
 
@@ -231,6 +234,17 @@ export default function ProductsScreen({
   const jHdrs = { ...hdrs, 'Content-Type': 'application/json' };
 
   useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/delivery/config', { headers: hdrs });
+        if (!res.ok) return;
+        const payload = await res.json().catch(() => ({}));
+        const imageUrl = String(payload?.cardapio_reactivation_image_url || '').trim();
+        setWhatsAppCardapioImageUrl(imageUrl || null);
+      } catch {}
+    })();
+  }, [token]);
 
   const fetchCategories = async () => {
     const r = await fetch('/api/categories', { headers: hdrs });
@@ -258,6 +272,50 @@ export default function ProductsScreen({
       setEditing(prev => prev ? { ...prev, photo_url: undefined } : prev);
       onUpdate();
     } catch { alert('Erro ao remover foto'); }
+  };
+
+  const handleWhatsAppCardapioImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setWhatsAppCardapioImageBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('imagem', file);
+      const res = await fetch('/api/delivery/cardapio-visual/reativacao-imagem', {
+        method: 'POST',
+        headers: hdrs,
+        body: fd,
+      });
+      const payload = await res.json().catch(() => ({} as any));
+      if (res.ok && typeof payload.url === 'string' && payload.url.trim()) {
+        setWhatsAppCardapioImageUrl(payload.url);
+      } else {
+        alert(payload?.message || payload?.error || 'Falha ao enviar imagem para WhatsApp');
+      }
+    } catch {
+      alert('Falha ao enviar imagem para WhatsApp');
+    }
+    setWhatsAppCardapioImageBusy(false);
+  };
+
+  const handleWhatsAppCardapioImageRemove = async () => {
+    setWhatsAppCardapioImageBusy(true);
+    try {
+      const res = await fetch('/api/delivery/cardapio-visual/reativacao-imagem', {
+        method: 'DELETE',
+        headers: hdrs,
+      });
+      if (res.ok) {
+        setWhatsAppCardapioImageUrl(null);
+      } else {
+        const payload = await res.json().catch(() => ({} as any));
+        alert(payload?.message || payload?.error || 'Falha ao remover imagem para WhatsApp');
+      }
+    } catch {
+      alert('Falha ao remover imagem para WhatsApp');
+    }
+    setWhatsAppCardapioImageBusy(false);
   };
 
   // ── salvar ───────────────────────────────────────────────────
@@ -726,6 +784,13 @@ export default function ProductsScreen({
 
       {/* ── Header ── */}
       <div className="min-w-0 shrink-0 border-b border-zinc-200 bg-white px-3 py-2 sm:px-3 sm:py-2.5 lg:px-4 lg:py-2.5 2xl:px-6 2xl:py-3.5">
+        <input
+          ref={whatsAppCardapioImageRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleWhatsAppCardapioImageUpload}
+        />
         <ScreenHeader
           rowFrom="lg"
           className="gap-2 lg:gap-2 2xl:gap-4"
@@ -782,6 +847,47 @@ export default function ProductsScreen({
             </div>
           }
         />
+        <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-white flex items-center justify-center">
+              {whatsAppCardapioImageUrl ? (
+                <img src={whatsAppCardapioImageUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <ImageIcon size={18} className="text-zinc-400" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div>
+                <p className="text-xs font-black text-zinc-700">Cardápio para WhatsApp</p>
+                <p className="text-[11px] text-zinc-500">
+                  Imagem opcional usada nas campanhas de reativação na aba Clientes (mensagem + imagem).
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={whatsAppCardapioImageBusy}
+                  onClick={() => whatsAppCardapioImageRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  <Upload size={12} />
+                  {whatsAppCardapioImageBusy ? 'Enviando...' : (whatsAppCardapioImageUrl ? 'Trocar imagem' : 'Enviar imagem')}
+                </button>
+                {whatsAppCardapioImageUrl ? (
+                  <button
+                    type="button"
+                    disabled={whatsAppCardapioImageBusy}
+                    onClick={handleWhatsAppCardapioImageRemove}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    <Trash2 size={12} />
+                    Remover imagem
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* ── Filtros ── */}
         <div className="flex flex-col gap-2 mt-2 sm:mt-3 2xl:mt-4 2xl:gap-3">
