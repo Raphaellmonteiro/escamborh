@@ -102,7 +102,7 @@ function normalizeProviderName(value: unknown) {
     .replace(/[\s-]+/g, '_');
 }
 
-export function normalizeWhatsAppConversationPhone(rawValue: unknown) {
+function normalizePhoneDigits(rawValue: unknown) {
   const base = normalizeOptionalText(rawValue);
   if (!base) return null;
 
@@ -115,10 +115,46 @@ export function normalizeWhatsAppConversationPhone(rawValue: unknown) {
   return digits;
 }
 
+export function normalizeWhatsAppConversationPhone(rawValue: unknown) {
+  const base = normalizeOptionalText(rawValue);
+  if (!base) return null;
+
+  const lowered = base.toLowerCase();
+  if (lowered.endsWith('@lid')) {
+    return lowered;
+  }
+
+  if (lowered.endsWith('@c.us') || lowered.endsWith('@s.whatsapp.net')) {
+    const [localPart] = lowered.split('@', 2);
+    const normalizedDigits = normalizePhoneDigits(localPart);
+    if (!normalizedDigits) return null;
+    return normalizedDigits;
+  }
+
+  return normalizePhoneDigits(base);
+}
+
+const NORMALIZED_CONVERSATION_KEY_SQL = `CASE
+  WHEN POSITION('@lid' IN LOWER(BTRIM(m.customer_phone))) > 0 THEN LOWER(BTRIM(m.customer_phone))
+  ELSE (
+    CASE
+      WHEN LENGTH(raw_digits) = 10 OR LENGTH(raw_digits) = 11 THEN CONCAT('55', raw_digits)
+      WHEN raw_digits LIKE '55%' AND LENGTH(raw_digits) >= 12 THEN raw_digits
+      ELSE COALESCE(NULLIF(raw_digits, ''), LOWER(BTRIM(m.customer_phone)))
+    END
+  )
+END`;
+
+const NORMALIZED_CONVERSATION_KEY_INNER_SQL = `COALESCE(
+  NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(m.customer_phone)), '@', 1), '\\D', '', 'g'), ''),
+  ''
+)`;
+
 export async function listWhatsAppConversations(tenantId: number) {
   const rows = await qAll<DbConversationSummaryRow>(
     `WITH timeline AS (
        SELECT m.customer_phone,
+              ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)} AS conversation_key,
               NULLIF(BTRIM(m.customer_name), '') AS customer_name,
               m.message_text AS last_message,
               m.created_at AS last_message_at
@@ -129,6 +165,7 @@ export async function listWhatsAppConversations(tenantId: number) {
        UNION ALL
 
        SELECT m.customer_phone,
+              ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)} AS conversation_key,
               NULLIF(BTRIM(m.customer_name), '') AS customer_name,
               m.auto_reply_text AS last_message,
               COALESCE(m.auto_reply_sent_at, m.auto_reply_attempted_at, m.created_at) AS last_message_at
@@ -137,22 +174,29 @@ export async function listWhatsAppConversations(tenantId: number) {
          AND NULLIF(BTRIM(m.auto_reply_text), '') IS NOT NULL
      ),
      latest_messages AS (
-       SELECT DISTINCT ON (timeline.customer_phone)
+       SELECT DISTINCT ON (timeline.conversation_key)
+              timeline.conversation_key,
               timeline.customer_phone,
               timeline.customer_name,
               timeline.last_message,
               timeline.last_message_at
        FROM timeline
-       ORDER BY timeline.customer_phone, timeline.last_message_at DESC
+       ORDER BY timeline.conversation_key, timeline.last_message_at DESC
      ),
      latest_names AS (
-       SELECT DISTINCT ON (m.customer_phone)
-              m.customer_phone,
-              NULLIF(BTRIM(m.customer_name), '') AS customer_name
-       FROM whatsapp_inbound_messages m
-       WHERE m.tenant_id=?
-         AND NULLIF(BTRIM(m.customer_name), '') IS NOT NULL
-       ORDER BY m.customer_phone, m.created_at DESC
+       SELECT DISTINCT ON (conversation_key)
+              conversation_key,
+              NULLIF(BTRIM(names.customer_name), '') AS customer_name
+       FROM (
+         SELECT ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)} AS conversation_key,
+                m.customer_name,
+                m.created_at
+         FROM whatsapp_inbound_messages m
+         WHERE m.tenant_id=?
+           AND NULLIF(BTRIM(m.customer_name), '') IS NOT NULL
+       ) names
+       WHERE NULLIF(BTRIM(names.customer_name), '') IS NOT NULL
+       ORDER BY conversation_key, names.created_at DESC
      ),
      handoffs AS (
        SELECT h.customer_phone,
@@ -172,7 +216,7 @@ export async function listWhatsAppConversations(tenantId: number) {
             COALESCE(h.handoff_active, FALSE) AS handoff_active
      FROM latest_messages lm
      LEFT JOIN latest_names ln
-       ON ln.customer_phone = lm.customer_phone
+       ON ln.conversation_key = lm.conversation_key
      LEFT JOIN handoffs h
        ON h.customer_phone = lm.customer_phone
      ORDER BY lm.last_message_at DESC, lm.customer_phone ASC`,
@@ -189,6 +233,9 @@ export async function listWhatsAppConversations(tenantId: number) {
 }
 
 export async function getWhatsAppConversationMessages(tenantId: number, customerPhone: string) {
+  const normalizedCustomerPhone = normalizeWhatsAppConversationPhone(customerPhone);
+  if (!normalizedCustomerPhone) return null;
+
   const [messages, handoffRow] = await Promise.all([
     qAll<DbConversationMessageRow>(
       `WITH timeline AS (
@@ -205,7 +252,10 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
                 NULL::text AS error
          FROM whatsapp_inbound_messages m
          WHERE m.tenant_id=?
-           AND m.customer_phone=?
+           AND (
+             m.customer_phone=?
+             OR ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)}=?
+           )
            AND NULLIF(BTRIM(COALESCE(m.message_text, '')), '') IS NOT NULL
 
          UNION ALL
@@ -229,7 +279,10 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
                 m.auto_reply_error AS error
          FROM whatsapp_inbound_messages m
          WHERE m.tenant_id=?
-           AND m.customer_phone=?
+           AND (
+             m.customer_phone=?
+             OR ${NORMALIZED_CONVERSATION_KEY_SQL.replace(/raw_digits/g, NORMALIZED_CONVERSATION_KEY_INNER_SQL)}=?
+           )
            AND NULLIF(BTRIM(m.auto_reply_text), '') IS NOT NULL
        )
        SELECT source_message_id,
@@ -247,7 +300,7 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
        ORDER BY message_at ASC,
                 source_message_id ASC,
                 CASE WHEN direction = 'inbound' THEN 0 ELSE 1 END ASC`,
-      [tenantId, customerPhone, tenantId, customerPhone]
+      [tenantId, customerPhone, normalizedCustomerPhone, tenantId, customerPhone, normalizedCustomerPhone]
     ),
     q1<DbHandoffRow>(
       `SELECT CASE
@@ -258,9 +311,26 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
               END AS handoff_active
        FROM whatsapp_human_handoffs
        WHERE tenant_id=?
-         AND customer_phone=?
+         AND (
+           customer_phone=?
+           OR (
+             CASE
+               WHEN POSITION('@lid' IN LOWER(BTRIM(customer_phone))) > 0 THEN LOWER(BTRIM(customer_phone))
+               ELSE (
+                 CASE
+                   WHEN LENGTH(COALESCE(NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(customer_phone)), '@', 1), '\\D', '', 'g'), ''), '')) IN (10, 11)
+                     THEN CONCAT('55', COALESCE(NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(customer_phone)), '@', 1), '\\D', '', 'g'), ''), ''))
+                   WHEN COALESCE(NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(customer_phone)), '@', 1), '\\D', '', 'g'), ''), '') LIKE '55%'
+                    AND LENGTH(COALESCE(NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(customer_phone)), '@', 1), '\\D', '', 'g'), ''), '')) >= 12
+                     THEN COALESCE(NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(customer_phone)), '@', 1), '\\D', '', 'g'), ''), '')
+                   ELSE COALESCE(NULLIF(REGEXP_REPLACE(SPLIT_PART(LOWER(BTRIM(customer_phone)), '@', 1), '\\D', '', 'g'), ''), LOWER(BTRIM(customer_phone)))
+                 END
+               )
+             END
+           )=?
+         )
        LIMIT 1`,
-      [tenantId, customerPhone]
+      [tenantId, customerPhone, normalizedCustomerPhone]
     ),
   ]);
 
@@ -275,7 +345,7 @@ export async function getWhatsAppConversationMessages(tenantId: number, customer
       .at(-1) || null;
 
   return {
-    customer_phone: customerPhone,
+    customer_phone: normalizedCustomerPhone,
     customer_name: customerName,
     handoff_active: toBool(handoffRow?.handoff_active, false),
     messages: messages.map<WhatsAppConversationMessage>((message) => ({
