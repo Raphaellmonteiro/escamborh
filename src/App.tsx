@@ -250,8 +250,9 @@ export default function App() {
   const tenantHasMotoboyFeature = token && !planProfile
     ? true
     : planFeatures.includes('funcionarios');
-  const flowAIToken = token && planProfile && planAllows('ai') ? token : null;
-  const alertsEnabled = Boolean(flowAIToken);
+  const alertsToken = token && planProfile && planAllows('dashboard') ? token : null;
+  const alertsEnabled = Boolean(alertsToken);
+  const alertsPopupEnabled = Boolean(token && planProfile && planAllows('ai'));
   const userRoleLabel =
     userCargo === 'dono' ? 'Proprietário' : userCargo === 'gerente' ? 'Gerente' : 'Atendente';
   const userDisplayName = userName || 'Sessão ativa';
@@ -270,7 +271,7 @@ export default function App() {
     historico, historicoTotal, carregandoHist,
     buscarAvisos, marcarLido, marcarTodosLidos,
     gerarAvisos, proximoAviso, buscarHistorico,
-  } = useFlowAI(flowAIToken);
+  } = useFlowAI(alertsToken);
 
   const refreshNotifHistorico = useCallback(() => {
     buscarHistorico(100, 0);
@@ -281,7 +282,7 @@ export default function App() {
 
   // Gera avisos ao logar e a cada 30 minutos — com fallback silencioso
   useEffect(() => {
-    if (!flowAIToken) return;
+    if (!alertsToken) return;
     const rodar = () =>
       gerarAvisos()
         .then(() => buscarAvisos())
@@ -293,7 +294,7 @@ export default function App() {
     const init = setTimeout(rodar, 6000);
     const iv   = setInterval(rodar, 30 * 60 * 1000);
     return () => { clearTimeout(init); clearInterval(iv); };
-  }, [flowAIToken, gerarAvisos, buscarAvisos]);
+  }, [alertsToken, gerarAvisos, buscarAvisos]);
 
   // Após login como cliente (admin): abre Estoque ou Pedidos para deeplink
   useEffect(() => {
@@ -1333,7 +1334,7 @@ const handleAuth = async (e: React.FormEvent) => {
 
       {/* ── FlowAI Popup proativo ─────────────────────────────────────────── */}
       <AnimatePresence>
-        {alertsEnabled && avisoAtivo && (
+        {alertsPopupEnabled && avisoAtivo && (
           <Suspense fallback={null}>
             <FlowAIPopup
               aviso={avisoAtivo}

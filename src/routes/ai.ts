@@ -2,7 +2,7 @@
 import { Router, Request } from 'express';
 import { q1, qAll, qRun } from '../db';
 import { sendInternalError } from '../utils/internalServerError';
-import { requirePlanFeature } from '../middleware';
+import { requireAnyPermission, requirePlanFeature } from '../middleware';
 import { refreshDeterministicAlerts } from '../services/alertsService';
 
 const TZ = 'America/Sao_Paulo';
@@ -11,7 +11,10 @@ const TIPOS_ANALISE = new Set(['visao_geral', 'financeiro']);
 
 export function createAiRouter() {
   const router = Router();
-  router.use(requirePlanFeature('ai'));
+  // Etapa 1 (insights comerciais + alertas determinísticos) fica disponível para planos com Dashboard.
+  // A camada avançada (análises com IA externa) continua restrita ao plano completo via feature `ai`.
+  router.use(requirePlanFeature('dashboard'));
+  router.use(requireAnyPermission('dashboard', 'pos', 'orders', 'delivery'));
 
   router.get('/avisos', async (req: Request, res) => {
     try {
@@ -93,7 +96,7 @@ export function createAiRouter() {
     }
   });
 
-  router.post('/analisar', async (req: Request, res) => {
+  router.post('/analisar', requirePlanFeature('ai'), async (req: Request, res) => {
     const tipoRaw = String((req.body || {}).tipo ?? 'visao_geral').trim();
     const tipo = TIPOS_ANALISE.has(tipoRaw) ? tipoRaw : 'visao_geral';
     const perguntaProbe = (req.body || {}).pergunta;

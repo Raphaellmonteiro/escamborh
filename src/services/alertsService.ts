@@ -1,4 +1,7 @@
 import { q1, qAll, qInsert, qRun } from '../db';
+import { type PlanFeature } from '../config/planFeatures';
+import { getTenantPlanContext } from './tenantPlan';
+import { getCommercialInsightsSnapshot } from './commercialInsightsService';
 
 const TZ = 'America/Sao_Paulo';
 const SYSTEM_ALERT_KEY_PREFIX = 'sys:';
@@ -140,6 +143,63 @@ function createAlert(input: Omit<DeterministicAlert, 'chave'> & { chave: string 
     ...input,
     chave: `${SYSTEM_ALERT_KEY_PREFIX}${input.chave}`,
   };
+}
+
+function pctChange(current: number, baseline: number): number | null {
+  const c = Number(current);
+  const b = Number(baseline);
+  if (!Number.isFinite(c) || !Number.isFinite(b)) return null;
+  if (b <= 0) return null;
+  return ((c - b) / b) * 100;
+}
+
+async function buildCommercialAlerts(tenantId: number, features: PlanFeature[]): Promise<DeterministicAlert[]> {
+  const snapshot = await getCommercialInsightsSnapshot({ tenantId, features });
+  const m = snapshot.meta;
+
+  const deltaPct = pctChange(m.faturamentoHoje, m.faturamentoOntem);
+  const ticketDelta = m.ticketMedioHoje - m.ticketMedioOntem;
+
+  const severityKind =
+    deltaPct !== null && deltaPct <= -12 ? 'atencao' : deltaPct !== null && deltaPct <= -5 ? 'alerta' : deltaPct !== null && deltaPct >= 10 ? 'parabens' : 'oportunidade';
+  const prioridade: AlertPriority =
+    severityKind === 'atencao' ? 3 : severityKind === 'alerta' ? 2 : 1;
+
+  const headlineParts: string[] = [];
+  headlineParts.push(`Faturamento hoje: ${formatMoney(m.faturamentoHoje)}`);
+  if (deltaPct !== null) {
+    headlineParts.push(`${deltaPct >= 0 ? '+' : ''}${formatNumber(deltaPct)}% vs ontem`);
+  }
+
+  const pedidosDelta = m.pedidosHoje - m.pedidosOntem;
+  const pedidosPart = `Pedidos: ${m.pedidosHoje}${Number.isFinite(pedidosDelta) && pedidosDelta !== 0 ? ` (${pedidosDelta >= 0 ? '+' : ''}${pedidosDelta})` : ''}`;
+  headlineParts.push(pedidosPart);
+
+  headlineParts.push(`Ticket: ${formatMoney(m.ticketMedioHoje)}${Number.isFinite(ticketDelta) && Math.abs(ticketDelta) >= 0.01 ? ` (${ticketDelta >= 0 ? '+' : '-'}${formatMoney(Math.abs(ticketDelta))})` : ''}`);
+
+  if (m.produtoTopHoje?.name) {
+    headlineParts.push(`Top: ${m.produtoTopHoje.name}`);
+  }
+
+  const inativos15 = Number(m.clientesInativos15 || 0);
+  if (inativos15 > 0) {
+    headlineParts.push(`Inativos 15+d: ${inativos15}`);
+  }
+
+  const actionHint = snapshot.insights.find((i) => i.id === 'faturamento_vs_ontem')?.actionHint || null;
+  const mensagem = `${headlineParts.join(' • ')}${actionHint ? `\nAção: ${actionHint}` : ''}`;
+
+  return [
+    createAlert({
+      chave: `comercial:digest:${snapshot.date}`,
+      tipo: severityKind as AlertType,
+      prioridade,
+      titulo: 'Resumo comercial de hoje',
+      mensagem,
+      acao: 'Ver dashboard',
+      acao_rota: '/dashboard',
+    }),
+  ];
 }
 
 function getStuckThresholdMinutes(status: string) {
@@ -736,18 +796,29 @@ async function expireInactiveAlerts(tenantId: number, activeKeys: Set<string>) {
 }
 
 export async function refreshDeterministicAlerts(tenantId: number): Promise<RefreshDeterministicAlertsResult> {
-  const settled = await Promise.allSettled([
-    buildCashAlerts(tenantId),
-    buildOperationalAlerts(tenantId),
-    buildStockAlerts(tenantId),
-  ]);
+  const plan = await getTenantPlanContext(tenantId);
+  const features = plan.features;
+
+  const builders: Array<{
+    scope: string;
+    fn: () => Promise<DeterministicAlert[]>;
+  }> = [
+    { scope: 'comercial', fn: () => buildCommercialAlerts(tenantId, features) },
+  ];
+
+  if (features.includes('ai')) {
+    builders.push({ scope: 'caixa', fn: () => buildCashAlerts(tenantId) });
+    builders.push({ scope: 'operacao', fn: () => buildOperationalAlerts(tenantId) });
+    if (features.includes('estoque')) {
+      builders.push({ scope: 'estoque', fn: () => buildStockAlerts(tenantId) });
+    }
+  }
+
+  const settled = await Promise.allSettled(builders.map((b) => b.fn()));
 
   const alerts = settled.flatMap((result, index) => {
-    if (result.status === 'fulfilled') {
-      return result.value;
-    }
-
-    const scope = ['caixa', 'operacao', 'estoque'][index] || 'desconhecido';
+    if (result.status === 'fulfilled') return result.value;
+    const scope = builders[index]?.scope || 'desconhecido';
     console.error(`[alerts] falha ao gerar alertas de ${scope}:`, result.reason);
     return [];
   });

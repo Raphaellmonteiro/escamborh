@@ -1,6 +1,8 @@
 // src/routes/dashboard.ts
 import { Router, Request } from 'express';
 import { q1, qAll, qRun } from '../db';
+import { getTenantFeatures } from '../services/tenantPlan';
+import { getCommercialInsightsSnapshot } from '../services/commercialInsightsService';
 import { sendInternalError } from '../utils/internalServerError';
 
 const TZ = 'America/Sao_Paulo';
@@ -178,6 +180,17 @@ export function createCaixaRouter() {
 
 export function createDashboardRouter() {
   const router = Router();
+
+  router.get('/commercial-insights', async (req: Request, res) => {
+    try {
+      const tenantId = Number(req.tenantId);
+      const features = await getTenantFeatures(tenantId);
+      const snapshot = await getCommercialInsightsSnapshot({ tenantId, features });
+      res.json(snapshot);
+    } catch (e: any) {
+      sendInternalError(res, 'routes/dashboard/commercial-insights', e);
+    }
+  });
 
   router.get('/stats', async (req: Request, res) => {
     try {
