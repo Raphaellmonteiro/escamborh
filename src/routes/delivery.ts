@@ -20,6 +20,7 @@ import {
 import { parseAutomationFromDeliveryConfigJson } from '../services/automationConfig';
 import { validateDeliveryItems } from '../services/deliveryItemValidation';
 import { createPixPayment } from '../services/paymentsService';
+import { ensureItauWebhookRegistered, testItauAuthentication } from '../services/payments/providers';
 import { isKitchenDispatchFailure } from '../services/kitchenPrintDispatchService';
 import { runAutomatedKitchenPrintForOrder } from '../services/operationalAutomationService';
 import { revalidatePixPaymentByOrder } from '../services/pixPaymentRevalidationService';
@@ -106,6 +107,43 @@ function normalizePaymentProvider(value: unknown) {
   if (!normalized) return null;
   if (normalized === 'mercadopago') return 'mercado_pago';
   return normalized;
+}
+
+function normalizePublicBaseUrl(rawValue: unknown) {
+  const normalized = normalizeOptionalText(rawValue);
+  if (!normalized) return null;
+
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)
+    ? normalized
+    : `https://${normalized}`;
+
+  try {
+    const url = new URL(withProtocol);
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function resolvePublicBackendBaseUrl() {
+  const envCandidates = [
+    process.env.FLOWPDV_PUBLIC_URL,
+    process.env.PUBLIC_API_BASE_URL,
+    process.env.APP_URL,
+    process.env.BACKEND_URL,
+    process.env.RAILWAY_STATIC_URL,
+    process.env.RAILWAY_PUBLIC_DOMAIN,
+  ];
+
+  for (const candidate of envCandidates) {
+    const normalized = normalizePublicBaseUrl(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
 }
 
 type DeliveryOrderEventInput = {
@@ -812,6 +850,8 @@ export function createDeliveryRouter() {
 
       const provider = normalizePaymentProvider(merged.payment_provider);
       const accessToken = normalizeOptionalText(merged.access_token);
+      const apiKey = normalizeOptionalText(merged.api_key);
+      const pixKey = normalizeOptionalText(merged.pix_key);
 
       if (!provider) {
         return res.status(400).json({
@@ -822,24 +862,101 @@ export function createDeliveryRouter() {
         });
       }
 
-      if (provider !== 'mercado_pago') {
+      if (provider !== 'mercado_pago' && provider !== 'itau') {
         return res.status(400).json({
           success: false,
           mode: 'automatic',
           status: 'invalid',
           provider,
-          message: 'Provider ainda nao suportado neste fluxo. Use mercadopago para PIX automatico.',
+          message: 'Provider ainda nao suportado neste fluxo. Use mercado_pago ou itau.',
         });
       }
 
-      if (!accessToken) {
+      if (provider === 'mercado_pago') {
+        if (!accessToken) {
+          return res.status(400).json({
+            success: false,
+            mode: 'automatic',
+            status: 'invalid',
+            provider,
+            message: 'Access token ausente. Preencha o token do provider para continuar.',
+          });
+        }
+
+        return res.json({
+          success: true,
+          mode: 'automatic',
+          status: 'ready',
+          provider,
+          sandbox: Boolean(merged.provider_sandbox),
+          message: 'Configuracao pronta para teste em pedido PIX. Salve e gere um pedido para validar o fluxo automatico.',
+        });
+      }
+
+      // provider === 'itau'
+      if (!apiKey || !accessToken || !pixKey) {
         return res.status(400).json({
           success: false,
           mode: 'automatic',
           status: 'invalid',
           provider,
-          message: 'Access token ausente. Preencha o token do provider para continuar.',
+          message:
+            'Campos obrigatorios ausentes para Itaú: api_key (client_id), access_token (client_secret) e pix_key (chave Pix).',
         });
+      }
+
+      const sandbox = Boolean(merged.provider_sandbox);
+      const certPem = normalizeOptionalText(merged.itau_tls_cert_pem);
+      const keyPem = normalizeOptionalText(merged.itau_tls_key_pem);
+
+      if (!sandbox && (!certPem || !keyPem)) {
+        return res.status(400).json({
+          success: false,
+          mode: 'automatic',
+          status: 'invalid',
+          provider,
+          message:
+            'Produção Itaú exige mTLS: preencha itau_tls_cert_pem e itau_tls_key_pem (PEM ou caminho do arquivo).',
+        });
+      }
+
+      // Teste seguro: valida autenticação (token) e, se possível, registra webhook.
+      await testItauAuthentication({
+        clientId: apiKey,
+        clientSecret: accessToken,
+        pixKey,
+        sandbox,
+        apiBaseUrl: normalizeOptionalText(merged.itau_api_base_url),
+        tokenUrl: normalizeOptionalText(merged.itau_token_url),
+        tls: {
+          certPem,
+          keyPem,
+          caPem: normalizeOptionalText(merged.itau_tls_ca_pem),
+        },
+      });
+
+      const publicBaseUrl = resolvePublicBackendBaseUrl();
+      let webhookMessage: string | null = null;
+
+      if (publicBaseUrl) {
+        const webhookBaseUrl = `${publicBaseUrl}/api/webhooks/payments/itau`;
+        const webhookResult = await ensureItauWebhookRegistered({
+          config: {
+            clientId: apiKey,
+            clientSecret: accessToken,
+            pixKey,
+            sandbox,
+            apiBaseUrl: normalizeOptionalText(merged.itau_api_base_url),
+            tokenUrl: normalizeOptionalText(merged.itau_token_url),
+            tls: {
+              certPem,
+              keyPem,
+              caPem: normalizeOptionalText(merged.itau_tls_ca_pem),
+            },
+          },
+          webhookBaseUrl,
+        });
+        webhookMessage = webhookResult.message;
       }
 
       return res.json({
@@ -847,8 +964,10 @@ export function createDeliveryRouter() {
         mode: 'automatic',
         status: 'ready',
         provider,
-        sandbox: Boolean(merged.provider_sandbox),
-        message: 'Configuracao pronta para teste em pedido PIX. Salve e gere um pedido para validar o fluxo automatico.',
+        sandbox,
+        message: webhookMessage
+          ? `Configuracao Itaú validada. ${webhookMessage}`
+          : 'Configuracao Itaú validada (token OK). Defina FLOWPDV_PUBLIC_URL para registrar o webhook automaticamente.',
       });
     } catch (e: unknown) {
       sendInternalError(res, 'routes/delivery.pixTest', e);

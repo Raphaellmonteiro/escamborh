@@ -1,0 +1,400 @@
+warning: in the working copy of 'src/routes/webhooks.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/routes/webhooks/whatsappWebhook.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/services/evolutionClient.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/services/tenantWhatsAppConfigService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/services/whatsAppWebhookAuthService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/services/whatsappService.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/routes/webhooks.ts b/src/routes/webhooks.ts[m
+[1mindex a6e03bb..5541a40 100644[m
+[1m--- a/src/routes/webhooks.ts[m
+[1m+++ b/src/routes/webhooks.ts[m
+[36m@@ -41,6 +41,10 @@[m [mfunction getWhatsAppWebhookAuthPublicMessage(reason: string) {[m
+   return reason === 'invalid_tenant_id' ? 'Tenant invalido' : 'Webhook nao autorizado';[m
+ }[m
+ [m
+[32m+[m[32mfunction getRequestPath(req: Request) {[m
+[32m+[m[32m  return `${req.baseUrl}${req.path}`;[m
+[32m+[m[32m}[m
+[32m+[m
+ function forwardToCentralWhatsAppInbound([m
+   input: ForwardWhatsAppInboundInput[m
+ ) {[m
+[36m@@ -151,12 +155,13 @@[m [mexport function createWebhooksRouter() {[m
+       const authResult = await validateInboundWhatsAppWebhookAuth({[m
+         tenantId: req.params.tenantId,[m
+         headers: req.headers as Record<string, unknown>,[m
+[32m+[m[32m        query: req.query as Record<string, unknown>,[m
+         payload: req.body,[m
+       });[m
+ [m
+       if (!authResult.allowed) {[m
+         logInfo('webhooks.whatsappInbound.authRejected', {[m
+[31m-          path: req.originalUrl,[m
+[32m+[m[32m          path: getRequestPath(req),[m
+           method: req.method,[m
+           source: 'primary_route',[m
+           tenantId: req.params.tenantId,[m
+[36m@@ -176,7 +181,7 @@[m [mexport function createWebhooksRouter() {[m
+ [m
+       if (authResult.enforced) {[m
+         logInfo('webhooks.whatsappInbound.authValidated', {[m
+[31m-          path: req.originalUrl,[m
+[32m+[m[32m          path: getRequestPath(req),[m
+           method: req.method,[m
+           source: 'primary_route',[m
+           tenantId: req.params.tenantId,[m
+[36m@@ -189,7 +194,7 @@[m [mexport function createWebhooksRouter() {[m
+         });[m
+       } else {[m
+         logInfo('webhooks.whatsappInbound.authSkipped', {[m
+[31m-          path: req.originalUrl,[m
+[32m+[m[32m          path: getRequestPath(req),[m
+           method: req.method,[m
+           source: 'primary_route',[m
+           tenantId: req.params.tenantId,[m
+[36m@@ -206,13 +211,13 @@[m [mexport function createWebhooksRouter() {[m
+         tenantId: req.params.tenantId,[m
+         payload: req.body,[m
+         webhookEventName: req.params.eventName,[m
+[31m-        path: req.originalUrl,[m
+[32m+[m[32m        path: getRequestPath(req),[m
+         method: req.method,[m
+         source: 'primary_route',[m
+       });[m
+     })().catch((error) => {[m
+       logError('webhooks.whatsappInbound.auth', error, {[m
+[31m-        path: req.originalUrl,[m
+[32m+[m[32m        path: getRequestPath(req),[m
+         method: req.method,[m
+         source: 'primary_route',[m
+         tenantId: req.params.tenantId,[m
+[1mdiff --git a/src/routes/webhooks/whatsappWebhook.ts b/src/routes/webhooks/whatsappWebhook.ts[m
+[1mindex a32ac8b..380f31f 100644[m
+[1m--- a/src/routes/webhooks/whatsappWebhook.ts[m
+[1m+++ b/src/routes/webhooks/whatsappWebhook.ts[m
+[36m@@ -69,6 +69,10 @@[m [mfunction getWhatsAppWebhookAuthPublicMessage(reason: string) {[m
+   return reason === 'invalid_tenant_id' ? 'Tenant invalido' : 'Webhook nao autorizado';[m
+ }[m
+ [m
+[32m+[m[32mfunction getRequestPath(req: Request) {[m
+[32m+[m[32m  return `${req.baseUrl}${req.path}`;[m
+[32m+[m[32m}[m
+[32m+[m
+ export function createWhatsAppWebhookRouter([m
+   input: CreateWhatsAppWebhookRouterInput[m
+ ) {[m
+[36m@@ -92,12 +96,13 @@[m [mexport function createWhatsAppWebhookRouter([m
+         const authResult = await validateInboundWhatsAppWebhookAuth({[m
+           tenantId,[m
+           headers: req.headers as Record<string, unknown>,[m
+[32m+[m[32m          query: req.query as Record<string, unknown>,[m
+           payload,[m
+         });[m
+ [m
+         if (!authResult.allowed) {[m
+           logInfo('webhooks.whatsapp.legacyAdapter.authRejected', {[m
+[31m-            path: req.originalUrl,[m
+[32m+[m[32m            path: getRequestPath(req),[m
+             method: req.method,[m
+             instance,[m
+             tenantId,[m
+[36m@@ -116,7 +121,7 @@[m [mexport function createWhatsAppWebhookRouter([m
+ [m
+         if (authResult.enforced) {[m
+           logInfo('webhooks.whatsapp.legacyAdapter.authValidated', {[m
+[31m-            path: req.originalUrl,[m
+[32m+[m[32m            path: getRequestPath(req),[m
+             method: req.method,[m
+             instance,[m
+             tenantId,[m
+[36m@@ -127,7 +132,7 @@[m [mexport function createWhatsAppWebhookRouter([m
+           });[m
+         } else {[m
+           logInfo('webhooks.whatsapp.legacyAdapter.authSkipped', {[m
+[31m-            path: req.originalUrl,[m
+[32m+[m[32m            path: getRequestPath(req),[m
+             method: req.method,[m
+             instance,[m
+             tenantId,[m
+[36m@@ -138,7 +143,7 @@[m [mexport function createWhatsAppWebhookRouter([m
+         }[m
+       } else {[m
+         logInfo('webhooks.whatsapp.legacyAdapter.authSkipped', {[m
+[31m-          path: req.originalUrl,[m
+[32m+[m[32m          path: getRequestPath(req),[m
+           method: req.method,[m
+           instance,[m
+           tenantId: null,[m
+[36m@@ -151,7 +156,7 @@[m [mexport function createWhatsAppWebhookRouter([m
+       res.status(200).json({ received: true });[m
+ [m
+       logInfo('webhooks.whatsapp.legacyAdapter.delegated', {[m
+[31m-        path: req.originalUrl,[m
+[32m+[m[32m        path: getRequestPath(req),[m
+         method: req.method,[m
+         instance,[m
+         tenantId: tenantId ?? null,[m
+[36m@@ -163,7 +168,7 @@[m [mexport function createWhatsAppWebhookRouter([m
+         tenantId: tenantId ?? '',[m
+         payload,[m
+         webhookEventName: eventType,[m
+[31m-        path: req.originalUrl,[m
+[32m+[m[32m        path: getRequestPath(req),[m
+         method: req.method,[m
+         instance,[m
+       });[m
+[1mdiff --git a/src/services/evolutionClient.ts b/src/services/evolutionClient.ts[m
+[1mindex 496f5a6..a79fa14 100644[m
+[1m--- a/src/services/evolutionClient.ts[m
+[1m+++ b/src/services/evolutionClient.ts[m
+[36m@@ -16,6 +16,14 @@[m [mtype SendTextPayload = {[m
+   text: string;[m
+ };[m
+ [m
+[32m+[m[32mexport type SetWebhookPayload = {[m
+[32m+[m[32m  enabled: boolean;[m
+[32m+[m[32m  url: string;[m
+[32m+[m[32m  webhookByEvents: boolean;[m
+[32m+[m[32m  webhookBase64: boolean;[m
+[32m+[m[32m  events: string[];[m
+[32m+[m[32m};[m
+[32m+[m
+ export type EvolutionApiClientConfig = {[m
+   baseUrl?: string | null;[m
+   apiKey?: string | null;[m
+[36m@@ -161,6 +169,24 @@[m [mexport async function getConnectionState<TData = EvolutionApiData>([m
+   );[m
+ }[m
+ [m
+[32m+[m[32mexport async function setWebhook<TData = EvolutionApiData>([m
+[32m+[m[32m  instanceName: string,[m
+[32m+[m[32m  payload: SetWebhookPayload,[m
+[32m+[m[32m  config?: EvolutionApiClientConfig[m
+[32m+[m[32m) {[m
+[32m+[m[32m  const client = createEvolutionApiClient(config);[m
+[32m+[m[32m  const normalizedInstanceName = normalizeRequiredText(instanceName, 'instanceName');[m
+[32m+[m
+[32m+[m[32m  return requestEvolutionApi([m
+[32m+[m[32m    () =>[m
+[32m+[m[32m      client.post<TData>([m
+[32m+[m[32m        `/webhook/set/${encodeURIComponent(normalizedInstanceName)}`,[m
+[32m+[m[32m        payload[m
+[32m+[m[32m      ),[m
+[32m+[m[32m    'Erro ao configurar webhook na Evolution API'[m
+[32m+[m[32m  );[m
+[32m+[m[32m}[m
+[32m+[m
+ export async function sendText<TData = EvolutionApiData>([m
+   instanceName: string,[m
+   number: string,[m
+[1mdiff --git a/src/services/tenantWhatsAppConfigService.ts b/src/services/tenantWhatsAppConfigService.ts[m
+[1mindex c5552ac..4100991 100644[m
+[1m--- a/src/services/tenantWhatsAppConfigService.ts[m
+[1m+++ b/src/services/tenantWhatsAppConfigService.ts[m
+[36m@@ -26,6 +26,7 @@[m [mexport type TenantWhatsAppConnectionConfig = {[m
+   providerConfigJson: string | null;[m
+   baseUrl: string | null;[m
+   apiKey: string | null;[m
+[32m+[m[32m  webhookSecret?: string | null;[m
+   instanceName: string | null;[m
+   whatsappNumber: string | null;[m
+   channelIdentifier: string | null;[m
+[36m@@ -232,6 +233,17 @@[m [mfunction mapTenantRowToConnectionConfig([m
+     providerConfigJson,[m
+     baseUrl: getConfigValueText(providerConfig, ['base_url', 'baseUrl', 'url', 'api_url']),[m
+     apiKey: getConfigValueText(providerConfig, ['apikey', 'api_key', 'apiKey', 'token']),[m
+[32m+[m[32m    webhookSecret: getConfigValueText(providerConfig, [[m
+[32m+[m[32m      'webhook_secret',[m
+[32m+[m[32m      'webhookSecret',[m
+[32m+[m[32m      'inbound_webhook_secret',[m
+[32m+[m[32m      'inboundWebhookSecret',[m
+[32m+[m[32m      'verify_token',[m
+[32m+[m[32m      'verifyToken',[m
+[32m+[m[32m      'signature_secret',[m
+[32m+[m[32m      'signatureSecret',[m
+[32m+[m[32m      'secret',[m
+[32m+[m[32m    ]),[m
+     instanceName,[m
+     whatsappNumber,[m
+     channelIdentifier,[m
+[36m@@ -357,6 +369,7 @@[m [mfunction mergeConnectionConfigWithLegacyTransport([m
+     providerConfigJson,[m
+     baseUrl,[m
+     apiKey,[m
+[32m+[m[32m    webhookSecret: current?.webhookSecret ?? null,[m
+     instanceName,[m
+     whatsappNumber,[m
+     channelIdentifier,[m
+[36m@@ -417,6 +430,7 @@[m [mfunction mergeConnectionConfigWithInstanceRecord([m
+     ...current,[m
+     provider,[m
+     providerConfigJson,[m
+[32m+[m[32m    webhookSecret: current.webhookSecret ?? null,[m
+     instanceName,[m
+     channelIdentifier,[m
+   };[m
+[36m@@ -461,6 +475,7 @@[m [mfunction applyRuntimeEvolutionConnectionFallback([m
+     providerConfigJson,[m
+     baseUrl,[m
+     apiKey,[m
+[32m+[m[32m    webhookSecret: config.webhookSecret ?? null,[m
+     channelIdentifier,[m
+   };[m
+ }[m
+[36m@@ -587,6 +602,7 @@[m [mexport async function persistTenantWhatsAppInstanceName([m
+         : current?.providerConfigJson ?? null,[m
+     baseUrl,[m
+     apiKey,[m
+[32m+[m[32m    webhookSecret: current?.webhookSecret ?? null,[m
+     instanceName: normalizedInstanceName,[m
+     whatsappNumber: current?.whatsappNumber ?? null,[m
+     channelIdentifier,[m
+[1mdiff --git a/src/services/whatsAppWebhookAuthService.ts b/src/services/whatsAppWebhookAuthService.ts[m
+[1mindex 3e24747..d76889c 100644[m
+[1m--- a/src/services/whatsAppWebhookAuthService.ts[m
+[1m+++ b/src/services/whatsAppWebhookAuthService.ts[m
+[36m@@ -42,6 +42,7 @@[m [mexport type WhatsAppWebhookAuthResult = {[m
+ type EvaluateWhatsAppWebhookAuthInput = {[m
+   config: TenantWhatsAppWebhookAuthConfig | null;[m
+   headers?: Record<string, unknown> | null;[m
+[32m+[m[32m  query?: Record<string, unknown> | null;[m
+   payload?: unknown;[m
+ };[m
+ [m
+[36m@@ -72,6 +73,19 @@[m [mconst PAYLOAD_SECRET_KEYS = [[m
+   'secret',[m
+ ] as const;[m
+ [m
+[32m+[m[32mconst QUERY_SECRET_KEYS = [[m
+[32m+[m[32m  'apikey',[m
+[32m+[m[32m  'api_key',[m
+[32m+[m[32m  'apiKey',[m
+[32m+[m[32m  'token',[m
+[32m+[m[32m  'webhook_secret',[m
+[32m+[m[32m  'webhookSecret',[m
+[32m+[m[32m  'verify_token',[m
+[32m+[m[32m  'verifyToken',[m
+[32m+[m[32m  'signature',[m
+[32m+[m[32m  'secret',[m
+[32m+[m[32m] as const;[m
+[32m+[m
+ const HEADER_SECRET_CANDIDATES = [[m
+   { header: 'apikey', source: 'header.apikey' },[m
+   { header: 'x-api-key', source: 'header.x-api-key' },[m
+[36m@@ -260,6 +274,40 @@[m [mfunction extractHeaderSecretCandidates(headers?: Record<string, unknown> | null)[m
+   return dedupeCandidates(candidates);[m
+ }[m
+ [m
+[32m+[m[32mfunction extractQuerySecretCandidates(query?: Record<string, unknown> | null) {[m
+[32m+[m[32m  if (!query) return [] as SecretCandidate[];[m
+[32m+[m
+[32m+[m[32m  const candidates: SecretCandidate[] = [];[m
+[32m+[m
+[32m+[m[32m  for (const key of QUERY_SECRET_KEYS) {[m
+[32m+[m[32m    const value = normalizeHeaderValue(query[key]);[m
+[32m+[m[32m    if (value) {[m
+[32m+[m[32m      candidates.push({[m
+[32m+[m[32m        source: `query.${key}`,[m
+[32m+[m[32m        value,[m
+[32m+[m[32m      });[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  const authorization = normalizeHeaderValue(query.authorization);[m
+[32m+[m[32m  if (authorization) {[m
+[32m+[m[32m    candidates.push({[m
+[32m+[m[32m      source: 'query.authorization',[m
+[32m+[m[32m      value: authorization,[m
+[32m+[m[32m    });[m
+[32m+[m
+[32m+[m[32m    const bearer = stripBearerPrefix(authorization);[m
+[32m+[m[32m    if (bearer) {[m
+[32m+[m[32m      candidates.push({[m
+[32m+[m[32m        source: 'query.authorization_bearer',[m
+[32m+[m[32m        value: bearer,[m
+[32m+[m[32m      });[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  return dedupeCandidates(candidates);[m
+[32m+[m[32m}[m
+[32m+[m
+ function resolveExpectedSecretCandidates(config: TenantWhatsAppWebhookAuthConfig) {[m
+   const providerConfig = parseProviderConfigJson(config.providerConfigJson);[m
+   const candidates: SecretCandidate[] = [];[m
+[36m@@ -336,6 +384,7 @@[m [mexport function evaluateWhatsAppInboundWebhookAuth([m
+ [m
+   const incomingSecrets = dedupeCandidates([[m
+     ...extractHeaderSecretCandidates(input.headers),[m
+[32m+[m[32m    ...extractQuerySecretCandidates(input.query),[m
+     ...extractPayloadSecretCandidates(input.payload),[m
+   ]);[m
+ [m
+[36m@@ -386,6 +435,7 @@[m [mexport function evaluateWhatsAppInboundWebhookAuth([m
+ export async function validateInboundWhatsAppWebhookAuth(input: {[m
+   tenantId: number | string;[m
+   headers?: Record<string, unknown> | null;[m
+[32m+[m[32m  query?: Record<string, unknown> | null;[m
+   payload?: unknown;[m
+ }): Promise<WhatsAppWebhookAuthResult> {[m
+   const normalizedTenantId = parsePositiveInt(input.tenantId);[m
+[36m@@ -420,6 +470,7 @@[m [mexport async function validateInboundWhatsAppWebhookAuth(input: {[m
+   return evaluateWhatsAppInboundWebhookAuth({[m
+     config,[m
+     headers: input.headers,[m
+[32m+[m[32m    query: input.query,[m
+     payload: input.payload,[m
+   });[m
+ }[m
+[1mdiff --git a/src/services/whatsappService.ts b/src/services/whatsappService.ts[m
+[1mindex d94f224..bfa209d 100644[m
+[1m--- a/src/services/whatsappService.ts[m
+[1m+++ b/src/services/whatsappService.ts[m
+[36m@@ -1,9 +1,11 @@[m
+ import { AppError } from '../utils/errors';[m
+[32m+[m[32mimport { logError, logInfo } from '../utils/logger';[m
+ import {[m
+   createInstance as createEvolutionInstance,[m
+   connectInstance,[m
+   getConnectionState,[m
+   sendText,[m
+[32m+[m[32m  setWebhook,[m
+   type EvolutionApiClientConfig,[m
+   type EvolutionApiResponse,[m
+ } from './evolutionClient';[m
+[36m@@ -73,6 +75,14 @@[m [mtype TenantConnectionContext = {[m
+   evolutionClientConfig?: EvolutionApiClientConfig;[m
+ };[m
+ [m
+[32m+[m[32mtype EvolutionInboundWebhookConfig = {[m
+[32m+[m[32m  url: string;[m
+[32m+[m[32m  logSafeUrl: string;[m
+[32m+[m[32m  authMode: 'none' | 'query.apikey';[m
+[32m+[m[32m};[m
+[32m+[m
+[32m+[m[32mconst EVOLUTION_INBOUND_WEBHOOK_EVENTS = ['MESSAGES_UPSERT'];[m
+[32m+[m
+ function normalizeTenantId(value: TenantId) {[m
+   const parsed = Number(value);[m
+ [m
+[36m@@ -201,6 +211,49 @@[m [mfunction buildTenantInstanceName(tenantId: number) {[m
+   return `tenant_${tenantId}_whatsapp`;[m
+ }[m
+ [m
+[32m+[m[32mfunction resolvePublicBaseUrl() {[m
+[32m+[m[32m  const explicit =[m
+[32m+[m[32m    toNonEmptyString(process.env.FLOWPDV_PUBLIC_URL) ||[m
+[32m+[m[32m    toNonEmptyString(process.env.RAILWAY_PUBLIC_DOMAIN);[m
+[32m+[m
+[32m+[m[32m  if (explicit) {[m
+[32m+[m[32m    const withProtocol = /^https?:\/\//i.test(explicit) ? explicit : `https://${explicit}`;[m
+[32m+[m[32m    return withProtocol.replace(/\/+$/, '');[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  const fromAllowedOrigins = String(process.env.ALLOWED_ORIGINS || '')[m
+[32m+[m[32m    .split(',')[m
+[32m+[m[32m    .map((item) => toNonEmptyString(item))[m
+[32m+[m[32m    .find((item) => item);[m
+[32m+[m
+[32m+[m[32m  if (fromAllowedOrigins) {[m
+[32m+[m[32m    return fromAllowedOrigins.replace(/\/+

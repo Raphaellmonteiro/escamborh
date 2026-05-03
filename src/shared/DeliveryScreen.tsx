@@ -60,6 +60,11 @@ interface DeliveryConfig {
   webhook_secret?: string;
   pix_key?: string;
   provider_sandbox?: boolean;
+  itau_tls_cert_pem?: string;
+  itau_tls_key_pem?: string;
+  itau_tls_ca_pem?: string;
+  itau_api_base_url?: string;
+  itau_token_url?: string;
   modelo_entrega?: 'bairro_fixo';
   bairros_atendidos?: string; valor_por_entrega?: number;
   zonas_entrega?: Array<{ nome: string; taxa: number }>;
@@ -2451,8 +2456,16 @@ export function DeliveryConfigPanel({
   }, [
     cfg.provider_enabled,
     cfg.payment_provider,
+    cfg.api_key,
     cfg.access_token,
+    cfg.webhook_secret,
+    cfg.pix_key,
     cfg.provider_sandbox,
+    cfg.itau_tls_cert_pem,
+    cfg.itau_tls_key_pem,
+    cfg.itau_tls_ca_pem,
+    cfg.itau_api_base_url,
+    cfg.itau_token_url,
     cfg.pix_chave,
     cfg.pix_payload_estatico,
     cfg.pix_nome,
@@ -2491,6 +2504,11 @@ export function DeliveryConfigPanel({
           webhook_secret: cfg.webhook_secret,
           pix_key: cfg.pix_key,
           provider_sandbox: cfg.provider_sandbox,
+          itau_tls_cert_pem: cfg.itau_tls_cert_pem,
+          itau_tls_key_pem: cfg.itau_tls_key_pem,
+          itau_tls_ca_pem: cfg.itau_tls_ca_pem,
+          itau_api_base_url: cfg.itau_api_base_url,
+          itau_token_url: cfg.itau_token_url,
           pix_chave: cfg.pix_chave,
           pix_payload_estatico: cfg.pix_payload_estatico,
         }),
@@ -2598,10 +2616,13 @@ export function DeliveryConfigPanel({
   const providerSupported =
     !normalizedPaymentProvider ||
     normalizedPaymentProvider === 'mercado_pago' ||
-    normalizedPaymentProvider === 'mercadopago';
+    normalizedPaymentProvider === 'mercadopago' ||
+    normalizedPaymentProvider === 'itau';
   const providerLabel =
     normalizedPaymentProvider === 'mercado_pago' || normalizedPaymentProvider === 'mercadopago'
       ? 'Mercado Pago'
+      : normalizedPaymentProvider === 'itau'
+        ? 'Itaú'
       : (cfg.payment_provider || 'Nao definido');
   const manualPixConfigured = Boolean(
     String(cfg.pix_payload_estatico || '').trim() ||
@@ -2610,7 +2631,17 @@ export function DeliveryConfigPanel({
   const automaticMissingFields: string[] = [];
   if (isAutomaticPix) {
     if (!normalizedPaymentProvider) automaticMissingFields.push('provider');
-    if (!String(cfg.access_token || '').trim()) automaticMissingFields.push('access token');
+    if (normalizedPaymentProvider === 'mercado_pago' || normalizedPaymentProvider === 'mercadopago') {
+      if (!String(cfg.access_token || '').trim()) automaticMissingFields.push('access token');
+    } else if (normalizedPaymentProvider === 'itau') {
+      if (!String(cfg.api_key || '').trim()) automaticMissingFields.push('api_key (client_id)');
+      if (!String(cfg.access_token || '').trim()) automaticMissingFields.push('access_token (client_secret)');
+      if (!String(cfg.pix_key || '').trim()) automaticMissingFields.push('pix_key (chave Pix)');
+      if (!cfg.provider_sandbox) {
+        if (!String(cfg.itau_tls_cert_pem || '').trim()) automaticMissingFields.push('itau_tls_cert_pem');
+        if (!String(cfg.itau_tls_key_pem || '').trim()) automaticMissingFields.push('itau_tls_key_pem');
+      }
+    }
   }
 
   let pixStatusVariant: 'success' | 'warning' | 'error' | 'info' = 'info';
@@ -2623,7 +2654,7 @@ export function DeliveryConfigPanel({
     if (!providerSupported) {
       pixStatusVariant = 'error';
       pixStatusLabel = 'Provider nao suportado';
-      pixStatusDescription = 'Este modo automatico aceita apenas Mercado Pago neste fluxo atual.';
+      pixStatusDescription = 'Este modo automatico aceita Mercado Pago ou Itaú (por tenant).';
     } else if (automaticMissingFields.length > 0) {
       pixStatusVariant = 'warning';
       pixStatusLabel = 'Integracao incompleta';
@@ -3020,11 +3051,103 @@ export function DeliveryConfigPanel({
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Field label="Provider" value={cfg.payment_provider||''} onChange={v=>setCfg(c=>({...c,payment_provider:v}))} placeholder="mercadopago"/>
-                    <Field label="pix_key" value={cfg.pix_key||''} onChange={v=>setCfg(c=>({...c,pix_key:v}))} placeholder="Chave PIX do provider"/>
-                    <Field label="api_key" value={cfg.api_key||''} onChange={v=>setCfg(c=>({...c,api_key:v}))} type="password" placeholder="Opcional"/>
-                    <Field label="Access token" value={cfg.access_token||''} onChange={v=>setCfg(c=>({...c,access_token:v}))} type="password" placeholder="Obrigatório para Mercado Pago"/>
-                    <Field label="webhook_secret" value={cfg.webhook_secret||''} onChange={v=>setCfg(c=>({...c,webhook_secret:v}))} type="password" placeholder="Opcional"/>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Provider</label>
+                      <select
+                        value={
+                          normalizedPaymentProvider === 'mercadopago'
+                            ? 'mercado_pago'
+                            : normalizedPaymentProvider || ''
+                        }
+                        onChange={(e) =>
+                          setCfg((c) => ({
+                            ...c,
+                            payment_provider: e.target.value || '',
+                          }))
+                        }
+                        className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"
+                      >
+                        <option value="">Selecione</option>
+                        <option value="mercado_pago">Mercado Pago</option>
+                        <option value="itau">Itaú</option>
+                      </select>
+                      <p className="text-[10px] text-zinc-400 mt-1 leading-snug">
+                        Mercado Pago permanece inalterado; Itaú só impacta tenants com provider=itau.
+                      </p>
+                    </div>
+                    <Field
+                      label={normalizedPaymentProvider === 'itau' ? 'pix_key (chave Pix)' : 'pix_key'}
+                      value={cfg.pix_key||''}
+                      onChange={v=>setCfg(c=>({...c,pix_key:v}))}
+                      placeholder={normalizedPaymentProvider === 'itau' ? 'Chave Pix (DICT) do recebedor' : 'Chave PIX do provider'}
+                    />
+                    <Field
+                      label={normalizedPaymentProvider === 'itau' ? 'api_key (client_id)' : 'api_key'}
+                      value={cfg.api_key||''}
+                      onChange={v=>setCfg(c=>({...c,api_key:v}))}
+                      type="password"
+                      placeholder={normalizedPaymentProvider === 'itau' ? 'Client ID do Itaú' : 'Opcional'}
+                    />
+                    <Field
+                      label={normalizedPaymentProvider === 'itau' ? 'access_token (client_secret)' : 'Access token'}
+                      value={cfg.access_token||''}
+                      onChange={v=>setCfg(c=>({...c,access_token:v}))}
+                      type="password"
+                      placeholder={normalizedPaymentProvider === 'itau' ? 'Client Secret do Itaú' : 'Obrigatório para Mercado Pago'}
+                    />
+                    <Field
+                      label={normalizedPaymentProvider === 'itau' ? 'webhook_secret (opcional)' : 'webhook_secret'}
+                      value={cfg.webhook_secret||''}
+                      onChange={v=>setCfg(c=>({...c,webhook_secret:v}))}
+                      type="password"
+                      placeholder="Opcional"
+                    />
+                    {normalizedPaymentProvider === 'itau' && !cfg.provider_sandbox && (
+                      <>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">itau_tls_cert_pem (produção)</label>
+                          <textarea
+                            value={cfg.itau_tls_cert_pem||''}
+                            onChange={e=>setCfg(c=>({...c,itau_tls_cert_pem:e.target.value}))}
+                            placeholder="Cole o certificado PEM ou informe o caminho do arquivo (.pem/.crt)"
+                            rows={3}
+                            className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary resize-none"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">itau_tls_key_pem (produção)</label>
+                          <textarea
+                            value={cfg.itau_tls_key_pem||''}
+                            onChange={e=>setCfg(c=>({...c,itau_tls_key_pem:e.target.value}))}
+                            placeholder="Cole a chave privada PEM ou informe o caminho do arquivo (.pem/.key)"
+                            rows={3}
+                            className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary resize-none"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">itau_tls_ca_pem (opcional)</label>
+                          <textarea
+                            value={cfg.itau_tls_ca_pem||''}
+                            onChange={e=>setCfg(c=>({...c,itau_tls_ca_pem:e.target.value}))}
+                            placeholder="Opcional (CA chain). Cole o PEM ou informe caminho do arquivo."
+                            rows={2}
+                            className="w-full px-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary resize-none"
+                          />
+                        </div>
+                        <Field
+                          label="itau_api_base_url (opcional)"
+                          value={cfg.itau_api_base_url||''}
+                          onChange={v=>setCfg(c=>({...c,itau_api_base_url:v}))}
+                          placeholder="Override do base URL da API Pix Recebimentos"
+                        />
+                        <Field
+                          label="itau_token_url (opcional)"
+                          value={cfg.itau_token_url||''}
+                          onChange={v=>setCfg(c=>({...c,itau_token_url:v}))}
+                          placeholder="Override do token URL (OAuth2)"
+                        />
+                      </>
+                    )}
                     <div>
                       <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Ambiente</label>
                       <select

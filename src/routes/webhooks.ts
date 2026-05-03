@@ -3,6 +3,7 @@ import {
   MercadoPagoWebhookSecurityError,
   processMercadoPagoPaymentWebhook,
 } from '../services/paymentWebhooksService';
+import { processItauPixWebhook } from '../services/itauPaymentWebhooksService';
 import { registerInboundWhatsAppMessages } from '../services/whatsAppInboundService';
 import { validateInboundWhatsAppWebhookAuth } from '../services/whatsAppWebhookAuthService';
 import { logError, logInfo } from '../utils/logger';
@@ -164,6 +165,26 @@ export function createWebhooksRouter() {
       }
     }
   );
+
+  // Webhook Itaú (Pix Recebimentos): o Itaú envia eventos no sufixo /pix do webhook cadastrado.
+  router.post('/payments/itau/pix', async (req, res) => {
+    try {
+      const result = await processItauPixWebhook({
+        payload: req.body,
+        path: req.originalUrl,
+        method: req.method,
+      });
+
+      logInfo('webhooks.itauPix.result', result);
+      return res.status(200).json({ received: true });
+    } catch (error) {
+      logError('webhooks.itauPix', error, {
+        path: req.originalUrl,
+        method: req.method,
+      });
+      return res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  });
 
   // Ponto central do inbound de WhatsApp no FlowPDV.
   // Trilha principal: Evolution webhook -> /api/webhooks/whatsapp/inbound/:tenantId/:eventName? -> registerInboundWhatsAppMessages()

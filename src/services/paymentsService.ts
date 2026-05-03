@@ -9,6 +9,7 @@ import { AppError } from '../utils/errors';
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import {
   createMercadoPagoPixPayment,
+  createItauPixPayment,
   type CreatePixProviderPaymentResult,
 } from './payments/providers';
 import { getTenantPixConfig } from './tenantPixConfigService';
@@ -41,8 +42,15 @@ type TenantPaymentConfigRow = {
 type TenantPaymentProviderConfig = {
   enabled: boolean;
   provider: PaymentProvider | null;
+  apiKey: string | null;
   accessToken: string | null;
   webhookSecret: string | null;
+  pixKey: string | null;
+  itauTlsCertPem: string | null;
+  itauTlsKeyPem: string | null;
+  itauTlsCaPem: string | null;
+  itauApiBaseUrl: string | null;
+  itauTokenUrl: string | null;
   sandbox: boolean;
 };
 
@@ -190,8 +198,15 @@ export async function getTenantPaymentProviderConfig(
   return {
     enabled: Boolean(config.provider_enabled),
     provider: normalizeProviderName(config.payment_provider),
+    apiKey: normalizeOptionalText(config.api_key),
     accessToken: normalizeOptionalText(config.access_token),
     webhookSecret: normalizeOptionalText(config.webhook_secret),
+    pixKey: normalizeOptionalText(config.pix_key),
+    itauTlsCertPem: normalizeOptionalText(config.itau_tls_cert_pem),
+    itauTlsKeyPem: normalizeOptionalText(config.itau_tls_key_pem),
+    itauTlsCaPem: normalizeOptionalText(config.itau_tls_ca_pem),
+    itauApiBaseUrl: normalizeOptionalText(config.itau_api_base_url),
+    itauTokenUrl: normalizeOptionalText(config.itau_token_url),
     sandbox: Boolean(config.provider_sandbox),
   };
 }
@@ -459,6 +474,32 @@ export async function createPixPayment(
       sandbox: providerConfig.sandbox,
       expiresAt: normalizeOptionalText(input.expires_at),
       idempotencyKey: normalizeOptionalText(input.idempotency_key),
+    });
+  } else if (providerConfig.provider === 'itau') {
+    providerResult = await createItauPixPayment({
+      tenantId,
+      orderId,
+      amount,
+      externalReference:
+        normalizeOptionalText(input.external_reference) || `pedido-${tenantId}-${orderId}`,
+      description:
+        normalizeOptionalText(input.description) || `Pedido #${orderId} - FlowPDV`,
+      payerName: normalizeOptionalText(input.customer_name),
+      expiresAt: normalizeOptionalText(input.expires_at),
+      idempotencyKey: normalizeOptionalText(input.idempotency_key),
+      config: {
+        clientId: providerConfig.apiKey,
+        clientSecret: providerConfig.accessToken,
+        pixKey: providerConfig.pixKey,
+        sandbox: providerConfig.sandbox,
+        apiBaseUrl: providerConfig.itauApiBaseUrl,
+        tokenUrl: providerConfig.itauTokenUrl,
+        tls: {
+          certPem: providerConfig.itauTlsCertPem,
+          keyPem: providerConfig.itauTlsKeyPem,
+          caPem: providerConfig.itauTlsCaPem,
+        },
+      },
     });
   } else {
     throw new AppError(`Provider de pagamento nao suportado: ${providerConfig.provider}`, 400);

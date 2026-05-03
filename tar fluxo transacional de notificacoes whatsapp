@@ -1,0 +1,673 @@
+warning: in the working copy of 'src/routes/delivery-public.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/routes/delivery.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/services/whatsAppEventsService.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/routes/delivery-public.ts b/src/routes/delivery-public.ts[m
+[1mindex 278b13e..6e2b91e 100644[m
+[1m--- a/src/routes/delivery-public.ts[m
+[1m+++ b/src/routes/delivery-public.ts[m
+[36m@@ -392,6 +392,31 @@[m [mfunction normalizeDiasFolgaEntrega(raw: unknown): number[] {[m
+   return Array.from(out).sort((a, b) => a - b);[m
+ }[m
+ [m
+[32m+[m[32m/** Normaliza método de pagamento (trim + lower + NFD sem diacríticos). */[m
+[32m+[m[32mfunction normalizePaymentMethodKey(value: unknown): string {[m
+[32m+[m[32m  return String(value ?? '')[m
+[32m+[m[32m    .trim()[m
+[32m+[m[32m    .toLowerCase()[m
+[32m+[m[32m    .normalize('NFD')[m
+[32m+[m[32m    .replace(/\p{M}/gu, '');[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mtype CanonicalPaymentMethod = 'dinheiro' | 'pix' | 'cartao' | 'debito' | 'credito';[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * Normaliza variações do checkout público para chaves canônicas persistidas.[m
+[32m+[m[32m * - `cartao_credito` / `cartao_debito` → `cartao` (checkout público não discrimina no fluxo operacional)[m
+[32m+[m[32m */[m
+[32m+[m[32mfunction normalizeDeliveryPublicPaymentMethod(value: unknown): CanonicalPaymentMethod | null {[m
+[32m+[m[32m  const k = normalizePaymentMethodKey(value);[m
+[32m+[m[32m  if (k === 'pix') return 'pix';[m
+[32m+[m[32m  if (k === 'dinheiro') return 'dinheiro';[m
+[32m+[m[32m  if (k === 'cartao' || k === 'cartao_credito' || k === 'cartao_debito') return 'cartao';[m
+[32m+[m[32m  if (k === 'debito') return 'debito';[m
+[32m+[m[32m  if (k === 'credito') return 'credito';[m
+[32m+[m[32m  return null;[m
+[32m+[m[32m}[m
+[32m+[m
+ /** Horário de funcionamento (se cadastrado) e dias recorrentes de folga no fuso `TZ`. */[m
+ function computeDeliveryCardapioAberto(dcfg: DeliveryConfig): { aberto: boolean; dia_folga_hoje: boolean } {[m
+   const diasFolga = normalizeDiasFolgaEntrega(dcfg.dias_folga_entrega);[m
+[36m@@ -860,7 +885,7 @@[m [masync function buildCheckoutSummary(params: {[m
+     enderecoId: params.enderecoId,[m
+   });[m
+   const { subtotal, itensValidados } = await validateDeliveryItems(params.tenantId, params.items);[m
+[31m-  const pagamentoTipo = String(params.pagamentoTipo || 'pix').trim().toLowerCase();[m
+[32m+[m[32m  const pagamentoTipo = normalizeDeliveryPublicPaymentMethod(params.pagamentoTipo);[m
+   const fee = await resolveDeliveryFee({[m
+     tenantId: params.tenantId,[m
+     clienteId,[m
+[36m@@ -1723,6 +1748,10 @@[m [mexport function createDeliveryPublicRouter() {[m
+       const d = String(dateObj.getDate()).padStart(2, '0');[m
+       const prefix = `D${y}${m}${d}`;[m
+ [m
+[32m+[m[32m      const pagamentoTipoCanon = normalizeDeliveryPublicPaymentMethod(pagamento_tipo);[m
+[32m+[m[32m      const pagamentoStatusInicial =[m
+[32m+[m[32m        pagamentoTipoCanon === 'pix' ? 'aguardando_confirmacao' : 'pendente';[m
+[32m+[m
+       const initialOrderStatus =[m
+         canalPedido === 'delivery' && automation.delivery_auto_accept_orders ? 'Pedido Recebido' : 'Criado';[m
+       const inventoryEnabled = await tenantHasInventoryFeature(tenant.id);[m
+[36m@@ -1759,8 +1788,8 @@[m [mexport function createDeliveryPublicRouter() {[m
+             cliente_nome || null,[m
+             String(cliente_tel || '').replace(/\D/g, '') || null,[m
+             enderecoFinal,[m
+[31m-            pagamento_tipo || 'pix',[m
+[31m-            pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente',[m
+[32m+[m[32m            pagamentoTipoCanon,[m
+[32m+[m[32m            pagamentoStatusInicial,[m
+             initialOrderStatus,[m
+             clienteId,[m
+             clienteId,[m
+[36m@@ -1839,13 +1868,16 @@[m [mexport function createDeliveryPublicRouter() {[m
+             tipo_retirada: tipoRetirada,[m
+             auto_accept:[m
+               canalPedido === 'delivery' && Boolean(automation.delivery_auto_accept_orders),[m
+[32m+[m[32m            pagamento_tipo_raw: pagamento_tipo ?? null,[m
+[32m+[m[32m            pagamento_tipo_normalized: pagamentoTipoCanon,[m
+[32m+[m[32m            pagamento_status_initial: pagamentoStatusInicial,[m
+           },[m
+         });[m
+ [m
+         return { orderId, orderNumber };[m
+       });[m
+ [m
+[31m-      const isPixPayment = String(pagamento_tipo || '').trim().toLowerCase() === 'pix';[m
+[32m+[m[32m      const isPixPayment = pagamentoTipoCanon === 'pix';[m
+       const hasStaticPixFallback = Boolean([m
+         String(dcfg.pix_payload_estatico || '').trim() || String(dcfg.pix_chave || '').trim()[m
+       );[m
+[36m@@ -1923,15 +1955,17 @@[m [mexport function createDeliveryPublicRouter() {[m
+         const detSuffix = det ? ` — ${det}` : '';[m
+         return `- ${item.quantity}x ${name}${detSuffix} - R$ ${(item.price_at_time * item.quantity).toFixed(2).replace('.', ',')}`;[m
+       }));[m
+[31m-      const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao' };[m
+[32m+[m[32m      const pagLabel: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartao', debito: 'Debito', credito: 'Credito' };[m
+[32m+[m[32m      const paymentLabelKey = pagamentoTipoCanon || normalizePaymentMethodKey(pagamento_tipo);[m
+[32m+[m[32m      const paymentLabel = pagLabel[paymentLabelKey] || String(pagamento_tipo ?? '').trim() || 'Pagamento';[m
+       const mapsUrl = canalPedido === 'delivery'[m
+         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(enderecoFinal || '')}`[m
+         : null;[m
+       const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });[m
+       const data = new Date().toLocaleDateString('pt-BR');[m
+       const msg = canalPedido === 'retirada'[m
+[31m-        ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`[m
+[31m-        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${pagLabel[pagamento_tipo] || pagamento_tipo}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;[m
+[32m+[m[32m        ? `NOVO PEDIDO RETIRADA #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\n\nITENS:\n${listaItens.join('\n')}\n\n${paymentLabel}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`[m
+[32m+[m[32m        : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${paymentLabel}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;[m
+       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;[m
+ [m
+       if (canalPedido === 'delivery' && automation.delivery_auto_accept_orders) {[m
+[36m@@ -1969,7 +2003,7 @@[m [mexport function createDeliveryPublicRouter() {[m
+         orderNumber: result.orderNumber,[m
+         total: totalFinal,[m
+         canal: canalPedido,[m
+[31m-        pagamento_status: String(pagamento_tipo || '').trim().toLowerCase() === 'pix' ? 'aguardando_confirmacao' : 'pendente',[m
+[32m+[m[32m        pagamento_status: pagamentoTipoCanon === 'pix' ? 'aguardando_confirmacao' : 'pendente',[m
+         waLink,[m
+         mapsUrl,[m
+         payment_pix: buildPublicPixPayment([m
+[1mdiff --git a/src/routes/delivery.ts b/src/routes/delivery.ts[m
+[1mindex cf2c05d..ce881af 100644[m
+[1m--- a/src/routes/delivery.ts[m
+[1m+++ b/src/routes/delivery.ts[m
+[36m@@ -153,6 +153,9 @@[m [mtype TenantWhatsAppConfigSyncRow = {[m
+   whatsapp_number?: string | null;[m
+   instance_name?: string | null;[m
+   channel_identifier?: string | null;[m
+[32m+[m[32m  auto_notify_order_accepted?: number | boolean | string | null;[m
+[32m+[m[32m  auto_notify_order_preparing?: number | boolean | string | null;[m
+[32m+[m[32m  auto_notify_order_out_for_delivery?: number | boolean | string | null;[m
+ };[m
+ [m
+ const DELIVERY_CONFIG_WHATSAPP_TRANSPORT_KEYS = [[m
+[36m@@ -348,6 +351,9 @@[m [mfunction buildTenantWhatsAppConfigState([m
+     evolutionInstance,[m
+     whatsappNumber,[m
+     channelIdentifier,[m
+[32m+[m[32m    autoNotifyOrderAccepted: toFlag(tenantWhatsAppConfig.auto_notify_order_accepted),[m
+[32m+[m[32m    autoNotifyOrderPreparing: toFlag(tenantWhatsAppConfig.auto_notify_order_preparing),[m
+[32m+[m[32m    autoNotifyOrderOutForDelivery: toFlag(tenantWhatsAppConfig.auto_notify_order_out_for_delivery),[m
+   };[m
+ }[m
+ [m
+[36m@@ -595,7 +601,10 @@[m [mexport function createDeliveryRouter() {[m
+                 provider_config_json,[m
+                 whatsapp_number,[m
+                 instance_name,[m
+[31m-                channel_identifier[m
+[32m+[m[32m                channel_identifier,[m
+[32m+[m[32m                auto_notify_order_accepted,[m
+[32m+[m[32m                auto_notify_order_preparing,[m
+[32m+[m[32m                auto_notify_order_out_for_delivery[m
+            FROM tenant_whatsapp_config[m
+           WHERE tenant_id=?`,[m
+         [req.tenantId][m
+[36m@@ -620,6 +629,11 @@[m [mexport function createDeliveryRouter() {[m
+         ...transportConfig,[m
+         whatsapp_provider: resolvedProvider,[m
+         whatsapp_enabled: toFlag(tenantWhatsAppConfig?.whatsapp_enabled),[m
+[32m+[m[32m        whatsapp_order_notifications_enabled: tenantWhatsAppState[m
+[32m+[m[32m          ? (tenantWhatsAppState.autoNotifyOrderAccepted ||[m
+[32m+[m[32m            tenantWhatsAppState.autoNotifyOrderPreparing ||[m
+[32m+[m[32m            tenantWhatsAppState.autoNotifyOrderOutForDelivery)[m
+[32m+[m[32m          : false,[m
+         whatsapp_active_number: tenantWhatsAppState?.whatsappNumber || resolvedWhatsApp.whatsappNumber,[m
+         whatsapp_inbound_webhook_path: buildTenantWhatsAppInboundWebhookPath(Number(req.tenantId)),[m
+       });[m
+[36m@@ -632,10 +646,15 @@[m [mexport function createDeliveryRouter() {[m
+         ativo,[m
+         whatsapp_provider: _whatsappProvider,[m
+         whatsapp_enabled: _whatsappEnabled,[m
+[32m+[m[32m        whatsapp_order_notifications_enabled: whatsappOrderNotificationsEnabledRaw,[m
+         whatsapp_active_number: _whatsappActiveNumber,[m
+         whatsapp_inbound_webhook_path: _whatsappInboundWebhookPath,[m
+         ...rest[m
+       } = req.body;[m
+[32m+[m[32m      const whatsappOrderNotificationsEnabled =[m
+[32m+[m[32m        whatsappOrderNotificationsEnabledRaw === undefined[m
+[32m+[m[32m          ? undefined[m
+[32m+[m[32m          : toFlag(whatsappOrderNotificationsEnabledRaw);[m
+       const [row, tenantWhatsAppConfig] = await Promise.all([[m
+         q1<{ delivery_config: string | null; whatsapp?: string | null }>([m
+           'SELECT delivery_config, whatsapp FROM clientes WHERE id=?',[m
+[36m@@ -647,7 +666,10 @@[m [mexport function createDeliveryRouter() {[m
+                   provider_config_json,[m
+                   whatsapp_number,[m
+                   instance_name,[m
+[31m-                  channel_identifier[m
+[32m+[m[32m                  channel_identifier,[m
+[32m+[m[32m                  auto_notify_order_accepted,[m
+[32m+[m[32m                  auto_notify_order_preparing,[m
+[32m+[m[32m                  auto_notify_order_out_for_delivery[m
+              FROM tenant_whatsapp_config[m
+             WHERE tenant_id=?`,[m
+           [req.tenantId][m
+[36m@@ -699,6 +721,30 @@[m [mexport function createDeliveryRouter() {[m
+         tenantWhatsAppConfig,[m
+         row?.whatsapp[m
+       );[m
+[32m+[m[32m      if (whatsappOrderNotificationsEnabled !== undefined) {[m
+[32m+[m[32m        await qRun([m
+[32m+[m[32m          `INSERT INTO tenant_whatsapp_config ([m
+[32m+[m[32m              tenant_id,[m
+[32m+[m[32m              whatsapp_enabled,[m
+[32m+[m[32m              auto_notify_order_accepted,[m
+[32m+[m[32m              auto_notify_order_preparing,[m
+[32m+[m[32m              auto_notify_order_out_for_delivery,[m
+[32m+[m[32m              updated_at[m
+[32m+[m[32m            ) VALUES (?, ?, ?, ?, ?, NOW())[m
+[32m+[m[32m            ON CONFLICT (tenant_id) DO UPDATE SET[m
+[32m+[m[32m              auto_notify_order_accepted=EXCLUDED.auto_notify_order_accepted,[m
+[32m+[m[32m              auto_notify_order_preparing=EXCLUDED.auto_notify_order_preparing,[m
+[32m+[m[32m              auto_notify_order_out_for_delivery=EXCLUDED.auto_notify_order_out_for_delivery,[m
+[32m+[m[32m              updated_at=NOW()`,[m
+[32m+[m[32m          [[m
+[32m+[m[32m            Number(req.tenantId),[m
+[32m+[m[32m            tenantWhatsAppConfig?.whatsapp_enabled ? 1 : 0,[m
+[32m+[m[32m            whatsappOrderNotificationsEnabled ? 1 : 0,[m
+[32m+[m[32m            whatsappOrderNotificationsEnabled ? 1 : 0,[m
+[32m+[m[32m            whatsappOrderNotificationsEnabled ? 1 : 0,[m
+[32m+[m[32m          ][m
+[32m+[m[32m        );[m
+[32m+[m[32m      }[m
+       res.json({ success: true });[m
+     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }[m
+   });[m
+[1mdiff --git a/src/services/whatsAppEventsService.ts b/src/services/whatsAppEventsService.ts[m
+[1mindex 9239ec4..ea6e739 100644[m
+[1m--- a/src/services/whatsAppEventsService.ts[m
+[1m+++ b/src/services/whatsAppEventsService.ts[m
+[36m@@ -5,24 +5,18 @@[m [mimport { sendWhatsAppMessage } from './whatsAppSenderService';[m
+ type TenantId = number | string;[m
+ [m
+ type WhatsAppOrderEventName =[m
+[31m-  | 'order_created'[m
+[31m-  | 'payment_confirmed'[m
+[31m-  | 'order_accepted'[m
+[31m-  | 'order_preparing'[m
+[32m+[m[32m  | 'order_confirmed'[m
+[32m+[m[32m  | 'order_ready_for_delivery'[m
+   | 'order_out_for_delivery'[m
+[31m-  | 'order_delivered'[m
+[31m-  | 'order_cancelled';[m
+[32m+[m[32m  | 'order_ready_for_pickup';[m
+ [m
+ type TenantWhatsAppConfigRow = {[m
+   whatsapp_enabled?: number | boolean | string | null;[m
+   provider?: string | null;[m
+   provider_config_json?: string | null;[m
+[31m-  auto_notify_order_created?: number | boolean | string | null;[m
+   auto_notify_order_accepted?: number | boolean | string | null;[m
+   auto_notify_order_preparing?: number | boolean | string | null;[m
+   auto_notify_order_out_for_delivery?: number | boolean | string | null;[m
+[31m-  auto_notify_order_delivered?: number | boolean | string | null;[m
+[31m-  auto_notify_order_cancelled?: number | boolean | string | null;[m
+ };[m
+ [m
+ type OrderWhatsAppRow = {[m
+[36m@@ -32,8 +26,10 @@[m [mtype OrderWhatsAppRow = {[m
+   cliente_nome: string | null;[m
+   cliente_tel: string | null;[m
+   status: string | null;[m
+[31m-  total_amount: number | string | null;[m
+[32m+[m[32m  canal?: string | null;[m
+[32m+[m[32m  tipo_retirada?: string | null;[m
+   loja_nome?: string | null;[m
+[32m+[m[32m  loja_slug?: string | null;[m
+ };[m
+ [m
+ type RegisterWhatsAppOrderEventInput = {[m
+[36m@@ -47,50 +43,42 @@[m [mtype WhatsAppMessagePayload = {[m
+   order_id: number;[m
+   order_number: string | null;[m
+   store_name: string | null;[m
+[32m+[m[32m  store_slug: string | null;[m
+   customer_name: string | null;[m
+   customer_phone: string | null;[m
+   status: string | null;[m
+[31m-  total_amount: number;[m
+[32m+[m[32m  channel: string | null;[m
+[32m+[m[32m  pickup_type: string | null;[m
+ };[m
+ [m
+ const SUCCESS_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {[m
+[31m-  order_created: 'WHATSAPP_ORDER_CREATED',[m
+[31m-  payment_confirmed: 'WHATSAPP_ORDER_PAYMENT_CONFIRMED',[m
+[31m-  order_accepted: 'WHATSAPP_ORDER_ACCEPTED',[m
+[31m-  order_preparing: 'WHATSAPP_ORDER_PREPARING',[m
+[31m-  order_out_for_delivery: 'WHATSAPP_ORDER_OUT_FOR_DELIVERY',[m
+[31m-  order_delivered: 'WHATSAPP_ORDER_DELIVERED',[m
+[31m-  order_cancelled: 'WHATSAPP_ORDER_CANCELLED',[m
+[32m+[m[32m  order_confirmed: 'WHATSAPP_TXN_ORDER_CONFIRMED',[m
+[32m+[m[32m  order_ready_for_delivery: 'WHATSAPP_TXN_ORDER_READY_FOR_DELIVERY',[m
+[32m+[m[32m  order_out_for_delivery: 'WHATSAPP_TXN_ORDER_OUT_FOR_DELIVERY',[m
+[32m+[m[32m  order_ready_for_pickup: 'WHATSAPP_TXN_ORDER_READY_FOR_PICKUP',[m
+ };[m
+ [m
+ const ERROR_EVENT_TYPE_BY_NAME: Record<WhatsAppOrderEventName, string> = {[m
+[31m-  order_created: 'WHATSAPP_ORDER_CREATED_ERROR',[m
+[31m-  payment_confirmed: 'WHATSAPP_ORDER_PAYMENT_CONFIRMED_ERROR',[m
+[31m-  order_accepted: 'WHATSAPP_ORDER_ACCEPTED_ERROR',[m
+[31m-  order_preparing: 'WHATSAPP_ORDER_PREPARING_ERROR',[m
+[31m-  order_out_for_delivery: 'WHATSAPP_ORDER_OUT_FOR_DELIVERY_ERROR',[m
+[31m-  order_delivered: 'WHATSAPP_ORDER_DELIVERED_ERROR',[m
+[31m-  order_cancelled: 'WHATSAPP_ORDER_CANCELLED_ERROR',[m
+[32m+[m[32m  order_confirmed: 'WHATSAPP_TXN_ORDER_CONFIRMED_ERROR',[m
+[32m+[m[32m  order_ready_for_delivery: 'WHATSAPP_TXN_ORDER_READY_FOR_DELIVERY_ERROR',[m
+[32m+[m[32m  order_out_for_delivery: 'WHATSAPP_TXN_ORDER_OUT_FOR_DELIVERY_ERROR',[m
+[32m+[m[32m  order_ready_for_pickup: 'WHATSAPP_TXN_ORDER_READY_FOR_PICKUP_ERROR',[m
+ };[m
+ [m
+ const CONFIG_FLAG_BY_NAME: Record<[m
+   WhatsAppOrderEventName,[m
+   keyof TenantWhatsAppConfigRow[m
+ > = {[m
+[31m-  order_created: 'auto_notify_order_created',[m
+[31m-  payment_confirmed: 'auto_notify_order_accepted',[m
+[31m-  order_accepted: 'auto_notify_order_accepted',[m
+[31m-  order_preparing: 'auto_notify_order_preparing',[m
+[32m+[m[32m  order_confirmed: 'auto_notify_order_accepted',[m
+[32m+[m[32m  order_ready_for_delivery: 'auto_notify_order_preparing',[m
+   order_out_for_delivery: 'auto_notify_order_out_for_delivery',[m
+[31m-  order_delivered: 'auto_notify_order_delivered',[m
+[31m-  order_cancelled: 'auto_notify_order_cancelled',[m
+[32m+[m[32m  order_ready_for_pickup: 'auto_notify_order_preparing',[m
+ };[m
+ [m
+ function toBool(value: unknown, fallback = false) {[m
+   if (value === undefined || value === null) return fallback;[m
+   if (typeof value === 'boolean') return value;[m
+   if (typeof value === 'number') return value !== 0;[m
+[31m-[m
+   const normalized = String(value).trim().toLowerCase();[m
+   if (['1', 'true', 'sim', 'yes', 'on'].includes(normalized)) return true;[m
+   if (['0', 'false', 'nao', 'no', 'off'].includes(normalized)) return false;[m
+[36m@@ -109,10 +97,6 @@[m [mfunction normalizeOptionalText(value: unknown) {[m
+   return normalized || null;[m
+ }[m
+ [m
+[31m-function formatMoneyBr(value: number) {[m
+[31m-  return value.toFixed(2).replace('.', ',');[m
+[31m-}[m
+[31m-[m
+ function getOrderDisplayLabel(payload: WhatsAppMessagePayload) {[m
+   return payload.order_number[m
+     ? `Pedido #${payload.order_number}`[m
+[36m@@ -125,55 +109,63 @@[m [mfunction getCustomerGreeting(name: string | null) {[m
+   return firstName ? `Ola, ${firstName}!` : 'Ola!';[m
+ }[m
+ [m
+[32m+[m[32mfunction resolvePublicBaseUrl() {[m
+[32m+[m[32m  const explicit =[m
+[32m+[m[32m    normalizeOptionalText(process.env.FLOWPDV_PUBLIC_URL) ||[m
+[32m+[m[32m    normalizeOptionalText(process.env.RAILWAY_PUBLIC_DOMAIN);[m
+[32m+[m[32m  if (!explicit) return normalizeOptionalText(process.env.PUBLIC_BASE_URL);[m
+[32m+[m[32m  return /^https?:\/\//i.test(explicit)[m
+[32m+[m[32m    ? explicit.replace(/\/+$/, '')[m
+[32m+[m[32m    : `https://${explicit}`.replace(/\/+$/, '');[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction resolveOrderTypeLabel(payload: WhatsAppMessagePayload) {[m
+[32m+[m[32m  const channel = String(payload.channel || '').trim().toLowerCase();[m
+[32m+[m[32m  if (channel === 'delivery') return 'Entrega';[m
+[32m+[m[32m  if (channel === 'retirada' || String(payload.pickup_type || '').trim().toLowerCase() === 'levar') {[m
+[32m+[m[32m    return 'Retirada';[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return null;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction buildTrackingLink(payload: WhatsAppMessagePayload) {[m
+[32m+[m[32m  const baseUrl = resolvePublicBaseUrl();[m
+[32m+[m[32m  if (!baseUrl || !payload.store_slug) return null;[m
+[32m+[m[32m  return `${baseUrl}/delivery/${encodeURIComponent(payload.store_slug)}/pedido/${payload.order_id}`;[m
+[32m+[m[32m}[m
+[32m+[m
+ function buildDefaultOrderStatusMessage([m
+   eventName: WhatsAppOrderEventName,[m
+   payload: WhatsAppMessagePayload[m
+ ) {[m
+   const greeting = getCustomerGreeting(payload.customer_name);[m
+   const orderLabel = getOrderDisplayLabel(payload);[m
+[31m-  const totalLine = `Total: R$ ${formatMoneyBr(payload.total_amount)}`;[m
+[32m+[m[32m  const orderTypeLabel = resolveOrderTypeLabel(payload);[m
+[32m+[m[32m  const orderTypeLine = orderTypeLabel ? `Tipo: ${orderTypeLabel}` : null;[m
+   const storeLine = payload.store_name ? `Loja: ${payload.store_name}` : null;[m
+[32m+[m[32m  const trackingLine = buildTrackingLink(payload) ? `Acompanhe: ${buildTrackingLink(payload)}` : null;[m
+[32m+[m
+[32m+[m[32m  if (eventName === 'order_confirmed') {[m
+[32m+[m[32m    return [greeting, `${orderLabel} confirmado com sucesso.`, orderTypeLine, storeLine, trackingLine][m
+[32m+[m[32m      .filter(Boolean)[m
+[32m+[m[32m      .join('\n');[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  if (eventName === 'order_ready_for_delivery') {[m
+[32m+[m[32m    return [greeting, `${orderLabel} esta pronto e saira para entrega em breve.`, orderTypeLine, storeLine, trackingLine][m
+[32m+[m[32m      .filter(Boolean)[m
+[32m+[m[32m      .join('\n');[m
+[32m+[m[32m  }[m
+ [m
+[31m-  switch (eventName) {[m
+[31m-    case 'order_created':[m
+[31m-      return [greeting, `${orderLabel} foi recebido com sucesso.`, totalLine, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    case 'payment_confirmed':[m
+[31m-      return [[m
+[31m-        greeting,[m
+[31m-        `Recebemos o pagamento do ${orderLabel}.`,[m
+[31m-        `${orderLabel} foi confirmado e seguira para preparo.`,[m
+[31m-        totalLine,[m
+[31m-        storeLine,[m
+[31m-      ][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    case 'order_accepted':[m
+[31m-      return [greeting, `${orderLabel} foi aceito e entrou em atendimento.`, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    case 'order_preparing':[m
+[31m-      return [greeting, `${orderLabel} esta em preparo.`, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    case 'order_out_for_delivery':[m
+[31m-      return [greeting, `${orderLabel} saiu para entrega.`, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    case 'order_delivered':[m
+[31m-      return [greeting, `${orderLabel} foi entregue. Obrigado pela preferencia!`, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    case 'order_cancelled':[m
+[31m-      return [greeting, `${orderLabel} foi cancelado. Se precisar, fale com a loja.`, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[31m-    default:[m
+[31m-      return [greeting, `${orderLabel} teve atualizacao de status.`, storeLine][m
+[31m-        .filter(Boolean)[m
+[31m-        .join('\n');[m
+[32m+[m[32m  if (eventName === 'order_out_for_delivery') {[m
+[32m+[m[32m    return [greeting, `${orderLabel} saiu para entrega.`, orderTypeLine, storeLine, trackingLine][m
+[32m+[m[32m      .filter(Boolean)[m
+[32m+[m[32m      .join('\n');[m
+   }[m
+[32m+[m
+[32m+[m[32m  return [greeting, `${orderLabel} esta pronto para retirada.`, orderTypeLine, storeLine, trackingLine][m
+[32m+[m[32m    .filter(Boolean)[m
+[32m+[m[32m    .join('\n');[m
+ }[m
+ [m
+ function maskPhone(rawPhone: string | null) {[m
+[36m@@ -191,22 +183,47 @@[m [masync function insertPedidoWhatsAppEvent(input: {[m
+   orderId: number;[m
+   eventType: string;[m
+   statusNovo: string | null;[m
+[31m-  totalAmount: number;[m
+   payload: Record<string, unknown>;[m
+ }) {[m
+   await qRun([m
+     `INSERT INTO pedido_eventos[m
+       (pedido_id, tenant_id, tipo, status_novo, valor, estoque_reposto, payload, usuario_id)[m
+[31m-     VALUES (?, ?, ?, ?, ?, 0, ?, NULL)`,[m
+[31m-    [[m
+[31m-      input.orderId,[m
+[31m-      input.tenantId,[m
+[31m-      input.eventType,[m
+[31m-      input.statusNovo,[m
+[31m-      input.totalAmount,[m
+[31m-      JSON.stringify(input.payload),[m
+[31m-    ][m
+[32m+[m[32m     VALUES (?, ?, ?, ?, 0, 0, ?, NULL)`,[m
+[32m+[m[32m    [input.orderId, input.tenantId, input.eventType, input.statusNovo, JSON.stringify(input.payload)][m
+[32m+[m[32m  );[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32masync function hasAlreadyProcessedOrderEvent([m
+[32m+[m[32m  tenantId: number,[m
+[32m+[m[32m  orderId: number,[m
+[32m+[m[32m  eventName: WhatsAppOrderEventName[m
+[32m+[m[32m) {[m
+[32m+[m[32m  const successType = SUCCESS_EVENT_TYPE_BY_NAME[eventName];[m
+[32m+[m[32m  const errorType = ERROR_EVENT_TYPE_BY_NAME[eventName];[m
+[32m+[m[32m  const row = await q1<{ id: number }>([m
+[32m+[m[32m    `SELECT id[m
+[32m+[m[32m       FROM pedido_eventos[m
+[32m+[m[32m      WHERE pedido_id=? AND tenant_id=? AND tipo IN (?, ?)[m
+[32m+[m[32m      LIMIT 1`,[m
+[32m+[m[32m    [orderId, tenantId, successType, errorType][m
+   );[m
+[32m+[m[32m  return Boolean(row?.id);[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction shouldDispatchTransactionalEvent([m
+[32m+[m[32m  eventName: WhatsAppOrderEventName,[m
+[32m+[m[32m  order: OrderWhatsAppRow[m
+[32m+[m[32m) {[m
+[32m+[m[32m  const channel = String(order.canal || '').trim().toLowerCase();[m
+[32m+[m[32m  const pickupType = String(order.tipo_retirada || '').trim().toLowerCase();[m
+[32m+[m
+[32m+[m[32m  if (eventName === 'order_ready_for_pickup') {[m
+[32m+[m[32m    return channel === 'retirada' || pickupType === 'levar';[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (eventName === 'order_ready_for_delivery' || eventName === 'order_out_for_delivery') {[m
+[32m+[m[32m    return channel === 'delivery';[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return true;[m
+ }[m
+ [m
+ async function registerWhatsAppOrderEvent([m
+[36m@@ -216,34 +233,24 @@[m [masync function registerWhatsAppOrderEvent([m
+   try {[m
+     const tenantId = parsePositiveInt(input.tenantId);[m
+     const orderId = parsePositiveInt(input.orderId);[m
+[31m-[m
+[31m-    if (!tenantId || !orderId) {[m
+[31m-      return;[m
+[31m-    }[m
+[32m+[m[32m    if (!tenantId || !orderId) return;[m
+ [m
+     const config = await q1<TenantWhatsAppConfigRow>([m
+       `SELECT whatsapp_enabled,[m
+               provider,[m
+               provider_config_json,[m
+[31m-              auto_notify_order_created,[m
+               auto_notify_order_accepted,[m
+               auto_notify_order_preparing,[m
+[31m-              auto_notify_order_out_for_delivery,[m
+[31m-              auto_notify_order_delivered,[m
+[31m-              auto_notify_order_cancelled[m
+[32m+[m[32m              auto_notify_order_out_for_delivery[m
+        FROM tenant_whatsapp_config[m
+        WHERE tenant_id=?`,[m
+       [tenantId][m
+     );[m
+[31m-[m
+[31m-    if (!config || !toBool(config.whatsapp_enabled, false)) {[m
+[31m-      return;[m
+[31m-    }[m
+[32m+[m[32m    if (!config || !toBool(config.whatsapp_enabled, false)) return;[m
+ [m
+     const autoNotifyFlag = CONFIG_FLAG_BY_NAME[eventName];[m
+[31m-    if (!toBool(config[autoNotifyFlag], false)) {[m
+[31m-      return;[m
+[31m-    }[m
+[32m+[m[32m    const autoNotifyEnabled = toBool(config[autoNotifyFlag], false);[m
+[32m+[m[32m    if (!autoNotifyEnabled) return;[m
+ [m
+     const order = await q1<OrderWhatsAppRow>([m
+       `SELECT p.id,[m
+[36m@@ -252,8 +259,10 @@[m [masync function registerWhatsAppOrderEvent([m
+               COALESCE(NULLIF(BTRIM(p.cliente_nome), ''), NULLIF(BTRIM(dc.nome), '')) AS cliente_nome,[m
+               COALESCE(NULLIF(BTRIM(p.cliente_tel), ''), NULLIF(BTRIM(dc.telefone), '')) AS cliente_tel,[m
+               p.status,[m
+[31m-              p.total_amount,[m
+[31m-              c.nome_estabelecimento AS loja_nome[m
+[32m+[m[32m              p.canal,[m
+[32m+[m[32m              p.tipo_retirada,[m
+[32m+[m[32m              c.nome_estabelecimento AS loja_nome,[m
+[32m+[m[32m              c.usuario AS loja_slug[m
+        FROM pedidos p[m
+        LEFT JOIN delivery_clientes dc[m
+          ON dc.id = COALESCE(p.cliente_id, p.delivery_cliente_id)[m
+[36m@@ -263,20 +272,20 @@[m [masync function registerWhatsAppOrderEvent([m
+        WHERE p.id=? AND p.tenant_id=?`,[m
+       [orderId, tenantId][m
+     );[m
+[31m-[m
+[31m-    if (!order) {[m
+[31m-      return;[m
+[31m-    }[m
+[32m+[m[32m    if (!order || !shouldDispatchTransactionalEvent(eventName, order)) return;[m
+[32m+[m[32m    if (await hasAlreadyProcessedOrderEvent(tenantId, orderId, eventName)) return;[m
+ [m
+     const payload: WhatsAppMessagePayload = {[m
+       tenant_id: Number(order.tenant_id),[m
+       order_id: Number(order.id),[m
+       order_number: normalizeOptionalText(order.order_number),[m
+       store_name: normalizeOptionalText(order.loja_nome),[m
+[32m+[m[32m      store_slug: normalizeOptionalText(order.loja_slug),[m
+       customer_name: normalizeOptionalText(order.cliente_nome),[m
+       customer_phone: normalizeOptionalText(order.cliente_tel),[m
+       status: normalizeOptionalText(order.status),[m
+[31m-      total_amount: Number(order.total_amount || 0),[m
+[32m+[m[32m      channel: normalizeOptionalText(order.canal),[m
+[32m+[m[32m      pickup_type: normalizeOptionalText(order.tipo_retirada),[m
+     };[m
+ [m
+     const message = buildDefaultOrderStatusMessage(eventName, payload);[m
+[36m@@ -294,7 +303,6 @@[m [masync function registerWhatsAppOrderEvent([m
+         orderId,[m
+         eventType: SUCCESS_EVENT_TYPE_BY_NAME[eventName],[m
+         statusNovo: payload.status,[m
+[31m-        totalAmount: payload.total_amount,[m
+         payload: {[m
+           source: input.source || null,[m
+           channel: 'whatsapp',[m
+[36m@@ -323,7 +331,6 @@[m [masync function registerWhatsAppOrderEvent([m
+         orderId,[m
+         eventType: ERROR_EVENT_TYPE_BY_NAME[eventName],[m
+         statusNovo: payload.status,[m
+[31m-        totalAmount: payload.total_amount,[m
+         payload: {[m
+           source: input.source || null,[m
+           channel: 'whatsapp',[m
+[36m@@ -355,19 +362,19 @@[m [masync function registerWhatsAppOrderEvent([m
+ }[m
+ [m
+ export async function orderCreatedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[31m-  await registerWhatsAppOrderEvent('order_created', input);[m
+[32m+[m[32m  await registerWhatsAppOrderEvent('order_confirmed', input);[m
+ }[m
+ [m
+ export async function orderPaymentConfirmedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[31m-  await registerWhatsAppOrderEvent('payment_confirmed', input);[m
+[32m+[m[32m  await registerWhatsAppOrderEvent('order_confirmed', input);[m
+ }[m
+ [m
+ export async function orderAcceptedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[31m-  await registerWhatsAppOrderEvent('order_accepted', input);[m
+[32m+[m[32m  await registerWhatsAppOrderEvent('order_confirmed', input);[m
+ }[m
+ [m
+ export async function orderPreparingWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[31m-  await registerWhatsAppOrderEvent('order_preparing', input);[m
+[32m+[m[32m  await registerWhatsAppOrderEvent('order_ready_for_delivery', input);[m
+ }[m
+ [m
+ export async function orderOutForDeliveryWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[36m@@ -375,37 +382,32 @@[m [mexport async function orderOutForDeliveryWhatsAppEvent(input: RegisterWhatsAppOr[m
+ }[m
+ [m
+ export async function orderDeliveredWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[31m-  await registerWhatsAppOrderEvent('order_delivered', input);[m
+[32m+[m[32m  await registerWhatsAppOrderEvent('order_ready_for_pickup', input);[m
+ }[m
+ [m
+[31m-export async function orderCancelledWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {[m
+[31m-  await registerWhatsAppOrderEvent('order_cancelled', input);[m
+[32m+[m[32mexport async function orderCancelledWhatsAppEvent(_input: RegisterWhatsAppOrderEventInput) {[m
+[32m+[m[32m  return;[m
+ }[m
+ [m
+ export async function emitWhatsAppOrderStatusEvent(input: RegisterWhatsAppOrderEventInput & { status?: string | null }) {[m
+   const normalizedStatus = String(input.status || '').trim().toLowerCase();[m
+ [m
+   if (normalizedStatus === 'pedido recebido') {[m
+[31m-    await orderAcceptedWhatsAppEvent(input);[m
+[32m+[m[32m    await registerWhatsAppOrderEvent('order_confirmed', input);[m
+     return;[m
+   }[m
+ [m
+[31m-  if (normalizedStatus === 'em preparo') {[m
+[31m-    await orderPreparingWhatsAppEvent(input);[m
+[32m+[m[32m  if (normalizedStatus === 'pronto para entrega') {[m
+[32m+[m[32m    await registerWhatsAppOrderEvent('order_ready_for_delivery', input);[m
+     return;[m
+   }[m
+ [m
+   if (normalizedStatus === 'saiu para entrega') {[m
+[31m-    await orderOutForDeliveryWhatsAppEvent(input);[m
+[31m-    return;[m
+[31m-  }[m
+[31m-[m
+[31m-  if (normalizedStatus === 'entregue') {[m
+[31m-    await orderDeliveredWhatsAppEvent(input);[m
+[32m+[m[32m    await registerWhatsAppOrderEvent('order_out_for_delivery', input);[m
+     return;[m
+   }[m
+ [m
+[31m-  if (normalizedStatus === 'cancelado') {[m
+[31m-    await orderCancelledWhatsAppEvent(input);[m
+[32m+[m[32m  if (normalizedStatus === 'pronto') {[m
+[32m+[m[32m    await registerWhatsAppOrderEvent('order_ready_for_pickup', input);[m
+   }[m
+ }[m

@@ -99,10 +99,6 @@ async function revalidatePixPaymentRecord(
     throw new AppError('Pagamento PIX sem external_id para revalidacao', 400);
   }
 
-  if (provider !== 'mercado_pago') {
-    throw new AppError('Provider PIX nao suportado para revalidacao', 400);
-  }
-
   const providerConfig = await getTenantPaymentProviderConfig(payment.tenant_id);
   const alreadyPaid = internalStatus === 'paid';
 
@@ -115,40 +111,93 @@ async function revalidatePixPaymentRecord(
     );
   }
 
-  if (providerConfig.provider !== 'mercado_pago' || !providerConfig.accessToken) {
-    throw new AppError('Configuracao do Mercado Pago nao encontrada para o tenant', 400);
-  }
+  if (provider === 'mercado_pago') {
+    if (providerConfig.provider !== 'mercado_pago' || !providerConfig.accessToken) {
+      throw new AppError('Configuracao do Mercado Pago nao encontrada para o tenant', 400);
+    }
 
-  const providerPayment = await getPaymentStatus({
-    provider: 'mercado_pago',
-    externalId,
-    accessToken: providerConfig.accessToken,
-    sandbox: providerConfig.sandbox,
-  });
-
-  const externalStatus = normalizeOptionalText(providerPayment.status);
-
-  if (!isExternalPaymentPaid(externalStatus)) {
-    return {
-      matched: true,
-      paymentUpdated: false,
-      orderUpdated: false,
-      alreadyPaid,
+    const providerPayment = await getPaymentStatus({
+      provider: 'mercado_pago',
       externalId,
-      externalStatus,
-      internalStatus,
-      paidAt: payment.paid_at ?? normalizeOptionalText(providerPayment.paid_at),
-      orderId: payment.order_id,
-      paymentId: payment.id,
-    };
+      accessToken: providerConfig.accessToken,
+      sandbox: providerConfig.sandbox,
+    });
+
+    const externalStatus = normalizeOptionalText(providerPayment.status);
+
+    if (!isExternalPaymentPaid(externalStatus)) {
+      return {
+        matched: true,
+        paymentUpdated: false,
+        orderUpdated: false,
+        alreadyPaid,
+        externalId,
+        externalStatus,
+        internalStatus,
+        paidAt: payment.paid_at ?? normalizeOptionalText(providerPayment.paid_at),
+        orderId: payment.order_id,
+        paymentId: payment.id,
+      };
+    }
+
+    const paidAt =
+      normalizeOptionalText(providerPayment.paid_at) ||
+      normalizeOptionalText(payment.paid_at) ||
+      new Date().toISOString();
+
+    return finalizePaidPixPayment(payment, externalStatus, alreadyPaid, paidAt);
   }
 
-  const paidAt =
-    normalizeOptionalText(providerPayment.paid_at) ||
-    normalizeOptionalText(payment.paid_at) ||
-    new Date().toISOString();
+  if (provider === 'itau') {
+    if (
+      providerConfig.provider !== 'itau' ||
+      !providerConfig.apiKey ||
+      !providerConfig.accessToken ||
+      !providerConfig.pixKey
+    ) {
+      throw new AppError('Configuracao do Itaú nao encontrada para o tenant', 400);
+    }
 
-  return finalizePaidPixPayment(payment, externalStatus, alreadyPaid, paidAt);
+    const providerPayment = await getPaymentStatus({
+      provider: 'itau',
+      externalId,
+      accessToken: providerConfig.accessToken,
+      apiKey: providerConfig.apiKey,
+      pixKey: providerConfig.pixKey,
+      itauTlsCertPem: providerConfig.itauTlsCertPem,
+      itauTlsKeyPem: providerConfig.itauTlsKeyPem,
+      itauTlsCaPem: providerConfig.itauTlsCaPem,
+      itauApiBaseUrl: providerConfig.itauApiBaseUrl,
+      itauTokenUrl: providerConfig.itauTokenUrl,
+      sandbox: providerConfig.sandbox,
+    });
+
+    const externalStatus = normalizeOptionalText(providerPayment.status);
+
+    if (!isExternalPaymentPaid(externalStatus)) {
+      return {
+        matched: true,
+        paymentUpdated: false,
+        orderUpdated: false,
+        alreadyPaid,
+        externalId,
+        externalStatus,
+        internalStatus,
+        paidAt: payment.paid_at ?? normalizeOptionalText(providerPayment.paid_at),
+        orderId: payment.order_id,
+        paymentId: payment.id,
+      };
+    }
+
+    const paidAt =
+      normalizeOptionalText(providerPayment.paid_at) ||
+      normalizeOptionalText(payment.paid_at) ||
+      new Date().toISOString();
+
+    return finalizePaidPixPayment(payment, externalStatus, alreadyPaid, paidAt);
+  }
+
+  throw new AppError('Provider PIX nao suportado para revalidacao', 400);
 }
 
 export async function revalidatePixPaymentByExternalId(input: {
