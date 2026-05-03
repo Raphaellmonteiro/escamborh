@@ -4,10 +4,31 @@ import { q1, qAll, qRun } from '../db';
 import { sendInternalError } from '../utils/internalServerError';
 import { requireAnyPermission, requirePlanFeature } from '../middleware';
 import { refreshDeterministicAlerts } from '../services/alertsService';
+import { getTenantFeatures } from '../services/tenantPlan';
+import { type PlanFeature } from '../config/planFeatures';
 
 const TZ = 'America/Sao_Paulo';
 
 const TIPOS_ANALISE = new Set(['visao_geral', 'financeiro']);
+
+function buildAvisosFeatureFilters(features: PlanFeature[]) {
+  const blockedLike: string[] = [];
+
+  if (!features.includes('estoque')) {
+    blockedLike.push('sys:estoque:%');
+  }
+
+  if (!features.includes('funcionarios')) {
+    blockedLike.push('sys:rh:%', 'sys:funcionarios:%');
+  }
+
+  if (blockedLike.length === 0) {
+    return { whereSql: '', params: [] as string[] };
+  }
+
+  const whereSql = blockedLike.map(() => 'AND (chave IS NULL OR chave NOT LIKE ?)').join('\n             ');
+  return { whereSql, params: blockedLike };
+}
 
 export function createAiRouter() {
   const router = Router();
@@ -19,6 +40,8 @@ export function createAiRouter() {
   router.get('/avisos', async (req: Request, res) => {
     try {
       await refreshDeterministicAlerts(req.tenantId!);
+      const features = await getTenantFeatures(req.tenantId!);
+      const filters = buildAvisosFeatureFilters(features);
       res.json(
         await qAll(
           `SELECT *
@@ -26,8 +49,9 @@ export function createAiRouter() {
            WHERE tenant_id=?
              AND lido=0
              AND (expira_em IS NULL OR expira_em > NOW())
+             ${filters.whereSql}
            ORDER BY prioridade DESC, id DESC`,
-          [req.tenantId]
+          [req.tenantId, ...filters.params]
         )
       );
     } catch (e: any) {
@@ -38,15 +62,27 @@ export function createAiRouter() {
   router.get('/avisos/historico', async (req: Request, res) => {
     try {
       await refreshDeterministicAlerts(req.tenantId!);
+      const features = await getTenantFeatures(req.tenantId!);
+      const filters = buildAvisosFeatureFilters(features);
       const limit = Math.min(Number(req.query.limit) || 100, 200);
       const offset = Number(req.query.offset) || 0;
       const [lista, total] = await Promise.all([
-        qAll('SELECT * FROM ai_avisos WHERE tenant_id=? ORDER BY id DESC LIMIT ? OFFSET ?', [
-          req.tenantId,
-          limit,
-          offset,
-        ]),
-        q1('SELECT COUNT(*) AS n FROM ai_avisos WHERE tenant_id=?', [req.tenantId]),
+        qAll(
+          `SELECT *
+           FROM ai_avisos
+           WHERE tenant_id=?
+             ${filters.whereSql}
+           ORDER BY id DESC
+           LIMIT ? OFFSET ?`,
+          [req.tenantId, ...filters.params, limit, offset]
+        ),
+        q1(
+          `SELECT COUNT(*) AS n
+           FROM ai_avisos
+           WHERE tenant_id=?
+             ${filters.whereSql}`,
+          [req.tenantId, ...filters.params]
+        ),
       ]);
       res.json({ avisos: lista, total: total?.n || 0 });
     } catch (e: any) {

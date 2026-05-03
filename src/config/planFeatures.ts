@@ -70,8 +70,24 @@ export function normalizeTenantPlan(rawPlan?: string | null): TenantPlan {
     return plan;
   }
 
+  // Normaliza rótulos/variações comuns (ex.: "Básico + Delivery", "basico delivery", "basico-delivery").
+  const normalized = plan
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (normalized === 'basico') return 'basico';
+  if (normalized === 'trial') return 'trial';
+  if (normalized === 'completo') return 'completo';
+
+  // Aceita labels que contenham ambos os tokens.
+  if (normalized.includes('basico') && normalized.includes('delivery')) {
+    return 'basico_delivery';
+  }
+
   // Mantem compatibilidade com tenants antigos, sem bloquear acesso inesperadamente.
-  if (plan === 'mensal' || plan === 'trimestral' || plan === 'anual') {
+  if (normalized === 'mensal' || normalized === 'trimestral' || normalized === 'anual') {
     return 'completo';
   }
 
