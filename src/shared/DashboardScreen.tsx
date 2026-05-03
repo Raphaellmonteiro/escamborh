@@ -244,10 +244,10 @@ export default function DashboardScreen({
               <div>
                 <h2 className="text-sm font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider flex items-center gap-2">
                   <BarChart2 size={16} className="text-red-600 dark:text-red-400" />
-                  IA Comercial (Etapa 1)
+                  IA Comercial (Etapa 2)
                 </h2>
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  Insights curtos e acionaveis com base nos seus pedidos.
+                  Insights curtos + ação sugerida com base nos seus pedidos.
                 </p>
               </div>
               <div className="h-10 w-10 rounded-2xl bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 flex items-center justify-center border border-red-100 dark:border-red-900/50">
@@ -284,8 +284,8 @@ export default function DashboardScreen({
                           {ins.text}
                         </p>
                         {ins.actionHint ? (
-                          <p className="mt-1.5 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
-                            Acao: {ins.actionHint}
+                          <p className="mt-1.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                            Ação sugerida: {ins.actionHint}
                           </p>
                         ) : null}
                       </div>

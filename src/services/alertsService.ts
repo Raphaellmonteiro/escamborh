@@ -187,7 +187,7 @@ async function buildCommercialAlerts(tenantId: number, features: PlanFeature[]):
   }
 
   const actionHint = snapshot.insights.find((i) => i.id === 'faturamento_vs_ontem')?.actionHint || null;
-  const mensagem = `${headlineParts.join(' • ')}${actionHint ? `\nAção: ${actionHint}` : ''}`;
+  const mensagemSugerida = `${headlineParts.join(' • ')}${actionHint ? `\nAção sugerida: ${actionHint}` : ''}`;
 
   return [
     createAlert({
@@ -195,7 +195,7 @@ async function buildCommercialAlerts(tenantId: number, features: PlanFeature[]):
       tipo: severityKind as AlertType,
       prioridade,
       titulo: 'Resumo comercial de hoje',
-      mensagem,
+      mensagem: mensagemSugerida,
       acao: 'Ver dashboard',
       acao_rota: '/dashboard',
     }),

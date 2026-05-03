@@ -323,39 +323,119 @@ async function getInactiveCustomerCounts(tenantId: number): Promise<{
   };
 }
 
-function buildActionHint(input: {
-  faturamentoHoje: number;
-  faturamentoOntem: number;
-  ticketHoje: number;
-  ticketOntem: number;
-  produtoTopHoje: { name: string; quantity: number } | null;
-  clientesInativos15: number;
-}): string {
-  const faturamentoDeltaPct = computePctChange(input.faturamentoHoje, input.faturamentoOntem);
-  const ticketDelta = input.ticketHoje - input.ticketOntem;
-
-  if (faturamentoDeltaPct !== null && faturamentoDeltaPct <= -5) {
-    const top = input.produtoTopHoje?.name ? `Destaque "${input.produtoTopHoje.name}" no balcão e no delivery.` : 'Destaque seus itens mais vendidos.';
-    const reativar =
-      input.clientesInativos15 > 0
-        ? `Reative clientes sem compra recente (15+ dias: ${input.clientesInativos15}).`
-        : 'Reative clientes sem compra recente com uma oferta simples.';
-    return `${reativar} ${top}`;
-  }
-
-  if (ticketDelta <= -2) {
-    return 'Teste combos simples ou adicionais para recuperar o ticket médio (ex.: bebida + acompanhamento).';
-  }
-
-  if (faturamentoDeltaPct !== null && faturamentoDeltaPct >= 8) {
-    return 'Aproveite o bom dia: mantenha o destaque dos itens campeões e ofereça adicionais no caixa.';
-  }
-
-  return 'Acompanhe os campeões do dia e ajuste o destaque do cardápio/PDV para aumentar conversão.';
-}
-
 function hasFeature(features: PlanFeature[] | null | undefined, feature: PlanFeature): boolean {
   return Array.isArray(features) && features.includes(feature);
+}
+
+function oneLine(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const normalized = String(input).replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  // Conservador: evita poluir UI/notificações com frases longas.
+  if (normalized.length > 140) return `${normalized.slice(0, 137).trimEnd()}...`;
+  return normalized;
+}
+
+function buildSuggestedActionByInsightId(input: {
+  id: string;
+  features?: PlanFeature[];
+  meta: CommercialInsightsSnapshot['meta'];
+}): string | null {
+  const m = input.meta;
+  const faturamentoDeltaVsOntem = computePctChange(m.faturamentoHoje, m.faturamentoOntem);
+  const faturamentoDeltaVsSemana = computePctChange(m.faturamentoHoje, m.faturamentoSemanaPassadaMesmoDia);
+  const pedidosDeltaVsOntem = computePctChange(m.pedidosHoje, m.pedidosOntem);
+  const ticketDelta = m.ticketMedioHoje - m.ticketMedioOntem;
+
+  const hasDelivery = hasFeature(input.features, 'delivery') || hasFeature(input.features, 'delivery_public');
+
+  switch (input.id) {
+    case 'faturamento_vs_ontem': {
+      if (faturamentoDeltaVsOntem !== null && faturamentoDeltaVsOntem <= -5) {
+        if (m.produtoTopHoje?.name) {
+          return oneLine(`Destaque "${m.produtoTopHoje.name}" no cardápio e recomende no caixa.`);
+        }
+        if (ticketDelta <= -2) {
+          return oneLine('Destaque combos/adicionais para recuperar o ticket médio.');
+        }
+        return oneLine('Faça uma promoção relâmpago (2h) em 1 item campeão para puxar pedidos.');
+      }
+      if (faturamentoDeltaVsOntem !== null && faturamentoDeltaVsOntem >= 8) {
+        return oneLine('Aproveite o bom ritmo: ofereça adicionais no caixa para elevar o ticket.');
+      }
+      return oneLine('Monitore o dia e ajuste o destaque do cardápio para aumentar conversão.');
+    }
+
+    case 'faturamento_vs_semana': {
+      if (faturamentoDeltaVsSemana !== null && faturamentoDeltaVsSemana <= -5) {
+        return oneLine('Revise destaque/combos do cardápio e teste uma oferta simples por 48h.');
+      }
+      if (faturamentoDeltaVsSemana !== null && faturamentoDeltaVsSemana >= 8) {
+        return oneLine('Repita o que está funcionando: mantenha os destaques e sugira adicionais.');
+      }
+      return oneLine('Compare o mix do dia e priorize 1-2 itens de maior giro no destaque.');
+    }
+
+    case 'pedidos_ticket': {
+      if (ticketDelta <= -2) {
+        return oneLine('Destaque combos/adicionais e simplifique a sugestão no caixa.');
+      }
+      if (pedidosDeltaVsOntem !== null && pedidosDeltaVsOntem <= -10) {
+        return oneLine('Reforce o destaque do item campeão e uma oferta simples para reaquecer pedidos.');
+      }
+      if (pedidosDeltaVsOntem !== null && pedidosDeltaVsOntem >= 10) {
+        return oneLine('Mantenha o ritmo e ofereça adicionais para aumentar o valor por pedido.');
+      }
+      return oneLine('Ajuste 1 destaque do cardápio e acompanhe o ticket ao longo do dia.');
+    }
+
+    case 'produto_top_hoje': {
+      if (!m.produtoTopHoje?.name) return null;
+      return oneLine('Mantenha em destaque (foto/descrição) e sugira como recomendação no caixa.');
+    }
+
+    case 'produto_queda_semana': {
+      if (!m.produtoQuedaSemana?.name) return null;
+      return oneLine('Revise preço/destaque e teste uma oferta simples por 48h para validar reação.');
+    }
+
+    case 'produto_fraco_semana': {
+      if (!m.produtoFracoSemana?.name) return null;
+      return oneLine('Reposicione no cardápio ou crie um combo simples para aumentar a saída.');
+    }
+
+    case 'clientes_inativos': {
+      const inativosRelevantes = Math.max(m.clientesInativos15, m.clientesInativos30);
+      if (inativosRelevantes <= 0) return null;
+      if (hasDelivery) {
+        return oneLine('Envie uma campanha curta de reativação (WhatsApp) com cupom simples.');
+      }
+      return oneLine('Reative clientes recorrentes com uma oferta simples e lembrete no balcão.');
+    }
+
+    default:
+      return null;
+  }
+}
+
+function applySuggestedActions(params: {
+  insights: CommercialInsight[];
+  features?: PlanFeature[];
+  meta: CommercialInsightsSnapshot['meta'];
+}): CommercialInsight[] {
+  const used = new Set<string>();
+  return params.insights.map((ins) => {
+    const suggested = buildSuggestedActionByInsightId({
+      id: ins.id,
+      features: params.features,
+      meta: params.meta,
+    });
+
+    // Evita repetição literal: mantém apenas a primeira ocorrência.
+    const actionHint = suggested && !used.has(suggested) ? suggested : null;
+    if (actionHint) used.add(actionHint);
+    return { ...ins, actionHint };
+  });
 }
 
 export async function getCommercialInsightsSnapshot(input: {
@@ -426,22 +506,12 @@ export async function getCommercialInsightsSnapshot(input: {
   const inactiveSeverity: CommercialInsightSeverity =
     inativos.inactive30 > 0 ? 'negative' : inativos.inactive15 > 0 ? 'neutral' : 'neutral';
 
-  const actionHint = buildActionHint({
-    faturamentoHoje: hoje.faturamento,
-    faturamentoOntem: ontem.faturamento,
-    ticketHoje,
-    ticketOntem,
-    produtoTopHoje,
-    clientesInativos15: inativos.inactive15,
-  });
-
   const insights: CommercialInsight[] = [
     {
       id: 'faturamento_vs_ontem',
       title: 'Faturamento (hoje vs ontem)',
       text: faturamentoVsOntem.text,
       severity: faturamentoVsOntem.severity,
-      actionHint: actionHint,
     },
     {
       id: 'faturamento_vs_semana',
@@ -503,7 +573,7 @@ export async function getCommercialInsightsSnapshot(input: {
     });
   }
 
-  return {
+  const snapshot: CommercialInsightsSnapshot = {
     date: today,
     insights,
     meta: {
@@ -525,5 +595,13 @@ export async function getCommercialInsightsSnapshot(input: {
       clientesTotal: inativos.total,
     },
   };
-}
 
+  return {
+    ...snapshot,
+    insights: applySuggestedActions({
+      insights: snapshot.insights,
+      features: input.features,
+      meta: snapshot.meta,
+    }),
+  };
+}
