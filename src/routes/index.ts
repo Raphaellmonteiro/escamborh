@@ -31,6 +31,7 @@ import { createLegalRouter } from './legal';
 import { createPrivacidadeRouter } from './privacidade';
 import { createWhatsAppRouter } from './whatsapp';
 import { createWebhooksRouter } from './webhooks';
+import { createAtendimentoRouter } from './atendimento';
 import { deletePointRecord, updatePointRecord } from '../services/pointService';
 import { setupSseStream } from '../sse';
 
@@ -192,6 +193,7 @@ export function createApiRouter() {
   protectedRouter.use('/caixa', requirePlanFeature('caixa'), requireAnyPermission('finance'), createCaixaRouter());
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
+  protectedRouter.use('/atendimento', requirePlanFeature('delivery'), createAtendimentoRouter());
   protectedRouter.use('/whatsapp', createWhatsAppRouter());
   protectedRouter.use('/chatbot', createChatbotRouter());
   protectedRouter.use('/ai', createAiRouter());

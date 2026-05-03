@@ -1968,8 +1968,21 @@ router.get('/clientes', async (req: Request, res) => {
 
   router.post('/pedidos', async (req: Request, res) => {
     try {
-      const { items, cliente_nome, cliente_tel, endereco, pagamento_tipo, total_amount, taxa_entrega, observation } = req.body;
+      const {
+        items,
+        cliente_nome,
+        cliente_tel,
+        endereco,
+        pagamento_tipo,
+        total_amount,
+        taxa_entrega,
+        observation,
+        tipo_retirada,
+      } = req.body;
       const tenantId = Number(req.tenantId);
+
+      const tipoRetirada =
+        String(tipo_retirada || 'delivery').trim().toLowerCase() === 'retirada' ? 'retirada' : 'delivery';
 
       let subtotal: number;
       let itensValidados: any[];
@@ -1982,7 +1995,7 @@ router.get('/clientes', async (req: Request, res) => {
         throw e;
       }
 
-      const taxa = Number(taxa_entrega) || 0;
+      const taxa = tipoRetirada === 'retirada' ? 0 : Number(taxa_entrega) || 0;
       const serverTotal = subtotal + taxa;
       const clientTotal = Number(total_amount);
       if (!Number.isFinite(clientTotal) || Math.abs(serverTotal - clientTotal) > MANUAL_DELIVERY_TOTAL_TOLERANCE) {
@@ -2019,18 +2032,22 @@ router.get('/clientes', async (req: Request, res) => {
             );
             const n = Number(todayCount?.c || 0) + 1;
             const ordNum = `${prefix}-${String(n).padStart(3, '0')}`;
+            const enderecoFinal =
+              tipoRetirada === 'retirada' ? null : normalizeOptionalText(endereco);
+
             const oid = await txInsert(
               client,
-              `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,cliente_id) VALUES (?,?,?,?,?,'delivery',?,?,?,?,?,?,?,?)`,
+              `INSERT INTO pedidos (order_number,total_amount,taxa_entrega,observation,tenant_id,canal,tipo_retirada,cliente_nome,cliente_tel,endereco,pagamento_tipo,pagamento_status,status,delivery_cliente_id,cliente_id) VALUES (?,?,?,?,?,'delivery',?,?,?,?,?,?,?,?,?,?)`,
               [
                 ordNum,
                 serverTotal,
                 taxa,
                 observation || null,
                 tenantId,
+                tipoRetirada,
                 cliente_nome || null,
                 clienteTelNormalizado || null,
-                endereco || null,
+                enderecoFinal,
                 pagamento_tipo || 'dinheiro',
                 pagamento_tipo === 'pix' ? 'aguardando_confirmacao' : 'pendente',
                 'Pedido Recebido',

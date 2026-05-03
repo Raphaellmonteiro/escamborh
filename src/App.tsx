@@ -52,6 +52,7 @@ const ClienteMesaScreen     = lazy(() => import('./segments/restaurante/ClienteM
 const MesasScreen           = lazy(() => import('./segments/bar/MesasScreen'));
 const PrivacyPolicyPublicPage = lazy(() => import('./shared/legal/PrivacyPolicyPublicPage'));
 const TermsOfUsePublicPage  = lazy(() => import('./shared/legal/TermsOfUsePublicPage'));
+const AtendimentoMobileScreen = lazy(() => import('./segments/atendimento/AtendimentoMobileScreen'));
 
 import { Button }            from './components/ui/Card';
 import { Input }             from './components/ui/Card';
@@ -232,7 +233,7 @@ export default function App() {
   };
 
   const refreshOpenMesasCount = useCallback(async () => {
-    if (!token) return;
+    if (!token || isAtendimentoMobile) return;
     try {
       const res = await fetch('/api/mesas', {
         headers: { Authorization: `Bearer ${token}` },
@@ -346,6 +347,8 @@ export default function App() {
   const path = window.location.pathname;
   const isLegalPublicPage = path === '/privacidade' || path === '/termos';
   const isAdmin = path.startsWith('/admin');
+  const atendimentoMobileMatch = path.match(/^\/m\/atendimento\/?$/);
+  const isAtendimentoMobile = Boolean(atendimentoMobileMatch);
   const bookingMatch = path.match(/^\/agendar\/(.+)$/);
   const bookingSlug  = bookingMatch ? bookingMatch[1] : null;
   const kdsMatch     = path.match(/^\/kds\/(.+)$/);
@@ -408,12 +411,12 @@ export default function App() {
   }, []);
 
   const mesasNavAttentionEligible = Boolean(
-    token && !isAdmin && permiteMesas && canAccess('mesas'),
+    token && !isAdmin && !isAtendimentoMobile && permiteMesas && canAccess('mesas'),
   );
 
   // ── Título dinâmico + alerta operacional incremental ─────────────────────
 React.useEffect(() => {
-    if (!token || isAdmin) return;
+    if (!token || isAdmin || isAtendimentoMobile) return;
 
     const fetchOperationalAlerts = async () => {
       const now = new Date();
@@ -483,7 +486,7 @@ React.useEffect(() => {
       window.clearTimeout(bootTimer);
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [token, isAdmin, isOperationTab, operationalSoundEnabled, segCfg.statusConcluido]);
+  }, [token, isAdmin, isAtendimentoMobile, isOperationTab, operationalSoundEnabled, segCfg.statusConcluido]);
 
   useEffect(() => {
     if (!shouldRepeatOperationalSound) {
@@ -606,7 +609,7 @@ React.useEffect(() => {
     if (!token) return;
     // Independentes: perfil / produtos / caixa não se ordenam entre si; paralelo reduz tempo até UI pronta.
     void Promise.all([fetchProducts(), fetchCaixa(), fetchPerfil()]);
-  }, [token]);
+  }, [token, isAtendimentoMobile]);
 
 const fetchPerfil = async () => {
     try {
@@ -887,6 +890,14 @@ const handleAuth = async (e: React.FormEvent) => {
         token={token}
         onAccepted={() => setLegalNeedsAcceptance(false)}
       />
+    );
+  }
+
+  if (isAtendimentoMobile) {
+    return (
+      <Suspense fallback={<PublicRouteFallback />}>
+        <AtendimentoMobileScreen token={token} />
+      </Suspense>
     );
   }
 
