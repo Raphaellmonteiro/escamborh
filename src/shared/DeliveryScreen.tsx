@@ -51,6 +51,10 @@ interface DeliveryConfig {
   cardapio_link_curto?: string;
   pix_nome?: string; pix_cidade?: string; pix_payload_estatico?: string;
   desconto_pix?: number; horario_abertura?: string; horario_fechamento?: string;
+  /** Se true, usa `horarios_semana` (múltiplas janelas por dia). */
+  horarios_semana_ativo?: boolean;
+  /** Agenda semanal: por dia (0=dom ... 6=sáb), até 2 janelas. */
+  horarios_semana?: Record<string, Array<{ abertura?: string; fechamento?: string }>> | unknown;
   /** 0=domingo … 6=sábado (`Date#getDay`). Dias em que o cardápio não aceita pedidos. */
   dias_folga_entrega?: number[];
   payment_provider?: string;
@@ -2807,6 +2811,123 @@ export function DeliveryConfigPanel({
                 <Field label="Horário fechamento" value={cfg.horario_fechamento||''} onChange={v=>setCfg(c=>({...c,horario_fechamento:v}))} type="time"/>
                 <Field label="Tempo de preparo (min)" value={String(cfg.tempo_preparo||'')} onChange={v=>setCfg(c=>({...c,tempo_preparo:parseInt(v)||0}))} type="number" placeholder="40"/>
                 <Field label="Pedido mínimo (R$)" value={String(cfg.pedido_minimo||'')} onChange={v=>setCfg(c=>({...c,pedido_minimo:parseFloat(v)||0}))} type="number" placeholder="0"/>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-zinc-800 dark:text-zinc-100">Horario por dia (2 janelas)</p>
+                    <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                      Opcional. Se ativado, permite ate 2 janelas por dia e substitui o horario unico + folga fixa.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCfg((c) => ({ ...c, horarios_semana_ativo: !c.horarios_semana_ativo }))}
+                    className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${cfg.horarios_semana_ativo ? 'bg-emerald-500' : 'bg-zinc-200 dark:bg-zinc-600'}`}
+                    aria-pressed={Boolean(cfg.horarios_semana_ativo)}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-zinc-200 rounded-full shadow transition-all ${cfg.horarios_semana_ativo ? 'left-6' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                {cfg.horarios_semana_ativo ? (
+                  <div className="space-y-3">
+                    {[
+                      { value: 1, label: 'Seg' },
+                      { value: 2, label: 'Ter' },
+                      { value: 3, label: 'Qua' },
+                      { value: 4, label: 'Qui' },
+                      { value: 5, label: 'Sex' },
+                      { value: 6, label: 'Sab' },
+                      { value: 0, label: 'Dom' },
+                    ].map((dia) => {
+                      const scheduleObj =
+                        cfg.horarios_semana && typeof cfg.horarios_semana === 'object' && !Array.isArray(cfg.horarios_semana)
+                          ? (cfg.horarios_semana as Record<string, any>)
+                          : {};
+                      const windows = Array.isArray(scheduleObj[String(dia.value)]) ? scheduleObj[String(dia.value)] : [];
+                      const closed = windows.length === 0;
+                      const w1 = windows[0] && typeof windows[0] === 'object' ? windows[0] : {};
+                      const w2 = windows[1] && typeof windows[1] === 'object' ? windows[1] : {};
+
+                      const setWindowField = (idx: number, key: 'abertura' | 'fechamento', value: string) => {
+                        setCfg((c) => {
+                          const prevObj =
+                            c.horarios_semana && typeof c.horarios_semana === 'object' && !Array.isArray(c.horarios_semana)
+                              ? (c.horarios_semana as Record<string, any>)
+                              : {};
+                          const prevDay = Array.isArray(prevObj[String(dia.value)]) ? [...prevObj[String(dia.value)]] : [];
+                          while (prevDay.length <= idx) prevDay.push({ abertura: '', fechamento: '' });
+                          prevDay[idx] = { ...(prevDay[idx] || {}), [key]: value };
+                          return {
+                            ...c,
+                            horarios_semana: {
+                              ...prevObj,
+                              [String(dia.value)]: prevDay.slice(0, 2),
+                            },
+                          };
+                        });
+                      };
+
+                      const setClosed = (nextClosed: boolean) => {
+                        setCfg((c) => {
+                          const prevObj =
+                            c.horarios_semana && typeof c.horarios_semana === 'object' && !Array.isArray(c.horarios_semana)
+                              ? (c.horarios_semana as Record<string, any>)
+                              : {};
+                          return {
+                            ...c,
+                            horarios_semana: {
+                              ...prevObj,
+                              [String(dia.value)]: nextClosed ? [] : [{ abertura: '', fechamento: '' }],
+                            },
+                          };
+                        });
+                      };
+
+                      return (
+                        <div key={dia.value} className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white/70 dark:bg-zinc-900/20 p-3 space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-black text-zinc-800 dark:text-zinc-100">{dia.label}</p>
+                            <button
+                              type="button"
+                              onClick={() => setClosed(!closed)}
+                              className={`min-h-[36px] rounded-xl border px-3 py-2 text-xs font-bold transition-colors shrink-0 ${
+                                closed
+                                  ? 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-zinc-500'
+                                  : 'border-rose-400 bg-rose-100 text-rose-900 dark:border-rose-500/50 dark:bg-rose-500/20 dark:text-rose-100'
+                              }`}
+                            >
+                              {closed ? 'Fechado' : 'Aberto'}
+                            </button>
+                          </div>
+
+                          <div className={`grid grid-cols-1 gap-3 ${closed ? 'opacity-50' : ''} sm:grid-cols-2`}>
+                            <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-3">
+                              <p className="text-[11px] font-black text-zinc-500 uppercase tracking-wider">Janela 1</p>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <input type="time" disabled={closed} value={String(w1.abertura || '')} onChange={e=>setWindowField(0,'abertura',e.target.value)}
+                                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+                                <input type="time" disabled={closed} value={String(w1.fechamento || '')} onChange={e=>setWindowField(0,'fechamento',e.target.value)}
+                                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-3">
+                              <p className="text-[11px] font-black text-zinc-500 uppercase tracking-wider">Janela 2</p>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <input type="time" disabled={closed} value={String(w2.abertura || '')} onChange={e=>setWindowField(1,'abertura',e.target.value)}
+                                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+                                <input type="time" disabled={closed} value={String(w2.fechamento || '')} onChange={e=>setWindowField(1,'fechamento',e.target.value)}
+                                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-600 text-fptext-primary"/>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 space-y-3">
                 <div>

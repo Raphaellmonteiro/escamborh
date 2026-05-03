@@ -86,6 +86,12 @@ interface Config {
   whatsapp?: string;
   horario_abertura?: string;
   horario_fechamento?: string;
+  /** Agenda semanal por dia (opcional). */
+  horarios_semana_ativo?: boolean;
+  horarios_semana?: unknown;
+  /** Próximos horários calculados pelo backend (compatível com múltiplas janelas). */
+  proxima_abertura?: string | null;
+  proximo_fechamento?: string | null;
   desconto_pix?: number;
   zonas_entrega?: Array<{nome: string; taxa: number}>;
   desconto_primeiro_cliente_ativo?: boolean;
@@ -905,6 +911,9 @@ function isPedidoAndamentoClienteStatus(status: string): boolean {
 }
 
 const MEUS_PEDIDOS_POLL_MS = 10000;
+const CARDAPIO_STATUS_POLL_FALLBACK_MS = 60000;
+const CARDAPIO_STATUS_POLL_MIN_MS = 15000;
+const CARDAPIO_STATUS_POLL_MAX_MS = 10 * 60000;
 
 function badgeClassStatusPedido(status: string, mode: DeliveryCardapioThemeMode = 'dark_premium'): string {
   const k = String(status || '').toLowerCase();
@@ -1297,6 +1306,49 @@ export default function DeliveryCardapio() {
     };
   }, [slug]);
 
+  // Revalida aberto/fechado automaticamente (múltiplas janelas por dia).
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const scheduleNext = (nextMinutes: unknown) => {
+      const n = typeof nextMinutes === 'number' && Number.isFinite(nextMinutes) ? Math.max(0, nextMinutes) : null;
+      const ms = n == null
+        ? CARDAPIO_STATUS_POLL_FALLBACK_MS
+        : Math.min(CARDAPIO_STATUS_POLL_MAX_MS, Math.max(CARDAPIO_STATUS_POLL_MIN_MS, Math.round(n * 60000) + 1500));
+      timer = window.setTimeout(() => { void poll(); }, ms);
+    };
+
+    const poll = async () => {
+      try {
+        const r = await fetch(`/public/delivery/${slug}/status`);
+        const d = await r.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (typeof (d as any)?.aberto === 'boolean') {
+          setAtivo(Boolean((d as any).aberto));
+        }
+        setDiaFolgaHoje((d as any)?.dia_folga_hoje === true);
+        setConfig((prev) => ({
+          ...prev,
+          proxima_abertura: (d as any)?.proxima_abertura ?? prev.proxima_abertura,
+          proximo_fechamento: (d as any)?.proximo_fechamento ?? prev.proximo_fechamento,
+        }));
+
+        scheduleNext((d as any)?.proximo_evento_em_minutos);
+      } catch {
+        if (!cancelled) scheduleNext(null);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [slug]);
+
   const subtotal = useMemo(() => cart.reduce((a,i)=>a+i.preco_final*i.qty,0), [cart]);
   const suggestionProductSignature = useMemo(() => buildSuggestionProductSignature(cart), [cart]);
   const shouldShowSuggestions = cart.length > 0;
@@ -1462,12 +1514,14 @@ export default function DeliveryCardapio() {
     mensagemPrimeiroCliente: 'Confira a taxa e os beneficios finais ao abrir sua sacola.',
   }), [config, subtotal]);
   const horarioLoja = useMemo(() => {
+    const proximoFecha = config.proximo_fechamento || config.horario_fechamento;
+    const proximoAbre = config.proxima_abertura || config.horario_abertura;
     if (ativo) {
-      return config.horario_fechamento ? `Aberto até às ${config.horario_fechamento}` : 'Loja aberta agora';
+      return proximoFecha ? `Aberto até às ${proximoFecha}` : 'Loja aberta agora';
     }
     if (diaFolgaHoje) return 'Fechado hoje (folga semanal)';
-    return config.horario_abertura ? `Fechado agora · abre às ${config.horario_abertura}` : 'Loja fechada no momento';
-  }, [ativo, diaFolgaHoje, config.horario_abertura, config.horario_fechamento]);
+    return proximoAbre ? `Fechado agora · abre às ${proximoAbre}` : 'Loja fechada no momento';
+  }, [ativo, diaFolgaHoje, config.proxima_abertura, config.proximo_fechamento, config.horario_abertura, config.horario_fechamento]);
   const cardapioTheme = useMemo(
     () => buildDeliveryCardapioTheme(normalizeDeliveryCardapioThemeMode(config.theme_mode)),
     [config.theme_mode]
@@ -2275,7 +2329,7 @@ export default function DeliveryCardapio() {
         <div className="bg-rose-600 px-4 py-2.5 text-center text-sm font-semibold text-white">
           {diaFolgaHoje
             ? 'Hoje a loja está fechada (folga semanal). Pedidos pelo cardápio não estão disponíveis.'
-            : <>Delivery fechado no momento {config.horario_abertura && `• Abre às ${config.horario_abertura}`}</>}
+            : <>Delivery fechado no momento {(config.proxima_abertura || config.horario_abertura) && `• Abre às ${config.proxima_abertura || config.horario_abertura}`}</>}
         </div>
       )}
 

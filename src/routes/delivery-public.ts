@@ -34,6 +34,12 @@ import { notifyTenantOrderStreams } from '../sse';
 import { normalizeCardapioOnlineBannerSlots } from '../utils/deliveryCardapioBannerSlots';
 import { applyNormalizedBannerSlots, coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist';
 import {
+  computeOperatingStatusFromLegacy,
+  computeOperatingStatusFromWeeklySchedule,
+  type DeliveryOperatingStatus,
+  type WeekdayJs,
+} from '../utils/deliveryOperatingHours';
+import {
   findDeliveryZoneByBairro,
   MENSAGEM_ENTREGA_FORA_DA_AREA,
 } from '../utils/deliveryBairroZona';
@@ -125,6 +131,10 @@ type DeliveryConfig = {
   whatsapp?: string;
   horario_abertura?: string;
   horario_fechamento?: string;
+  /** Se true, usa `horarios_semana` (janelas por dia) em vez do modelo legado. */
+  horarios_semana_ativo?: boolean;
+  /** Agenda semanal: por dia (0=dom ... 6=sáb), até 2 janelas. */
+  horarios_semana?: unknown;
   desconto_pix?: number;
   valor_por_entrega?: number;
   zonas_entrega?: DeliveryZone[];
@@ -413,22 +423,29 @@ function normalizeDeliveryPublicPaymentMethod(value: unknown): CanonicalPaymentM
   return null;
 }
 
-/** Horário de funcionamento (se cadastrado) e dias recorrentes de folga no fuso `TZ`. */
-function computeDeliveryCardapioAberto(dcfg: DeliveryConfig): { aberto: boolean; dia_folga_hoje: boolean } {
-  const diasFolga = normalizeDiasFolgaEntrega(dcfg.dias_folga_entrega);
-  const diaFolgaHoje = diasFolga.length > 0 && diasFolga.includes(getCurrentWeekdayJsInTimeZone());
-  if (diaFolgaHoje) return { aberto: false, dia_folga_hoje: true };
+/** Horário de funcionamento no fuso `TZ` (legado ou janelas por dia). */
+function computeDeliveryCardapioAberto(dcfg: DeliveryConfig): DeliveryOperatingStatus {
+  const nowWeekday = getCurrentWeekdayJsInTimeZone() as WeekdayJs;
+  const nowMinutes = getCurrentMinutesInTimeZone();
 
-  let abertoHorario = true;
-  if (dcfg.horario_abertura && dcfg.horario_fechamento) {
-    const [ah, am] = dcfg.horario_abertura.split(':').map(Number);
-    const [fh, fm] = dcfg.horario_fechamento.split(':').map(Number);
-    const t = getCurrentMinutesInTimeZone();
-    const ini = ah * 60 + am;
-    const fim = fh * 60 + fm;
-    abertoHorario = ini <= fim ? (t >= ini && t <= fim) : (t >= ini || t <= fim);
+  const weeklyActive = Boolean(dcfg.horarios_semana_ativo);
+  if (weeklyActive) {
+    const weekly = computeOperatingStatusFromWeeklySchedule({
+      nowWeekday,
+      nowMinutes,
+      scheduleRaw: dcfg.horarios_semana,
+    });
+    if (weekly) return weekly;
+    // Se a agenda semanal estiver inválida, cai no legado para não derrubar a operação.
   }
-  return { aberto: abertoHorario, dia_folga_hoje: false };
+
+  return computeOperatingStatusFromLegacy({
+    nowWeekday,
+    nowMinutes,
+    horario_abertura: dcfg.horario_abertura,
+    horario_fechamento: dcfg.horario_fechamento,
+    dias_folga_entrega: dcfg.dias_folga_entrega,
+  });
 }
 
 function validateCupom(
@@ -1095,6 +1112,41 @@ export function createDeliveryPublicRouter() {
   const requireDeliveryPublicPlan = requireSlugPlanFeature('delivery_public');
   const requireDeliveryTrackingPlan = requireSlugPlanFeature('delivery_tracking');
 
+  /** Endpoint leve para o cardápio revalidar aberto/fechado sem baixar produtos. */
+  router.get('/:slug/status', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
+    try {
+      const tenant = await getTenant(req.params.slug);
+      if (!tenant) return res.status(404).json({ error: 'Loja nao encontrada' });
+      const dcfg = parseDeliveryConfig(tenant.delivery_config);
+
+      if (!tenant.delivery_ativo) {
+        return res.json({
+          ativo: false,
+          aberto: false,
+          dia_folga_hoje: false,
+          proxima_abertura: null,
+          proximo_fechamento: null,
+          proximo_evento_em_minutos: null,
+          motivo: 'Delivery nao esta ativo',
+        });
+      }
+
+      const status = computeDeliveryCardapioAberto(dcfg);
+      return res.json({
+        ativo: status.aberto,
+        aberto: status.aberto,
+        dia_folga_hoje: status.dia_folga_hoje,
+        proxima_abertura: status.proxima_abertura ?? null,
+        proximo_fechamento: status.proximo_fechamento ?? null,
+        proximo_evento_em_minutos: status.proximo_evento_em_minutos ?? null,
+        horarios_semana_ativo: dcfg.horarios_semana_ativo ?? false,
+      });
+    } catch (e: unknown) {
+      sendInternalError(res, 'delivery-public:status', e);
+      return;
+    }
+  });
+
   router.get('/:slug/cardapio', publicRateLimit, requireDeliveryPublicPlan, async (req, res) => {
     try {
       const tenant = await getTenant(req.params.slug);
@@ -1102,7 +1154,7 @@ export function createDeliveryPublicRouter() {
       const dcfg = parseDeliveryConfig(tenant.delivery_config);
       if (!tenant.delivery_ativo) return res.status(403).json({ error: 'Delivery nao esta ativo', aberto: false });
 
-      const { aberto, dia_folga_hoje } = computeDeliveryCardapioAberto(dcfg);
+      const { aberto, dia_folga_hoje, proxima_abertura, proximo_fechamento } = computeDeliveryCardapioAberto(dcfg);
       const diasFolgaCfg = normalizeDiasFolgaEntrega(dcfg.dias_folga_entrega);
 
       const produtos = await qAll('SELECT * FROM produtos WHERE tenant_id=? AND active=1 ORDER BY COALESCE(ordem,0) ASC, name ASC', [tenant.id]);
@@ -1166,6 +1218,10 @@ export function createDeliveryPublicRouter() {
           whatsapp: dcfg.whatsapp || tenant.whatsapp,
           horario_abertura: dcfg.horario_abertura,
           horario_fechamento: dcfg.horario_fechamento,
+          horarios_semana_ativo: dcfg.horarios_semana_ativo ?? false,
+          horarios_semana: dcfg.horarios_semana,
+          proxima_abertura,
+          proximo_fechamento,
           desconto_pix: dcfg.desconto_pix ?? 0,
           desconto_primeiro_cliente_ativo: dcfg.desconto_primeiro_cliente_ativo ?? false,
           desconto_primeiro_cliente_tipo: dcfg.desconto_primeiro_cliente_tipo ?? 'percentual',
