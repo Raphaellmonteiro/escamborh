@@ -1,6 +1,6 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RefreshCw, LayoutGrid, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree, ChefHat } from 'lucide-react';
+import { RefreshCw, LayoutGrid, Smartphone, X, ChevronRight, Clock, Printer, BadgeCheck, ReceiptText, MapPinned, MessageCircle, QrCode, ListTree, ChefHat } from 'lucide-react';
 import type { Order } from '../types';
 import { Card, Button } from '../components/ui/Card';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
@@ -760,16 +760,30 @@ export default function CentralPedidosScreen({
             </span>
           }
           actions={
-            <Button
-              type="button"
-              variant="secondary"
-              className="!min-h-[36px] sm:!min-h-[38px] !px-2.5 !py-1.5 !text-[11px]"
-              onClick={() => void fetchOrders()}
-              disabled={loading}
-            >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-              Atualizar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="!min-h-[36px] sm:!min-h-[38px] !px-2.5 !py-1.5 !text-[11px] opacity-75 hover:opacity-100"
+                onClick={() => {
+                  const w = window.open('/m/atendimento', '_blank', 'noopener,noreferrer');
+                  if (w) w.opener = null;
+                }}
+              >
+                <Smartphone size={13} />
+                Atendimento Mobile
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!min-h-[36px] sm:!min-h-[38px] !px-2.5 !py-1.5 !text-[11px]"
+                onClick={() => void fetchOrders()}
+                disabled={loading}
+              >
+                <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                Atualizar
+              </Button>
+            </div>
           }
         />
 
