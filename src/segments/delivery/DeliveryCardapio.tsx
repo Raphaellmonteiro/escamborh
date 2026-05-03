@@ -1201,6 +1201,43 @@ function getSlug() {
   return sp.get('delivery_slug') || sp.get('_delivery_slug') || '';
 }
 
+function isDeliveryAssistidoEnabled(slug: string): boolean {
+  if (!slug) return false;
+  const key = `dc_assistido_${slug}`;
+  const sp = new URLSearchParams(window.location.search);
+  const raw = String(
+    sp.get('assistido') ??
+      sp.get('assist') ??
+      sp.get('atendimento_assistido') ??
+      ''
+  )
+    .trim()
+    .toLowerCase();
+  const truthy = raw === '1' || raw === 'true' || raw === 'sim' || raw === 'yes' || raw === 'on';
+  const falsy = raw === '0' || raw === 'false' || raw === 'nao' || raw === 'não' || raw === 'off';
+  if (truthy) {
+    try {
+      sessionStorage.setItem(key, '1');
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+  if (falsy) {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+  try {
+    return sessionStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function useClienteAuth(slug: string) {
   const KEY = `dc_token_${slug}`;
   const [token, setToken] = useState<string|null>(() => localStorage.getItem(KEY));
@@ -1221,6 +1258,7 @@ function useClienteAuth(slug: string) {
 
 export default function DeliveryCardapio() {
   const slug = getSlug();
+  const assistido = useMemo(() => isDeliveryAssistidoEnabled(slug), [slug]);
   const { token: cliToken, cliente, salvar: salvarToken, logout, atualizarFavoritos } = useClienteAuth(slug);
   const [nome, setNome] = useState('');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -1789,14 +1827,14 @@ export default function DeliveryCardapio() {
   }, []);
   const abrirCheckoutAPartirDaSacola = useCallback(() => {
     if (!ativo) return;
-    if (!cliente) {
+    if (!cliente && !assistido) {
       abrirIdentificacao('checkout');
       return;
     }
     setSacolaOpen(false);
     setCheckoutOpen(true);
     setCheckoutStep(1);
-  }, [ativo, cliente, abrirIdentificacao]);
+  }, [ativo, cliente, assistido, abrirIdentificacao]);
   const abrirPromocoesPublicas = useCallback(() => {
     setSearch('');
     setAbaCardapio('promocoes');
@@ -3399,13 +3437,14 @@ export default function DeliveryCardapio() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {checkoutOpen && cliente && (
+        {checkoutOpen && (cliente || assistido) && (
           <TelaCheckout
             slug={slug}
             cart={cart}
             config={config}
-            cliToken={cliToken}
-            cliente={cliente}
+            assistido={assistido}
+            cliToken={assistido ? null : cliToken}
+            cliente={assistido ? null : cliente}
             tipoAtendimento={tipoAtendimento}
             onTipoAtendimentoChange={setTipoAtendimento}
             onSuccess={onPedidoOk}
@@ -4440,15 +4479,25 @@ function PedidoSucessoModal({
   );
 }
 
-function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, onTipoAtendimentoChange, onSuccess, modalUi }: {
+function TelaCheckout({ slug, cart, config, assistido, cliToken, cliente, tipoAtendimento, onTipoAtendimentoChange, onSuccess, modalUi }: {
   slug:string; cart:CartItem[]; config:Config;
-  cliToken:string|null; cliente:ClienteAuth;
+  assistido: boolean;
+  cliToken:string|null; cliente:ClienteAuth | null;
   tipoAtendimento: TipoAtendimento | null;
   onTipoAtendimentoChange: (tipo: TipoAtendimento) => void;
   onSuccess:(d: PedidoConfirmado)=>void;
   modalUi: { step: CheckoutStep; onStepChange: (s: CheckoutStep) => void; onClose: () => void };
 }) {
   const { step: modalStep, onStepChange: setModalStep, onClose: fecharModalCheckout } = modalUi;
+
+  const [assistTelefone, setAssistTelefone] = useState('');
+  const [assistNome, setAssistNome] = useState('');
+  const [assistLoading, setAssistLoading] = useState(false);
+  const [assistNovoCliente, setAssistNovoCliente] = useState(false);
+  const [assistErro, setAssistErro] = useState('');
+  const [assistSession, setAssistSession] = useState<null | { token: string; cliente: ClienteAuth }>(null);
+  const effectiveCliToken = assistido ? (assistSession?.token || cliToken) : cliToken;
+  const effectiveCliente = assistido ? (assistSession?.cliente || cliente) : cliente;
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [endSel, setEndSel] = useState<number|'novo'|''>('');
   const [novoEndereco, setNovoEndereco] = useState<DeliveryNovoEnderecoForm>(() => emptyDeliveryNovoEnderecoForm(true));
@@ -4530,6 +4579,129 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const tot = resumoAtual.total;
   const descontoPixPercentual = Number(config.desconto_pix || 0);
   const inp = cx.inputBase;
+  const assistTelefoneDigits = useMemo(
+    () => normalizeBrazilDeliveryPhoneDigits(assistTelefone),
+    [assistTelefone]
+  );
+  const assistTelefoneOk = assistTelefoneDigits.length === 10 || assistTelefoneDigits.length === 11;
+
+  const resetAssistidoCliente = useCallback(() => {
+    setAssistErro('');
+    setAssistNovoCliente(false);
+    setAssistSession(null);
+    setAssistNome('');
+    setAssistTelefone('');
+    setEnderecos([]);
+    setEndSel('novo');
+    setNovoEndereco(emptyDeliveryNovoEnderecoForm(true));
+    setResumoCheckout(null);
+  }, []);
+
+  const identificarPorTelefoneAssistido = useCallback(async () => {
+    if (!assistido) return;
+    if (!slug) return;
+    setAssistErro('');
+    if (!assistTelefoneOk) {
+      setAssistErro('Telefone: use DDD + telefone (10 ou 11 dígitos).');
+      return;
+    }
+    if (assistLoading) return;
+    setAssistLoading(true);
+    try {
+      const r = await fetch(`/public/delivery/${slug}/auth/identificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: assistTelefoneDigits }),
+      });
+      const d = await r.json();
+      if (d?.success && d?.novo === false && d?.token && d?.cliente) {
+        const c = d.cliente as ClienteAuth;
+        setAssistSession({
+          token: String(d.token),
+          cliente: {
+            id: Number(c.id),
+            nome: String(c.nome || '').trim(),
+            telefone: String(c.telefone || '').trim(),
+            email: c.email ? String(c.email) : undefined,
+            favoritos: Array.isArray((c as any).favoritos) ? (c as any).favoritos : [],
+          },
+        });
+        setAssistNovoCliente(false);
+        setAssistNome(String(c.nome || ''));
+        return;
+      }
+      if (d?.success && d?.novo === true) {
+        setAssistNovoCliente(true);
+        setAssistSession(null);
+        if (!assistNome.trim()) setAssistNome('');
+        return;
+      }
+      setAssistErro(d?.error || 'Não foi possível identificar o cliente.');
+    } catch {
+      setAssistErro('Erro de conexão ao buscar cliente.');
+    } finally {
+      setAssistLoading(false);
+    }
+  }, [
+    assistido,
+    slug,
+    assistTelefoneOk,
+    assistTelefoneDigits,
+    assistLoading,
+    assistNome,
+  ]);
+
+  const cadastrarRapidoAssistido = useCallback(async () => {
+    if (!assistido) return;
+    if (!slug) return;
+    setAssistErro('');
+    if (!assistTelefoneOk) {
+      setAssistErro('Telefone: use DDD + telefone (10 ou 11 dígitos).');
+      return;
+    }
+    const nomeTrim = assistNome.trim();
+    if (!nomeTrim) {
+      setAssistErro('Informe o nome do cliente.');
+      return;
+    }
+    if (assistLoading) return;
+    setAssistLoading(true);
+    try {
+      const r = await fetch(`/public/delivery/${slug}/auth/cadastrar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: assistTelefoneDigits, nome: nomeTrim }),
+      });
+      const d = await r.json();
+      if (d?.success && d?.token && d?.cliente) {
+        const c = d.cliente as ClienteAuth;
+        setAssistSession({
+          token: String(d.token),
+          cliente: {
+            id: Number(c.id),
+            nome: String(c.nome || '').trim(),
+            telefone: String(c.telefone || '').trim(),
+            email: c.email ? String(c.email) : undefined,
+            favoritos: Array.isArray((c as any).favoritos) ? (c as any).favoritos : [],
+          },
+        });
+        setAssistNovoCliente(false);
+        return;
+      }
+      setAssistErro(d?.error || 'Não foi possível cadastrar o cliente.');
+    } catch {
+      setAssistErro('Erro de conexão ao cadastrar cliente.');
+    } finally {
+      setAssistLoading(false);
+    }
+  }, [
+    assistido,
+    slug,
+    assistTelefoneOk,
+    assistTelefoneDigits,
+    assistLoading,
+    assistNome,
+  ]);
 
   const temPixCheckoutCfg = !!(config.pix_chave || config.pix_payload_estatico);
   const pixPayloadCheckout = useMemo(() => {
@@ -4588,8 +4760,8 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
   const aplicarConsumoLocal = () => { setModoRecebimento('consumo_local'); onTipoAtendimentoChange('retirada'); };
 
   useEffect(()=>{
-    if (!cliToken||!slug) return;
-    fetch(`/public/delivery/${slug}/cliente/enderecos`,{headers:{Authorization:`Bearer ${cliToken}`}})
+    if (!effectiveCliToken||!slug) return;
+    fetch(`/public/delivery/${slug}/cliente/enderecos`,{headers:{Authorization:`Bearer ${effectiveCliToken}`}})
       .then(r=>r.ok?r.json():[]).then(d=>{
         if (Array.isArray(d)&&d.length>0) {
           setEnderecos(d);
@@ -4601,13 +4773,13 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
           setNovoEndereco(emptyDeliveryNovoEnderecoForm(true));
         }
       });
-  },[cliToken,slug]);
+  },[effectiveCliToken,slug]);
 
   const atualizarResumo = useCallback(async (
     cupomCodigo?: string | null,
     feeOverride?: { enderecoId?: number },
   ) => {
-    if (!cliToken || !slug || cart.length === 0 || !tipoAtendimento) {
+    if (!effectiveCliToken || !slug || cart.length === 0 || !tipoAtendimento) {
       setResumoCheckout(null);
       return null;
     }
@@ -4636,7 +4808,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
         body: JSON.stringify({
           items: cart.map(i=>({ product_id:i.id, quantity:i.qty, price_at_time:i.preco_final, name:i.name, obs_opcoes:i.obs_opcoes||'', variation_id:i.variation_id ?? null, selecoes: i.selecoes || undefined })),
           pagamento_tipo: pag,
-          clienteToken: cliToken,
+          clienteToken: effectiveCliToken,
           canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
           endereco_id: resolvedEndId,
           bairro_temporario: resolvedBairroTemp,
@@ -4687,7 +4859,7 @@ function TelaCheckout({ slug, cart, config, cliToken, cliente, tipoAtendimento, 
       }
     }
   }, [
-    cliToken,
+    effectiveCliToken,
     slug,
     cart,
     pag,
@@ -4754,14 +4926,14 @@ const finalizar = async () => {
       let enderecoIdFinal: number | undefined = typeof endSel === 'number' ? endSel : undefined;
 
       if (tipoAtendimento === 'entrega' && endSel === 'novo') {
-        if (!cliToken) {
-          setErro('É necessário estar identificado para salvar o endereço de entrega.');
+        if (!effectiveCliToken) {
+          setErro('É necessário identificar o cliente (telefone) para salvar o endereço de entrega.');
           return;
         }
         const principalFlag = enderecos.length === 0 || novoEndereco.principal;
         const rs = await fetch(`/public/delivery/${slug}/cliente/enderecos`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cliToken}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${effectiveCliToken}` },
           body: JSON.stringify({
             label: novoEndereco.label,
             logradouro: novoEndereco.campos.logradouro.trim(),
@@ -4812,15 +4984,23 @@ const finalizar = async () => {
         obsCompleta = `Troco para R$ ${troco}${rest ? ` | ${rest}` : ''}`;
       }
       obsCompleta = observacaoComModoConsumo(modoRecebimento, obsCompleta);
+      if (!effectiveCliente) {
+        setErro(
+          assistido
+            ? 'Informe o telefone do cliente para localizar/cadastrar antes de finalizar o pedido.'
+            : 'É necessário estar identificado para finalizar o pedido.'
+        );
+        return;
+      }
       const body: any = {
         items: cart.map(i=>({product_id:i.id,quantity:i.qty,price_at_time:i.preco_final,name:i.name,obs_opcoes:i.obs_opcoes||'',variation_id:i.variation_id ?? null, selecoes: i.selecoes || undefined})),
         pagamento_tipo: pag,
         desconto_pix: pag==='pix' ? descontoPix : 0,
         observation: obsCompleta,
-        cliente_nome: cliente.nome, cliente_tel: cliente.telefone,
-        customer_email: cliente.email || undefined,
+        cliente_nome: effectiveCliente.nome, cliente_tel: effectiveCliente.telefone,
+        customer_email: effectiveCliente.email || undefined,
         endereco: tipoAtendimento === 'retirada' ? null : endStr,
-        clienteToken: cliToken,
+        clienteToken: effectiveCliToken,
         canal: tipoAtendimento === 'retirada' ? 'retirada' : 'delivery',
         ...(tipoAtendimento === 'retirada'
           ? {
@@ -4866,6 +5046,10 @@ const finalizar = async () => {
 
   const validarAvancoEtapa1 = (): boolean => {
     setErro('');
+    if (assistido && !effectiveCliente) {
+      setErro('Informe o telefone do cliente (atendimento assistido) para continuar.');
+      return false;
+    }
     if (modoRecebimento == null) {
       setErro('Escolha como deseja receber o pedido.');
       return false;
@@ -5106,10 +5290,107 @@ const finalizar = async () => {
           ))}
         </div>
         {/* Cliente */}
-        <div className={`${cx.clienteCard} ${modalStep !== 2 ? 'hidden' : ''}`}>
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black text-white ${checkoutTheme.mode === 'light_red' ? 'bg-red-600' : 'bg-sky-600'}`}>{cliente.nome[0]}</div>
-          <div><p className={`text-sm font-bold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>{cliente.nome}</p><p className={`text-xs ${checkoutTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-200'}`}>{cliente.telefone}</p></div>
-        </div>
+        {effectiveCliente ? (
+          <div className={`${cx.clienteCard} ${modalStep !== 2 ? 'hidden' : ''}`}>
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black text-white ${checkoutTheme.mode === 'light_red' ? 'bg-red-600' : 'bg-sky-600'}`}>{effectiveCliente.nome[0]}</div>
+            <div><p className={`text-sm font-bold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>{effectiveCliente.nome}</p><p className={`text-xs ${checkoutTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-200'}`}>{effectiveCliente.telefone}</p></div>
+          </div>
+        ) : assistido ? (
+          <div className={`${cx.clienteCard} ${modalStep !== 2 ? 'hidden' : ''}`}>
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black text-white ${checkoutTheme.mode === 'light_red' ? 'bg-red-600' : 'bg-sky-600'}`}>?</div>
+            <div>
+              <p className={`text-sm font-bold ${checkoutTheme.mode === 'light_red' ? 'text-zinc-900' : 'text-white'}`}>Telefone do cliente</p>
+              <p className={`text-xs ${checkoutTheme.mode === 'light_red' ? 'text-red-700' : 'text-cyan-200'}`}>Informe na etapa Entrega</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Atendimento assistido (sem login/senha): identifica o cliente no checkout */}
+        {assistido && modalStep === 1 && (
+          <div className={cx.card}>
+            <p className={cx.cardTitle}>Atendimento assistido</p>
+            <p className={cx.cardMuted}>Informe o telefone para buscar cadastro e endereços. Se não existir, cadastre rápido.</p>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <p className={`mb-1.5 text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}>Telefone do cliente</p>
+                <input
+                  value={assistTelefone}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setAssistTelefone(next);
+                    setAssistErro('');
+                    if (assistSession) {
+                      setAssistSession(null);
+                      setAssistNovoCliente(false);
+                      setEnderecos([]);
+                      setEndSel('novo');
+                      setNovoEndereco(emptyDeliveryNovoEnderecoForm(true));
+                      setResumoCheckout(null);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!assistSession && assistTelefoneOk && !assistNovoCliente) {
+                      void identificarPorTelefoneAssistido();
+                    }
+                  }}
+                  placeholder="DDD + telefone (somente números)"
+                  inputMode="tel"
+                  className={inp}
+                />
+              </div>
+              {assistSession ? (
+                <button type="button" onClick={resetAssistidoCliente} className={cx.footerBack}>
+                  Trocar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void identificarPorTelefoneAssistido()}
+                  className={cx.cupomApply}
+                  disabled={!assistTelefoneOk || assistLoading}
+                >
+                  {assistLoading ? 'Buscando...' : 'Buscar'}
+                </button>
+              )}
+            </div>
+
+            {assistSession && (
+              <div className={`mt-3 rounded-xl border px-3 py-2 text-sm ${isLightCheckout ? 'border-zinc-200 bg-zinc-50 text-zinc-700' : 'border-white/10 bg-white/5 text-zinc-200'}`}>
+                <span className="font-bold">Cliente:</span> {assistSession.cliente.nome} · {assistSession.cliente.telefone}
+              </div>
+            )}
+
+            {assistNovoCliente && !assistSession && (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div>
+                  <p className={`mb-1.5 text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}>Nome do cliente</p>
+                  <input
+                    value={assistNome}
+                    onChange={(e) => setAssistNome(e.target.value)}
+                    placeholder="Nome para cadastro rápido"
+                    className={inp}
+                    maxLength={80}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void cadastrarRapidoAssistido()}
+                  className={cx.cupomApply}
+                  disabled={assistLoading || !assistTelefoneOk || !assistNome.trim()}
+                >
+                  {assistLoading ? 'Cadastrando...' : 'Cadastrar'}
+                </button>
+              </div>
+            )}
+
+            {assistErro && (
+              <p className={`mt-2 text-sm font-semibold ${isLightCheckout ? 'text-red-700' : 'text-rose-200'}`}>
+                {assistErro}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Endereço / retirada — etapa 1 */}
         {modoRecebimento === 'retirada' && modalStep === 1 && (
