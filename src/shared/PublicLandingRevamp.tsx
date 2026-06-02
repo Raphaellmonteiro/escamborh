@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PUBLIC_SEGMENT_NOTE, PUBLIC_SEGMENT_OPTIONS } from '../config/publicSegments';
 
-const WHATSAPP_NUMBER = '5582999999999'; // TROQUE pelo seu número com DDI+DDD
+const WHATSAPP_NUMBER = '5582981831172'; // TROQUE pelo seu número com DDI+DDD
 
 const HIGHLIGHTS = [
   'Mesmo sistema para balcão, mesa, delivery e retirada',
