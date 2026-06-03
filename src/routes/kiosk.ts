@@ -637,7 +637,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     try {
       const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug });
-      const allOrders = await qAll(`SELECT * FROM pedidos WHERE tenant_id=? AND ${buildOperationalKdsOrderClause()} ORDER BY created_at ASC`, [tenant.id]);
+      const allOrders = await qAll(`SELECT * FROM pedidos WHERE tenant_id=? AND ${buildOperationalKdsOrderClause()} AND created_at >= NOW() - INTERVAL '24 hours' ORDER BY created_at ASC`, [tenant.id]);
       // Deduplica pedidos de mesa (agrupa pelo label da mesa)
       const seen = new Map<string,any>();
       for (const o of allOrders) {
