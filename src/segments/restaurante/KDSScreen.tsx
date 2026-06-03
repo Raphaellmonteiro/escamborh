@@ -121,7 +121,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
 
   if (loading) return (
     <div style={{ ...S.root, alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center', color: '#334155' }}>
+      <div style={{ textAlign: 'center', color: '#374151' }}>
         <div style={{ ...S.logoBox, width: 56, height: 56, margin: '0 auto 16px', fontSize: 12, fontWeight: 800, letterSpacing: '0.18em' }}>KDS</div>
         <p style={{ fontFamily: 'monospace', letterSpacing: 2 }}>Conectando à cozinha...</p>
       </div>
@@ -158,14 +158,14 @@ export default function KDSScreen({ slug }: { slug: string }) {
               <div key={col} style={{ ...S.pill, borderColor: sc.border, background: sc.bg }}>
                 <span style={{ fontSize: 16 }}>{sc.emoji}</span>
                 <span style={{ color: sc.color, fontWeight: 900, fontSize: 20, fontFamily: 'monospace', lineHeight: 1 }}>{n}</span>
-                <span style={{ color: '#475569', fontSize: 9, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: 1 }}>{sc.label}</span>
+                <span style={{ color: '#6b7280', fontSize: 9, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: 1 }}>{sc.label}</span>
               </div>
             );
           })}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={S.clock}>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-          <div style={{ fontSize: 10, color: '#334155', fontFamily: 'monospace' }}>↻ {lastUpdate.toLocaleTimeString('pt-BR')}</div>
+          <div style={{ fontSize: 10, color: '#374151', fontFamily: 'monospace' }}>↻ {lastUpdate.toLocaleTimeString('pt-BR')}</div>
         </div>
       </header>
 
@@ -173,8 +173,8 @@ export default function KDSScreen({ slug }: { slug: string }) {
       {orders.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ ...S.logoBox, width: 72, height: 72, marginBottom: 20, fontSize: 14, fontWeight: 800, letterSpacing: '0.18em' }}>KDS</div>
-          <p style={{ fontSize: 28, fontWeight: 900, color: '#1e293b' }}>Tudo em dia!</p>
-          <p style={{ fontSize: 14, color: '#334155', marginTop: 8 }}>Nenhum pedido pendente no momento</p>
+          <p style={{ fontSize: 28, fontWeight: 900, color: '#1a1a1a' }}>Tudo em dia!</p>
+          <p style={{ fontSize: 14, color: '#374151', marginTop: 8 }}>Nenhum pedido pendente no momento</p>
         </div>
       ) : (
         <div style={S.colGrid}>
@@ -271,8 +271,8 @@ export default function KDSScreen({ slug }: { slug: string }) {
 
                           {/* contador de tempo */}
                           <div style={{
-                            background: urgent ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.04)',
-                            border: `1px solid ${urgent ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                            background: urgent ? 'rgba(239,68,68,0.12)' : '#f3f4f6',
+                            border: `1px solid ${urgent ? 'rgba(239,68,68,0.3)' : '#e5e7eb'}`,
                             borderRadius: 8, padding: '5px 10px', textAlign: 'center', minWidth: 50, flexShrink: 0,
                           }}>
                             <div style={{ fontSize: 18, fontWeight: 900, color: urgent ? '#ef4444' : '#64748b', fontFamily: 'monospace', lineHeight: 1 }}>
@@ -285,7 +285,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
                         </div>
 
                         {/* divisor */}
-                        <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 10 }} />
+                        <div style={{ height: 1, background: '#e5e7eb', marginBottom: 10 }} />
 
                         {/* itens */}
                         <div style={{ marginBottom: 10 }}>
@@ -297,17 +297,17 @@ export default function KDSScreen({ slug }: { slug: string }) {
                               }}>
                                 {item.quantity}×
                               </span>
-                              <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>{item.product_name}</span>
+                              <span style={{ fontSize: 13, color: '#1a1a1a', fontWeight: 500 }}>{item.product_name}</span>
                             </div>
                           ))}
-                          {(order.items || []).length === 0 && <p style={{ fontSize: 12, color: '#334155', fontStyle: 'italic' }}>Sem itens</p>}
+                          {(order.items || []).length === 0 && <p style={{ fontSize: 12, color: '#374151', fontStyle: 'italic' }}>Sem itens</p>}
                         </div>
 
                         {/* observação */}
                         {order.observation && (
                           <div style={{
-                            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-                            borderRadius: 8, padding: '5px 10px', fontSize: 11, color: '#94a3b8',
+                            background: '#f9fafb', border: '1px solid #e5e7eb',
+                            borderRadius: 8, padding: '5px 10px', fontSize: 11, color: '#6b7280',
                             fontStyle: 'italic', marginBottom: 10,
                           }}>
                             Obs.: {order.observation}
@@ -319,7 +319,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
                           <button onClick={() => advance(order.id)} disabled={isAdv} style={{
                             width: '100%', padding: '10px 0', borderRadius: 10, border: 'none',
                             cursor: isAdv ? 'wait' : 'pointer',
-                            background: isAdv ? '#1e293b' : sc.color,
+                            background: isAdv ? '#e5e7eb' : sc.color,
                             color: '#020617', fontWeight: 900, fontSize: 13,
                             opacity: isAdv ? 0.5 : 1, transition: 'all 0.2s', letterSpacing: 0.5,
                           }}>
@@ -349,9 +349,9 @@ export default function KDSScreen({ slug }: { slug: string }) {
       {/* ── FOOTER ──────────────────────────────────────────────── */}
       <footer style={S.footer}>
         <span>Pratory · Tela da Cozinha</span>
-        <span style={{ color: '#475569' }}>·</span>
+        <span style={{ color: '#6b7280' }}>·</span>
         <span>Atualização a cada 10 segundos</span>
-        <span style={{ color: '#475569' }}>·</span>
+        <span style={{ color: '#6b7280' }}>·</span>
         <span style={{ color: '#f87171', fontWeight: 600 }}>Vermelho = acima de 15 min</span>
       </footer>
     </div>
@@ -359,19 +359,19 @@ export default function KDSScreen({ slug }: { slug: string }) {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  root:    { background: '#090e17', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#f0f4ff', userSelect: 'none' },
-  header:  { background: 'rgba(9,14,23,0.97)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(148,163,184,0.12)', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, gap: 12 },
-  logoBox: { width: 38, height: 38, background: 'rgba(234,29,44,0.08)', border: '1px solid rgba(234,29,44,0.18)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
-  hTitle:  { fontSize: '0.9rem', fontWeight: 800, color: '#f0f4ff' },
-  hSub:    { fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.12em', color: '#94a3b8', textTransform: 'uppercase' },
-  sep:     { width: 1, height: 30, background: 'rgba(148,163,184,0.16)', margin: '0 4px' },
+  root:    { background: '#f9fafb', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#1a1a1a', userSelect: 'none' },
+  header:  { background: '#ffffff', backdropFilter: 'blur(20px)', borderBottom: '2px solid #ea1d2c', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, gap: 12 },
+  logoBox: { width: 38, height: 38, background: 'rgba(234,29,44,0.08)', border: '1px solid rgba(234,29,44,0.25)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
+  hTitle:  { fontSize: '0.9rem', fontWeight: 800, color: '#1a1a1a' },
+  hSub:    { fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.12em', color: '#6b7280', textTransform: 'uppercase' },
+  sep:     { width: 1, height: 30, background: 'rgba(0,0,0,0.12)', margin: '0 4px' },
   pill:    { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 10, border: '1px solid' },
-  clock:   { fontFamily: 'monospace', fontSize: '1.3rem', fontWeight: 900, color: '#f0f4ff', letterSpacing: '-0.02em' },
+  clock:   { fontFamily: 'monospace', fontSize: '1.3rem', fontWeight: 900, color: '#1a1a1a', letterSpacing: '-0.02em' },
   colGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', overflow: 'hidden' },
-  col:     { borderRight: '1px solid rgba(148,163,184,0.08)', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '3px solid transparent' },
-  colHead: { display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid', background: 'rgba(15,23,42,0.45)', flexShrink: 0 },
+  col:     { borderRight: '1px solid rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '3px solid transparent' },
+  colHead: { display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid', background: '#f3f4f6', flexShrink: 0 },
   cardArea:{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 },
-  card:    { borderRadius: 14, border: '1px solid', padding: 14, transition: 'all 0.3s ease', background: 'rgba(15,23,42,0.55)' },
-  emptyCol:{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem', padding: '32px 0', fontStyle: 'italic' },
-  footer:  { borderTop: '1px solid rgba(148,163,184,0.1)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.68rem', color: '#94a3b8', background: 'rgba(9,14,23,0.94)', flexShrink: 0 },
+  card:    { borderRadius: 14, border: '1px solid', padding: 14, transition: 'all 0.3s ease', background: '#ffffff' },
+  emptyCol:{ textAlign: 'center', color: '#9ca3af', fontSize: '0.8rem', padding: '32px 0', fontStyle: 'italic' },
+  footer:  { borderTop: '1px solid rgba(0,0,0,0.08)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.68rem', color: '#6b7280', background: '#ffffff', flexShrink: 0 },
 };
