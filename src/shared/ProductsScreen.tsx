@@ -203,6 +203,7 @@ export default function ProductsScreen({
     { id: number; nome: string; estoque_atual: number; unidade: string }[]
   >([]);
   const [editingVar, setEditingVar] = useState<ProdutoVariacaoVendavel | null>(null);
+  const [activeTab, setActiveTab] = useState<'basico'|'preco'|'estoque'|'opcoes'|'imagem'|'avancado'>('basico');
 
   function handleEditVar(v: ProdutoVariacaoVendavel) {
     setEditingVar(v);
@@ -840,7 +841,7 @@ export default function ProductsScreen({
                   <button type="button" aria-label="Grade" onClick={() => setViewMode('grid')} className={`p-2.5 min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:p-2 lg:px-2.5 flex items-center justify-center rounded-lg transition-all ${viewMode==='grid'?'bg-white shadow-sm text-zinc-900':'text-zinc-400'}`}><LayoutGrid size={15}/></button>
                 </div>
               </div>
-              <button type="button" onClick={() => setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1, mais_vendido: 0 })}
+              <button type="button" onClick={() => { setEditing({ name: '', price: 0, category: categories[0]?.nome || 'Geral', active: true, custo: 0, destaque: 0, em_promocao: 0, preco_original: null, ordem: 0, production_type: 'kitchen', requires_preparation: 1, mais_vendido: 0 }); setActiveTab('basico'); }}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] lg:min-h-0 lg:py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-all active:scale-95 w-full sm:w-auto">
                 <Plus size={16}/> Novo Produto
               </button>
@@ -1026,21 +1027,7 @@ export default function ProductsScreen({
                       className="p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all">
                       <Copy size={15}/>
                     </button>
-                    {p.id && Number(p.is_combo) === 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setComboProdutoId(p.id!)}
-                        title="Grupos do combo"
-                        className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-violet-200 text-violet-700 hover:bg-violet-50 rounded-lg text-xs font-bold transition-all"
-                      >
-                        <Package size={12} /> Combo
-                      </button>
-                    )}
-                    {p.id && <button type="button" onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais"
-                      className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-bold transition-all">
-                      <Settings2 size={12}/> Opções
-                    </button>}
-                    <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }}
+                    <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); setActiveTab('basico'); }}
                       className="flex items-center justify-center gap-1 px-3 py-2 min-h-[40px] border border-zinc-200 text-zinc-700 hover:bg-zinc-50 rounded-lg text-xs font-bold transition-all">
                       <Pencil size={12}/> Editar
                     </button>
@@ -1125,13 +1112,8 @@ export default function ProductsScreen({
                     <button type="button" onClick={() => handleToggleDestaque(p)} className={`p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg transition-all ${p.destaque ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-500'}`}><Star size={14} className={p.destaque ? 'fill-amber-500' : ''}/></button>
                     <button type="button" onClick={() => handleToggleAtivo(p)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all">{p.active ? <Eye size={14}/> : <EyeOff size={14}/>}</button>
                     <button type="button" onClick={() => handleDuplicate(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Copy size={14}/></button>
-                    {p.id && Number(p.is_combo) === 1 && (
-                      <button type="button" onClick={() => setComboProdutoId(p.id!)} title="Grupos do combo" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-violet-50 text-zinc-300 hover:text-violet-600 rounded-lg transition-all">
-                        <Package size={14} />
-                      </button>
-                    )}
-                    {p.id && <button type="button" onClick={() => setOpcoesProdutoId(p.id!)} title="Opções / Adicionais" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-50 text-zinc-300 hover:text-emerald-600 rounded-lg transition-all"><Settings2 size={14}/></button>}
-                    <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); }} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
+                    {p.id && <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); setActiveTab('opcoes'); }} title="Opções / Adicionais" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-emerald-50 text-zinc-300 hover:text-emerald-600 rounded-lg transition-all"><Settings2 size={14}/></button>}
+                    <button type="button" onClick={() => { setEditing({ ...p, production_type: resolveProductionType(p), requires_preparation: resolveRequiresPreparation(p) ? 1 : 0 }); setPendingPhoto(null); setActiveTab('basico'); }} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-zinc-100 text-zinc-400 rounded-lg transition-all"><Pencil size={14}/></button>
                     <button type="button" onClick={() => handleDeleteClick(p.id)} className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center hover:bg-red-50 text-zinc-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14}/></button>
                   </div>
                 </div>
@@ -1163,214 +1145,445 @@ export default function ProductsScreen({
               </div>
 
               <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 min-w-0">
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pt-3 pb-2 sm:px-5 sm:pt-3 2xl:space-y-4 2xl:px-7 2xl:pt-4">
-                {/* Nome */}
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nome do produto *</label>
-                  <input value={editing.name || ''} onChange={e => setEditing(p => ({...p, name: e.target.value}))}
-                    placeholder="ex: Hambúrguer Clássico" required
-                    className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
-                </div>
 
-                {/* Descrição */}
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Descrição</label>
-                  <textarea value={editing.descricao || ''} onChange={e => setEditing(p => ({...p, descricao: e.target.value}))}
-                    rows={2} placeholder="ex: Pão brioche, carne 180g, queijo cheddar, molho especial..."
-                    className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400 resize-none"/>
+              {/* ── Navegação de abas ── */}
+              <div className="shrink-0 border-b border-zinc-100 px-3 sm:px-5 overflow-x-auto">
+                <div className="flex gap-0 min-w-max">
+                  {([
+                    { key: 'basico',   label: 'Básico'   },
+                    { key: 'preco',    label: 'Preço'    },
+                    { key: 'estoque',  label: 'Estoque'  },
+                    { key: 'opcoes',   label: 'Opções', onlyEdit: true },
+                    { key: 'imagem',   label: 'Imagem'   },
+                    { key: 'avancado', label: 'Avançado', onlyEdit: true },
+                  ] as { key: typeof activeTab; label: string; onlyEdit?: boolean }[])
+                    .filter(t => !t.onlyEdit || !!editing?.id)
+                    .map(t => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setActiveTab(t.key)}
+                        className={`px-3 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-all ${
+                          activeTab === t.key
+                            ? 'border-zinc-900 text-zinc-900'
+                            : 'border-transparent text-zinc-400 hover:text-zinc-600'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))
+                  }
                 </div>
+              </div>
 
-                {/* Preço + Custo */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-4 pb-2 sm:px-5 space-y-3 2xl:space-y-4 2xl:px-7 2xl:pt-5">
+
+                {/* ══ ABA: BÁSICO ══ */}
+                {activeTab === 'basico' && (<>
+                  {/* Nome */}
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Preço de venda (R$) *</label>
-                    <input type="number" step="0.01" min="0" value={editing.price ?? 0}
-                      onChange={e => setEditing(p => ({...p, price: parseFloat(e.target.value) || 0}))} required
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Nome do produto *</label>
+                    <input value={editing.name || ''} onChange={e => setEditing(p => ({...p, name: e.target.value}))}
+                      placeholder="ex: Hambúrguer Clássico" required
                       className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Custo (R$)</label>
-                    <input type="number" step="0.01" min="0" value={editing.custo ?? 0}
-                      onChange={e => setEditing(p => ({...p, custo: parseFloat(e.target.value) || 0}))}
-                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
-                  </div>
-                </div>
 
-                <div className="product-form-promo-block rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="product-form-section-title text-sm font-semibold text-zinc-800">Promocao no cardapio online</p>
-                      <p className="product-form-section-description text-xs text-zinc-500 mt-0.5">
-                        O preco atual continua sendo o Preco de venda. O campo abaixo serve apenas para exibir o valor antigo riscado.
-                      </p>
+                  {/* Descrição */}
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Descrição</label>
+                    <textarea value={editing.descricao || ''} onChange={e => setEditing(p => ({...p, descricao: e.target.value}))}
+                      rows={2} placeholder="ex: Pão brioche, carne 180g, queijo cheddar, molho especial..."
+                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400 resize-none"/>
+                  </div>
+
+                  {/* Categoria */}
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Categoria</label>
+                    <select value={editing.category || ''} onChange={e => setEditing(p => ({...p, category: e.target.value as any}))}
+                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none">
+                      {categories.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+                      {editing.category && !categories.find(c => c.nome === editing.category) && (
+                        <option value={editing.category}>{editing.category}</option>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Disponibilidade por horário */}
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">
+                      <Clock size={10} className="inline mr-1"/>Disponível das… às…
+                      <span className="ml-1 normal-case font-normal text-zinc-400">(deixe vazio para sempre disponível)</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input type="time" value={editing.disponivel_de || ''}
+                        onChange={e => setEditing(p => ({...p, disponivel_de: e.target.value || undefined}))}
+                        className="px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
+                      <input type="time" value={editing.disponivel_ate || ''}
+                        onChange={e => setEditing(p => ({...p, disponivel_ate: e.target.value || undefined}))}
+                        className="px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
                     </div>
-                    <label className={`product-form-checkbox-row flex items-center gap-2 cursor-pointer shrink-0 rounded-xl border px-3 py-2 transition-all ${editing.em_promocao ? 'is-active border-rose-300 bg-white shadow-sm' : 'border-rose-100/70 bg-white/70 hover:border-rose-200'}`}>
-                      <input
-                        type="checkbox"
-                        checked={!!editing.em_promocao}
-                        onChange={e => setEditing(prev => ({
-                          ...prev,
-                          em_promocao: e.target.checked ? 1 : 0,
-                          preco_original: e.target.checked ? prev?.preco_original ?? undefined : null,
-                        }))}
-                        className="product-form-checkbox h-4 w-4 rounded border-rose-300 accent-rose-500"
-                      />
-                      <span className="product-form-checkbox-label text-sm font-medium text-zinc-700">Produto em promocao</span>
+                  </div>
+
+                  {/* Toggles */}
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+                      <input type="checkbox" checked={!!editing.active} onChange={e => setEditing(p => ({...p, active: e.target.checked}))}
+                        className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"/>
+                      <span className="text-sm font-medium text-zinc-700">Produto ativo</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+                      <input type="checkbox" checked={!!editing.destaque} onChange={e => setEditing(p => ({...p, destaque: e.target.checked ? 1 : 0}))}
+                        className="w-4 h-4 rounded border-zinc-300 text-amber-500 focus:ring-amber-500"/>
+                      <span className="text-sm font-medium text-zinc-700">⭐ Em destaque</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
+                      <input type="checkbox" checked={!!editing.mais_vendido} onChange={e => setEditing(p => ({...p, mais_vendido: e.target.checked ? 1 : 0}))}
+                        className="w-4 h-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500"/>
+                      <span className="text-sm font-medium text-zinc-700">🏆 Mais vendidos (PDF)</span>
                     </label>
                   </div>
+                </>)}
 
-                  {!!editing.em_promocao && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* ══ ABA: PREÇO ══ */}
+                {activeTab === 'preco' && (<>
+                  {/* Preço + Custo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Preço de venda (R$) *</label>
+                      <input type="number" step="0.01" min="0" value={editing.price ?? 0}
+                        onChange={e => setEditing(p => ({...p, price: parseFloat(e.target.value) || 0}))} required
+                        className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Custo (R$)</label>
+                      <input type="number" step="0.01" min="0" value={editing.custo ?? 0}
+                        onChange={e => setEditing(p => ({...p, custo: parseFloat(e.target.value) || 0}))}
+                        className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none focus:border-zinc-400"/>
+                    </div>
+                  </div>
+
+                  {/* Margem calculada */}
+                  {(editing.price || 0) > 0 && (editing.custo || 0) > 0 && (() => {
+                    const mg = margem(editing)!;
+                    const cls = mg >= 50 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : mg >= 30 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-red-50 border-red-200 text-red-700';
+                    return (
+                      <div className={`px-4 py-2.5 rounded-xl border text-sm font-bold ${cls}`}>
+                        Margem: {mg.toFixed(1)}% · Lucro: {fmtR$((editing.price || 0) - (editing.custo || 0))} por unidade
+                      </div>
+                    );
+                  })()}
+
+                  {/* Promoção */}
+                  <div className="product-form-promo-block rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Preco de antes (R$)</label>
+                        <p className="product-form-section-title text-sm font-semibold text-zinc-800">Promocao no cardapio online</p>
+                        <p className="product-form-section-description text-xs text-zinc-500 mt-0.5">
+                          O preco atual continua sendo o Preco de venda. O campo abaixo serve apenas para exibir o valor antigo riscado.
+                        </p>
+                      </div>
+                      <label className={`product-form-checkbox-row flex items-center gap-2 cursor-pointer shrink-0 rounded-xl border px-3 py-2 transition-all ${editing.em_promocao ? 'is-active border-rose-300 bg-white shadow-sm' : 'border-rose-100/70 bg-white/70 hover:border-rose-200'}`}>
                         <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={editing.preco_original ?? ''}
+                          type="checkbox"
+                          checked={!!editing.em_promocao}
                           onChange={e => setEditing(prev => ({
                             ...prev,
-                            preco_original: e.target.value === '' ? null : (parseFloat(e.target.value) || 0),
+                            em_promocao: e.target.checked ? 1 : 0,
+                            preco_original: e.target.checked ? prev?.preco_original ?? undefined : null,
                           }))}
-                          className="product-form-promo-input w-full px-3.5 py-2.5 border border-rose-200 bg-white rounded-xl text-sm focus:outline-none focus:border-rose-400"
+                          className="product-form-checkbox h-4 w-4 rounded border-rose-300 accent-rose-500"
                         />
-                      </div>
-                      <div className="product-form-promo-preview rounded-xl border border-rose-100 bg-white px-3.5 py-2.5 flex flex-col justify-center">
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Preview</span>
-                        <div className="mt-1 flex items-baseline gap-2">
-                          <span className="text-base font-black text-zinc-900">{fmtR$(Number(editing.price || 0))}</span>
-                          {Number(editing.preco_original || 0) > Number(editing.price || 0) && (
-                            <span className="text-xs font-bold text-rose-500 line-through">{fmtR$(Number(editing.preco_original || 0))}</span>
-                          )}
+                        <span className="product-form-checkbox-label text-sm font-medium text-zinc-700">Produto em promocao</span>
+                      </label>
+                    </div>
+
+                    {!!editing.em_promocao && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Preco de antes (R$)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={editing.preco_original ?? ''}
+                            onChange={e => setEditing(prev => ({
+                              ...prev,
+                              preco_original: e.target.value === '' ? null : (parseFloat(e.target.value) || 0),
+                            }))}
+                            className="product-form-promo-input w-full px-3.5 py-2.5 border border-rose-200 bg-white rounded-xl text-sm focus:outline-none focus:border-rose-400"
+                          />
+                        </div>
+                        <div className="product-form-promo-preview rounded-xl border border-rose-100 bg-white px-3.5 py-2.5 flex flex-col justify-center">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Preview</span>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            <span className="text-base font-black text-zinc-900">{fmtR$(Number(editing.price || 0))}</span>
+                            {Number(editing.preco_original || 0) > Number(editing.price || 0) && (
+                              <span className="text-xs font-bold text-rose-500 line-through">{fmtR$(Number(editing.preco_original || 0))}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {getPromotionValidationMessage(editing) && (
-                    <div className="product-form-promo-alert rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
-                      {getPromotionValidationMessage(editing)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Margem calculada */}
-                {(editing.price || 0) > 0 && (editing.custo || 0) > 0 && (() => {
-                  const mg = margem(editing)!;
-                  const cls = mg >= 50 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : mg >= 30 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-red-50 border-red-200 text-red-700';
-                  return (
-                    <div className={`px-4 py-2.5 rounded-xl border text-sm font-bold ${cls}`}>
-                      Margem: {mg.toFixed(1)}% · Lucro: {fmtR$((editing.price || 0) - (editing.custo || 0))} por unidade
-                    </div>
-                  );
-                })()}
-
-                {/* Categoria */}
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Categoria</label>
-                  <select value={editing.category || ''} onChange={e => setEditing(p => ({...p, category: e.target.value as any}))}
-                    className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none">
-                    {categories.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-                    {editing.category && !categories.find(c => c.nome === editing.category) && (
-                      <option value={editing.category}>{editing.category}</option>
                     )}
-                  </select>
-                </div>
 
-                {/* Disponibilidade por horário */}
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">
-                    <Clock size={10} className="inline mr-1"/>Disponível das… às…
-                    <span className="ml-1 normal-case font-normal text-zinc-400">(deixe vazio para sempre disponível)</span>
-                  </label>
+                    {getPromotionValidationMessage(editing) && (
+                      <div className="product-form-promo-alert rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">
+                        {getPromotionValidationMessage(editing)}
+                      </div>
+                    )}
+                  </div>
+                </>)}
+
+                {/* ══ ABA: ESTOQUE ══ */}
+                {activeTab === 'estoque' && (<>
+                  {/* Código de barras + Marca */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input type="time" value={editing.disponivel_de || ''}
-                      onChange={e => setEditing(p => ({...p, disponivel_de: e.target.value || undefined}))}
-                      className="px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
-                    <input type="time" value={editing.disponivel_ate || ''}
-                      onChange={e => setEditing(p => ({...p, disponivel_ate: e.target.value || undefined}))}
-                      className="px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1 mb-1.5"><Barcode size={10}/>Cód. Barras</label>
+                      <input type="text" placeholder="7896006754345"
+                        value={(editing as any).codigo_barras || ''}
+                        onChange={e => setEditing(p => ({...p, codigo_barras: e.target.value} as any))}
+                        className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm font-mono focus:outline-none"/>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Marca</label>
+                      <input type="text" placeholder="Nestlé, Camil..."
+                        value={(editing as any).marca || ''}
+                        onChange={e => setEditing(p => ({...p, marca: e.target.value} as any))}
+                        className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
+                    </div>
                   </div>
-                </div>
 
-                <div className={`${adminOpsMutedBlockClass} product-form-production-block`}>
-                  <div>
-                    <span className="product-form-section-title block text-sm font-semibold text-zinc-800">Setor de producao</span>
-                    <span className="product-form-section-description block text-xs text-zinc-500 mt-0.5">
-                      Define se o item vai para cozinha, bar, balcao/pronto ou se nao entra em fila de producao.
-                    </span>
+                  {/* Setor de produção */}
+                  <div className={`${adminOpsMutedBlockClass} product-form-production-block`}>
+                    <div>
+                      <span className="product-form-section-title block text-sm font-semibold text-zinc-800">Setor de producao</span>
+                      <span className="product-form-section-description block text-xs text-zinc-500 mt-0.5">
+                        Define se o item vai para cozinha, bar, balcao/pronto ou se nao entra em fila de producao.
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                      {(Object.entries(PRODUCTION_TYPE_META) as [ProductionType, typeof PRODUCTION_TYPE_META[ProductionType]][]).map(([value, meta]) => {
+                        const selectedType = resolveProductionType(editing);
+                        const isSelected = selectedType === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setEditing(prev => ({
+                              ...prev,
+                              production_type: value,
+                              requires_preparation: value === 'kitchen' || value === 'bar' ? 1 : 0,
+                            }))}
+                            aria-pressed={isSelected}
+                            data-production-type={value}
+                            className={`product-form-production-option rounded-xl border px-3 py-3 text-left transition-all ${isSelected ? 'is-selected border-zinc-900 bg-white shadow-sm' : 'border-zinc-200 bg-white/70 hover:bg-white'}`}
+                          >
+                            <span className="product-form-option-title block text-sm font-bold text-zinc-900">{meta.label}</span>
+                            <span className="product-form-option-description block text-xs text-zinc-500 mt-1">{meta.description}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                    {(Object.entries(PRODUCTION_TYPE_META) as [ProductionType, typeof PRODUCTION_TYPE_META[ProductionType]][]).map(([value, meta]) => {
-                      const selectedType = resolveProductionType(editing);
-                      const isSelected = selectedType === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setEditing(prev => ({
-                            ...prev,
-                            production_type: value,
-                            requires_preparation: value === 'kitchen' || value === 'bar' ? 1 : 0,
-                          }))}
-                          aria-pressed={isSelected}
-                          data-production-type={value}
-                          className={`product-form-production-option rounded-xl border px-3 py-3 text-left transition-all ${isSelected ? 'is-selected border-zinc-900 bg-white shadow-sm' : 'border-zinc-200 bg-white/70 hover:bg-white'}`}
-                        >
-                          <span className="product-form-option-title block text-sm font-bold text-zinc-900">{meta.label}</span>
-                          <span className="product-form-option-description block text-xs text-zinc-500 mt-1">{meta.description}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
 
+                  {/* Variações vendáveis */}
+                  {editing.id && (
+                    <div className={`${adminOpsMutedBlockClass} space-y-3`}>
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-800">Variações vendáveis</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          Sabores, tamanhos ou opções com preço, insumo de estoque ou código de barras próprios no PDV.
+                        </p>
+                      </div>
 
-                {/* Código de barras + Marca */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1 mb-1.5"><Barcode size={10}/>Cód. Barras</label>
-                    <input type="text" placeholder="7896006754345"
-                      value={(editing as any).codigo_barras || ''}
-                      onChange={e => setEditing(p => ({...p, codigo_barras: e.target.value} as any))}
-                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm font-mono focus:outline-none"/>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1.5">Marca</label>
-                    <input type="text" placeholder="Nestlé, Camil..."
-                      value={(editing as any).marca || ''}
-                      onChange={e => setEditing(p => ({...p, marca: e.target.value} as any))}
-                      className="w-full px-3.5 py-2.5 border border-zinc-200 bg-zinc-50 rounded-xl text-sm focus:outline-none"/>
-                  </div>
-                </div>
+                      <div className="space-y-2">
+                        {loadingVariacoes ? (
+                          <p className="text-xs text-zinc-400">Carregando variações...</p>
+                        ) : variacoesVendaveis.length === 0 ? (
+                          <p className="text-xs text-zinc-400">Nenhuma variação cadastrada.</p>
+                        ) : (
+                          variacoesVendaveis.map((v) => (
+                            <div
+                              key={v.id}
+                              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white border border-zinc-200 rounded-xl px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-zinc-800 truncate">{v.nome}</p>
+                                <p className="text-xs text-zinc-500">
+                                  {fmtR$(v.preco)}
+                                  {v.ingrediente_id
+                                    ? (() => {
+                                        const ing = ingredientesEstoque.find((i) => i.id === Number(v.ingrediente_id));
+                                        const label = ing?.nome || `insumo #${v.ingrediente_id}`;
+                                        const q = ing ? fmtQtdEstoque(ing.estoque_atual, ing.unidade) : '';
+                                        return ` · ${label}${q ? ` (atual: ${q})` : ''}`;
+                                      })()
+                                    : ''}
+                                  {v.codigo_barras ? ` · ${v.codigo_barras}` : ''}
+                                  {' · '}
+                                  ordem {v.ordem}
+                                  {' · '}
+                                  {Number(v.ativo) === 1 ? (
+                                    <span className="text-emerald-600 font-semibold">ativo</span>
+                                  ) : (
+                                    <span className="text-zinc-400 font-semibold">inativo</span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditVar(v)}
+                                  className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-100 text-zinc-800 hover:bg-zinc-200 transition-all"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveVariacaoVendavel(v.id)}
+                                  className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all"
+                                >
+                                  Remover
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
 
-                {/* Foto */}
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">Foto do Produto</label>
-                  {pendingPhoto || normalizeProductPhotoPublicUrl(editing.photo_url) ? (
-                    <div className="relative w-full h-40 rounded-xl overflow-hidden border border-zinc-200">
-                      <FlowProductImage
-                        src={pendingPhoto ? URL.createObjectURL(pendingPhoto) : (normalizeProductPhotoPublicUrl(editing.photo_url) ?? '')}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                      <button type="button"
-                        onClick={() => { if (pendingPhoto) setPendingPhoto(null); else if (editing.id) handlePhotoRemove(editing.id); }}
-                        className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg">
-                        <X size={14}/>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Nome"
+                          value={newVarNome}
+                          onChange={(e) => setNewVarNome(e.target.value)}
+                          className="sm:col-span-2 px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Preço"
+                          value={newVarPreco}
+                          onChange={(e) => setNewVarPreco(e.target.value)}
+                          className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Código de barras (opcional)"
+                          value={newVarCodigoBarras}
+                          onChange={(e) => setNewVarCodigoBarras(e.target.value)}
+                          className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        />
+                        <label className="sm:col-span-2 flex flex-col gap-1">
+                          <span className="text-xs font-medium text-zinc-600">Insumo no estoque (opcional)</span>
+                          <select
+                            value={newVarIngredienteId ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setNewVarIngredienteId(raw === '' ? null : Number(raw));
+                            }}
+                            className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                          >
+                            <option value="">Nenhum (prioriza código de barras da variação, se houver)</option>
+                            {ingredientesEstoque.map((ing) => (
+                              <option key={ing.id} value={ing.id}>
+                                {ing.nome} — atual: {fmtQtdEstoque(ing.estoque_atual, ing.unidade)}
+                              </option>
+                            ))}
+                          </select>
+                          {newVarIngredienteId != null && (
+                            <p className="text-xs text-zinc-500">
+                              Quantidade atual no estoque:{' '}
+                              <span className="font-semibold text-zinc-700">
+                                {(() => {
+                                  const ing = ingredientesEstoque.find((i) => i.id === newVarIngredienteId);
+                                  return ing ? fmtQtdEstoque(ing.estoque_atual, ing.unidade) : '—';
+                                })()}
+                              </span>
+                              {' '}(ajuste no menu Estoque)
+                            </p>
+                          )}
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="Ordem"
+                          value={newVarOrdem}
+                          onChange={(e) => setNewVarOrdem(parseInt(e.target.value, 10) || 0)}
+                          className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        />
+                        <label className="flex items-center gap-2 px-1 py-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newVarAtivo}
+                            onChange={(e) => setNewVarAtivo(e.target.checked)}
+                            className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                          />
+                          <span className="text-sm font-medium text-zinc-700">Ativo</span>
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddVariacaoVendavel}
+                        className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all"
+                      >
+                        {editingVar ? 'Salvar edição' : 'Adicionar variação'}
                       </button>
                     </div>
-                  ) : (
-                    <label className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-zinc-300 rounded-xl cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 transition-all ${uploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
-                      <ImageIcon size={24} className="text-zinc-300 mb-1"/>
-                      <span className="text-xs text-zinc-400">Clique para adicionar foto</span>
-                      <span className="text-[10px] text-zinc-300">JPEG, PNG ou WEBP · máx. 5MB</span>
-                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setPendingPhoto(f); }}/>
-                    </label>
                   )}
-                </div>
+                  {!editing.id && (
+                    <p className="text-xs text-zinc-400 text-center py-4">Salve o produto primeiro para adicionar variações.</p>
+                  )}
+                </>)}
 
-                {editing.id && (
+                {/* ══ ABA: OPÇÕES ══ */}
+                {activeTab === 'opcoes' && editing.id && (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-800">Grupos de adicionais</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Gerencie os grupos de opções e adicionais deste produto.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setEditing(null); setPendingPhoto(null); setOpcoesProdutoId(editing.id!); }}
+                      className="w-full rounded-xl border border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-800 transition-all hover:bg-emerald-100 flex items-center justify-center gap-2"
+                    >
+                      <Settings2 size={16}/> Abrir gerenciador de opções
+                    </button>
+                    <p className="text-xs text-zinc-400 text-center">O gerenciador de opções abrirá em um painel separado.</p>
+                  </div>
+                )}
+
+                {/* ══ ABA: IMAGEM ══ */}
+                {activeTab === 'imagem' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">Foto do Produto</label>
+                    {pendingPhoto || normalizeProductPhotoPublicUrl(editing.photo_url) ? (
+                      <div className="relative w-full h-48 rounded-xl overflow-hidden border border-zinc-200">
+                        <FlowProductImage
+                          src={pendingPhoto ? URL.createObjectURL(pendingPhoto) : (normalizeProductPhotoPublicUrl(editing.photo_url) ?? '')}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                        <button type="button"
+                          onClick={() => { if (pendingPhoto) setPendingPhoto(null); else if (editing.id) handlePhotoRemove(editing.id); }}
+                          className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg">
+                          <X size={14}/>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-zinc-300 rounded-xl cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 transition-all ${uploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <ImageIcon size={24} className="text-zinc-300 mb-1"/>
+                        <span className="text-xs text-zinc-400">Clique para adicionar foto</span>
+                        <span className="text-[10px] text-zinc-300">JPEG, PNG ou WEBP · máx. 5MB</span>
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setPendingPhoto(f); }}/>
+                      </label>
+                    )}
+                  </div>
+                )}
+
+                {/* ══ ABA: AVANÇADO ══ */}
+                {activeTab === 'avancado' && editing.id && (<>
+                  {/* Sugestões de complementos */}
                   <div className={`${adminOpsMutedBlockClass} space-y-3`}>
                     <div>
                       <p className="text-sm font-semibold text-zinc-800">Sugestões de complementos</p>
@@ -1429,190 +1642,34 @@ export default function ProductsScreen({
                       Adicionar sugestão
                     </button>
                   </div>
-                )}
 
-                {editing.id && (
+                  {/* Combo */}
                   <div className={`${adminOpsMutedBlockClass} space-y-3`}>
                     <div>
-                      <p className="text-sm font-semibold text-zinc-800">Variações vendáveis</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">
-                        Sabores, tamanhos ou opções com preço, insumo de estoque ou código de barras próprios no PDV.
-                      </p>
+                      <p className="text-sm font-semibold text-zinc-800">Combo</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Monte grupos com produtos do cardápio.</p>
                     </div>
-
-                    <div className="space-y-2">
-                      {loadingVariacoes ? (
-                        <p className="text-xs text-zinc-400">Carregando variações...</p>
-                      ) : variacoesVendaveis.length === 0 ? (
-                        <p className="text-xs text-zinc-400">Nenhuma variação cadastrada.</p>
-                      ) : (
-                        variacoesVendaveis.map((v) => (
-                          <div
-                            key={v.id}
-                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white border border-zinc-200 rounded-xl px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-zinc-800 truncate">{v.nome}</p>
-                              <p className="text-xs text-zinc-500">
-                                {fmtR$(v.preco)}
-                                {v.ingrediente_id
-                                  ? (() => {
-                                      const ing = ingredientesEstoque.find((i) => i.id === Number(v.ingrediente_id));
-                                      const label = ing?.nome || `insumo #${v.ingrediente_id}`;
-                                      const q = ing ? fmtQtdEstoque(ing.estoque_atual, ing.unidade) : '';
-                                      return ` · ${label}${q ? ` (atual: ${q})` : ''}`;
-                                    })()
-                                  : ''}
-                                {v.codigo_barras ? ` · ${v.codigo_barras}` : ''}
-                                {' · '}
-                                ordem {v.ordem}
-                                {' · '}
-                                {Number(v.ativo) === 1 ? (
-                                  <span className="text-emerald-600 font-semibold">ativo</span>
-                                ) : (
-                                  <span className="text-zinc-400 font-semibold">inativo</span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2 shrink-0 self-start sm:self-center">
-                              <button
-                                type="button"
-                                onClick={() => handleEditVar(v)}
-                                className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-100 text-zinc-800 hover:bg-zinc-200 transition-all"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveVariacaoVendavel(v.id)}
-                                className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all"
-                              >
-                                Remover
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
                       <input
-                        type="text"
-                        placeholder="Nome"
-                        value={newVarNome}
-                        onChange={(e) => setNewVarNome(e.target.value)}
-                        className="sm:col-span-2 px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
+                        type="checkbox"
+                        checked={Number(editing.is_combo) === 1}
+                        onChange={(e) => setEditing((p) => (p ? { ...p, is_combo: e.target.checked ? 1 : 0 } : p))}
+                        className="w-4 h-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
                       />
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Preço"
-                        value={newVarPreco}
-                        onChange={(e) => setNewVarPreco(e.target.value)}
-                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Código de barras (opcional)"
-                        value={newVarCodigoBarras}
-                        onChange={(e) => setNewVarCodigoBarras(e.target.value)}
-                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
-                      />
-                      <label className="sm:col-span-2 flex flex-col gap-1">
-                        <span className="text-xs font-medium text-zinc-600">Insumo no estoque (opcional)</span>
-                        <select
-                          value={newVarIngredienteId ?? ''}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            setNewVarIngredienteId(raw === '' ? null : Number(raw));
-                          }}
-                          className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
-                        >
-                          <option value="">Nenhum (prioriza código de barras da variação, se houver)</option>
-                          {ingredientesEstoque.map((ing) => (
-                            <option key={ing.id} value={ing.id}>
-                              {ing.nome} — atual: {fmtQtdEstoque(ing.estoque_atual, ing.unidade)}
-                            </option>
-                          ))}
-                        </select>
-                        {newVarIngredienteId != null && (
-                          <p className="text-xs text-zinc-500">
-                            Quantidade atual no estoque:{' '}
-                            <span className="font-semibold text-zinc-700">
-                              {(() => {
-                                const ing = ingredientesEstoque.find((i) => i.id === newVarIngredienteId);
-                                return ing ? fmtQtdEstoque(ing.estoque_atual, ing.unidade) : '—';
-                              })()}
-                            </span>
-                            {' '}(ajuste no menu Estoque)
-                          </p>
-                        )}
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="Ordem"
-                        value={newVarOrdem}
-                        onChange={(e) => setNewVarOrdem(parseInt(e.target.value, 10) || 0)}
-                        className="px-3 py-2 border border-zinc-200 bg-white rounded-lg text-sm focus:outline-none"
-                      />
-                      <label className="flex items-center gap-2 px-1 py-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newVarAtivo}
-                          onChange={(e) => setNewVarAtivo(e.target.checked)}
-                          className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                        />
-                        <span className="text-sm font-medium text-zinc-700">Ativo</span>
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddVariacaoVendavel}
-                      className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-bold transition-all"
-                    >
-                      {editingVar ? 'Salvar edição' : 'Adicionar variação'}
-                    </button>
+                      <span className="text-sm font-medium text-zinc-700">Produto é um combo</span>
+                    </label>
+                    {Number(editing.is_combo) === 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setComboProdutoId(editing.id!)}
+                        className="w-full rounded-xl border border-violet-200 bg-violet-50 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-100"
+                      >
+                        Configurar grupos do combo
+                      </button>
+                    )}
                   </div>
-                )}
+                </>)}
 
-                {/* Toggles */}
-                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
-                    <input type="checkbox" checked={!!editing.active} onChange={e => setEditing(p => ({...p, active: e.target.checked}))}
-                      className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"/>
-                    <span className="text-sm font-medium text-zinc-700">Produto ativo</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
-                    <input type="checkbox" checked={!!editing.destaque} onChange={e => setEditing(p => ({...p, destaque: e.target.checked ? 1 : 0}))}
-                      className="w-4 h-4 rounded border-zinc-300 text-amber-500 focus:ring-amber-500"/>
-                    <span className="text-sm font-medium text-zinc-700">⭐ Em destaque</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
-                    <input type="checkbox" checked={!!editing.mais_vendido} onChange={e => setEditing(p => ({...p, mais_vendido: e.target.checked ? 1 : 0}))}
-                      className="w-4 h-4 rounded border-zinc-300 text-teal-600 focus:ring-teal-500"/>
-                    <span className="text-sm font-medium text-zinc-700">🏆 Mais vendidos (PDF)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
-                    <input
-                      type="checkbox"
-                      checked={Number(editing.is_combo) === 1}
-                      onChange={(e) => setEditing((p) => (p ? { ...p, is_combo: e.target.checked ? 1 : 0 } : p))}
-                      className="w-4 h-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
-                    />
-                    <span className="text-sm font-medium text-zinc-700">Combo (monte grupos com produtos do cardápio)</span>
-                  </label>
-                </div>
-                {editing.id && Number(editing.is_combo) === 1 && (
-                  <div className="px-1">
-                    <button
-                      type="button"
-                      onClick={() => setComboProdutoId(editing.id!)}
-                      className="w-full rounded-xl border border-violet-200 bg-violet-50 py-2.5 text-sm font-bold text-violet-800 transition-all hover:bg-violet-100"
-                    >
-                      Configurar grupos do combo
-                    </button>
-                  </div>
-                )}
               </div>
 
                 <div className="flex shrink-0 gap-2 border-t border-zinc-100 bg-white px-3 pt-2.5 pb-3 sm:gap-3 sm:px-5 sm:pb-4 2xl:px-7 2xl:pt-3 2xl:pb-6">

@@ -540,7 +540,9 @@ async function normalizeCreateOrderInput(data: CreateOrderInput, tenantId: Tenan
     throw new AppError('Taxa total inválida', 400);
   }
 
-  const status = data.status?.trim() || 'Criado';
+  const canal = deriveOrderChannel(data.tipo_retirada);
+  const defaultStatus = canal === 'balcao' ? 'Em Preparo' : 'Criado';
+  const status = data.status?.trim() || defaultStatus;
 
   if (!ALLOWED_ORDER_STATUSES.has(status)) {
     throw new AppError('Status inválido', 400);
