@@ -637,18 +637,56 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     try {
       const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug });
-      const allOrders = await qAll(`SELECT * FROM pedidos WHERE tenant_id=? AND ${buildOperationalKdsOrderClause()} AND created_at >= NOW() - INTERVAL '24 hours' ORDER BY created_at ASC`, [tenant.id]);
-      // Deduplica pedidos de mesa (agrupa pelo label da mesa)
-      const seen = new Map<string,any>();
-      for (const o of allOrders) {
-        const key = (o.observation||'').startsWith('Mesa ') ? o.observation : String(o.id);
-        const ex = seen.get(key);
-        if (!ex||o.id>ex.id) seen.set(key,o);
+
+      // 1ª query: pedidos das últimas 24h não finalizados
+      const allOrders = await qAll(
+        `SELECT * FROM pedidos
+         WHERE tenant_id=?
+           AND ${buildOperationalKdsOrderClause()}
+           AND created_at >= NOW() - INTERVAL '24 hours'
+         ORDER BY created_at ASC`,
+        [tenant.id]
+      );
+
+      if (allOrders.length === 0) {
+        return res.json({ estabelecimento: tenant.nome_estabelecimento, orders: [] });
       }
-      const deduped = Array.from(seen.values()).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
+
+      // 2ª query: todos os itens de uma vez (evita N+1)
+      const orderIds = allOrders.map((o: any) => o.id);
+      const placeholders = orderIds.map(() => '?').join(',');
+      const allItems = await qAll(
+        `SELECT i.order_id, i.quantity, i.type, i.price_at_time,
+                p.name as product_name, p.category as product_category,
+                p.requires_preparation, p.production_type
+         FROM itens_pedido i
+         LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id
+         WHERE i.order_id IN (${placeholders}) AND i.tenant_id=?`,
+        [...orderIds, tenant.id]
+      );
+
+      // Agrupa itens por pedido em memória
+      const itemsByOrder = new Map<number, any[]>();
+      for (const item of allItems) {
+        const list = itemsByOrder.get(item.order_id) || [];
+        list.push(item);
+        itemsByOrder.set(item.order_id, list);
+      }
+
+      // Deduplica pedidos de mesa (mantém o mais recente por mesa)
+      const seen = new Map<string, any>();
+      for (const o of allOrders) {
+        const key = (o.observation || '').startsWith('Mesa ') ? o.observation : String(o.id);
+        const ex = seen.get(key);
+        if (!ex || o.id > ex.id) seen.set(key, o);
+      }
+
+      const deduped = Array.from(seen.values())
+        .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
       const orders = [];
       for (const o of deduped) {
-        const items = await qAll('SELECT i.quantity,i.type,i.price_at_time,p.name as product_name,p.category as product_category,p.requires_preparation,p.production_type FROM itens_pedido i LEFT JOIN produtos p ON p.id=i.product_id AND p.tenant_id=i.tenant_id WHERE i.order_id=? AND i.tenant_id=?', [o.id, tenant.id]);
+        const items = itemsByOrder.get(o.id) || [];
         const prepItems = items
           .filter((item: any) =>
             resolveRequiresPreparation({
@@ -666,7 +704,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
           }));
         if (prepItems.length > 0) orders.push({ ...o, items: prepItems });
       }
-      res.json({ estabelecimento:tenant.nome_estabelecimento, orders });
+
+      res.json({ estabelecimento: tenant.nome_estabelecimento, orders });
     } catch (error) {
       handlePublicRouteError(res, 'GET /public/kds/:slug', slug, error);
     }
