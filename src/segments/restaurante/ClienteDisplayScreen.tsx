@@ -103,10 +103,6 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
       {/* ── HEADER ─────────────────────────────────────── */}
       <header style={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={styles.headerLogo}>
-            Flow<span style={{ color: '#ea1d2c' }}>PDV</span>
-          </div>
-          <div style={styles.headerSep} />
           <div>
             <div style={styles.headerTitle}>{data!.estabelecimento}</div>
             <div style={styles.headerSub}>PAINEL DE CHAMADAS</div>
@@ -125,7 +121,7 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
             {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
           {/* dot de sync */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#9ca3af' }}>
             <span style={{ ...styles.syncDot, background: error ? '#ef4444' : '#10b981' }} />
             {lastFetch.toLocaleTimeString('pt-BR')}
           </div>
@@ -136,8 +132,8 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
       {orders.length === 0 ? (
         <div style={styles.emptyState}>
           <div style={{ fontSize: 80, marginBottom: 20 }}>✅</div>
-          <p style={{ fontSize: 28, fontWeight: 900, color: '#2d3748' }}>Tudo em dia!</p>
-          <p style={{ fontSize: 15, color: '#4a5568', marginTop: 8 }}>Nenhum pedido no momento</p>
+          <p style={{ fontSize: 28, fontWeight: 900, color: '#1a1a1a' }}>Tudo em dia!</p>
+          <p style={{ fontSize: 15, color: '#6b7280', marginTop: 8 }}>Nenhum pedido no momento</p>
         </div>
       ) : (
         <div style={styles.colGrid}>
@@ -166,7 +162,7 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
                     return (
                       <div key={order.id} style={{
                         ...styles.card,
-                        background: isPronte ? 'rgba(52,211,153,0.06)' : 'rgba(255,255,255,0.03)',
+                        background: isPronte ? 'rgba(52,211,153,0.06)' : '#ffffff',
                         borderColor: isPronte ? 'rgba(52,211,153,0.4)' : cfg.border,
                         boxShadow: isPronte ? '0 0 32px rgba(52,211,153,0.15)' : 'none',
                       }}>
@@ -195,7 +191,7 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
                             </span>
                           ))}
                           {(order.items || []).length > 3 && (
-                            <span style={{ ...styles.cardItem, color: '#64748b' }}>
+                            <span style={{ ...styles.cardItem, color: '#9ca3af' }}>
                               +{order.items.length - 3} itens
                             </span>
                           )}
@@ -236,18 +232,18 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
 /* ─── estilos ────────────────────────────────────────── */
 const styles: Record<string, React.CSSProperties> = {
   root: {
-    background: '#080c14',
+    background: '#ffffff',
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
     fontFamily: "'DM Sans', system-ui, sans-serif",
-    color: '#f0f4ff',
+    color: '#1a1a1a',
     userSelect: 'none',
   },
   header: {
-    background: 'rgba(13,18,32,0.95)',
+    background: '#ffffff',
     backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(255,255,255,0.07)',
+    borderBottom: '2px solid #ea1d2c',
     padding: '14px 28px',
     display: 'flex',
     alignItems: 'center',
@@ -261,24 +257,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1.3rem',
     fontWeight: 800,
     letterSpacing: '-0.02em',
-    color: '#f0f4ff',
+    color: '#1a1a1a',
   },
   headerSep: {
     width: 1,
     height: 28,
-    background: 'rgba(255,255,255,0.1)',
+    background: 'rgba(0,0,0,0.15)',
   },
   headerTitle: {
     fontSize: '1rem',
     fontWeight: 700,
-    color: '#f0f4ff',
+    color: '#1a1a1a',
     lineHeight: 1.2,
   },
   headerSub: {
     fontSize: '0.62rem',
     fontWeight: 600,
     letterSpacing: '0.12em',
-    color: '#475569',
+    color: '#6b7280',
     textTransform: 'uppercase',
   },
   readyPill: {
@@ -295,7 +291,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "'Syne', system-ui, sans-serif",
     fontSize: '1.5rem',
     fontWeight: 800,
-    color: '#f0f4ff',
+    color: '#1a1a1a',
     letterSpacing: '-0.02em',
   },
   syncDot: {
@@ -311,7 +307,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 0,
   },
   col: {
-    borderRight: '1px solid rgba(255,255,255,0.05)',
+    borderRight: '1px solid rgba(0,0,0,0.08)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -322,7 +318,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '16px 20px',
     borderBottom: '2px solid',
-    background: 'rgba(255,255,255,0.02)',
+    background: '#f9fafb',
   },
   colHeaderLabel: {
     fontFamily: "'Syne', system-ui, sans-serif",
@@ -381,7 +377,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardItem: {
     fontSize: '0.8rem',
-    color: '#94a3b8',
+    color: '#6b7280',
     lineHeight: 1.4,
   },
   cardTime: {
@@ -404,7 +400,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   emptyCol: {
     textAlign: 'center',
-    color: '#1e293b',
+    color: '#d1d5db',
     fontSize: '0.85rem',
     padding: '24px 0',
   },
@@ -414,16 +410,16 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#1e293b',
+    color: '#6b7280',
   },
   footer: {
-    borderTop: '1px solid rgba(255,255,255,0.05)',
+    borderTop: '1px solid rgba(0,0,0,0.08)',
     padding: '10px 28px',
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     fontSize: '0.72rem',
-    color: '#334155',
-    background: 'rgba(13,18,32,0.8)',
+    color: '#9ca3af',
+    background: '#f9fafb',
   },
 };

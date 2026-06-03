@@ -35,7 +35,7 @@ const STATUS_CFG: Record<string, {
   'Criado':     { label: 'Pedido recebido',        sub: 'Seu pedido foi registrado e aguarda preparo.',  emoji: '📋', color: '#ea1d2c', bg: 'rgba(234,29,44,0.08)',  border: 'rgba(234,29,44,0.2)',  glow: 'rgba(234,29,44,0.1)'  },
   'Em Preparo': { label: 'Em preparo 🔥',           sub: 'A cozinha está preparando seu pedido agora.',  emoji: '👨‍🍳', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.3)',  glow: 'rgba(251,191,36,0.12)' },
   'Pronto':     { label: 'Pronto! Bom apetite 🎉', sub: 'Seu pedido está pronto e a caminho.',           emoji: '✅', color: '#34d399', bg: 'rgba(52,211,153,0.08)',  border: 'rgba(52,211,153,0.35)', glow: 'rgba(52,211,153,0.15)' },
-  'Entregue':   { label: 'Entregue com sucesso',   sub: 'Aproveite! Obrigado pela preferência.',         emoji: '🍽️', color: '#94a3b8', bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.2)', glow: 'rgba(0,0,0,0)'         },
+  'Entregue':   { label: 'Entregue com sucesso',   sub: 'Aproveite! Obrigado pela preferência.',         emoji: '🍽️', color: '#6b7280', bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.2)', glow: 'rgba(0,0,0,0)'         },
 };
 const PIPELINE = ['Criado', 'Em Preparo', 'Pronto', 'Entregue'];
 
@@ -148,7 +148,6 @@ export default function ClienteMesaScreen({ slug, mesa }: { slug: string; mesa: 
     <div style={S.root}>
       {/* ── HEADER ────────────────────────────────────────── */}
       <header style={S.header}>
-        <div style={S.logo}>Flow<span style={{ color: '#ea1d2c' }}>PDV</span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={S.estNome}>{estNome}</span>
           <span style={S.mesaBadgeSmall}>Mesa {mesa}</span>
@@ -248,7 +247,7 @@ export default function ClienteMesaScreen({ slug, mesa }: { slug: string; mesa: 
             >
               <div style={S.cartHandle} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#f0f4ff' }}>🛒 Seu carrinho</span>
+                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1a1a1a' }}>🛒 Seu carrinho</span>
                 <button onClick={() => setShowCart(false)} style={S.closeBtn}>✕</button>
               </div>
 
@@ -256,22 +255,22 @@ export default function ClienteMesaScreen({ slug, mesa }: { slug: string; mesa: 
                 {cart.map(it => (
                   <div key={it.product_id} style={S.cartRow}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#e2e8f0' }}>{it.name}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{fmt(it.price_at_time)} cada</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1a1a1a' }}>{it.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{fmt(it.price_at_time)} cada</div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <button onClick={() => removeFromCart(it.product_id)} style={S.qtyBtn}>−</button>
-                      <span style={{ fontWeight: 700, color: '#f0f4ff', minWidth: 20, textAlign: 'center' }}>{it.quantity}</span>
+                      <span style={{ fontWeight: 700, color: '#1a1a1a', minWidth: 20, textAlign: 'center' }}>{it.quantity}</span>
                       <button onClick={() => addToCart({ id: it.product_id, name: it.name, price: it.price_at_time, category: '' })} style={S.qtyBtn}>+</button>
-                      <span style={{ fontSize: '0.85rem', color: '#94a3b8', minWidth: 64, textAlign: 'right' }}>{fmt(it.price_at_time * it.quantity)}</span>
+                      <span style={{ fontSize: '0.85rem', color: '#6b7280', minWidth: 64, textAlign: 'right' }}>{fmt(it.price_at_time * it.quantity)}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255,255,255,0.08)', marginBottom: 16 }}>
-                <span style={{ fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '0.06em' }}>Total</span>
-                <span style={{ fontWeight: 800, fontSize: '1.2rem', color: '#f0f4ff' }}>{fmt(cartTotal)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid #e5e7eb', marginBottom: 16 }}>
+                <span style={{ fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '0.06em' }}>Total</span>
+                <span style={{ fontWeight: 800, fontSize: '1.2rem', color: '#1a1a1a' }}>{fmt(cartTotal)}</span>
               </div>
 
               {erroPedido && (
@@ -313,7 +312,7 @@ function AbaCardapio({
   removeFromCart: (id: number) => void;
 }) {
   if (loading) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🍽️</div>
         <p style={{ fontFamily: 'monospace' }}>Carregando cardápio...</p>
@@ -322,7 +321,7 @@ function AbaCardapio({
   );
 
   if (!cardapio || cardapio.categorias.length === 0) return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>😔</div>
         <p>Cardápio não disponível</p>
@@ -361,12 +360,12 @@ function AbaCardapio({
       {/* Produtos */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 100px' }}>
         {busca && (
-          <p style={{ fontSize: '0.75rem', color: '#475569', marginBottom: 10 }}>
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: 10 }}>
             {produtosFiltrados.length} resultado{produtosFiltrados.length !== 1 ? 's' : ''} para &ldquo;{busca}&rdquo;
           </p>
         )}
         {produtosFiltrados.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#334155', paddingTop: 40 }}>
+          <div style={{ textAlign: 'center', color: '#374151', paddingTop: 40 }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>🔍</div>
             <p>Nenhum item encontrado</p>
           </div>
@@ -380,7 +379,7 @@ function AbaCardapio({
                   {foto ? (
                     <FlowProductImage src={foto} alt={p.name} style={S.prodImg} />
                   ) : (
-                    <div style={{ ...S.prodImg, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
+                    <div style={{ ...S.prodImg, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
                       🍽️
                     </div>
                   )}
@@ -393,7 +392,7 @@ function AbaCardapio({
                     {qty > 0 ? (
                       <>
                         <button onClick={() => removeFromCart(p.id)} style={S.qtyBtnSm}>−</button>
-                        <span style={{ fontWeight: 700, color: '#f0f4ff', minWidth: 18, textAlign: 'center' }}>{qty}</span>
+                        <span style={{ fontWeight: 700, color: '#1a1a1a', minWidth: 18, textAlign: 'center' }}>{qty}</span>
                         <button onClick={() => addToCart(p)} style={{ ...S.qtyBtnSm, background: 'rgba(234,29,44,0.15)', borderColor: 'rgba(234,29,44,0.4)', color: '#ea1d2c' }}>+</button>
                       </>
                     ) : (
@@ -413,7 +412,7 @@ function AbaCardapio({
 /* ══════════════════════ ABA MEU PEDIDO ════════════════════ */
 function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoaded: boolean; mesa: string }) {
   if (!kdsLoaded) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60, color: '#475569' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60, color: '#6b7280' }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 36, marginBottom: 8 }}>⏳</div>
         <p>Verificando pedido...</p>
@@ -424,8 +423,8 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
   if (!order) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center', minHeight: 300 }}>
       <div style={{ fontSize: 52, marginBottom: 14 }}>🪑</div>
-      <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f0f4ff', marginBottom: 8 }}>Mesa {mesa}</h2>
-      <p style={{ color: '#64748b', fontSize: '0.88rem', lineHeight: 1.6 }}>
+      <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1a1a1a', marginBottom: 8 }}>Mesa {mesa}</h2>
+      <p style={{ color: '#6b7280', fontSize: '0.88rem', lineHeight: 1.6 }}>
         Nenhum pedido ativo no momento.<br />
         Vá até a aba <strong style={{ color: '#ea1d2c' }}>Cardápio</strong> para fazer seu pedido!
       </p>
@@ -447,7 +446,7 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
       >
         <div style={{ fontSize: '2.4rem', marginBottom: 8 }}>{cfg.emoji}</div>
         <div style={{ fontFamily: "'Syne', system-ui", fontSize: '1.3rem', fontWeight: 800, color: cfg.color, marginBottom: 4 }}>{cfg.label}</div>
-        <div style={{ fontSize: '0.82rem', color: '#64748b' }}>{cfg.sub}</div>
+        <div style={{ fontSize: '0.82rem', color: '#6b7280' }}>{cfg.sub}</div>
       </motion.div>
 
       {/* pipeline */}
@@ -458,23 +457,23 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
           return (
             <React.Fragment key={step}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', background: done ? 'rgba(52,211,153,0.2)' : cur ? sc.bg : 'rgba(255,255,255,0.04)', border: `2px solid ${done ? '#34d399' : cur ? sc.color : 'rgba(255,255,255,0.1)'}`, transition: 'all 0.4s' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', background: done ? 'rgba(52,211,153,0.2)' : cur ? sc.bg : '#f3f4f6', border: `2px solid ${done ? '#34d399' : cur ? sc.color : '#e5e7eb'}`, transition: 'all 0.4s' }}>
                   {done ? '✓' : sc.emoji}
                 </div>
                 <span style={{ fontSize: '0.6rem', fontWeight: cur ? 700 : 400, color: done ? '#34d399' : cur ? sc.color : '#334155', textAlign: 'center', maxWidth: 52 }}>
                   {step === 'Criado' ? 'Recebido' : step}
                 </span>
               </div>
-              {i < 2 && <div style={{ flex: 1, height: 2, borderRadius: 2, marginBottom: 18, background: done ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.06)', transition: 'background 0.4s' }} />}
+              {i < 2 && <div style={{ flex: 1, height: 2, borderRadius: 2, marginBottom: 18, background: done ? 'rgba(52,211,153,0.5)' : '#e5e7eb', transition: 'background 0.4s' }} />}
             </React.Fragment>
           );
         })}
       </div>
 
       {/* itens */}
-      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
-          <span style={{ fontFamily: "'Syne', system-ui", fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seu pedido</span>
+      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+          <span style={{ fontFamily: "'Syne', system-ui", fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seu pedido</span>
           <span style={{ fontSize: '0.72rem', color: '#ea1d2c', fontWeight: 600, background: 'rgba(234,29,44,0.08)', padding: '3px 10px', borderRadius: 100, border: '1px solid rgba(234,29,44,0.2)' }}>
             {(() => {
               const obs = order.observation || '';
@@ -488,20 +487,20 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
         </div>
         <div style={{ padding: '8px 0' }}>
           {(order.items || []).map((it, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', gap: 10, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', gap: 10, borderBottom: '1px solid #f3f4f6' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ea1d2c', minWidth: 24 }}>{it.quantity}×</span>
-              <span style={{ flex: 1, fontSize: '0.9rem', color: '#e2e8f0' }}>{it.product_name}</span>
-              <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>{fmt(it.price_at_time * it.quantity)}</span>
+              <span style={{ flex: 1, fontSize: '0.9rem', color: '#1a1a1a' }}>{it.product_name}</span>
+              <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>{fmt(it.price_at_time * it.quantity)}</span>
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</span>
-          <span style={{ fontFamily: "'Syne', system-ui", fontSize: '1.15rem', fontWeight: 800, color: '#f0f4ff' }}>{fmt(total)}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</span>
+          <span style={{ fontFamily: "'Syne', system-ui", fontSize: '1.15rem', fontWeight: 800, color: '#1a1a1a' }}>{fmt(total)}</span>
         </div>
       </div>
 
-      <p style={{ textAlign: 'center', fontSize: '0.7rem', color: '#1e293b' }}>
+      <p style={{ textAlign: 'center', fontSize: '0.7rem', color: '#9ca3af' }}>
         Atualizado automaticamente a cada 8 segundos
       </p>
     </div>
@@ -511,26 +510,26 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
 /* ─────────────────────────── estilos ────────────────────────────────── */
 const S: Record<string, React.CSSProperties> = {
   root: {
-    background: '#080c14',
+    background: '#ffffff',
     minHeight: '100vh',
     maxWidth: 480,
     margin: '0 auto',
     display: 'flex',
     flexDirection: 'column',
     fontFamily: "'DM Sans', system-ui, sans-serif",
-    color: '#f0f4ff',
+    color: '#1a1a1a',
     position: 'relative',
   },
   header: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '14px 20px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-    background: 'rgba(13,18,32,0.9)',
+    borderBottom: '2px solid #ea1d2c',
+    background: '#ffffff',
     backdropFilter: 'blur(12px)',
     position: 'sticky', top: 0, zIndex: 20,
   },
-  logo: { fontFamily: "'Syne', system-ui", fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#f0f4ff' },
-  estNome: { fontSize: '0.75rem', fontWeight: 600, color: '#64748b' },
+  logo: { fontFamily: "'Syne', system-ui", fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#1a1a1a' },
+  estNome: { fontSize: '0.75rem', fontWeight: 600, color: '#6b7280' },
   mesaBadgeSmall: {
     background: 'rgba(234,29,44,0.1)', border: '1px solid rgba(234,29,44,0.3)',
     color: '#ea1d2c', borderRadius: 100, padding: '3px 10px',
@@ -538,13 +537,13 @@ const S: Record<string, React.CSSProperties> = {
   },
   tabs: {
     display: 'flex',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-    background: 'rgba(13,18,32,0.6)',
+    borderBottom: '1px solid rgba(0,0,0,0.08)',
+    background: '#f9fafb',
     position: 'sticky', top: 49, zIndex: 19,
   },
   tab: {
     flex: 1, padding: '13px 8px', background: 'none', border: 'none',
-    color: '#475569', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer',
+    color: '#6b7280', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer',
     borderBottom: '2px solid transparent', transition: 'all 0.2s', fontFamily: 'inherit',
   },
   tabActive: { color: '#ea1d2c', borderBottom: '2px solid #ea1d2c' },
@@ -553,39 +552,39 @@ const S: Record<string, React.CSSProperties> = {
     width: 8, height: 8, borderRadius: '50%', background: '#34d399',
   },
   searchInput: {
-    width: '100%', background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12,
-    padding: '10px 14px', color: '#f0f4ff', fontSize: '0.9rem',
+    width: '100%', background: '#f3f4f6',
+    border: '1px solid #e5e7eb', borderRadius: 12,
+    padding: '10px 14px', color: '#1a1a1a', fontSize: '0.9rem',
     fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
   },
   catScroll: { display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 16px', scrollbarWidth: 'none' },
   catBtn: {
     flexShrink: 0, padding: '6px 14px', borderRadius: 100,
-    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-    color: '#64748b', fontSize: '0.82rem', fontWeight: 600,
+    background: '#f3f4f6', border: '1px solid #e5e7eb',
+    color: '#6b7280', fontSize: '0.82rem', fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'all 0.15s',
   },
   catBtnActive: { background: 'rgba(234,29,44,0.1)', border: '1px solid rgba(234,29,44,0.4)', color: '#ea1d2c' },
   prodCard: {
     display: 'flex', alignItems: 'center', gap: 12,
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+    background: '#ffffff', border: '1px solid #e5e7eb',
     borderRadius: 14, padding: 12,
   },
   prodImg:  { width: 60, height: 60, borderRadius: 10, objectFit: 'cover', flexShrink: 0 } as React.CSSProperties,
-  prodName: { fontSize: '0.9rem', fontWeight: 600, color: '#e2e8f0', marginBottom: 2 },
-  prodCat:  { fontSize: '0.72rem', color: '#475569', marginBottom: 4 },
+  prodName: { fontSize: '0.9rem', fontWeight: 600, color: '#1a1a1a', marginBottom: 2 },
+  prodCat:  { fontSize: '0.72rem', color: '#6b7280', marginBottom: 4 },
   prodPrice:{ fontSize: '0.9rem', fontWeight: 700, color: '#ea1d2c' },
   addBtn: {
     width: 34, height: 34, borderRadius: '50%',
-    background: 'rgba(234,29,44,0.15)', border: '1px solid rgba(234,29,44,0.4)',
+    background: 'rgba(234,29,44,0.1)', border: '1px solid rgba(234,29,44,0.4)',
     color: '#ea1d2c', fontSize: '1.3rem', fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', fontFamily: 'inherit',
   },
   qtyBtnSm: {
     width: 28, height: 28, borderRadius: '50%',
-    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-    color: '#94a3b8', fontSize: '1rem', fontWeight: 700,
+    background: '#f3f4f6', border: '1px solid #e5e7eb',
+    color: '#6b7280', fontSize: '1rem', fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', fontFamily: 'inherit',
   },
@@ -599,25 +598,25 @@ const S: Record<string, React.CSSProperties> = {
     boxShadow: '0 8px 32px rgba(234,29,44,0.35)', zIndex: 30,
   },
   cartOverlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
     backdropFilter: 'blur(4px)', zIndex: 100,
     display: 'flex', alignItems: 'flex-end',
   },
   cartSheet: {
     width: '100%', maxWidth: 480, margin: '0 auto',
-    background: '#0f172a', borderRadius: '24px 24px 0 0',
+    background: '#ffffff', borderRadius: '24px 24px 0 0',
     padding: '12px 20px 40px', maxHeight: '85vh', overflowY: 'auto',
   },
-  cartHandle: { width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 16px' },
+  cartHandle: { width: 40, height: 4, borderRadius: 2, background: '#e5e7eb', margin: '0 auto 16px' },
   cartRow: {
     display: 'flex', alignItems: 'center', gap: 12,
-    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+    background: '#f9fafb', border: '1px solid #e5e7eb',
     borderRadius: 12, padding: '10px 12px',
   },
   qtyBtn: {
     width: 30, height: 30, borderRadius: '50%',
-    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-    color: '#94a3b8', fontSize: '1rem', fontWeight: 700,
+    background: '#f3f4f6', border: '1px solid #e5e7eb',
+    color: '#6b7280', fontSize: '1rem', fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', fontFamily: 'inherit',
   },
@@ -630,10 +629,10 @@ const S: Record<string, React.CSSProperties> = {
   },
   clearBtn: {
     width: '100%', padding: '10px', borderRadius: 12,
-    background: 'none', border: '1px solid rgba(255,255,255,0.08)',
-    color: '#475569', fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit',
+    background: 'none', border: '1px solid #e5e7eb',
+    color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit',
   },
-  closeBtn: { background: 'none', border: 'none', color: '#475569', fontSize: '1.1rem', cursor: 'pointer', padding: 4 },
+  closeBtn: { background: 'none', border: 'none', color: '#6b7280', fontSize: '1.1rem', cursor: 'pointer', padding: 4 },
   toast: {
     position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)',
     background: 'rgba(16,185,129,0.9)', backdropFilter: 'blur(8px)',
