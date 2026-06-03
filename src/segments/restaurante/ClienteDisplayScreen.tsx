@@ -28,7 +28,7 @@ interface ApiData {
 
 /* ─── constantes de status ───────────────────────────── */
 const STATUS_CFG: Record<string, { label: string; emoji: string; color: string; bg: string; border: string }> = {
-  'Criado':     { label: 'Aguardando',  emoji: '🕐', color: '#60a5fa', bg: 'rgba(59,130,246,0.08)',  border: 'rgba(59,130,246,0.2)'  },
+  'Criado':     { label: 'Aguardando',  emoji: '🕐', color: '#ea1d2c', bg: 'rgba(234,29,44,0.08)',  border: 'rgba(234,29,44,0.2)'  },
   'Em Preparo': { label: 'Em Preparo',  emoji: '🔥', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.25)' },
   'Pronto':     { label: 'Pronto! 🎉', emoji: '✅', color: '#34d399', bg: 'rgba(52,211,153,0.08)',  border: 'rgba(52,211,153,0.35)' },
 };
@@ -104,7 +104,7 @@ export default function ClienteDisplayScreen({ slug }: { slug: string }) {
       <header style={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={styles.headerLogo}>
-            Flow<span style={{ color: '#06b6d4' }}>PDV</span>
+            Flow<span style={{ color: '#ea1d2c' }}>PDV</span>
           </div>
           <div style={styles.headerSep} />
           <div>

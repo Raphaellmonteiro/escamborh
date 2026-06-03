@@ -3529,8 +3529,8 @@ function SacolaUpsellCard({
       className={
         featured
           ? isLightRed
-            ? 'flex min-h-[236px] flex-col rounded-[20px] border-2 border-red-400/70 bg-[linear-gradient(180deg,#fffdf9_0%,#ffe8e0_100%)] p-3 shadow-[0_10px_28px_rgba(220,38,38,0.10)] ring-1 ring-red-200/70 sm:min-h-[248px] sm:p-3.5'
-            : 'flex min-h-[236px] flex-col rounded-[20px] border border-cyan-400/35 bg-[linear-gradient(180deg,rgba(16,18,28,1)_0%,rgba(10,22,30,0.99)_100%)] p-3 shadow-[0_12px_32px_rgba(0,0,0,0.35)] ring-1 ring-cyan-400/25 sm:min-h-[248px] sm:p-3.5'
+            ? 'flex h-full min-h-[200px] flex-col rounded-[20px] border-2 border-red-400/70 bg-[linear-gradient(180deg,#fffdf9_0%,#ffe8e0_100%)] p-3 shadow-[0_10px_28px_rgba(220,38,38,0.10)] ring-1 ring-red-200/70 sm:min-h-[208px] sm:p-3.5'
+            : 'flex h-full min-h-[200px] flex-col rounded-[20px] border border-cyan-400/35 bg-[linear-gradient(180deg,rgba(16,18,28,1)_0%,rgba(10,22,30,0.99)_100%)] p-3 shadow-[0_12px_32px_rgba(0,0,0,0.35)] ring-1 ring-cyan-400/25 sm:min-h-[208px] sm:p-3.5'
           : isLightRed
             ? 'flex h-full min-h-[200px] flex-col rounded-[18px] border border-stone-300/80 bg-[#fffefc] p-3 shadow-sm sm:min-h-[208px] sm:rounded-[20px] sm:p-3.5'
             : 'flex h-full min-h-[200px] flex-col rounded-[18px] border border-white/12 bg-zinc-950 p-3 sm:min-h-[208px] sm:rounded-[20px] sm:p-3.5'
@@ -3925,23 +3925,18 @@ function SacolaConteudo({ slug, cliToken, cart, config, tipoAtendimento, suggest
                 )}
 
                 {!showSuggestionSkeleton && suggestionCards.length > 0 && (
-                  <div className="flex flex-col gap-3 sm:gap-3.5">
-                    <SacolaUpsellCard card={suggestionCards[0]} isLightRed={isLightRed} onAdd={handleSuggestionAdd} />
-                    {suggestionCards.length > 1 && (
-                      <div
-                        className={
-                          suggestionCards.length === 2
-                            ? 'grid grid-cols-1 gap-3 sm:gap-3.5'
-                            : 'grid grid-cols-2 gap-3 sm:items-stretch sm:gap-3.5'
-                        }
-                      >
-                        {suggestionCards.slice(1).map((card) => (
-                          <Fragment key={card.item.id}>
-                            <SacolaUpsellCard card={card} isLightRed={isLightRed} onAdd={handleSuggestionAdd} />
-                          </Fragment>
-                        ))}
-                      </div>
-                    )}
+                  <div
+                    className={
+                      suggestionCards.length === 1
+                        ? 'grid grid-cols-1 gap-3 sm:gap-3.5'
+                        : 'grid grid-cols-2 gap-3 sm:items-stretch sm:gap-3.5'
+                    }
+                  >
+                    {suggestionCards.map((card) => (
+                      <Fragment key={card.item.id}>
+                        <SacolaUpsellCard card={card} isLightRed={isLightRed} onAdd={handleSuggestionAdd} />
+                      </Fragment>
+                    ))}
                   </div>
                 )}
 

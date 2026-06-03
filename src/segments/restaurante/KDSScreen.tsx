@@ -8,9 +8,9 @@ interface KDSOrder {
 
 const PIPELINE = ['Criado', 'Em Preparo', 'Pronto', 'Entregue'];
 const STATUS: Record<string, { label: string; emoji: string; color: string; bg: string; border: string; glow: string; }> = {
-  'Criado':     { label: 'AGUARDANDO', emoji: '•', color: '#60a5fa', bg: 'rgba(59,130,246,0.06)',  border: 'rgba(59,130,246,0.25)', glow: 'transparent' },
+  'Criado':     { label: 'AGUARDANDO', emoji: '•', color: '#ea1d2c', bg: 'rgba(234,29,44,0.06)',  border: 'rgba(234,29,44,0.25)', glow: 'transparent' },
   'Em Preparo': { label: 'EM PREPARO', emoji: '•', color: '#fbbf24', bg: 'rgba(251,191,36,0.07)',  border: 'rgba(251,191,36,0.35)', glow: 'rgba(251,191,36,0.15)' },
-  'Pronto':     { label: 'PRONTO',     emoji: '•', color: '#22d3ee', bg: 'rgba(34,211,238,0.08)', border: 'rgba(34,211,238,0.35)', glow: 'rgba(34,211,238,0.16)' },
+  'Pronto':     { label: 'PRONTO',     emoji: '•', color: '#22c55e', bg: 'rgba(34,197,94,0.08)',  border: 'rgba(34,197,94,0.35)',  glow: 'rgba(34,197,94,0.16)'  },
 };
 const COLS = ['Criado', 'Em Preparo', 'Pronto'];
 
@@ -19,8 +19,8 @@ function elapsedMin(created_at: string) {
 }
 function tipoInfo(order: KDSOrder) {
   if (order.tipo_retirada === 'levar') return { label: 'VIAGEM', emoji: '•', color: '#fb923c' };
-  if ((order.observation || '').startsWith('Mesa ')) return { label: order.observation.toUpperCase(), emoji: '•', color: '#a78bfa' };
-  return { label: 'BALCÃO', emoji: '•', color: '#38bdf8' };
+  if ((order.observation || '').startsWith('Mesa ')) return { label: order.observation.toUpperCase(), emoji: '•', color: '#a02331' };
+  return { label: 'BALCÃO', emoji: '•', color: '#ea1d2c' };
 }
 
 export default function KDSScreen({ slug }: { slug: string }) {
@@ -205,9 +205,9 @@ export default function KDSScreen({ slug }: { slug: string }) {
                     return (
                       <div key={order.id} style={{
                         ...S.card,
-                        background: col === 'Pronto' ? 'rgba(34,211,238,0.08)' : sc.bg,
+                        background: col === 'Pronto' ? 'rgba(34,197,94,0.08)' : sc.bg,
                         borderColor: urgent ? '#ef4444' : sc.border,
-                        boxShadow:   urgent ? '0 0 24px rgba(239,68,68,0.25)' : col === 'Pronto' ? '0 0 28px rgba(34,211,238,0.16)' : 'none',
+                        boxShadow:   urgent ? '0 0 24px rgba(239,68,68,0.25)' : col === 'Pronto' ? '0 0 28px rgba(34,197,94,0.16)' : 'none',
                       }}>
 
                         {/* topo: senha + tipo + tempo */}
@@ -330,7 +330,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
                           <button onClick={() => advance(order.id)} disabled={isAdv} style={{
                             width: '100%', padding: '10px 0', borderRadius: 10, border: 'none',
                             cursor: isAdv ? 'wait' : 'pointer',
-                            background: isAdv ? '#1e293b' : '#22d3ee',
+                            background: isAdv ? '#1e293b' : '#22c55e',
                             color: '#020617', fontWeight: 900, fontSize: 13, opacity: isAdv ? 0.5 : 1,
                           }}>
                             {isAdv ? '...' : 'Marcar como entregue'}
@@ -361,7 +361,7 @@ export default function KDSScreen({ slug }: { slug: string }) {
 const S: Record<string, React.CSSProperties> = {
   root:    { background: '#090e17', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#f0f4ff', userSelect: 'none' },
   header:  { background: 'rgba(9,14,23,0.97)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(148,163,184,0.12)', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, gap: 12 },
-  logoBox: { width: 38, height: 38, background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(34,211,238,0.18)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
+  logoBox: { width: 38, height: 38, background: 'rgba(234,29,44,0.08)', border: '1px solid rgba(234,29,44,0.18)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
   hTitle:  { fontSize: '0.9rem', fontWeight: 800, color: '#f0f4ff' },
   hSub:    { fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.12em', color: '#94a3b8', textTransform: 'uppercase' },
   sep:     { width: 1, height: 30, background: 'rgba(148,163,184,0.16)', margin: '0 4px' },

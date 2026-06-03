@@ -198,7 +198,7 @@ export function buildCardapioPdfHtml(params: BuildCardapioPdfHtmlParams): string
   .name-line{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
   .name{font-weight:600;font-size:13px}
   .marks{display:inline-flex;gap:4px;font-size:11px}
-  .price{font-weight:700;color:#16a34a;white-space:nowrap;text-align:right;min-width:5.5rem}
+  .price{font-weight:700;color:#ea1d2c;white-space:nowrap;text-align:right;min-width:5.5rem}
   .desc{font-size:10px;color:#888;margin-top:4px;line-height:1.4}
   .sub{color:#888;font-size:11px;margin-bottom:18px}
   @media print{body{padding:16px}}
@@ -241,7 +241,7 @@ ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
   *{box-sizing:border-box}
   body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,sans-serif;margin:0;padding:0;color:#0f172a;font-size:14px;background:#f4f6f8;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .doc{position:relative;max-width:640px;margin:0 auto;padding:40px 36px 52px;min-height:100vh}
-  .doc-accent{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#0f766e 0%,#0d9488 45%,#cbd5e1 100%);opacity:.55}
+  .doc-accent{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#a02331 0%,#ea1d2c 45%,#e5e5e7 100%);opacity:.55}
   .wm{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);width:min(320px,72vw);pointer-events:none;z-index:0}
   .wm img{display:block;width:100%;height:auto;object-fit:contain;opacity:.055;filter:grayscale(1)}
   .sheet{position:relative;z-index:1}
@@ -251,7 +251,7 @@ ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
   .brand-fallback{font-size:28px;font-weight:900;color:#64748b}
   .hero-text{min-width:0;flex:1}
   .hero-title{font-size:27px;font-weight:900;letter-spacing:-0.03em;margin:0;line-height:1.12;color:#0f172a}
-  .hero-tagline{margin:6px 0 0;font-size:12px;font-weight:700;color:#0f766e;text-transform:uppercase;letter-spacing:.04em}
+  .hero-tagline{margin:6px 0 0;font-size:12px;font-weight:700;color:#ea1d2c;text-transform:uppercase;letter-spacing:.04em}
   .hero-date{margin:10px 0 0;font-size:10px;color:#94a3b8;font-weight:500;line-height:1.4}
   .hero-date-label{color:#94a3b8;margin-right:4px;font-weight:600}
   .cat{margin-top:40px}
@@ -263,11 +263,11 @@ ${autoPrint ? '<script>window.onload=function(){window.print()}</script>' : ''}
   .dish-main{min-width:0;flex:1;display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 10px}
   .marks{display:inline-flex;gap:6px;flex-shrink:0;align-items:center;padding-top:2px}
   .mark{font-size:13px;line-height:1}
-  .mark--promo{font-size:8px;font-weight:800;letter-spacing:.06em;color:#fff;background:#0d9488;padding:4px 8px;border-radius:5px;line-height:1;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .mark--promo{font-size:8px;font-weight:800;letter-spacing:.06em;color:#fff;background:#ea1d2c;padding:4px 8px;border-radius:5px;line-height:1;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .dish-name{font-size:16px;font-weight:900;margin:0;letter-spacing:-0.02em;line-height:1.3;color:#0f172a;flex:1;min-width:0}
   .dish-desc{margin:10px 0 0;font-size:11px;color:#64748b;line-height:1.45;font-weight:400;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .price-col{flex-shrink:0;text-align:right;align-self:flex-start;min-width:7rem;display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-start;gap:3px}
-  .price{font-size:18px;font-weight:900;color:#0d9488;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.15}
+  .price{font-size:18px;font-weight:900;color:#ea1d2c;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.15}
   .price-old{font-size:10px;color:#94a3b8;text-decoration:line-through;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
   .foot-qr{margin-top:52px;padding:28px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap}
   .qr-wrap{flex-shrink:0}

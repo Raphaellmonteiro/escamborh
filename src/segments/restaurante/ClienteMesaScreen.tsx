@@ -32,7 +32,7 @@ const STATUS_CFG: Record<string, {
   label: string; sub: string; emoji: string;
   color: string; bg: string; border: string; glow: string;
 }> = {
-  'Criado':     { label: 'Pedido recebido',        sub: 'Seu pedido foi registrado e aguarda preparo.',  emoji: '📋', color: '#60a5fa', bg: 'rgba(59,130,246,0.08)',  border: 'rgba(59,130,246,0.2)',  glow: 'rgba(59,130,246,0.1)'  },
+  'Criado':     { label: 'Pedido recebido',        sub: 'Seu pedido foi registrado e aguarda preparo.',  emoji: '📋', color: '#ea1d2c', bg: 'rgba(234,29,44,0.08)',  border: 'rgba(234,29,44,0.2)',  glow: 'rgba(234,29,44,0.1)'  },
   'Em Preparo': { label: 'Em preparo 🔥',           sub: 'A cozinha está preparando seu pedido agora.',  emoji: '👨‍🍳', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.3)',  glow: 'rgba(251,191,36,0.12)' },
   'Pronto':     { label: 'Pronto! Bom apetite 🎉', sub: 'Seu pedido está pronto e a caminho.',           emoji: '✅', color: '#34d399', bg: 'rgba(52,211,153,0.08)',  border: 'rgba(52,211,153,0.35)', glow: 'rgba(52,211,153,0.15)' },
   'Entregue':   { label: 'Entregue com sucesso',   sub: 'Aproveite! Obrigado pela preferência.',         emoji: '🍽️', color: '#94a3b8', bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.2)', glow: 'rgba(0,0,0,0)'         },
@@ -148,7 +148,7 @@ export default function ClienteMesaScreen({ slug, mesa }: { slug: string; mesa: 
     <div style={S.root}>
       {/* ── HEADER ────────────────────────────────────────── */}
       <header style={S.header}>
-        <div style={S.logo}>Flow<span style={{ color: '#06b6d4' }}>PDV</span></div>
+        <div style={S.logo}>Flow<span style={{ color: '#ea1d2c' }}>PDV</span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={S.estNome}>{estNome}</span>
           <span style={S.mesaBadgeSmall}>Mesa {mesa}</span>
@@ -394,7 +394,7 @@ function AbaCardapio({
                       <>
                         <button onClick={() => removeFromCart(p.id)} style={S.qtyBtnSm}>−</button>
                         <span style={{ fontWeight: 700, color: '#f0f4ff', minWidth: 18, textAlign: 'center' }}>{qty}</span>
-                        <button onClick={() => addToCart(p)} style={{ ...S.qtyBtnSm, background: 'rgba(6,182,212,0.2)', borderColor: 'rgba(6,182,212,0.4)', color: '#06b6d4' }}>+</button>
+                        <button onClick={() => addToCart(p)} style={{ ...S.qtyBtnSm, background: 'rgba(234,29,44,0.15)', borderColor: 'rgba(234,29,44,0.4)', color: '#ea1d2c' }}>+</button>
                       </>
                     ) : (
                       <button onClick={() => addToCart(p)} style={S.addBtn}>+</button>
@@ -427,7 +427,7 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
       <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f0f4ff', marginBottom: 8 }}>Mesa {mesa}</h2>
       <p style={{ color: '#64748b', fontSize: '0.88rem', lineHeight: 1.6 }}>
         Nenhum pedido ativo no momento.<br />
-        Vá até a aba <strong style={{ color: '#06b6d4' }}>Cardápio</strong> para fazer seu pedido!
+        Vá até a aba <strong style={{ color: '#ea1d2c' }}>Cardápio</strong> para fazer seu pedido!
       </p>
     </div>
   );
@@ -475,7 +475,7 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
       <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
           <span style={{ fontFamily: "'Syne', system-ui", fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seu pedido</span>
-          <span style={{ fontSize: '0.72rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59,130,246,0.1)', padding: '3px 10px', borderRadius: 100, border: '1px solid rgba(59,130,246,0.2)' }}>
+          <span style={{ fontSize: '0.72rem', color: '#ea1d2c', fontWeight: 600, background: 'rgba(234,29,44,0.08)', padding: '3px 10px', borderRadius: 100, border: '1px solid rgba(234,29,44,0.2)' }}>
             {(() => {
               const obs = order.observation || '';
               const m   = obs.match(/Mesa\s+(\d+)/i);
@@ -489,7 +489,7 @@ function AbaMeuPedido({ order, kdsLoaded, mesa }: { order: Order | null; kdsLoad
         <div style={{ padding: '8px 0' }}>
           {(order.items || []).map((it, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 16px', gap: 10, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#3b82f6', minWidth: 24 }}>{it.quantity}×</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ea1d2c', minWidth: 24 }}>{it.quantity}×</span>
               <span style={{ flex: 1, fontSize: '0.9rem', color: '#e2e8f0' }}>{it.product_name}</span>
               <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>{fmt(it.price_at_time * it.quantity)}</span>
             </div>
@@ -532,8 +532,8 @@ const S: Record<string, React.CSSProperties> = {
   logo: { fontFamily: "'Syne', system-ui", fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#f0f4ff' },
   estNome: { fontSize: '0.75rem', fontWeight: 600, color: '#64748b' },
   mesaBadgeSmall: {
-    background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)',
-    color: '#06b6d4', borderRadius: 100, padding: '3px 10px',
+    background: 'rgba(234,29,44,0.1)', border: '1px solid rgba(234,29,44,0.3)',
+    color: '#ea1d2c', borderRadius: 100, padding: '3px 10px',
     fontSize: '0.72rem', fontWeight: 700,
   },
   tabs: {
@@ -547,7 +547,7 @@ const S: Record<string, React.CSSProperties> = {
     color: '#475569', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer',
     borderBottom: '2px solid transparent', transition: 'all 0.2s', fontFamily: 'inherit',
   },
-  tabActive: { color: '#06b6d4', borderBottom: '2px solid #06b6d4' },
+  tabActive: { color: '#ea1d2c', borderBottom: '2px solid #ea1d2c' },
   tabDot: {
     position: 'absolute', top: 8, right: 24,
     width: 8, height: 8, borderRadius: '50%', background: '#34d399',
@@ -565,7 +565,7 @@ const S: Record<string, React.CSSProperties> = {
     color: '#64748b', fontSize: '0.82rem', fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'all 0.15s',
   },
-  catBtnActive: { background: 'rgba(6,182,212,0.15)', border: '1px solid rgba(6,182,212,0.4)', color: '#06b6d4' },
+  catBtnActive: { background: 'rgba(234,29,44,0.1)', border: '1px solid rgba(234,29,44,0.4)', color: '#ea1d2c' },
   prodCard: {
     display: 'flex', alignItems: 'center', gap: 12,
     background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
@@ -574,11 +574,11 @@ const S: Record<string, React.CSSProperties> = {
   prodImg:  { width: 60, height: 60, borderRadius: 10, objectFit: 'cover', flexShrink: 0 } as React.CSSProperties,
   prodName: { fontSize: '0.9rem', fontWeight: 600, color: '#e2e8f0', marginBottom: 2 },
   prodCat:  { fontSize: '0.72rem', color: '#475569', marginBottom: 4 },
-  prodPrice:{ fontSize: '0.9rem', fontWeight: 700, color: '#06b6d4' },
+  prodPrice:{ fontSize: '0.9rem', fontWeight: 700, color: '#ea1d2c' },
   addBtn: {
     width: 34, height: 34, borderRadius: '50%',
-    background: 'rgba(6,182,212,0.2)', border: '1px solid rgba(6,182,212,0.4)',
-    color: '#06b6d4', fontSize: '1.3rem', fontWeight: 700,
+    background: 'rgba(234,29,44,0.15)', border: '1px solid rgba(234,29,44,0.4)',
+    color: '#ea1d2c', fontSize: '1.3rem', fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', fontFamily: 'inherit',
   },
@@ -592,11 +592,11 @@ const S: Record<string, React.CSSProperties> = {
   cartFab: {
     position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
     maxWidth: 440, width: 'calc(100% - 40px)',
-    background: 'linear-gradient(135deg, #06b6d4, #0ea5e9)',
+    background: 'linear-gradient(135deg, #ea1d2c, #a02331)',
     border: 'none', borderRadius: 16, padding: '14px 20px',
     display: 'flex', alignItems: 'center', gap: 12,
     color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
-    boxShadow: '0 8px 32px rgba(6,182,212,0.4)', zIndex: 30,
+    boxShadow: '0 8px 32px rgba(234,29,44,0.35)', zIndex: 30,
   },
   cartOverlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
