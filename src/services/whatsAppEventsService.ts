@@ -473,7 +473,97 @@ export async function orderCreatedWhatsAppEvent(input: RegisterWhatsAppOrderEven
 }
 
 export async function orderPaymentConfirmedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {
-  await registerWhatsAppOrderEvent('order_confirmed', input);
+  // Pagamento Pix confirmado: envia mensagem dedicada ao cliente via WhatsApp.
+  // NÃO usa 'order_confirmed' para evitar duplicidade com o evento de pedido aceito.
+  try {
+    const tenantId = Number(input.tenantId);
+    const orderId = Number(input.orderId);
+    if (!tenantId || !orderId) return;
+
+    const config = await q1<TenantWhatsAppConfigRow>(
+      `SELECT whatsapp_enabled, provider, provider_config_json
+       FROM tenant_whatsapp_config
+       WHERE tenant_id=?`,
+      [tenantId]
+    );
+    if (!config || !toBool(config.whatsapp_enabled, false)) return;
+
+    const connectionInfo = await getConnectionInfo(tenantId);
+    if (!connectionInfo.supported || !connectionInfo.configured || !connectionInfo.status?.connected) return;
+
+    const order = await q1<OrderWhatsAppRow>(
+      `SELECT p.id,
+              p.tenant_id,
+              p.order_number,
+              COALESCE(NULLIF(BTRIM(p.cliente_nome), ''), NULLIF(BTRIM(dc.nome), '')) AS cliente_nome,
+              COALESCE(NULLIF(BTRIM(p.cliente_tel), ''), NULLIF(BTRIM(dc.telefone), '')) AS cliente_tel,
+              p.status,
+              p.canal,
+              p.tipo_retirada,
+              c.nome_estabelecimento AS loja_nome,
+              c.usuario AS loja_slug,
+              c.delivery_config
+       FROM pedidos p
+       LEFT JOIN delivery_clientes dc
+         ON dc.id = COALESCE(p.cliente_id, p.delivery_cliente_id)
+        AND dc.tenant_id = p.tenant_id
+       LEFT JOIN clientes c
+         ON c.id = p.tenant_id
+       WHERE p.id=? AND p.tenant_id=?`,
+      [orderId, tenantId]
+    );
+    if (!order || !order.cliente_tel) return;
+
+    const greeting = getCustomerGreeting(normalizeOptionalText(order.cliente_nome));
+    const orderLabel = order.order_number ? `pedido #${order.order_number}` : 'seu pedido';
+    const storeName = normalizeOptionalText(order.loja_nome) || 'a loja';
+    const trackingLink = buildTrackingLink({
+      tenant_id: tenantId,
+      order_id: orderId,
+      order_number: normalizeOptionalText(order.order_number),
+      store_name: normalizeOptionalText(order.loja_nome),
+      store_slug: normalizeOptionalText(order.loja_slug),
+      customer_name: normalizeOptionalText(order.cliente_nome),
+      customer_phone: normalizeOptionalText(order.cliente_tel),
+      status: normalizeOptionalText(order.status),
+      channel: normalizeOptionalText(order.canal),
+      pickup_type: normalizeOptionalText(order.tipo_retirada),
+      estimated_minutes: parseEstimatedMinutesFromDeliveryConfig(order.delivery_config),
+    });
+
+    const message = [
+      `${greeting} ✅`,
+      `Pagamento Pix do ${orderLabel} confirmado com sucesso!`,
+      `${storeName} já recebeu e está preparando seu pedido.`,
+      trackingLink ? `Acompanhe aqui: ${trackingLink}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    await sendWhatsAppMessage({
+      to: String(order.cliente_tel).replace(/\D/g, ''),
+      message,
+      provider: normalizeOptionalText(config.provider) || 'evolution',
+      providerConfigJson: normalizeOptionalText(config.provider_config_json),
+    });
+
+    await insertPedidoWhatsAppEvent({
+      tenantId,
+      orderId,
+      eventType: 'WHATSAPP_TXN_PAYMENT_CONFIRMED',
+      statusNovo: 'pago',
+      payload: {
+        source: input.source || 'orderPaymentConfirmedWhatsAppEvent',
+        channel: 'whatsapp',
+      },
+    });
+  } catch (error) {
+    logError('whatsAppEventsService.orderPaymentConfirmedWhatsAppEvent', error, {
+      tenantId: input.tenantId,
+      orderId: input.orderId,
+      source: input.source || null,
+    });
+  }
 }
 
 export async function orderAcceptedWhatsAppEvent(input: RegisterWhatsAppOrderEventInput) {

@@ -2008,7 +2008,7 @@ export function createDeliveryPublicRouter() {
         : `NOVO PEDIDO DELIVERY #${result.orderNumber}\n\n${data} as ${hora}\n\nCliente: ${cliente_nome || 'Cliente'}\nTelefone: ${cliente_tel || '-'}\nEndereco: ${enderecoFinal || '-'}\nMapa: ${mapsUrl}\n\nITENS:\n${listaItens.join('\n')}\n\n${paymentLabel}\nTotal: R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
       const waLink = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(msg)}` : null;
 
-      if (canalPedido === 'delivery' && automation.delivery_auto_accept_orders) {
+      if (canalPedido === 'delivery' && automation.delivery_auto_accept_orders && pagamentoTipoCanon !== 'pix') {
         void recordDeliveryAutoAcceptOnline(tenant.id, Number(result.orderId)).catch((err) =>
           logError('delivery-public.recordDeliveryAutoAcceptOnline.unhandled', err, { tenantId: tenant.id, orderId: result.orderId })
         );
