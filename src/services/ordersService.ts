@@ -1107,6 +1107,11 @@ function buildOrderFilters(filters: GetOrdersFilters) {
     clauses.push("LOWER(COALESCE(status,'')) <> 'entregue'");
     clauses.push("LOWER(COALESCE(status,'')) <> 'cancelado'");
     clauses.push("LOWER(COALESCE(status,'')) NOT LIKE 'conclu%'");
+    // Pedidos ativos: mostrar apenas do dia atual (fuso BR) para não congestionar a tela.
+    // Pedidos de dias anteriores ainda abertos ficam acessíveis na aba Histórico.
+    if (filters.todayOnly !== false) {
+      clauses.push(`(created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`);
+    }
   }
 
   if (filters.from) {

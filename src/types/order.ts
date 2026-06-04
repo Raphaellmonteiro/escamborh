@@ -172,6 +172,7 @@ export interface GetOrdersFilters {
   canal?: string;
   excludeCanal?: string;
   activeOnly?: boolean;
+  todayOnly?: boolean; // quando activeOnly=true, limitar ao dia atual (padrão: true)
   from?: string;
   to?: string;
   day?: string;

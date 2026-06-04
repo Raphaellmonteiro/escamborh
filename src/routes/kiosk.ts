@@ -675,12 +675,14 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
       const tenant = await q1('SELECT id,nome_estabelecimento FROM clientes WHERE usuario=?', [slug]);
       if (!tenant) return res.status(404).json({ error:'Restaurante não encontrado', slug });
 
-      // 1ª query: pedidos das últimas 24h não finalizados
+      // 1ª query: pedidos do DIA ATUAL (fuso BR) não finalizados.
+      // Usar data do dia ao invés de INTERVAL '24h' evita que pedidos
+      // do dia anterior permaneçam visíveis na tela da cozinha após a meia-noite.
       const allOrders = await qAll(
         `SELECT * FROM pedidos
          WHERE tenant_id=?
            AND ${buildOperationalKdsOrderClause()}
-           AND created_at >= NOW() - INTERVAL '24 hours'
+           AND (created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date
          ORDER BY created_at ASC`,
         [tenant.id]
       );

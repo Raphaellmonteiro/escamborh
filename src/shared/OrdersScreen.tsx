@@ -120,6 +120,11 @@ export default function OrdersScreen({
   const [filters, setFilters] = useState({
     day: '', month: (new Date().getMonth() + 1).toString(), year: new Date().getFullYear().toString()
   });
+  const [activeFilters, setActiveFilters] = useState({
+    status: '' as string,
+    canal: '' as string,
+    search: '' as string,
+  });
 
   const pdvDeeplinkOrderIdRef = useRef<number | null>(null);
 
@@ -705,7 +710,30 @@ const handleConfirmOrder = async (id: number) => {
       || normalizedStatus === normalizedSegmentFinalStatus;
   };
 
-  const activeOrders = orders.filter((order) => !isFinalOrderStatus(order.status));
+  const activeOrders = useMemo(() => {
+    let list = orders.filter((order) => !isFinalOrderStatus(order.status));
+    if (activeFilters.status) {
+      list = list.filter((o) => o.status === activeFilters.status);
+    }
+    if (activeFilters.canal) {
+      list = list.filter((o) => {
+        if (activeFilters.canal === 'delivery') return (o as any).canal === 'delivery';
+        if (activeFilters.canal === 'mesa') return Boolean(getMesaReference(o));
+        if (activeFilters.canal === 'balcao') return (o as any).canal !== 'delivery' && !getMesaReference(o);
+        return true;
+      });
+    }
+    if (activeFilters.search.trim()) {
+      const q = activeFilters.search.trim().toLowerCase();
+      list = list.filter((o) =>
+        String(o.order_number || '').toLowerCase().includes(q) ||
+        String((o as any).senha_pedido || '').includes(q) ||
+        String((o as any).cliente_nome || '').toLowerCase().includes(q) ||
+        String(o.observation || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [orders, activeFilters, isFinalOrderStatus, getMesaReference]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={adminScreenPagePaddingClass}>
@@ -782,6 +810,65 @@ const handleConfirmOrder = async (id: number) => {
               value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} />
           </div>
           <Button onClick={fetchOrders} variant="secondary" className="w-full !h-auto !min-h-[44px] sm:w-auto">Filtrar</Button>
+        </div>
+      )}
+
+      {/* FILTROS — Aba ativos */}
+      {activeTab === 'active' && (
+        <div className={`mb-4 flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-end ${adminOpsFilterCardClass}`}>
+          <div className="flex-1 min-w-0">
+            <label className={adminFormLabelClass}>Buscar</label>
+            <input
+              type="search"
+              placeholder="Número, senha, cliente, observação..."
+              className="w-full min-h-[44px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none"
+              value={activeFilters.search}
+              onChange={e => setActiveFilters(f => ({ ...f, search: e.target.value }))}
+            />
+          </div>
+          <div className="w-full sm:w-auto">
+            <label className={adminFormLabelClass}>Status</label>
+            <select
+              className="w-full min-h-[44px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none sm:w-44"
+              value={activeFilters.status}
+              onChange={e => setActiveFilters(f => ({ ...f, status: e.target.value }))}
+            >
+              <option value="">Todos os status</option>
+              <option value="Aguardando confirmação">Aguardando confirmação</option>
+              <option value="Criado">Criado</option>
+              <option value="Pedido Recebido">Pedido Recebido</option>
+              <option value="Em Preparo">Em Preparo</option>
+              <option value="Pronto">Pronto</option>
+              <option value="Pronto para Entrega">Pronto para Entrega</option>
+              <option value="Saiu para Entrega">Saiu para Entrega</option>
+            </select>
+          </div>
+          <div className="w-full sm:w-auto">
+            <label className={adminFormLabelClass}>Canal</label>
+            <select
+              className="w-full min-h-[44px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none sm:w-36"
+              value={activeFilters.canal}
+              onChange={e => setActiveFilters(f => ({ ...f, canal: e.target.value }))}
+            >
+              <option value="">Todos os canais</option>
+              <option value="delivery">🛵 Delivery</option>
+              <option value="mesa">🪑 Mesa</option>
+              <option value="balcao">🏪 Balcão</option>
+            </select>
+          </div>
+          {(activeFilters.status || activeFilters.canal || activeFilters.search) && (
+            <button
+              onClick={() => setActiveFilters({ status: '', canal: '', search: '' })}
+              className="min-h-[44px] rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-500 hover:bg-zinc-50 transition-colors whitespace-nowrap"
+            >
+              ✕ Limpar filtros
+            </button>
+          )}
+          <div className="w-full sm:w-auto self-end">
+            <p className="text-xs text-zinc-400 font-medium text-right">
+              {activeOrders.length} pedido{activeOrders.length !== 1 ? 's' : ''} exibido{activeOrders.length !== 1 ? 's' : ''}
+            </p>
+          </div>
         </div>
       )}
 
