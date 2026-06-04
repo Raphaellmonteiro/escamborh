@@ -817,121 +817,127 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#FAFAFB] px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:py-1.5">
-        {cart.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center py-8 px-4">
-            <div className="w-14 h-14 rounded-2xl bg-fp-card border border-fp-border flex items-center justify-center mb-3">
-              <ShoppingCart size={28} className="text-fptext-muted" />
-            </div>
-            <p className="font-bold text-fptext-primary text-sm">Carrinho vazio</p>
-            <p className="text-xs text-fptext-muted mt-1">Toque nos produtos para adicionar ao pedido</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {cart.map((item, index) => (
-              <motion.div key={index} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
-                onClick={() => setSelectedCartIndex(index)}
-                className={`flex items-center gap-2 bg-fp-card rounded-lg border p-2 transition-all cursor-pointer ${
-                  selectedCartIndex === index
-                    ? 'border-[#EA1D2C]/55 ring-1 ring-[#EA1D2C]/20 dark:border-[#ff7a83] dark:ring-[#EA1D2C]/20'
-                    : 'border-fp-border hover:border-zinc-300 dark:hover:border-zinc-600'
-                }`}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-fptext-primary text-xs leading-snug line-clamp-2">{item.product_name}</p>
-                  {(item as any).observation ? (
-                    <p className="text-[9px] text-fptext-muted line-clamp-2 mt-0.5">{(item as any).observation}</p>
-                  ) : null}
-                  {selectedCartIndex === index && (
-                    <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-[#EA1D2C] dark:text-[#ff7a83]">Selecionado</p>
-                  )}
-                  <p className="mt-0.5 text-xs font-black text-[#EA1D2C] dark:text-[#ff7a83]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-fp-hover hover:bg-fp-active border border-fp-border rounded-lg transition-all text-fptext-primary"><Minus size={11} /></button>
-                  <span className="w-8 lg:w-6 text-center font-black text-xs text-fptext-primary">{item.quantity}</span>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-fp-hover hover:bg-fp-active border border-fp-border rounded-lg transition-all text-fptext-primary"><Plus size={11} /></button>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* ── Área scrollável: itens + pagamentos ─────────────────────── */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#FAFAFB]">
 
-      <div className="shrink-0 space-y-2.5 border-t border-fp-border bg-white px-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 md:space-y-3 md:px-3 md:pb-3 md:pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4 [@media(max-height:700px)]:space-y-2 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
-        <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Pagamentos Adicionados</p>
-        {payments.length > 0 && (
-          <div className="space-y-1.5">
-            {payments.map((p, i) => (
-              <div key={i} className="flex justify-between items-center bg-fp-secondary px-2.5 py-2 rounded-lg border border-fp-border text-xs">
-                <span className="font-bold text-fptext-secondary">{p.method}</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-black text-fptext-primary">R$ {p.amount_paid.toFixed(2)}</span>
-                  <button type="button" onClick={() => removePayment(i)} className="text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center"><Trash2 size={11} /></button>
-                </div>
+        {/* Itens do carrinho */}
+        <div className="px-2.5 py-2 md:px-3 md:py-2.5 xl:px-4 xl:py-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:py-1.5">
+          {cart.length === 0 ? (
+            <div className="flex flex-col items-center justify-center text-center py-8 px-4">
+              <div className="w-14 h-14 rounded-2xl bg-fp-card border border-fp-border flex items-center justify-center mb-3">
+                <ShoppingCart size={28} className="text-fptext-muted" />
               </div>
+              <p className="font-bold text-fptext-primary text-sm">Carrinho vazio</p>
+              <p className="text-xs text-fptext-muted mt-1">Toque nos produtos para adicionar ao pedido</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cart.map((item, index) => (
+                <motion.div key={index} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                  onClick={() => setSelectedCartIndex(index)}
+                  className={`flex items-center gap-2 bg-fp-card rounded-lg border p-2 transition-all cursor-pointer ${
+                    selectedCartIndex === index
+                      ? 'border-[#EA1D2C]/55 ring-1 ring-[#EA1D2C]/20 dark:border-[#ff7a83] dark:ring-[#EA1D2C]/20'
+                      : 'border-fp-border hover:border-zinc-300 dark:hover:border-zinc-600'
+                  }`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-fptext-primary text-xs leading-snug line-clamp-2">{item.product_name}</p>
+                    {(item as any).observation ? (
+                      <p className="text-[9px] text-fptext-muted line-clamp-2 mt-0.5">{(item as any).observation}</p>
+                    ) : null}
+                    {selectedCartIndex === index && (
+                      <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-[#EA1D2C] dark:text-[#ff7a83]">Selecionado</p>
+                    )}
+                    <p className="mt-0.5 text-xs font-black text-[#EA1D2C] dark:text-[#ff7a83]">R$ {(item.price_at_time * item.quantity).toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, -1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-fp-hover hover:bg-fp-active border border-fp-border rounded-lg transition-all text-fptext-primary"><Minus size={11} /></button>
+                    <span className="w-8 lg:w-6 text-center font-black text-xs text-fptext-primary">{item.quantity}</span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); updateQuantity(index, 1); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center bg-fp-hover hover:bg-fp-active border border-fp-border rounded-lg transition-all text-fptext-primary"><Plus size={11} /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(index); }} className="w-10 h-10 lg:w-6 lg:h-6 flex items-center justify-center text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors ml-0.5"><Trash2 size={12} /></button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pagamentos */}
+        <div className="border-t border-fp-border bg-white px-2.5 py-2.5 space-y-2.5 md:px-3 md:py-3 md:space-y-3 xl:px-4 xl:py-3 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2 [@media(max-height:700px)]:space-y-2">
+          <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Pagamentos Adicionados</p>
+          {payments.length > 0 && (
+            <div className="space-y-1.5">
+              {payments.map((p, i) => (
+                <div key={i} className="flex justify-between items-center bg-fp-secondary px-2.5 py-2 rounded-lg border border-fp-border text-xs">
+                  <span className="font-bold text-fptext-secondary">{p.method}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-fptext-primary">R$ {p.amount_paid.toFixed(2)}</span>
+                    <button type="button" onClick={() => removePayment(i)} className="text-fptext-muted hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center"><Trash2 size={11} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-4 gap-1.5 lg:gap-2">
+            {PAY_METHODS.map(m => (
+              <button key={m} type="button" onClick={() => setCurrentPaymentMethod(m)}
+                className={`py-2 lg:py-1.5 rounded-lg text-[10px] font-bold border transition-all min-h-[40px] lg:min-h-0 ${
+                  currentPaymentMethod === m
+                    ? 'border-[#EA1D2C]/35 bg-[#FFF1F2] text-[#9C050B] dark:text-[#ff9aa1]'
+                    : 'bg-fp-secondary border-fp-border text-fptext-muted hover:border-zinc-400 hover:text-fptext-primary dark:hover:border-zinc-600 dark:hover:text-zinc-300'
+                }`}>
+                <span>{m}</span>
+                {getTaxa(m) > 0 && (
+                  <span className={`block text-[9px] font-bold mt-0.5 ${currentPaymentMethod === m ? 'text-[#9C050B] dark:text-[#ff9aa1]' : 'text-fptext-muted'}`}>
+                    +{getTaxa(m)}%
+                  </span>
+                )}
+              </button>
             ))}
           </div>
-        )}
-        <div className="grid grid-cols-4 gap-1.5 lg:gap-2">
-          {PAY_METHODS.map(m => (
-            <button key={m} type="button" onClick={() => setCurrentPaymentMethod(m)}
-              className={`py-2 lg:py-1.5 rounded-lg text-[10px] font-bold border transition-all min-h-[40px] lg:min-h-0 ${
-                currentPaymentMethod === m
-                  ? 'border-[#EA1D2C]/35 bg-[#FFF1F2] text-[#9C050B] dark:text-[#ff9aa1]'
-                  : 'bg-fp-secondary border-fp-border text-fptext-muted hover:border-zinc-400 hover:text-fptext-primary dark:hover:border-zinc-600 dark:hover:text-zinc-300'
-              }`}>
-              <span>{m}</span>
-              {getTaxa(m) > 0 && (
-                <span className={`block text-[9px] font-bold mt-0.5 ${currentPaymentMethod === m ? 'text-[#9C050B] dark:text-[#ff9aa1]' : 'text-fptext-muted'}`}>
-                  +{getTaxa(m)}%
-                </span>
-              )}
+          <div className="flex gap-2">
+            <input
+              type="number" placeholder="Valor"
+              value={currentAmount || ''}
+              onChange={e => setCurrentAmount(parseFloat(e.target.value) || 0)}
+              className="flex-1 min-h-[44px] rounded-lg border border-fp-border bg-fp-input px-3 py-2 text-base text-fptext-primary placeholder:text-fptext-muted transition-all focus:border-[#EA1D2C]/45 focus:outline-none md:text-sm"
+            />
+            <button type="button" onClick={addPayment} disabled={currentAmount <= 0}
+              className="min-h-[44px] rounded-lg border border-[#EA1D2C]/25 bg-[#FFF1F2] px-4 py-2 text-sm font-bold text-[#9C050B] transition-all hover:bg-[#FFE5E8] disabled:opacity-30">
+              Adicionar
             </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="number" placeholder="Valor"
-            value={currentAmount || ''}
-            onChange={e => setCurrentAmount(parseFloat(e.target.value) || 0)}
-            className="flex-1 min-h-[44px] rounded-lg border border-fp-border bg-fp-input px-3 py-2 text-base text-fptext-primary placeholder:text-fptext-muted transition-all focus:border-[#EA1D2C]/45 focus:outline-none md:text-sm"
-          />
-          <button type="button" onClick={addPayment} disabled={currentAmount <= 0}
-            className="min-h-[44px] rounded-lg border border-[#EA1D2C]/25 bg-[#FFF1F2] px-4 py-2 text-sm font-bold text-[#9C050B] transition-all hover:bg-[#FFE5E8] disabled:opacity-30">
-            Adicionar
-          </button>
-        </div>
-        {remaining > 0 && (
-          <button type="button" onClick={() => setCurrentAmount(remaining)}
-            className="w-full py-2 md:py-1.5 text-[10px] font-bold text-fptext-muted hover:text-fptext-primary border border-dashed border-fp-border hover:border-zinc-400 dark:hover:border-zinc-600 rounded-lg transition-all">
-            Preencher valor exato — R$ {remaining.toFixed(2)}
-          </button>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Restante</p>
-            <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${remaining > 0 ? 'bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400' : 'bg-fp-secondary text-fptext-muted border-fp-border'}`}>
-              R$ {Math.max(0, remaining).toFixed(2)}
+          </div>
+          {remaining > 0 && (
+            <button type="button" onClick={() => setCurrentAmount(remaining)}
+              className="w-full py-2 md:py-1.5 text-[10px] font-bold text-fptext-muted hover:text-fptext-primary border border-dashed border-fp-border hover:border-zinc-400 dark:hover:border-zinc-600 rounded-lg transition-all">
+              Preencher valor exato — R$ {remaining.toFixed(2)}
+            </button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Restante</p>
+              <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${remaining > 0 ? 'bg-red-500/10 text-red-600 border-red-500/30 dark:text-red-400' : 'bg-fp-secondary text-fptext-muted border-fp-border'}`}>
+                R$ {Math.max(0, remaining).toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Troco</p>
+              <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${change > 0 ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400' : 'bg-fp-secondary text-fptext-muted border-fp-border'}`}>
+                R$ {change.toFixed(2)}
+              </div>
             </div>
           </div>
           <div>
-            <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Troco</p>
-            <div className={`min-h-9 flex items-center justify-center font-bold text-xs rounded-lg border ${change > 0 ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400' : 'bg-fp-secondary text-fptext-muted border-fp-border'}`}>
-              R$ {change.toFixed(2)}
-            </div>
+            <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Observações</p>
+            <input
+              placeholder="Ex: Sem feijão, mais carne..."
+              value={observation}
+              onChange={(e: any) => setObservation(e.target.value)}
+              className="w-full min-h-[44px] rounded-lg border border-fp-border bg-fp-input px-3 py-2 text-base text-fptext-primary placeholder:text-fptext-muted transition-all focus:border-[#EA1D2C]/45 focus:outline-none md:text-sm"
+            />
           </div>
-        </div>
-        <div>
-          <p className="text-[9px] font-bold text-fptext-muted uppercase tracking-wider mb-0.5">Observações</p>
-          <input
-            placeholder="Ex: Sem feijão, mais carne..."
-            value={observation}
-            onChange={(e: any) => setObservation(e.target.value)}
-            className="w-full min-h-[44px] rounded-lg border border-fp-border bg-fp-input px-3 py-2 text-base text-fptext-primary placeholder:text-fptext-muted transition-all focus:border-[#EA1D2C]/45 focus:outline-none md:text-sm"
-          />
-        </div>
-        <div className="pt-2 space-y-2 md:pt-3 md:space-y-3 [@media(max-height:700px)]:pt-1.5 [@media(max-height:700px)]:space-y-2">
+
+          {/* Resumo de taxas */}
           <div className="rounded-lg border border-[#EA1D2C]/12 bg-[#FFF7F8] p-3 space-y-1.5 ring-1 ring-[#EA1D2C]/8 md:rounded-xl md:p-4 md:space-y-2 [@media(max-height:700px)]:p-2.5">
             <div className="flex justify-between items-center gap-2 min-w-0">
               <span className="text-fptext-muted font-medium text-[10px] md:text-xs truncate">Subtotal</span>
@@ -960,23 +966,27 @@ export default function POSScreen({
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleStartFinalize}
-            disabled={cart.length === 0 || remaining > 0.01 || isFinalizing}
-            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#EA1D2C] py-2.5 text-xs font-black text-white shadow-xl shadow-[#EA1D2C]/20 ring-2 ring-[#EA1D2C]/18 transition-all duration-200 hover:bg-[#9C050B] hover:ring-[#EA1D2C]/26 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 md:min-h-[46px] md:gap-2 md:py-2.5 md:text-sm xl:min-h-[50px] xl:text-base xl:py-3 [@media(max-height:700px)]:min-h-[40px] [@media(max-height:700px)]:py-2 [@media(max-height:700px)]:text-xs"
-          >
-            {isFinalizing ? (
-              <><span className="animate-pulse">⏳</span> Processando...</>
-            ) : cart.length === 0 ? (
-              'Adicione itens ao pedido'
-            ) : remaining > 0.01 ? (
-              `Faltam R$ ${remaining.toFixed(2)}`
-            ) : (
-              <><CheckCircle2 size={22} strokeWidth={2.5} /> Finalizar Venda</>
-            )}
-          </button>
         </div>
+      </div>
+
+      {/* ── Botão Finalizar — sempre fixo no bottom ──────────────────── */}
+      <div className="shrink-0 border-t border-fp-border bg-white px-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 md:px-3 md:pb-3 md:pt-3 xl:px-4 xl:pb-4 xl:pt-3 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
+        <button
+          type="button"
+          onClick={handleStartFinalize}
+          disabled={cart.length === 0 || remaining > 0.01 || isFinalizing}
+          className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#EA1D2C] py-2.5 text-xs font-black text-white shadow-xl shadow-[#EA1D2C]/20 ring-2 ring-[#EA1D2C]/18 transition-all duration-200 hover:bg-[#9C050B] hover:ring-[#EA1D2C]/26 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 md:min-h-[46px] md:gap-2 md:py-2.5 md:text-sm xl:min-h-[50px] xl:text-base xl:py-3 [@media(max-height:700px)]:min-h-[40px] [@media(max-height:700px)]:py-2 [@media(max-height:700px)]:text-xs"
+        >
+          {isFinalizing ? (
+            <><span className="animate-pulse">⏳</span> Processando...</>
+          ) : cart.length === 0 ? (
+            'Adicione itens ao pedido'
+          ) : remaining > 0.01 ? (
+            `Faltam R$ ${remaining.toFixed(2)}`
+          ) : (
+            <><CheckCircle2 size={22} strokeWidth={2.5} /> Finalizar Venda</>
+          )}
+        </button>
       </div>
     </>
   );
