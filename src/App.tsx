@@ -926,8 +926,9 @@ const handleAuth = async (e: React.FormEvent) => {
           lg:translate-x-0
         `}
       >
-        <div className="border-b border-fp-border-soft bg-fp-secondary p-3 sm:p-4 lg:p-3 xl:p-4">
-          <div className="rounded-3xl border border-fp-border bg-fp-card p-3 shadow-sm lg:p-3 xl:p-3.5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="border-b border-fp-border-soft bg-fp-secondary p-3 sm:p-4 lg:p-3 xl:p-4 [@media(max-height:700px)]:p-2.5">
+          <div className="rounded-3xl border border-fp-border bg-fp-card p-3 shadow-sm lg:p-3 xl:p-3.5 [@media(max-height:700px)]:p-2.5">
             <div className="flex items-start gap-3">
             <label className="cursor-pointer group relative" title="Clique para trocar a logo">
               <input
@@ -949,7 +950,7 @@ const handleAuth = async (e: React.FormEvent) => {
                 }}
               />
               {logoUrl ? (
-                <div className="h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-transparent transition-all group-hover:ring-[#DA5D69]/60">
+                <div className="h-14 w-14 [@media(max-height:700px)]:h-10 [@media(max-height:700px)]:w-10 overflow-hidden rounded-2xl ring-2 ring-transparent transition-all group-hover:ring-[#DA5D69]/60">
                   <img
                     src={logoUrl}
                     alt="Logo"
@@ -957,7 +958,7 @@ const handleAuth = async (e: React.FormEvent) => {
                   />
                 </div>
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EA1D2C] text-sm font-black uppercase tracking-[0.18em] text-white transition-colors group-hover:bg-[#9C050B]">
+                <div className="flex h-14 w-14 [@media(max-height:700px)]:h-10 [@media(max-height:700px)]:w-10 items-center justify-center rounded-2xl bg-[#EA1D2C] text-sm font-black uppercase tracking-[0.18em] text-white transition-colors group-hover:bg-[#9C050B]">
                   {estabelecimentoMonogram}
                 </div>
               )}
@@ -971,7 +972,7 @@ const handleAuth = async (e: React.FormEvent) => {
             </label>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-fptext-muted">Seu painel</p>
-              <h1 className="mt-1 truncate text-lg font-black leading-tight text-fptext-primary">{estabelecimentoNome}</h1>
+              <h1 className="mt-1 truncate text-lg [@media(max-height:700px)]:text-sm font-black leading-tight text-fptext-primary">{estabelecimentoNome}</h1>
               <p className="mt-2 truncate text-sm font-semibold text-fptext-primary">{userDisplayName}</p>
               <p className="mt-1 text-xs text-fptext-muted">{userSecondaryLine}</p>
             </div>
@@ -983,7 +984,7 @@ const handleAuth = async (e: React.FormEvent) => {
         </div>
 
         {/* Status do Caixa */}
-        <div className="border-b border-fp-border-soft px-3 py-2.5 lg:px-3 lg:py-3 xl:px-5 xl:py-3.5">
+        <div className="border-b border-fp-border-soft px-3 py-2.5 lg:px-3 lg:py-3 xl:px-5 xl:py-3.5 [@media(max-height:700px)]:px-2.5 [@media(max-height:700px)]:py-2">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${currentCaixa?.status === 'aberto' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
@@ -1082,6 +1083,7 @@ const handleAuth = async (e: React.FormEvent) => {
           {canAccess('logs')         && <NavItem active={activeTab === 'logs'}         onClick={() => handleTabChange('logs')}         icon="🕘"         label="Logs" />}
           {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon="⚙️"        label="Configurações" />}
         </nav>
+        </div>{/* fim área scrollável */}
 
         <div className="flex-shrink-0 space-y-2 border-t border-fp-border-soft p-2.5 lg:p-2.5 xl:space-y-2.5 xl:p-3">
           <div className="flex items-center justify-between px-1">
