@@ -1280,6 +1280,7 @@ export function TabClientes({ token }: { token: string }) {
     | 'wa_sent_7d'
     | 'wa_failed'
     | 'wa_ready'
+    | 'inadimplentes'
   >('all');
   const [sortBy, setSortBy] = useState<'recent_purchase' | 'long_without_purchase' | 'most_orders' | 'highest_spend'>('recent_purchase');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -1383,6 +1384,8 @@ export function TabClientes({ token }: { token: string }) {
         return getReactivationStatusMeta(customer).key === 'failed';
       case 'wa_ready':
         return isReadyForReactivation(customer);
+      case 'inadimplentes':
+        return Boolean(customer.tem_pix_pendente);
       case 'all':
       default:
         return true;
@@ -1420,6 +1423,7 @@ export function TabClientes({ token }: { token: string }) {
   const waNeverSentCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'never').length;
   const waFailedCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'failed').length;
   const waReadyCount = clientes.filter(isReadyForReactivation).length;
+  const inadimplenteCount = clientes.filter((c) => Boolean(c.tem_pix_pendente)).length;
   useEffect(() => {
     if (selectAllRef.current) {
       selectAllRef.current.indeterminate = someVisibleSelected;
@@ -1587,6 +1591,20 @@ export function TabClientes({ token }: { token: string }) {
               {label}
             </button>
           ))}
+          {/* Filtro inadimplentes — destaque vermelho separado */}
+          <button
+            type="button"
+            onClick={() => setQuickFilter('inadimplentes')}
+            className={`min-h-[36px] px-3 rounded-full text-xs font-bold border transition-colors ${
+              quickFilter === 'inadimplentes'
+                ? 'bg-red-600 text-white border-red-600'
+                : inadimplenteCount > 0
+                ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30 dark:hover:bg-red-500/20'
+                : 'bg-white text-zinc-400 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700'
+            }`}
+          >
+            {inadimplenteCount > 0 ? `⚠ Inadimplentes (${inadimplenteCount})` : 'Inadimplentes'}
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-xs font-bold text-zinc-500">Ordenar por</label>
@@ -1609,6 +1627,15 @@ export function TabClientes({ token }: { token: string }) {
           <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">Nunca enviados: {waNeverSentCount}</span>
           <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">Falharam: {waFailedCount}</span>
           <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">Prontos: {waReadyCount}</span>
+          {inadimplenteCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setQuickFilter('inadimplentes')}
+              className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 hover:bg-red-100 transition-colors"
+            >
+              ⚠ PIX pendente: {inadimplenteCount}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1619,6 +1646,15 @@ export function TabClientes({ token }: { token: string }) {
           <DCard label="Inativos" value={String(inativos)} color="orange" icon={<Clock size={16}/>}/>
           <DCard label="Sem compra" value={String(semCompra)} color="zinc" icon={<Package size={16}/>}/>
           <DCard label="Recorrentes" value={String(recorrentes)} color="blue" icon={<TrendingUp size={16}/>}/>
+          {inadimplenteCount > 0 && (
+            <button type="button" onClick={() => setQuickFilter('inadimplentes')} className="col-span-2 lg:col-span-1 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left hover:bg-red-100 transition-colors dark:border-red-500/30 dark:bg-red-500/10 dark:hover:bg-red-500/20">
+              <span className="text-lg">⚠️</span>
+              <div>
+                <p className="text-xl font-black text-red-700 dark:text-red-300">{inadimplenteCount}</p>
+                <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">PIX Pendente</p>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
@@ -1647,6 +1683,7 @@ export function TabClientes({ token }: { token: string }) {
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Reativacao WA</th>
                 <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Pedidos</th>
                 <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Total gasto</th>
+                <th className="text-right px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Ticket médio</th>
                 <th className="text-left px-4 py-3 text-[11px] font-black text-zinc-400 uppercase tracking-wider">Ultima compra</th>
                 <th className="px-4 py-3"/>
               </tr></thead>
@@ -1733,6 +1770,9 @@ export function TabClientes({ token }: { token: string }) {
                     </td>
                     <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300 font-bold text-right">{c.total_pedidos||0}</td>
                     <td className="px-4 py-3 font-bold text-emerald-700 text-right">{fmt(c.total_gasto||0)}</td>
+                    <td className="px-4 py-3 font-bold text-violet-700 dark:text-violet-400 text-right">
+                      {Number(c.total_pedidos||0) > 0 ? fmt(Number(c.total_gasto||0) / Number(c.total_pedidos)) : '—'}
+                    </td>
                     <td className="px-4 py-3">
                       <p className="text-zinc-600 dark:text-zinc-400 text-xs font-semibold">{fmtDate(c.ultima_compra_at || c.ultimo_pedido)}</p>
                       <p className="text-[11px] text-zinc-400 mt-1">{getCustomerPurchaseSummary(c)}</p>
@@ -1813,7 +1853,7 @@ export function TabClientes({ token }: { token: string }) {
                     </StatusChip>
                   </div>
                   <p className="mt-2 text-[11px] text-fptext-muted">{getReactivationStatusMeta(c).detail}</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                     <div className={`${adminOpsInsetPanelClass} px-3 py-2`}>
                       <p className="text-zinc-400">Pedidos</p>
                       <p className="mt-1 font-black text-zinc-800 dark:text-zinc-100">{c.total_pedidos || 0}</p>
@@ -1821,6 +1861,12 @@ export function TabClientes({ token }: { token: string }) {
                     <div className={`${adminOpsInsetPanelClass} px-3 py-2`}>
                       <p className="text-zinc-400">Total gasto</p>
                       <p className="mt-1 font-black text-emerald-700">{fmt(c.total_gasto || 0)}</p>
+                    </div>
+                    <div className={`${adminOpsInsetPanelClass} px-3 py-2`}>
+                      <p className="text-zinc-400">Ticket médio</p>
+                      <p className="mt-1 font-black text-violet-700 dark:text-violet-400">
+                        {Number(c.total_pedidos || 0) > 0 ? fmt(Number(c.total_gasto || 0) / Number(c.total_pedidos)) : '—'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1882,7 +1928,7 @@ export function TabClientes({ token }: { token: string }) {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
                 <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 text-center">
                   <p className="text-xl font-black text-fptext-primary">{selected.total_pedidos||0}</p>
                   <p className="text-xs text-zinc-400 mt-0.5">Pedidos</p>
@@ -1890,6 +1936,12 @@ export function TabClientes({ token }: { token: string }) {
                 <div className="bg-emerald-50 rounded-xl p-3 text-center">
                   <p className="text-xl font-black text-emerald-700">{fmt(selected.total_gasto||0)}</p>
                   <p className="text-xs text-zinc-400 mt-0.5">Total gasto</p>
+                </div>
+                <div className="bg-violet-50 dark:bg-violet-500/10 rounded-xl p-3 text-center">
+                  <p className="text-xl font-black text-violet-700 dark:text-violet-300">
+                    {Number(selected.total_pedidos||0) > 0 ? fmt(Number(selected.total_gasto||0) / Number(selected.total_pedidos)) : '—'}
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Ticket médio</p>
                 </div>
                 <div className="bg-blue-50 rounded-xl p-3 text-center">
                   <p className="text-sm font-black text-blue-700">{fmtDate(selected.ultima_compra_at || selected.ultimo_pedido)}</p>
