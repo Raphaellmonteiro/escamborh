@@ -164,7 +164,7 @@ export function gerarCupomHtml(opts: PrintDocumentOptions): string {
       ? 'Separar por ordem de preparo.'
       : variant === 'table-slip'
         ? 'Uso interno da operacao.'
-        : 'FlowPDV';
+        : 'Pratory';
 
   const itemsHtml = opts.itens
     .map((item) => {
