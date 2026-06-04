@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { q1, qAll, qInsert, qRun } from '../db';
 import {
   authenticateToken,
   extractBearerToken,
+  JWT_SECRET,
   publicRateLimit,
   requireTrustedBrowserOrigin,
   requireAnyPermission,
@@ -189,7 +191,6 @@ export function createApiRouter() {
   protectedRouter.use('/clientes', createClientesRouter());
   protectedRouter.use('/expenses', requirePlanFeature('finance'), requireAnyPermission('finance'), createExpensesRouter());
   protectedRouter.use('/dashboard', requirePlanFeature('dashboard'), requireAnyPermission('dashboard'), createDashboardRouter());
-  // Caixa: rotas definidas em `registerCaixaRoutes` (dashboard.ts); apenas montagem e gates distintos do dashboard.
   protectedRouter.use('/caixa', requirePlanFeature('caixa'), requireAnyPermission('finance'), createCaixaRouter());
   protectedRouter.use('/estoque', requirePlanFeature('estoque'), createEstoqueRouter());
   protectedRouter.use('/delivery', requirePlanFeature('delivery'), createDeliveryRouter());
@@ -203,6 +204,35 @@ export function createApiRouter() {
   protectedRouter.use('/funcionarios', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createAcessoFuncRouter());
   protectedRouter.use('/mesas', requirePlanFeature('mesas'), requireAnyPermission('mesas'), createMesasRouter());
   protectedRouter.use('/pontos', requirePlanFeature('funcionarios'), requireAnyPermission('funcionarios'), createPontosRouter());
+
+  // ── Gerador de tokens para telas operacionais (KDS / Ponto) ─────────────
+  // GET /api/kiosk-token?purpose=kds  |  GET /api/kiosk-token?purpose=ponto
+  // Requer JWT válido (authenticateToken já aplicado pelo protectedRouter).
+  // O frontend armazena o token em memória e envia via header X-Kiosk-Token.
+  protectedRouter.get('/kiosk-token', async (req: any, res: Response) => {
+    try {
+      const purpose = String(req.query.purpose || '').trim() as 'kds' | 'ponto';
+      if (purpose !== 'kds' && purpose !== 'ponto') {
+        return res.status(400).json({ error: "purpose deve ser 'kds' ou 'ponto'" });
+      }
+
+      const tenant = await q1<{ usuario: string }>(
+        'SELECT usuario FROM clientes WHERE id=?',
+        [req.tenantId]
+      );
+      if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado' });
+
+      const secret = process.env.KIOSK_TOKEN_SECRET || JWT_SECRET;
+      const token = crypto
+        .createHmac('sha256', secret)
+        .update(`${purpose}:${tenant.usuario}`)
+        .digest('hex');
+
+      res.json({ token, slug: tenant.usuario, purpose });
+    } catch (e: unknown) {
+      sendInternalError(res, 'GET /kiosk-token', e);
+    }
+  });
 
   router.use(protectedRouter);
 

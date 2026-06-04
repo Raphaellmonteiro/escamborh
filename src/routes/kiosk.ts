@@ -4,7 +4,8 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { q1, qAll, qRun, qInsert } from '../db';
-import { publicRateLimit, requireTrustedBrowserOrigin } from '../middleware';
+import crypto from 'node:crypto';
+import { JWT_SECRET, publicRateLimit, requireTrustedBrowserOrigin } from '../middleware';
 import { resolveRequiresPreparation } from '../utils/preparation';
 import { notifyTenantOrderStreams, setupSseStream } from '../sse';
 import { parseBodyOrReply, replyZod400ErrorKey } from '../validation/zodHttp';
@@ -181,7 +182,43 @@ async function syncMesaOrderVisibility(
 export function createKioskRouter() {
   const router = Router();
   const PIPELINE_KDS = ['Criado','Em Preparo','Pronto','Entregue'];
-  const requireBrowserOrigin = requireTrustedBrowserOrigin();
+  const requireBrowserOrigin = requireTrustedBrowserOrigin({ allowMissing: false });
+
+  // ── Token de acesso para telas operacionais (KDS / Ponto) ─────────────────
+  /**
+   * Gera um token HMAC-SHA256 deterministico para o par (slug, purpose).
+   * O token deve ser gerado pelo backend autenticado e enviado ao frontend.
+   * purpose: 'kds' | 'ponto'
+   */
+  function generateKioskAccessToken(slug: string, purpose: 'kds' | 'ponto'): string {
+    const secret = process.env.KIOSK_TOKEN_SECRET || JWT_SECRET;
+    return crypto.createHmac('sha256', secret).update(`${purpose}:${slug}`).digest('hex');
+  }
+
+  /**
+   * Middleware que exige o header X-Kiosk-Token correto para telas operacionais.
+   * O token é obtido via rota autenticada (/api/kiosk-token) e armazenado no frontend.
+   */
+  function requireKioskToken(purpose: 'kds' | 'ponto') {
+    return (req: any, res: any, next: any) => {
+      const secret = process.env.KIOSK_TOKEN_SECRET || JWT_SECRET;
+      const slug = req.params.slug as string | undefined;
+      if (!slug) return res.status(400).json({ error: 'Slug ausente' });
+      const expected = crypto.createHmac('sha256', secret).update(`${purpose}:${slug}`).digest('hex');
+      const provided = String(req.headers['x-kiosk-token'] || req.query['kiosk_token'] || '').trim();
+      if (!provided) return res.status(401).json({ error: 'Token de acesso obrigatório. Acesse pelo painel.' });
+      // Comparação segura contra timing attacks
+      const expectedBuf = Buffer.from(expected, 'hex');
+      const providedBuf = Buffer.alloc(expectedBuf.length);
+      Buffer.from(provided.slice(0, expectedBuf.length * 2), 'hex').copy(providedBuf);
+      if (!crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+        return res.status(403).json({ error: 'Token de acesso inválido ou expirado. Acesse pelo painel.' });
+      }
+      next();
+    };
+  }
+
+
 
   // ── Página HTML do quiosque de ponto ──────────────────────────────────────
   router.get('/kiosk/ponto/:slug', (req, res) => {
@@ -482,7 +519,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.post('/public/ponto/:slug/save-face', requireBrowserOrigin, async (req, res) => {
+  router.post('/public/ponto/:slug/save-face', requireBrowserOrigin, requireKioskToken('ponto'), async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -498,7 +535,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.get('/public/ponto/:slug/proximo-tipo/:func_id', async (req, res) => {
+  router.get('/public/ponto/:slug/proximo-tipo/:func_id', requireKioskToken('ponto'), async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -515,7 +552,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.get('/public/ponto/:slug/espelho/:func_id', async (req, res) => {
+  router.get('/public/ponto/:slug/espelho/:func_id', requireKioskToken('ponto'), async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -587,7 +624,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.post('/public/ponto/:slug/registrar', requireBrowserOrigin, async (req, res) => {
+  router.post('/public/ponto/:slug/registrar', requireBrowserOrigin, requireKioskToken('ponto'), async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -712,7 +749,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
   });
 
   // ── KDS SSE (keep-alive) ──────────────────────────────────────────────────
-  router.get('/public/kds/:slug/events', async (req, res) => {
+  router.get('/public/kds/:slug/events', requireKioskToken('kds'), async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
@@ -729,7 +766,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
     }
   });
 
-  router.patch('/public/kds/:slug/orders/:id/advance', kdsAdvanceLimit, requireBrowserOrigin, async (req, res) => {
+  router.patch('/public/kds/:slug/orders/:id/advance', kdsAdvanceLimit, requireBrowserOrigin, requireKioskToken('kds'), async (req, res) => {
     const slug = getPublicSlugOrReject(res, req.params.slug);
     if (!slug) return;
 
