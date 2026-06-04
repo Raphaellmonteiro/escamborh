@@ -873,7 +873,7 @@ export default function POSScreen({
             ))}
           </div>
         )}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-1.5 lg:gap-2">
           {PAY_METHODS.map(m => (
             <button key={m} type="button" onClick={() => setCurrentPaymentMethod(m)}
               className={`py-2 lg:py-1.5 rounded-lg text-[10px] font-bold border transition-all min-h-[40px] lg:min-h-0 ${
@@ -1091,7 +1091,7 @@ export default function POSScreen({
       {/* ═══════════════════════════════════════════════════════════════
           PAINEL DIREITO — Pedido + Pagamento (tablet/desktop)
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-fp-border bg-white shadow-sm shadow-zinc-950/[0.06] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] dark:shadow-[0_0_40px_rgba(0,0,0,0.45)] md:flex md:w-[min(236px,27vw)] md:flex-col md:min-w-[220px] lg:w-[min(252px,23vw)] xl:w-[min(288px,20vw)] 2xl:w-[min(336px,16vw)] min-[2200px]:w-[min(380px,14vw)]">
+      <div className="hidden h-full min-h-0 w-full shrink-0 overflow-hidden border-l border-fp-border bg-white shadow-sm shadow-zinc-950/[0.06] print:shadow-none [print-color-adjust:exact] [-webkit-print-color-adjust:exact] dark:shadow-[0_0_40px_rgba(0,0,0,0.45)] md:flex md:w-[min(260px,30vw)] md:flex-col md:min-w-[240px] lg:w-[min(272px,25vw)] xl:w-[min(300px,22vw)] 2xl:w-[min(336px,16vw)] min-[2200px]:w-[min(380px,14vw)]">
         {renderCartColumn('desktop')}
       </div>
 
