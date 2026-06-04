@@ -496,7 +496,7 @@ function getModalAccent(isLightRed: boolean, visualVariant: ProductOptionsVisual
 }
 
 /** Viewport muito baixa: layout compacto. Limiar baixo evita modal “espremido” em notebooks comuns. */
-const COMPACT_MAX_VIEWPORT_HEIGHT_PX = 620;
+const COMPACT_MAX_VIEWPORT_HEIGHT_PX = 720;
 
 function useCompactOptionsModalLayout() {
   const [compact, setCompact] = useState(() =>
@@ -1254,7 +1254,7 @@ export function ProductOptionsModal({
                 : 'max-h-[min(92dvh,92svh,92vh,100%)] sm:max-h-[min(93vh,93dvh,93svh)] sm:!max-w-lg'
               : 'max-h-[min(91dvh,91svh,100%)] sm:max-h-[min(70vh,70dvh,600px)] sm:!max-w-lg'
             : isPos
-              ? 'max-h-[min(84dvh,84svh,100%)] sm:max-h-[min(66vh,66dvh,580px)] sm:!max-w-lg'
+              ? 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(88vh,88dvh,88svh)] sm:!max-w-lg'
               : 'max-h-[min(94dvh,94svh,100%)] sm:max-h-[min(92vh,92dvh)]'
         }`}>
 

@@ -858,7 +858,7 @@ export default function POSScreen({
         )}
       </div>
 
-      <div className="shrink-0 space-y-2.5 border-t border-fp-border bg-white px-2.5 pb-2.5 pt-2.5 md:space-y-3 md:px-3 md:pb-3 md:pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4 [@media(max-height:700px)]:space-y-2 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
+      <div className="shrink-0 space-y-2.5 border-t border-fp-border bg-white px-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 md:space-y-3 md:px-3 md:pb-3 md:pt-3 xl:space-y-4 xl:px-4 xl:pb-4 xl:pt-4 [@media(max-height:700px)]:space-y-2 [@media(max-height:700px)]:px-2 [@media(max-height:700px)]:py-2">
         <p className="text-[10px] font-bold text-fptext-muted uppercase tracking-wider">Pagamentos Adicionados</p>
         {payments.length > 0 && (
           <div className="space-y-1.5">
@@ -1052,7 +1052,7 @@ export default function POSScreen({
         </div>
 
         {/* Grade de Produtos */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-24 md:px-3 md:pb-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-3 md:pb-3 [@media(max-height:640px)]:px-2 [@media(max-height:640px)]:pb-2">
           {displayProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-fptext-muted md:py-12 [@media(max-height:640px)]:py-6" role="status">
               <ScanLine size={36} className="mb-3 opacity-40" aria-hidden />
@@ -1125,7 +1125,7 @@ export default function POSScreen({
             className="absolute inset-0 bg-black/60"
             onClick={() => setMobileCartOpen(false)}
           />
-          <div className="relative mx-0 flex max-h-[min(92dvh,100%)] flex-col overflow-hidden rounded-t-2xl border border-b-0 border-fp-border bg-fp-card pb-[env(safe-area-inset-bottom)] shadow-2xl">
+          <div className="relative mx-0 flex h-[min(92dvh,100%)] max-h-[min(92dvh,100%)] flex-col overflow-hidden rounded-t-2xl border border-b-0 border-fp-border bg-fp-card shadow-2xl">
             <div className="flex items-center justify-between px-3 py-3 border-b border-fp-border shrink-0">
               <button
                 type="button"
