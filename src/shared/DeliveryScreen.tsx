@@ -136,6 +136,7 @@ interface DeliveryCustomer {
   total_pedidos_validos?: number;
   total_gasto?: number;
   sem_historico?: boolean;
+  tem_pix_pendente?: boolean;
   whatsapp_reativacao_last_sent_at?: string | null;
   whatsapp_reativacao_last_status?: 'sent' | 'failed' | string | null;
   whatsapp_reativacao_last_operator_id?: number | null;
@@ -146,6 +147,9 @@ interface CustomerOrderHistory {
   created_at: string;
   total_amount: number;
   resumo_itens?: string | null;
+  pagamento_tipo?: string | null;
+  pagamento_status?: string | null;
+  status?: string | null;
 }
 
 // ─── Config de status (toneClass para light/dark nativo) ───────────────────────
@@ -1659,7 +1663,14 @@ export function TabClientes({ token }: { token: string }) {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
+                        {c.tem_pix_pendente && (
+                          <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 border border-red-200 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/30">
+                            ⚠ PIX pendente
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         <StatusChip variant="info" size="md">
                           {getCustomerOriginLabel(c.origem_cadastro)}
@@ -1765,7 +1776,14 @@ export function TabClientes({ token }: { token: string }) {
                   </div>
                   <div className="mt-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-zinc-800 dark:text-zinc-200">{c.nome}</p>
+                        {c.tem_pix_pendente && (
+                          <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 border border-red-200 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/30">
+                            ⚠ PIX pendente
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-xs font-mono text-fptext-muted">{c.telefone || '—'}</p>
                     </div>
                   </div>
@@ -1917,18 +1935,71 @@ export function TabClientes({ token }: { token: string }) {
                 </div>
               </div>
 
+              {(() => {
+                const pixPendentes = pedidos.filter(
+                  (p) => p.pagamento_tipo === 'pix' && p.pagamento_status !== 'pago' && p.status !== 'Cancelado'
+                );
+                if (pixPendentes.length > 0) {
+                  return (
+                    <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
+                      <span className="text-lg leading-none">⚠️</span>
+                      <div>
+                        <p className="text-sm font-black text-red-700 dark:text-red-300">
+                          Cliente inadimplente
+                        </p>
+                        <p className="mt-0.5 text-xs text-red-600 dark:text-red-400">
+                          {pixPendentes.length === 1
+                            ? 'Este cliente possui 1 pedido com PIX gerado e não confirmado.'
+                            : `Este cliente possui ${pixPendentes.length} pedidos com PIX gerado e não confirmados.`}{' '}
+                          Verifique antes de aceitar novos pedidos.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <p className="text-xs font-black text-zinc-400 uppercase tracking-wider mb-3">Historico de pedidos</p>
               <div className="space-y-2">
-                {pedidos.map((p) => (
-                  <div key={p.id} className="flex flex-col gap-2 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800 sm:flex-row sm:items-center">
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">#{p.order_number}</p>
-                      <p className="text-xs text-zinc-400">{p.resumo_itens||'—'}</p>
-                      <p className="text-[10px] text-zinc-300 mt-0.5">{fmtDate(p.created_at)}</p>
+                {pedidos.map((p) => {
+                  const isPixPendente = p.pagamento_tipo === 'pix' && p.pagamento_status !== 'pago' && p.status !== 'Cancelado';
+                  const isCancelado = p.status === 'Cancelado';
+                  return (
+                    <div key={p.id} className={`flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center ${isPixPendente ? 'bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/30' : 'bg-zinc-50 dark:bg-zinc-800'}`}>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">#{p.order_number}</p>
+                          {p.pagamento_tipo === 'pix' && (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black border ${
+                              p.pagamento_status === 'pago'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30'
+                                : isCancelado
+                                ? 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-700 dark:text-zinc-400 dark:border-zinc-600'
+                                : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/30'
+                            }`}>
+                              {p.pagamento_status === 'pago' ? '✓ PIX Pago' : isCancelado ? 'PIX / Cancelado' : '⚠ PIX Pendente'}
+                            </span>
+                          )}
+                          {p.pagamento_tipo && p.pagamento_tipo !== 'pix' && (
+                            <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500 border border-zinc-200 dark:bg-zinc-700 dark:text-zinc-400 dark:border-zinc-600">
+                              {p.pagamento_tipo === 'dinheiro' ? 'Dinheiro' : p.pagamento_tipo === 'cartao' ? 'Cartão' : p.pagamento_tipo}
+                              {p.pagamento_status === 'pago' ? ' ✓' : ''}
+                            </span>
+                          )}
+                          {isCancelado && (
+                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/25">
+                              Cancelado
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1">{p.resumo_itens||'—'}</p>
+                        <p className="text-[10px] text-zinc-300 mt-0.5">{fmtDate(p.created_at)}</p>
+                      </div>
+                      <span className="font-black text-sm text-zinc-700 dark:text-zinc-300">{fmt(p.total_amount)}</span>
                     </div>
-                    <span className="font-black text-sm text-zinc-700">{fmt(p.total_amount)}</span>
-                  </div>
-                ))}
+                  );
+                })}
                 {pedidos.length===0 && <p className="text-center text-zinc-300 text-sm py-6">Sem pedidos anteriores</p>}
               </div>
             </motion.div>

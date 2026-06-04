@@ -1531,6 +1531,14 @@ router.get('/clientes', async (req: Request, res) => {
           FROM pedidos p
           WHERE ${pedidoVinculoCliente('p', 'c')}
         ) metrics ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) > 0 AS tem_pix_pendente
+          FROM pedidos p
+          WHERE ${pedidoVinculoCliente('p', 'c')}
+            AND p.pagamento_tipo = 'pix'
+            AND COALESCE(p.pagamento_status, '') <> 'pago'
+            AND COALESCE(p.status, '') <> 'Cancelado'
+        ) pix_check ON TRUE
         WHERE c.tenant_id=?
       `;
       const summaryParams: any[] = [req.tenantId];
@@ -1563,6 +1571,7 @@ router.get('/clientes', async (req: Request, res) => {
           fidelizacao,
           status_atividade: classifyCustomerActivity(totalPedidosValidos, diasSemComprar),
           sem_historico: totalPedidos <= 0,
+          tem_pix_pendente: Boolean(row.tem_pix_pendente),
         };
       }));
     } catch (e: unknown) { sendInternalError(res, 'routes/delivery', e); }
