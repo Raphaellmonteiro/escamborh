@@ -1,216 +1,285 @@
-import React, { useState } from 'react';
-import { AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { fieldInputClass, fieldLabelClass } from '../components/ui/fieldStyles';
-import LandingPage from './LandingPage';
+/**
+ * LoginScreen.tsx — Tela de login do Pratory com vídeo de apresentação.
+ *
+ * COMO USAR:
+ * 1. Coloque o arquivo `Anunciopratory.mp4` em: public/videos/Anunciopratory.mp4
+ * 2. Coloque o arquivo `logopratory.jpeg` em:   public/images/logopratory.jpeg
+ * 3. Substitua o seu LoginScreen.tsx atual por este arquivo.
+ */
 
-export default function LoginScreen({
-  onLogin,
-  onShowSolicitacao,
-  onLicenseError,
-}: {
+import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+
+// ── Tipos ────────────────────────────────────────────────────────────────────
+interface LoginScreenProps {
   onLogin: (token: string) => void;
-  onShowSolicitacao: () => void;
-  onLicenseError: (type: 'bloqueado' | 'trial_expirado') => void;
-}) {
-  const view = window.location.pathname === '/login' ? 'login' : 'landing';
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  onShowSolicitacao?: () => void;
+  onLicenseError?: (type: 'bloqueado' | 'trial_expirado') => void;
+}
+
+// ── Componente principal ─────────────────────────────────────────────────────
+export default function LoginScreen({ onLogin, onShowSolicitacao, onLicenseError }: LoginScreenProps) {
+  const [username, setUsername]     = useState('');
+  const [password, setPassword]     = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState('');
+  const [videoMuted, setVideoMuted] = useState(true);
+  const videoRef                    = useRef<HTMLVideoElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (username === 'admin@rmpvd') {
-      window.location.href = '/admin';
+    if (!username.trim() || !password.trim()) {
+      setError('Preencha usuário e senha.');
       return;
     }
-
     setLoading(true);
     setError('');
-
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
+      const res  = await fetch('/api/login', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body:    JSON.stringify({ username: username.trim(), password }),
       });
       const data = await res.json();
 
-      if (data.success) {
-        if (data.user) {
-          localStorage.setItem('user_cargo', data.user.cargo || 'dono');
-          localStorage.setItem('user_nome', data.user.nome || data.user.username);
-          localStorage.setItem(
-            'user_permissoes',
-            data.user.permissoes ? JSON.stringify(data.user.permissoes) : '',
-          );
+      if (!res.ok) {
+        if (data?.tipo === 'bloqueado' || data?.tipo === 'trial_expirado') {
+          onLicenseError?.(data.tipo);
+          return;
         }
-        onLogin(data.token);
+        setError(data?.message || data?.error || 'Usuário ou senha incorretos.');
         return;
       }
-
-      if (data.status === 'bloqueado' || data.message === 'Acesso bloqueado') {
-        onLicenseError('bloqueado');
-      } else if (data.status === 'trial_expirado' || data.message === 'Trial expirado') {
-        onLicenseError('trial_expirado');
-      } else {
-        setError(data.message || 'Usuário ou senha não conferem');
-      }
+      if (data?.token) onLogin(data.token);
+      else setError('Resposta inválida do servidor.');
     } catch {
-      setError('Não foi possível conectar. Tente de novo.');
+      setError('Erro de conexão. Verifique sua internet.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBack = () => {
-    window.location.href = '/';
+  const toggleMute = () => {
+    setVideoMuted(v => {
+      if (videoRef.current) videoRef.current.muted = !v;
+      return !v;
+    });
   };
 
-  if (view === 'login') {
-    return (
-      <div className="pratori-public-light flex min-h-screen items-center justify-center bg-fp-app px-4 py-8">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 flex flex-col items-center gap-1.5 text-center">
-            <div className="pratori-text-brand text-2xl font-bold tracking-tight">Pratory</div>
-            <p className="text-xs font-medium text-fptext-secondary">Entrar na sua loja · RM Tecnologia</p>
-          </div>
+  return (
+    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-zinc-950 overflow-hidden">
 
-          <div className="overflow-hidden rounded-2xl border border-fp-border bg-fp-card shadow-[0_8px_28px_rgba(63,62,62,0.07)]">
-            <div className="pratori-card-accent-bar w-full" />
-            <div className="p-6 sm:p-8">
-              <h2 className="mb-1 text-lg font-bold tracking-tight text-fptext-primary">Entrar</h2>
-              <p className="mb-6 text-sm leading-relaxed text-fptext-secondary">
-                Digite o usuário e a senha da sua loja (fornecidos pela RM Tecnologia).
-              </p>
+      {/* ── Lado esquerdo: vídeo ─────────────────────────────────────────── */}
+      <div className="relative w-full lg:w-[58%] xl:w-[62%] flex-shrink-0 overflow-hidden
+                      h-[38vh] sm:h-[44vh] lg:h-screen">
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className={`${fieldLabelClass} mb-1.5 block`}>Usuário</label>
-                  <input
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="seu.usuario"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    required
-                    className={fieldInputClass}
-                  />
-                </div>
+        {/* Vídeo de fundo */}
+        <video
+          ref={videoRef}
+          src="/videos/Anunciopratory.mp4"
+          autoPlay
+          loop
+          muted={videoMuted}
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        />
 
-                <div>
-                  <label className={`${fieldLabelClass} mb-1.5 block`}>Senha</label>
-                  <div className="relative">
-                    <input
-                      type={showPass ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Sua senha"
-                      autoComplete="current-password"
-                      required
-                      className={`${fieldInputClass} pr-11`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass((v) => !v)}
-                      tabIndex={-1}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-fptext-muted transition-colors hover:bg-fp-hover hover:text-fptext-primary"
-                      aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
-                    >
-                      {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
+        {/* Gradiente sobre o vídeo */}
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent lg:bg-gradient-to-r" />
 
-                {error ? (
-                  <div className="pratori-alert flex items-center gap-2 rounded-xl px-3.5 py-3 text-xs font-medium">
-                    <AlertCircle size={14} className="shrink-0" />
-                    {error}
-                  </div>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="pratori-btn-primary flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {loading ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Entrando...
-                    </>
-                  ) : (
-                    'Entrar'
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={handleBack}
-              className="flex-1 py-2 text-left text-xs text-fptext-muted transition-colors hover:text-fptext-primary"
-            >
-              Voltar
-            </button>
-
-            <div className="h-4 w-px bg-fp-border" />
-
-            <a
-              href="/admin"
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-1 items-center justify-end gap-1 py-2 text-right text-xs text-fptext-muted transition-colors hover:text-fptext-primary"
-            >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              Painel Admin
-            </a>
-          </div>
-
-          <div className="pratori-card-soft mt-4 rounded-2xl p-4 text-center">
-            <p className="text-sm font-semibold text-fptext-primary">Quer testar o Pratory?</p>
-            <p className="mt-1 text-xs leading-relaxed text-fptext-secondary">
-              Peça acesso e a gente explica certinho para o seu negócio.
+        {/* Overlay de marca */}
+        <div className="absolute bottom-6 left-6 right-6 lg:bottom-10 lg:left-10 z-10">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-1 h-10 rounded-full bg-[#EA1D2C]" />
+            <p className="text-white/60 text-sm font-medium tracking-wide uppercase">
+              Sistema de Gestão
             </p>
+          </div>
+          <h1 className="text-white text-3xl lg:text-4xl xl:text-5xl font-black leading-tight tracking-tight">
+            PDV, pedidos e delivery<br className="hidden lg:block" />
+            <span className="text-[#EA1D2C]"> para seu negócio.</span>
+          </h1>
+          <p className="mt-3 text-white/50 text-sm lg:text-base max-w-md">
+            Caixa, cozinha, cardápio online, mesas, estoque e relatórios — tudo em um lugar.
+          </p>
+        </div>
+
+        {/* Botão de mudo */}
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={videoMuted ? 'Ativar som do vídeo' : 'Silenciar vídeo'}
+          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center
+                     rounded-full bg-black/40 text-white/70 hover:bg-black/60
+                     hover:text-white transition-all backdrop-blur-sm"
+        >
+          {videoMuted ? (
+            /* ícone mudo */
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          ) : (
+            /* ícone com som */
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </svg>
+          )}
+        </button>
+
+        {/* Badge LIVE / AO VIVO */}
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5
+                        rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
+          <span className="w-2 h-2 rounded-full bg-[#EA1D2C] animate-pulse" />
+          <span className="text-white/70 text-[11px] font-bold uppercase tracking-wider">Conheça o Pratory</span>
+        </div>
+      </div>
+
+      {/* ── Lado direito: formulário ─────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col items-center justify-center
+                      px-6 py-10 lg:px-12 xl:px-16
+                      bg-zinc-950 lg:bg-zinc-950">
+
+        <div className="w-full max-w-sm">
+
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="relative mb-4">
+              <img
+                src="/images/logopratory.jpeg"
+                alt="Pratory"
+                className="w-24 h-24 rounded-[28px] object-cover shadow-2xl
+                           ring-2 ring-[#EA1D2C]/30"
+              />
+              {/* brilho decorativo */}
+              <div className="absolute -inset-1 rounded-[32px] bg-[#EA1D2C]/10 blur-xl -z-10" />
+            </div>
+            <h2 className="text-2xl font-black text-white tracking-tight">Pratory</h2>
+            <p className="text-zinc-500 text-sm mt-1">Acesse sua conta</p>
+          </div>
+
+          {/* Formulário */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Usuário */}
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                Usuário
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="seu-estabelecimento"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="username"
+                required
+                className="w-full h-12 px-4 rounded-xl bg-zinc-900 border border-zinc-800
+                           text-white placeholder-zinc-600 text-sm
+                           focus:outline-none focus:border-[#EA1D2C]/60 focus:ring-1
+                           focus:ring-[#EA1D2C]/30 transition-all"
+              />
+            </div>
+
+            {/* Senha */}
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1.5">
+                Senha
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                className="w-full h-12 px-4 rounded-xl bg-zinc-900 border border-zinc-800
+                           text-white placeholder-zinc-600 text-sm
+                           focus:outline-none focus:border-[#EA1D2C]/60 focus:ring-1
+                           focus:ring-[#EA1D2C]/30 transition-all"
+              />
+            </div>
+
+            {/* Mensagem de erro */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="flex items-start gap-2 px-4 py-3 rounded-xl
+                             bg-red-950/50 border border-red-800/60 text-red-300 text-sm"
+                >
+                  <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Botão entrar */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 rounded-xl bg-[#EA1D2C] hover:bg-[#C9101E]
+                         active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
+                         text-white font-black text-sm uppercase tracking-wider
+                         transition-all shadow-lg shadow-[#EA1D2C]/20 mt-2"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Entrando…
+                </span>
+              ) : 'Entrar no sistema'}
+            </button>
+          </form>
+
+          {/* Divisor */}
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-zinc-800" />
+            <span className="text-zinc-600 text-xs">ou</span>
+            <div className="flex-1 h-px bg-zinc-800" />
+          </div>
+
+          {/* Solicitar acesso */}
+          {onShowSolicitacao && (
             <button
               type="button"
               onClick={onShowSolicitacao}
-              className="pratori-btn-secondary mt-3 inline-flex min-h-[42px] w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors"
+              className="w-full h-11 rounded-xl border border-zinc-800 text-zinc-400
+                         hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-900
+                         text-sm font-semibold transition-all"
             >
-              Pedir acesso
+              Solicitar acesso ao Pratory
             </button>
-          </div>
+          )}
 
-          <div className="pratori-footer-links mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-medium">
-            <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="hover:underline">
-              Política de Privacidade
-            </a>
-            <span className="text-fp-border" aria-hidden>
-              ·
-            </span>
-            <a href="/termos" target="_blank" rel="noopener noreferrer" className="hover:underline">
+          {/* Rodapé */}
+          <p className="text-center text-zinc-700 text-[11px] mt-8 leading-relaxed">
+            Ao acessar, você concorda com os{' '}
+            <a href="/termos" target="_blank" rel="noopener noreferrer"
+               className="text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors">
               Termos de Uso
-            </a>
-          </div>
+            </a>{' '}
+            e{' '}
+            <a href="/privacidade" target="_blank" rel="noopener noreferrer"
+               className="text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors">
+              Política de Privacidade
+            </a>.
+          </p>
         </div>
       </div>
-    );
-  }
-
-  return <LandingPage onShowSolicitacao={onShowSolicitacao} />;
+    </div>
+  );
 }
