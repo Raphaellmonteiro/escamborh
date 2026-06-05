@@ -1675,10 +1675,107 @@ export function TabClientes({ token }: { token: string }) {
             <option value="most_orders">Mais pedidos</option>
             <option value="highest_spend">Maior gasto</option>
           </select>
-          <span className="text-xs text-zinc-500 ml-auto">
-            Selecionados: <strong className="text-zinc-700 dark:text-zinc-300">{selectedCount}</strong>
-          </span>
+
+          {/* Paginação no topo */}
+          {sortedFilteredClientes.length > PAGE_SIZE && (
+            <div className="flex items-center gap-1.5 ml-auto">
+              <span className="text-xs text-zinc-500 mr-1">
+                <strong className="text-zinc-700 dark:text-zinc-300">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sortedFilteredClientes.length)}</strong>
+                {' '}de{' '}
+                <strong className="text-zinc-700 dark:text-zinc-300">{sortedFilteredClientes.length}</strong>
+              </span>
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-600 disabled:opacity-40 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                aria-label="Página anterior"
+              >‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPage(p as number)}
+                      className={`min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg border text-xs font-bold transition-colors ${
+                        page === p
+                          ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-700 dark:border-zinc-700'
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                      }`}
+                    >{p}</button>
+                  )
+                )}
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-600 disabled:opacity-40 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                aria-label="Próxima página"
+              >›</button>
+            </div>
+          )}
+
+          {/* Contador e seleção global quando não há paginação */}
+          {sortedFilteredClientes.length <= PAGE_SIZE && (
+            <span className="text-xs text-zinc-500 ml-auto">
+              <strong className="text-zinc-700 dark:text-zinc-300">{sortedFilteredClientes.length}</strong> cliente{sortedFilteredClientes.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
+
+        {/* Barra de seleção — aparece quando há clientes filtrados */}
+        {sortedFilteredClientes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={selectedIds.size > 0 && sortedFilteredClientes.every((c) => selectedIds.has(c.id))}
+                ref={(el) => {
+                  if (el) el.indeterminate = selectedIds.size > 0 && !sortedFilteredClientes.every((c) => selectedIds.has(c.id)) && sortedFilteredClientes.some((c) => selectedIds.has(c.id));
+                }}
+                onChange={() => {
+                  const allSelected = sortedFilteredClientes.every((c) => selectedIds.has(c.id));
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (allSelected) sortedFilteredClientes.forEach((c) => next.delete(c.id));
+                    else sortedFilteredClientes.forEach((c) => next.add(c.id));
+                    return next;
+                  });
+                }}
+                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500"
+              />
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">
+                {sortedFilteredClientes.every((c) => selectedIds.has(c.id)) && selectedIds.size > 0
+                  ? `✓ Todos os ${sortedFilteredClientes.length} selecionados`
+                  : `Selecionar todos os ${sortedFilteredClientes.length}`}
+              </span>
+            </label>
+            {selectedCount > 0 && (
+              <>
+                <span className="text-xs text-zinc-400">·</span>
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                  {selectedCount} selecionado{selectedCount !== 1 ? 's' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs font-semibold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline underline-offset-2 transition-colors"
+                >
+                  Limpar seleção
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">Enviados hoje: {waSentTodayCount}</span>
           <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">Nunca enviados: {waNeverSentCount}</span>
@@ -1937,54 +2034,6 @@ export function TabClientes({ token }: { token: string }) {
                 title="Nenhum cliente encontrado"
                 description="Tente outro termo de busca ou limpe o filtro."
               />
-            </div>
-          )}
-
-          {/* Paginação */}
-          {sortedFilteredClientes.length > PAGE_SIZE && (
-            <div className="flex items-center justify-between gap-3 border-t border-zinc-100 dark:border-zinc-800 px-4 py-3">
-              <p className="text-xs text-zinc-500">
-                Exibindo <strong className="text-zinc-700 dark:text-zinc-300">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sortedFilteredClientes.length)}</strong> de <strong className="text-zinc-700 dark:text-zinc-300">{sortedFilteredClientes.length}</strong> clientes
-              </p>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs font-bold text-zinc-600 disabled:opacity-40 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  aria-label="Página anterior"
-                >‹</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                  .reduce<(number | '...')[]>((acc, p, idx, arr) => {
-                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...');
-                    acc.push(p);
-                    return acc;
-                  }, [])
-                  .map((p, idx) =>
-                    p === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400">…</span>
-                    ) : (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPage(p as number)}
-                        className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border text-xs font-bold transition-colors ${
-                          page === p
-                            ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-700 dark:border-zinc-700'
-                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
-                        }`}
-                      >{p}</button>
-                    )
-                  )}
-                <button
-                  type="button"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs font-bold text-zinc-600 disabled:opacity-40 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  aria-label="Próxima página"
-                >›</button>
-              </div>
             </div>
           )}
         </div>
