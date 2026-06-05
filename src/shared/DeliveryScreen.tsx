@@ -1283,6 +1283,14 @@ export function TabClientes({ token }: { token: string }) {
     | 'inadimplentes'
   >('all');
   const [sortBy, setSortBy] = useState<'recent_purchase' | 'long_without_purchase' | 'most_orders' | 'highest_spend'>('recent_purchase');
+  const [waFiltersExpanded, setWaFiltersExpanded] = useState(false);
+
+  // Se um filtro WA estiver ativo, mantém o grupo expandido
+  useEffect(() => {
+    if (['wa_never_sent', 'wa_sent_today', 'wa_sent_7d', 'wa_failed', 'wa_ready'].includes(quickFilter)) {
+      setWaFiltersExpanded(true);
+    }
+  }, [quickFilter]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [sendWithCardapioImage, setSendWithCardapioImage] = useState(false);
@@ -1559,6 +1567,7 @@ export function TabClientes({ token }: { token: string }) {
       )}
 
       <div className={`${adminOpsSurfaceCardClass} p-3 space-y-3`}>
+        {/* Filtros principais */}
         <div className="flex flex-wrap items-center gap-2">
           {[
             ['all', 'Todos'],
@@ -1572,11 +1581,6 @@ export function TabClientes({ token }: { token: string }) {
             ['em_risco', 'Em risco'],
             ['mais_pedidos', 'Mais pedidos'],
             ['maior_gasto', 'Maior gasto'],
-            ['wa_never_sent', 'Nunca enviados'],
-            ['wa_sent_today', 'Enviados hoje'],
-            ['wa_sent_7d', 'Enviados 7 dias'],
-            ['wa_failed', 'Falharam'],
-            ['wa_ready', 'Prontos reativacao'],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1605,6 +1609,46 @@ export function TabClientes({ token }: { token: string }) {
           >
             {inadimplenteCount > 0 ? `⚠ Inadimplentes (${inadimplenteCount})` : 'Inadimplentes'}
           </button>
+        </div>
+
+        {/* Filtros WhatsApp — grupo recolhível */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setWaFiltersExpanded((v) => !v)}
+            className={`inline-flex items-center gap-1.5 min-h-[32px] px-3 rounded-full text-xs font-bold border transition-colors ${
+              ['wa_never_sent', 'wa_sent_today', 'wa_sent_7d', 'wa_failed', 'wa_ready'].includes(quickFilter)
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30 dark:hover:bg-emerald-500/20'
+            }`}
+          >
+            <span>📲 WhatsApp</span>
+            <span className="opacity-70">{waFiltersExpanded ? '▲' : '▼'}</span>
+          </button>
+          {waFiltersExpanded && (
+            <>
+              {[
+                ['wa_never_sent', 'Nunca enviados'],
+                ['wa_sent_today', 'Enviados hoje'],
+                ['wa_sent_7d', 'Enviados 7 dias'],
+                ['wa_failed', 'Falharam'],
+                ['wa_ready', 'Prontos reativacao'],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setQuickFilter(key as typeof quickFilter)}
+                  className={`min-h-[32px] px-3 rounded-full text-xs font-bold border transition-colors ${
+                    quickFilter === key
+                      ? 'bg-emerald-700 text-white border-emerald-700 dark:bg-emerald-600 dark:border-emerald-600'
+                      : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:bg-zinc-800 dark:text-emerald-300 dark:border-emerald-700/50 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-xs font-bold text-zinc-500">Ordenar por</label>
