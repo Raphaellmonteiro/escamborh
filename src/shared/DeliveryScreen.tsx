@@ -1284,6 +1284,8 @@ export function TabClientes({ token }: { token: string }) {
   >('all');
   const [sortBy, setSortBy] = useState<'recent_purchase' | 'long_without_purchase' | 'most_orders' | 'highest_spend'>('recent_purchase');
   const [waFiltersExpanded, setWaFiltersExpanded] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   // Se um filtro WA estiver ativo, mantém o grupo expandido
   useEffect(() => {
@@ -1291,6 +1293,9 @@ export function TabClientes({ token }: { token: string }) {
       setWaFiltersExpanded(true);
     }
   }, [quickFilter]);
+
+  // Volta pra página 1 quando filtro ou busca muda
+  useEffect(() => { setPage(1); }, [quickFilter, sortBy, search]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [sendWithCardapioImage, setSendWithCardapioImage] = useState(false);
@@ -1423,9 +1428,10 @@ export function TabClientes({ token }: { token: string }) {
     });
   }, [clientes, matchesQuickFilter, sortBy, quickFilter]);
   const selectedCount = selectedIds.size;
-  const visibleSelectedCount = sortedFilteredClientes.filter((c) => selectedIds.has(c.id)).length;
-  const allVisibleSelected = sortedFilteredClientes.length > 0 && visibleSelectedCount === sortedFilteredClientes.length;
-  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredClientes.length / PAGE_SIZE));
+  const pagedClientes = sortedFilteredClientes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const allVisibleSelected = pagedClientes.length > 0 && pagedClientes.every((c) => selectedIds.has(c.id));
+  const someVisibleSelected = pagedClientes.some((c) => selectedIds.has(c.id)) && !allVisibleSelected;
   const selectedSentTodayCount = clientes.filter((customer) => selectedIds.has(customer.id) && getReactivationStatusMeta(customer).key === 'sent_today').length;
   const waSentTodayCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'sent_today').length;
   const waNeverSentCount = clientes.filter((customer) => getReactivationStatusMeta(customer).key === 'never').length;
@@ -1449,9 +1455,9 @@ export function TabClientes({ token }: { token: string }) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
-        sortedFilteredClientes.forEach((customer) => next.delete(customer.id));
+        pagedClientes.forEach((customer) => next.delete(customer.id));
       } else {
-        sortedFilteredClientes.forEach((customer) => next.add(customer.id));
+        pagedClientes.forEach((customer) => next.add(customer.id));
       }
       return next;
     });
@@ -1512,7 +1518,14 @@ export function TabClientes({ token }: { token: string }) {
   };
 
   return (
-    <div className="space-y-4">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="h-full min-h-0 overflow-y-auto bg-fp-secondary">
+      <div className="mx-auto max-w-7xl min-w-0 space-y-4 p-3 sm:space-y-5 sm:p-4 lg:p-6">
+      <ScreenHeader
+        titleAs="h1"
+        titleClassName="flex items-center gap-2"
+        title={<><Users size={22} className="shrink-0" /> Clientes</>}
+        subtitle="Histórico de clientes, filtros de reengajamento e disparo WhatsApp"
+      />
       <div className="flex flex-wrap gap-3 items-start">
         <div className="relative w-full flex-1 min-w-0 sm:min-w-[240px] sm:max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"/>
@@ -1732,7 +1745,7 @@ export function TabClientes({ token }: { token: string }) {
                 <th className="px-4 py-3"/>
               </tr></thead>
               <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800">
-                {sortedFilteredClientes.map(c => (
+                {pagedClientes.map(c => (
                   <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800">
                     <td className="px-4 py-3 align-top">
                       <input
@@ -1833,7 +1846,7 @@ export function TabClientes({ token }: { token: string }) {
             </table>
           </div>
           <div className="md:hidden space-y-3 p-3">
-            {sortedFilteredClientes.map(c => {
+            {pagedClientes.map(c => {
               const status = getCustomerActivityMeta(c.status_atividade);
               return (
                 <div
@@ -1927,6 +1940,53 @@ export function TabClientes({ token }: { token: string }) {
             </div>
           )}
 
+          {/* Paginação */}
+          {sortedFilteredClientes.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between gap-3 border-t border-zinc-100 dark:border-zinc-800 px-4 py-3">
+              <p className="text-xs text-zinc-500">
+                Exibindo <strong className="text-zinc-700 dark:text-zinc-300">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sortedFilteredClientes.length)}</strong> de <strong className="text-zinc-700 dark:text-zinc-300">{sortedFilteredClientes.length}</strong> clientes
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs font-bold text-zinc-600 disabled:opacity-40 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  aria-label="Página anterior"
+                >‹</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) =>
+                    p === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-xs text-zinc-400">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPage(p as number)}
+                        className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border text-xs font-bold transition-colors ${
+                          page === p
+                            ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-700 dark:border-zinc-700'
+                            : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                        }`}
+                      >{p}</button>
+                    )
+                  )}
+                <button
+                  type="button"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs font-bold text-zinc-600 disabled:opacity-40 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  aria-label="Próxima página"
+                >›</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2102,7 +2162,8 @@ export function TabClientes({ token }: { token: string }) {
           </div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </motion.div>
   );
 }
 
