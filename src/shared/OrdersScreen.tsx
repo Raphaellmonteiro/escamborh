@@ -931,6 +931,18 @@ const handleConfirmOrder = async (id: number) => {
                     )}
                   </div>
                 )}
+                {/* Banner retirada */}
+                {channelMeta.kind === 'pickup' && (
+                  <div className="flex flex-wrap items-center gap-2 border-b border-emerald-100 bg-emerald-50 px-3 py-1.5 sm:px-4 sm:py-2 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                    <span className="text-sm">🛍️</span>
+                    <span className="text-xs font-black text-emerald-700 uppercase tracking-wider dark:text-emerald-300">Retirada no local</span>
+                    {(order as any).cliente_nome
+                      ? <span className="text-xs text-emerald-700 font-semibold dark:text-emerald-300">— {(order as any).cliente_nome}</span>
+                      : <span className="text-xs text-emerald-600 italic dark:text-emerald-400">Cliente não identificado</span>
+                    }
+                    {(order as any).cliente_tel && <span className="text-xs text-emerald-500 ml-1 dark:text-emerald-400">({(order as any).cliente_tel})</span>}
+                  </div>
+                )}
                 <div className="p-3 sm:p-4">
                   <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
                     {/* Esquerda: senha + tipo */}

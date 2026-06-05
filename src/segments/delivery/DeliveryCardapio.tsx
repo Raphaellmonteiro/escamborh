@@ -5580,13 +5580,16 @@ const finalizar = async () => {
             <p
               className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
             >
-              Quem recebe e observações da entrega
+              Outra pessoa vai receber? (opcional)
+            </p>
+            <p className={`-mt-1 text-xs leading-relaxed ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              Preencha só se você pediu do trabalho ou de outro lugar e outra pessoa vai receber no seu lugar. Caso contrário, deixe em branco.
             </p>
             <div>
               <label
                 className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
               >
-                Nome de quem vai receber <span className="font-normal normal-case">(opcional)</span>
+                Nome de quem vai receber
               </label>
               <input
                 type="text"
@@ -5602,10 +5605,10 @@ const finalizar = async () => {
               <label
                 className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
               >
-                Número para contato <span className="font-normal normal-case">(opcional)</span>
+                Telefone de quem vai receber
               </label>
               <p className={`mb-2 text-xs leading-relaxed ${isLightCheckout ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                Se outra pessoa for receber ou atender o motoboy, informe DDD + número (10 ou 11 dígitos). Não altera o telefone da sua conta.
+                Para o entregador entrar em contato com quem está no local. Não altera o telefone do seu cadastro.
               </p>
               <input
                 type="tel"
@@ -5614,7 +5617,7 @@ const finalizar = async () => {
                 maxLength={40}
                 value={contatoRecebimento}
                 onChange={(e) => setContatoRecebimento(e.target.value)}
-                placeholder="Ex.: (11) 99999-9999"
+                placeholder="Ex.: (82) 99999-9999"
                 className={`${inp} text-sm`}
               />
             </div>
@@ -5622,12 +5625,12 @@ const finalizar = async () => {
               <label
                 className={`mb-1.5 block text-xs font-bold uppercase tracking-wider ${isLightCheckout ? 'text-zinc-500' : 'text-zinc-400'}`}
               >
-                Observação curta da entrega <span className="font-normal normal-case">(opcional)</span>
+                Recado para o entregador
               </label>
               <textarea
                 value={obsEntrega}
                 onChange={(e) => setObsEntrega(e.target.value)}
-                placeholder="Ex.: deixar na portaria, campainha não funciona"
+                placeholder="Ex.: Deixar na portaria. Campainha não funciona."
                 rows={2}
                 maxLength={MAX_CHECKOUT_OBS_ENTREGA_LEN}
                 className={`${inp} resize-none text-sm`}

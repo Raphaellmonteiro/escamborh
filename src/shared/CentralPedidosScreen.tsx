@@ -189,6 +189,8 @@ function getClienteLine(order: Order) {
   if (nome) return nome;
   const tel = order.cliente_tel;
   if (tel && String(tel).trim()) return String(tel).trim();
+  const kind = getCentralOrderKind(order);
+  if (kind === 'retirada') return 'Cliente não identificado';
   return '—';
 }
 
