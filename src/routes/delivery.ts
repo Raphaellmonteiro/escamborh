@@ -1177,7 +1177,7 @@ export function createDeliveryRouter() {
 
 router.get('/pedidos', async (req: Request, res) => {
     try {
-      const { status, limit = 100 } = req.query;
+      const { status, limit = 100, date } = req.query;
       let q = `SELECT p.*, dc.nome as motoboy_nome,
         (SELECT STRING_AGG(pr.name || ' x' || ip.quantity::text, ', ')
          FROM itens_pedido ip JOIN produtos pr ON pr.id=ip.product_id AND pr.tenant_id=ip.tenant_id WHERE ip.order_id=p.id AND ip.tenant_id=p.tenant_id) as resumo_itens,
@@ -1216,6 +1216,16 @@ router.get('/pedidos', async (req: Request, res) => {
         FROM pedidos p LEFT JOIN delivery_motoboys dc ON dc.id=p.motoboy_id AND dc.tenant_id=p.tenant_id
         WHERE p.tenant_id=? AND p.canal='delivery'`;
       const params: any[] = [req.tenantId];
+
+      // Filtro de data: por padrão mostra apenas pedidos do dia atual (fuso BR),
+      // igual ao comportamento da tela de Operações. Passa ?date=YYYY-MM-DD para
+      // consultar um dia específico (ex.: histórico de ontem).
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+        q += ` AND (p.created_at AT TIME ZONE '${TZ}')::date = ?`;
+        params.push(String(date));
+      } else {
+        q += ` AND (p.created_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`;
+      }
 
       if (status) {
         const statusList = String(status).split(',');
