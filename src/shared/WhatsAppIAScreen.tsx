@@ -1,24 +1,75 @@
+import React, { lazy, Suspense, useState } from 'react';
 import { motion } from 'motion/react';
-import { Bot, MessageCircle, Zap } from 'lucide-react';
-import { ScreenHeader } from '../components/ui/ScreenHeader';
-import WhatsAppConnectionPanel from './WhatsAppConnectionPanel';
-import WhatsAppChatbotPanel from './WhatsAppChatbotPanel';
 import {
-  adminOpsInsetPanelClass,
-  adminOpsSurfaceCardClass,
-  adminScreenMetaHintClass,
-  adminSectionEyebrowClass,
-} from '../components/ui/screenChrome';
+  Bot,
+  History,
+  Megaphone,
+  Plug,
+  ShoppingBag,
+  Smartphone,
+  UtensilsCrossed,
+  Zap,
+} from 'lucide-react';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { adminScreenMetaHintClass } from '../components/ui/screenChrome';
+
+// Carregamento lazy de cada aba para manter o bundle inicial leve
+const TabConexao     = lazy(() => import('./whatsapp-ia/TabConexao'));
+const TabIA          = lazy(() => import('./whatsapp-ia/TabIA'));
+const TabCardapio    = lazy(() => import('./whatsapp-ia/TabCardapio'));
+const TabPedidos     = lazy(() => import('./whatsapp-ia/TabPedidos'));
+const TabDisparos    = lazy(() => import('./whatsapp-ia/TabDisparos'));
+const TabIntegracoes = lazy(() => import('./whatsapp-ia/TabIntegracoes'));
+const TabLogs        = lazy(() => import('./whatsapp-ia/TabLogs'));
+
+type WhatsAppIATab =
+  | 'conexao'
+  | 'ia'
+  | 'cardapio'
+  | 'pedidos'
+  | 'disparos'
+  | 'integracoes'
+  | 'logs';
+
+type TabDef = {
+  key: WhatsAppIATab;
+  label: string;
+  icon: React.ReactNode;
+};
+
+const TABS: TabDef[] = [
+  { key: 'conexao',     label: 'Conexão',     icon: <Smartphone   size={14} /> },
+  { key: 'ia',          label: 'IA',           icon: <Bot          size={14} /> },
+  { key: 'cardapio',    label: 'Cardápio',     icon: <UtensilsCrossed size={14} /> },
+  { key: 'pedidos',     label: 'Pedidos',      icon: <ShoppingBag  size={14} /> },
+  { key: 'disparos',    label: 'Disparos',     icon: <Megaphone    size={14} /> },
+  { key: 'integracoes', label: 'Integrações',  icon: <Plug         size={14} /> },
+  { key: 'logs',        label: 'Logs',         icon: <History      size={14} /> },
+];
 
 type WhatsAppIAScreenProps = {
   token: string;
   slug?: string;
 };
 
-export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps) {
+function TabFallback() {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="h-full min-h-0 overflow-y-auto bg-fp-secondary">
-      <div className="mx-auto max-w-7xl min-w-0 space-y-4 p-3 sm:space-y-5 sm:p-4 lg:p-6">
+    <div className="flex min-h-[12rem] items-center justify-center text-sm text-fptext-muted">
+      Carregando…
+    </div>
+  );
+}
+
+export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps) {
+  const [activeTab, setActiveTab] = useState<WhatsAppIATab>('conexao');
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="h-full min-h-0 overflow-y-auto bg-fp-secondary"
+    >
+      <div className="mx-auto max-w-7xl min-w-0 space-y-0 p-3 sm:p-4 lg:p-6">
         <ScreenHeader
           titleAs="h1"
           titleClassName="flex flex-wrap items-center gap-2"
@@ -28,55 +79,54 @@ export default function WhatsAppIAScreen({ token, slug }: WhatsAppIAScreenProps)
               WhatsApp IA
             </>
           }
-          subtitle="Conexao segura do WhatsApp por tenant e configuracao do chatbot Groq, alinhadas ao contrato atual do modulo WhatsApp IA."
+          subtitle="Gerencie a conexão, inteligência artificial, cardápio, pedidos, campanhas e integrações do módulo WhatsApp IA."
           meta={
             <span className={adminScreenMetaHintClass}>
-              Painel administrativo conectado aos contratos atuais de /api/whatsapp/connection e /api/whatsapp/ai
+              Conectado a /api/whatsapp/*
             </span>
           }
         />
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
-          <section className={`${adminOpsSurfaceCardClass} p-4 sm:p-5`}>
-            <p className={adminSectionEyebrowClass}>Modulo</p>
-            <h2 className="mt-2 text-lg font-black text-fptext-primary">Conexao e configuracao dedicadas do modulo</h2>
-            <p className="mt-2 text-sm leading-relaxed text-fptext-muted">
-              Esta tela concentra o bloco visual de conexao do WhatsApp e a configuracao do chatbot por tenant.
-              O inbound, a operacao do canal e as demais trilhas continuam nos fluxos proprios do modulo WhatsApp.
-            </p>
-          </section>
-
-          <aside className={`${adminOpsSurfaceCardClass} p-4 sm:p-5`}>
-            <p className={adminSectionEyebrowClass}>Contrato atual</p>
-            <h2 className="mt-2 text-lg font-black text-fptext-primary">Recorte deste painel</h2>
-            <div className="mt-4 space-y-3">
-              <div className={`${adminOpsInsetPanelClass} flex items-start gap-3 p-3`}>
-                <Bot size={16} className="mt-0.5 shrink-0 text-fptext-muted" />
-                <div>
-                  <p className="text-sm font-bold text-fptext-primary">Operado nesta tela</p>
-                  <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-                    Leitura via <code>GET /api/whatsapp/connection</code> do status agregado da conexao e configuracao
-                    do chatbot via <code>GET/PUT /api/whatsapp/ai</code>.
-                  </p>
-                </div>
-              </div>
-
-              <div className={`${adminOpsInsetPanelClass} flex items-start gap-3 p-3`}>
-                <MessageCircle size={16} className="mt-0.5 shrink-0 text-fptext-muted" />
-                <div>
-                  <p className="text-sm font-bold text-fptext-primary">Operado em outras trilhas</p>
-                  <p className="mt-1 text-xs leading-relaxed text-fptext-muted">
-                    Inbound, visao de conversas, roteamento e atendimento humano continuam no backend e nas telas
-                    operacionais do modulo, sem configuracao adicional nesta pagina.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </aside>
+        {/* ── Barra de abas ─────────────────────────────────────────────── */}
+        <div className="mt-4 border-b border-fp-border">
+          <nav
+            className="-mb-px flex gap-1 overflow-x-auto pb-0 scrollbar-none"
+            aria-label="Módulos do WhatsApp IA"
+          >
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`
+                  flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold
+                  transition-colors whitespace-nowrap
+                  ${
+                    activeTab === tab.key
+                      ? 'border-fp-accent text-fp-accent'
+                      : 'border-transparent text-fptext-muted hover:border-fp-border hover:text-fptext-primary'
+                  }
+                `}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         </div>
 
-        <WhatsAppConnectionPanel token={token} />
-        <WhatsAppChatbotPanel token={token} />
+        {/* ── Conteúdo da aba ──────────────────────────────────────────── */}
+        <div className="mt-4">
+          <Suspense fallback={<TabFallback />}>
+            {activeTab === 'conexao'     && <TabConexao     token={token} />}
+            {activeTab === 'ia'          && <TabIA          token={token} />}
+            {activeTab === 'cardapio'    && <TabCardapio    token={token} />}
+            {activeTab === 'pedidos'     && <TabPedidos     token={token} />}
+            {activeTab === 'disparos'    && <TabDisparos    token={token} />}
+            {activeTab === 'integracoes' && <TabIntegracoes token={token} />}
+            {activeTab === 'logs'        && <TabLogs        token={token} />}
+          </Suspense>
+        </div>
       </div>
     </motion.div>
   );
