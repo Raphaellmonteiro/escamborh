@@ -42,6 +42,7 @@ const CloseCaixaModal       = lazy(() => import('./shared/modals/CloseCaixaModal
 const SolicitacaoModal      = lazy(() => import('./shared/modals/SolicitacaoModal'));
 const RHScreen              = lazy(() => import('./shared/RHScreen'));
 const SystemLogsScreen      = lazy(() => import('./shared/SystemLogsScreen'));
+const FiscalScreen          = lazy(() => import('./shared/FiscalScreen'));
 const DeliveryScreen        = lazy(() => import('./shared/DeliveryScreen'));
 const TabClientes = lazy(() => import('./shared/DeliveryScreen').then((m) => ({ default: m.TabClientes })));
 const DeliveryCardapio      = lazy(() => import('./segments/delivery/DeliveryCardapio'));
@@ -1070,12 +1071,7 @@ const handleAuth = async (e: React.FormEvent) => {
             {canAccess('estoque')  && <NavItem active={activeTab === 'estoque'}  onClick={() => handleTabChange('estoque')}  icon="📦"  label="Estoque" />}
           </>); })()}
           {canAccess('nfse') && (
-            <a href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer"
-              onClick={() => setMobileNavOpen(false)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-fptext-muted hover:bg-fp-hover hover:text-fptext-primary min-h-[44px]">
-              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[16px] leading-none" aria-hidden>📄</span>
-              <span className="font-medium">NFS-e</span>
-            </a>
+            <NavItem active={activeTab === 'fiscal'} onClick={() => handleTabChange('fiscal')} icon="📊" label="Fiscal" />
           )}
           {canAccess('dashboard')    && <NavItem active={activeTab === 'dashboard'}    onClick={() => handleTabChange('dashboard')}    icon="📊" label="Dashboard" />}
           {canAccess('finance')      && <NavItem active={activeTab === 'finance'}      onClick={() => handleTabChange('finance')}      icon="💰"      label="Financeiro" />}
@@ -1261,6 +1257,7 @@ const handleAuth = async (e: React.FormEvent) => {
             )}
             {activeTab === 'mesas' && canAccess('mesas') && permiteMesas && <MesasScreen token={token} taxasPagamento={taxasPagamento} />}
             {activeTab === 'finance' && canAccess('finance') && <FinanceScreen token={token} segmento={segmentoOperacional} />}
+            {activeTab === 'fiscal' && canAccess('nfse') && <FiscalScreen token={token} />}
             {activeTab === 'funcionarios' && canAccess('funcionarios') && <RHScreen token={token} />}
             {activeTab === 'logs' && canAccess('logs') && <SystemLogsScreen token={token} />}
             {activeTab === 'configuracoes' && canAccess('configuracoes') && <ConfiguracoesScreen token={token} darkMode={darkMode} setDarkMode={setDarkMode} />}
