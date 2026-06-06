@@ -337,7 +337,19 @@ export default function ProductsScreen({
       const savedId = editing.id || d.id;
       if (pendingPhoto && savedId) {
         const fd = new FormData(); fd.append('photo', pendingPhoto);
-        await fetch(`/api/products/${savedId}/photo`, { method: 'POST', headers: hdrs, body: fd });
+        const photoRes = await fetch(`/api/products/${savedId}/photo`, { method: 'POST', headers: hdrs, body: fd });
+        if (!photoRes.ok) {
+          const photoErr = await photoRes.json().catch(() => ({} as any));
+          const msg = photoErr?.message || photoErr?.error || `Erro ao enviar foto (${photoRes.status})`;
+          if (photoRes.status === 413) {
+            alert('A imagem é muito grande para ser enviada. Use uma foto menor (máx. 10 MB) ou reduza a resolução.');
+          } else {
+            alert(msg);
+          }
+          // Produto já foi salvo — apenas a foto falhou; não reverter
+          setEditing(null); setPendingPhoto(null); onUpdate();
+          return;
+        }
       }
       setEditing(null); setPendingPhoto(null); onUpdate();
     } catch { alert('Erro ao salvar produto.'); }
@@ -1575,7 +1587,16 @@ export default function ProductsScreen({
                         <ImageIcon size={24} className="text-zinc-300 mb-1"/>
                         <span className="text-xs text-zinc-400">Clique para adicionar foto</span>
                         <span className="text-[10px] text-zinc-300">JPEG, PNG ou WEBP · máx. 5MB</span>
-                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setPendingPhoto(f); }}/>
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  if (f.size > 10 * 1024 * 1024) {
+    alert('A imagem selecionada é muito grande (máx. 10 MB). Reduza o tamanho ou a resolução antes de enviar.');
+    e.target.value = '';
+    return;
+  }
+  setPendingPhoto(f);
+}}/>
                       </label>
                     )}
                   </div>
