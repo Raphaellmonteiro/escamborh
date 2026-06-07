@@ -21,6 +21,8 @@ import {
   upsertTenantChatbotConfig,
 } from '../services/chatbotService';
 import { loadMenuContextForAI } from '../services/whatsAppMenuContextService';
+import { notifyTenantOrderStreams } from '../sse';
+import { logAIOrderCreated } from '../services/whatsAppAiLogService';
 import { AppError, isAppError } from '../utils/errors';
 import { sendInternalError } from '../utils/internalServerError';
 import { query } from '../db';
@@ -54,22 +56,6 @@ export function createWhatsAppAiRouter() {
         : [];
       const safeConfig = sanitizeTenantChatbotConfigForClient(config);
 
-      // Fase 2b — busca colunas de uso da IA
-      const usageRow = await query(
-        `SELECT ai_messages_used, ai_messages_limit, ai_usage_reset_at
-         FROM tenant_whatsapp_chatbot_config
-         WHERE tenant_id=$1`,
-        [tenantId]
-      );
-      const usageData = usageRow.rows[0] ?? null;
-      const usage = usageData
-        ? {
-            used: Number(usageData.ai_messages_used ?? 0),
-            limit: Number(usageData.ai_messages_limit ?? 2000),
-            reset_date: usageData.ai_usage_reset_at ?? null,
-          }
-        : { used: 0, limit: 2000, reset_date: null };
-
       res.json({
         success: true,
         configured: Boolean(config),
@@ -77,7 +63,6 @@ export function createWhatsAppAiRouter() {
         config: safeConfig,
         runtime_context: runtimeContext,
         payment_methods: paymentMethods,
-        usage,
       });
     } catch (e: unknown) {
       if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
@@ -290,6 +275,18 @@ export function createWhatsAppAiRouter() {
           [orderId, item.product_id, item.qty, item.price, tenantId],
         );
       }
+
+      // Fase 3b — dispara SSE para o Balcão PDV ver o pedido em tempo real
+      // Mesmo mecanismo usado pelo delivery online
+      notifyTenantOrderStreams(tenantId, 'new', { orderId });
+
+      // Fase 9b — grava log do pedido criado via IA
+      logAIOrderCreated({
+        tenantId,
+        phone: customer_phone ?? null,
+        orderId,
+        total,
+      });
 
       res.json({ success: true, order_id: orderId, total });
     } catch (e: unknown) {

@@ -1,6 +1,7 @@
 import { q1, qRun, qAll, query } from '../db';
 import { getInstanceByName } from '../repositories/whatsappRepository';
 import { logError, logInfo } from '../utils/logger';
+import { logAIMessage, logAIError, logAIHandoff } from './whatsAppAiLogService';
 import {
   findDeliveryZoneByBairro,
   MENSAGEM_ENTREGA_FORA_DA_AREA,
@@ -1457,7 +1458,7 @@ async function processInboundAutoReply(input: {
     chatbotReplySource = chatbotResult.replySource;
     chatbotReason = chatbotResult.reason;
 
-    // Fase 2b — incrementa contador de mensagens da IA quando usada
+    // Fase 2b — incrementa contador quando a IA respondeu
     if (chatbotResult.usedAiFallback && chatbotResult.replyText) {
       query(
         `UPDATE tenant_whatsapp_chatbot_config
@@ -1466,6 +1467,31 @@ async function processInboundAutoReply(input: {
          WHERE tenant_id = $1`,
         [input.tenantId]
       ).catch((err) => logError('whatsAppInboundService.incrementAiUsage', err, { tenantId: input.tenantId }));
+    }
+
+    // Fase 9b — grava log do evento no feed
+    if (chatbotResult.intent === 'atendente') {
+      logAIHandoff({
+        tenantId: input.tenantId,
+        phone: input.message.customer_phone,
+        messageText: input.message.message_text,
+      });
+    } else if (chatbotResult.replySource !== 'none') {
+      logAIMessage({
+        tenantId: input.tenantId,
+        phone: input.message.customer_phone,
+        messageText: input.message.message_text,
+        replySource: chatbotResult.replySource,
+        reason: chatbotResult.reason,
+        replyText: chatbotResult.replyText,
+      });
+    } else if (chatbotResult.usedAiFallback && chatbotResult.error) {
+      logAIError({
+        tenantId: input.tenantId,
+        phone: input.message.customer_phone,
+        reason: chatbotResult.reason,
+        error: chatbotResult.error,
+      });
     }
   } catch (error) {
     logError('whatsAppInboundService.chatbot.process', error, {
