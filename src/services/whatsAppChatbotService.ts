@@ -1,4 +1,4 @@
-import { q1, qAll } from '../db'
+import { q1, qAll, qRun } from '../db'
 import { coerceDeliveryConfigRow } from '../utils/deliveryConfigPersist'
 import {
   findDeliveryZoneByBairro,
@@ -7,7 +7,11 @@ import {
 } from '../utils/deliveryBairroZona'
 import { AppError } from '../utils/errors'
 import { logError } from '../utils/logger'
-import { generateGroqReply, type GroqChatReplyResult } from './groqService'
+import { callAIProvider, type AIProviderAdapterResult } from './aiProviderAdapter'
+import {
+  loadMenuContextForAI,
+  buildSystemPromptWithMenu,
+} from './whatsAppMenuContextService'
 
 type JsonRecord = Record<string, unknown>
 
@@ -108,7 +112,7 @@ export type GroqFallbackReplyInput = {
   paymentMethods?: string[] | null
 }
 
-export type GroqFallbackReplyResult = GroqChatReplyResult
+export type GroqFallbackReplyResult = AIProviderAdapterResult
 
 export type ProcessChatbotMessageInput = {
   tenantId: number | string
@@ -124,13 +128,16 @@ export type ProcessChatbotMessageInput = {
 
 export type ProcessChatbotMessageReason =
   | 'keyword_match'
+  | 'ai_reply'
   | 'groq_reply'
   | 'chatbot_not_configured'
   | 'chatbot_disabled'
   | 'no_intent_match'
   | 'provider_not_supported'
   | 'groq_not_configured'
+  | 'ai_not_configured'
   | 'groq_error'
+  | 'ai_error'
 
 export type ProcessChatbotMessageResult = {
   tenantId: number
@@ -1232,10 +1239,6 @@ export async function generateGroqFallbackReply(
   const messageText = normalizeRequiredMessage(input.messageText)
   const provider = normalizeProviderName(input.config.provider)
 
-  if (provider !== 'groq') {
-    throw new AppError('Provider do chatbot nao suportado para fallback com Groq', 400)
-  }
-
   const context =
     input.context || (await loadTenantChatbotRuntimeContext(tenantId))
 
@@ -1248,15 +1251,25 @@ export async function generateGroqFallbackReply(
       ? input.paymentMethods
       : await loadTenantChatbotPaymentMethods(tenantId, context)
 
-  const systemPrompt =
+  // Fase 2c: injeta o cardápio completo abaixo do system_prompt do dono
+  const basePrompt =
     normalizeOptionalText(input.config.system_prompt) ||
     buildDefaultGroqSystemPrompt(context)
 
-  return generateGroqReply({
-    config: {
-      model: input.config.model,
-      providerConfigJson: input.config.provider_config_json,
-    },
+  let systemPrompt = basePrompt
+  try {
+    const menu = await loadMenuContextForAI(tenantId)
+    systemPrompt = buildSystemPromptWithMenu(basePrompt, menu)
+  } catch (menuError) {
+    // cardápio indisponível não bloqueia a resposta
+    logError('chatbotService.generateGroqFallbackReply.loadMenu', menuError, { tenantId })
+  }
+
+  // Fase 2d: provider agnóstico — usa callAIProvider para qualquer provider
+  return callAIProvider({
+    provider,
+    model: input.config.model,
+    providerConfigJson: input.config.provider_config_json,
     systemPrompt,
     userPrompt: buildGroqUserPrompt({
       context,
@@ -1367,40 +1380,24 @@ export async function processChatbotMessage(
     }
   }
 
-  if ((provider || DEFAULT_TENANT_CHATBOT_CONFIG.provider) !== 'groq') {
-    return {
-      tenantId,
-      chatbotEnabled: true,
-      provider,
-      model: config?.model || null,
-      intent: null,
-      replySource: 'none',
-      replyText: null,
-      handoffRequested: false,
-      usedAiFallback: true,
-      reason: 'provider_not_supported',
-      error: null,
-    }
-  }
-
   if (!config) {
     return {
       tenantId,
       chatbotEnabled: true,
-      provider: 'groq',
+      provider: provider || DEFAULT_TENANT_CHATBOT_CONFIG.provider,
       model: null,
       intent: null,
       replySource: 'none',
       replyText: null,
       handoffRequested: false,
       usedAiFallback: true,
-      reason: 'groq_not_configured',
-      error: 'Configuracao Groq nao encontrada',
+      reason: 'ai_not_configured',
+      error: 'Configuracao do chatbot nao encontrada',
     }
   }
 
   try {
-    const groqReply = await generateGroqFallbackReply({
+    const aiReply = await generateGroqFallbackReply({
       tenantId,
       messageText,
       customerName: input.customerName,
@@ -1412,18 +1409,18 @@ export async function processChatbotMessage(
     return {
       tenantId,
       chatbotEnabled: true,
-      provider: groqReply.provider,
-      model: groqReply.model,
+      provider: aiReply.provider,
+      model: aiReply.model,
       intent: null,
       replySource: 'groq',
-      replyText: groqReply.replyText,
+      replyText: aiReply.replyText,
       handoffRequested: false,
       usedAiFallback: true,
-      reason: 'groq_reply',
+      reason: 'ai_reply',
       error: null,
     }
   } catch (error) {
-    logError('chatbotService.processChatbotMessage.groqFallback', error, {
+    logError('chatbotService.processChatbotMessage.aiFallback', error, {
       tenantId,
       provider,
       model: config.model,
@@ -1441,8 +1438,8 @@ export async function processChatbotMessage(
       usedAiFallback: true,
       reason:
         error instanceof AppError && error.statusCode === 400
-          ? 'groq_not_configured'
-          : 'groq_error',
+          ? 'ai_not_configured'
+          : 'ai_error',
       error: error instanceof Error ? error.message : String(error),
     }
   }

@@ -968,9 +968,11 @@ export async function runMigrations() {
 const { ensureOrdersSourceColumns }       = await import('./db/migrations/ordersSource');
 const { ensureWhatsAppCampaignsTable }    = await import('./db/migrations/whatsappCampaigns');
 const { ensureWhatsAppIntegrationsTable } = await import('./db/migrations/whatsappIntegrations');
+const { ensureWhatsAppAiUsageColumns }    = await import('./db/migrations/whatsappAiUsage');
 await ensureOrdersSourceColumns();
 await ensureWhatsAppCampaignsTable();
 await ensureWhatsAppIntegrationsTable();
+await ensureWhatsAppAiUsageColumns();
 
     console.log('Migracoes PostgreSQL concluidas.');
   } catch (err: any) {

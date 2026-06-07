@@ -1,4 +1,4 @@
-import { q1, qRun, qAll } from '../db';
+import { q1, qRun, qAll, query } from '../db';
 import { getInstanceByName } from '../repositories/whatsappRepository';
 import { logError, logInfo } from '../utils/logger';
 import {
@@ -1456,6 +1456,17 @@ async function processInboundAutoReply(input: {
     chatbotReplyMessage = normalizeOptionalText(chatbotResult.replyText);
     chatbotReplySource = chatbotResult.replySource;
     chatbotReason = chatbotResult.reason;
+
+    // Fase 2b — incrementa contador de mensagens da IA quando usada
+    if (chatbotResult.usedAiFallback && chatbotResult.replyText) {
+      query(
+        `UPDATE tenant_whatsapp_chatbot_config
+         SET ai_messages_used = ai_messages_used + 1,
+             updated_at = NOW()
+         WHERE tenant_id = $1`,
+        [input.tenantId]
+      ).catch((err) => logError('whatsAppInboundService.incrementAiUsage', err, { tenantId: input.tenantId }));
+    }
   } catch (error) {
     logError('whatsAppInboundService.chatbot.process', error, {
       tenantId: input.tenantId,
