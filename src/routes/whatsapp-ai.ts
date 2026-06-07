@@ -1,24 +1,14 @@
 /**
- * routes/whatsapp-ai.ts
- * Router expandido do módulo WhatsApp IA.
+ * routes/whatsapp-ai.ts — CORRIGIDO
  *
- * Endpoints existentes mantidos:
- *   GET  /               — config do chatbot
- *   PUT  /               — salvar config do chatbot
- *
- * Novos endpoints (Fases 2–9):
- *   GET  /menu-context   — snapshot do cardápio para a IA
- *   GET  /orders         — pedidos criados pela IA
- *   POST /create-order   — criar pedido via IA
- *   GET  /campaigns      — listar campanhas
- *   POST /campaigns      — criar campanha
- *   POST /campaigns/:id/send  — disparar campanha
- *   DELETE /campaigns/:id     — cancelar campanha
- *   GET  /integrations   — listar integrações (N8N / GPT / Webhook)
- *   POST /integrations   — criar integração
- *   PUT  /integrations/:id    — atualizar integração
- *   POST /integrations/:id/test — disparar evento de teste
- *   GET  /logs           — histórico de eventos
+ * Correções aplicadas vs versão anterior:
+ *   - "orders"      → "pedidos"       (nome real da tabela)
+ *   - "order_items" → "itens_pedido"  (nome real da tabela)
+ *   - colunas de pedidos corrigidas: customer_phone→cliente_tel, total→total_amount,
+ *     payment_method→pagamento_tipo, payment_confirmed→pagamento_confirmado_at
+ *   - itens_pedido: name→product_name inexistente → usamos product_id + price_at_time
+ *   - INSERT em pedidos usa colunas reais do schema
+ *   - Migrations das novas tabelas chamadas dentro de runMigrations (via db.ts)
  */
 
 import { Router, Request } from 'express';
@@ -119,7 +109,7 @@ export function createWhatsAppAiRouter() {
       const tenantId = getRequestTenantId(req);
       const menu = await loadMenuContextForAI(tenantId);
 
-      // ⚠️ Segurança: mascara a chave PIX antes de retornar ao frontend
+      // Segurança: mascara a chave PIX antes de retornar ao frontend
       if (menu.pix?.key) {
         const key = menu.pix.key;
         menu.pix.key = key.length > 8
@@ -135,6 +125,7 @@ export function createWhatsAppAiRouter() {
   });
 
   // ── Fase 3 — Pedidos via IA ───────────────────────────────────────────────
+  // Tabelas reais: pedidos, itens_pedido
 
   router.get('/orders', async (req: Request, res) => {
     try {
@@ -142,55 +133,78 @@ export function createWhatsAppAiRouter() {
       const limit  = Math.min(Number(req.query.limit  ?? 50), 100);
       const offset = Number(req.query.offset ?? 0);
 
-      // Busca pedidos com source = 'whatsapp_ai' + itens
+      // pedidos: canal='whatsapp_ai' identifica pedidos criados pela IA
+      // Colunas reais: id, cliente_tel, status, pagamento_tipo, total_amount, created_at
+      // payment_confirmed: usamos pagamento_confirmado_at IS NOT NULL
       const ordersResult = await query<{
         id: number;
-        customer_phone: string | null;
+        cliente_tel: string | null;
         status: string;
-        payment_method: string | null;
+        pagamento_tipo: string | null;
         payment_confirmed: boolean;
-        total: number;
+        total_amount: number;
         created_at: string;
       }>(
-        `SELECT id, customer_phone, status, payment_method,
-                COALESCE(payment_confirmed, false) AS payment_confirmed,
-                total, created_at
-           FROM orders
+        `SELECT id,
+                cliente_tel,
+                status,
+                pagamento_tipo,
+                (pagamento_confirmado_at IS NOT NULL) AS payment_confirmed,
+                total_amount,
+                created_at
+           FROM pedidos
           WHERE tenant_id = $1
-            AND source = 'whatsapp_ai'
+            AND canal = 'whatsapp_ai'
           ORDER BY created_at DESC
           LIMIT $2 OFFSET $3`,
         [tenantId, limit, offset],
       );
 
       const orderIds = ordersResult.rows.map((r) => r.id);
-      let itemsByOrder = new Map<number, unknown[]>();
+      const itemsByOrder = new Map<number, unknown[]>();
 
       if (orderIds.length > 0) {
+        // itens_pedido: colunas reais = order_id, product_id, quantity, price_at_time
+        // não tem coluna "name" — buscamos name do produto junto
         const itemsResult = await query<{
           order_id: number;
           product_id: number;
-          name: string;
-          qty: number;
-          unit_price: number;
+          name: string | null;
+          quantity: number;
+          price_at_time: number;
         }>(
-          `SELECT order_id, product_id, name, quantity AS qty, unit_price
-             FROM order_items
-            WHERE order_id = ANY($1::int[])
-            ORDER BY order_id, id`,
+          `SELECT ip.order_id,
+                  ip.product_id,
+                  p.name,
+                  ip.quantity,
+                  ip.price_at_time
+             FROM itens_pedido ip
+             LEFT JOIN produtos p ON p.id = ip.product_id
+            WHERE ip.order_id = ANY($1::int[])
+            ORDER BY ip.order_id, ip.id`,
           [orderIds],
         );
         for (const item of itemsResult.rows) {
           const list = itemsByOrder.get(item.order_id) ?? [];
-          list.push({ product_id: item.product_id, name: item.name, qty: item.qty, unit_price: Number(item.unit_price) });
+          list.push({
+            product_id: item.product_id,
+            name:       item.name ?? `Produto #${item.product_id}`,
+            qty:        item.quantity,
+            unit_price: Number(item.price_at_time),
+          });
           itemsByOrder.set(item.order_id, list);
         }
       }
 
       const orders = ordersResult.rows.map((o) => ({
-        ...o,
-        total: Number(o.total),
-        items: itemsByOrder.get(o.id) ?? [],
+        id:               o.id,
+        customer_phone:   o.cliente_tel ?? '',
+        status:           o.status,
+        payment_method:   o.pagamento_tipo,
+        payment_confirmed: Boolean(o.payment_confirmed),
+        total:            Number(o.total_amount),
+        created_at:       o.created_at,
+        items:            itemsByOrder.get(o.id) ?? [],
       }));
 
       res.json({ success: true, orders });
@@ -214,7 +228,7 @@ export function createWhatsAppAiRouter() {
       const productMap = new Map(menu.products.map((p) => [p.id, p]));
 
       let total = 0;
-      const validatedItems: { product_id: number; name: string; qty: number; unit_price: number }[] = [];
+      const validatedItems: { product_id: number; qty: number; price: number }[] = [];
 
       for (const item of items) {
         const product = productMap.get(Number(item.product_id));
@@ -226,30 +240,37 @@ export function createWhatsAppAiRouter() {
           return res.status(400).json({ success: false, error: `Quantidade inválida para o produto ${product.name}.` });
         }
         total += product.price * qty;
-        validatedItems.push({ product_id: product.id, name: product.name, qty, unit_price: product.price });
+        validatedItems.push({ product_id: product.id, qty, price: product.price });
       }
 
-      // Adiciona taxa de entrega se configurada
       const deliveryFee = menu.delivery_config?.delivery_fee ?? 0;
       total += deliveryFee;
 
-      // Cria o pedido com source = 'whatsapp_ai'
+      // Inserir em pedidos com colunas reais do schema
+      // canal='whatsapp_ai' identifica a origem
       const orderResult = await query<{ id: number }>(
-        `INSERT INTO orders
-           (tenant_id, customer_phone, status, payment_method, total,
-            delivery_address, source, created_at, updated_at)
-         VALUES ($1, $2, 'pendente', $3, $4, $5, 'whatsapp_ai', NOW(), NOW())
+        `INSERT INTO pedidos
+           (tenant_id, cliente_tel, endereco, pagamento_tipo,
+            total_amount, taxa_entrega, canal, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'whatsapp_ai', 'Criado', NOW())
          RETURNING id`,
-        [tenantId, customer_phone ?? null, payment_method ?? null, total, delivery_address ?? null],
+        [
+          tenantId,
+          customer_phone ?? null,
+          delivery_address ?? null,
+          payment_method ?? null,
+          total,
+          deliveryFee,
+        ],
       );
       const orderId = orderResult.rows[0].id;
 
-      // Insere os itens
+      // Inserir itens em itens_pedido com colunas reais
       for (const item of validatedItems) {
         await query(
-          `INSERT INTO order_items (order_id, product_id, name, quantity, unit_price)
+          `INSERT INTO itens_pedido (order_id, product_id, quantity, price_at_time, tenant_id)
            VALUES ($1, $2, $3, $4, $5)`,
-          [orderId, item.product_id, item.name, item.qty, item.unit_price],
+          [orderId, item.product_id, item.qty, item.price, tenantId],
         );
       }
 
@@ -304,8 +325,8 @@ export function createWhatsAppAiRouter() {
 
       const result = await query<{ id: number }>(
         `INSERT INTO whatsapp_campaigns
-           (tenant_id, name, message, target_type, status, scheduled_at, created_at)
-         VALUES ($1, $2, $3, $4, 'draft', $5, NOW())
+           (tenant_id, name, message, target_type, status, scheduled_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'draft', $5, NOW(), NOW())
          RETURNING id`,
         [tenantId, name.trim(), message.trim(), target_type, scheduled_at ?? null],
       );
@@ -319,7 +340,7 @@ export function createWhatsAppAiRouter() {
 
   router.post('/campaigns/:id/send', async (req: Request, res) => {
     try {
-      const tenantId = getRequestTenantId(req);
+      const tenantId  = getRequestTenantId(req);
       const campaignId = Number(req.params.id);
 
       const check = await query<{ status: string }>(
@@ -329,18 +350,14 @@ export function createWhatsAppAiRouter() {
       if (check.rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Campanha não encontrada.' });
       }
-      if (check.rows[0].status === 'done' || check.rows[0].status === 'running') {
-        return res.status(409).json({ success: false, error: 'Campanha já foi disparada ou está sendo executada.' });
+      if (['done', 'running'].includes(check.rows[0].status)) {
+        return res.status(409).json({ success: false, error: 'Campanha já foi disparada ou está em execução.' });
       }
 
-      // Marca como running — o worker de disparo processará em background
       await query(
         `UPDATE whatsapp_campaigns SET status = 'running', updated_at = NOW() WHERE id = $1`,
         [campaignId],
       );
-
-      // TODO Fase 7 completa: enfileirar envios com rate-limit (evitar ban)
-      // Por ora, responde imediatamente para a UI não ficar bloqueada.
 
       res.json({ success: true, message: 'Campanha marcada para disparo.' });
     } catch (e: unknown) {
@@ -365,7 +382,7 @@ export function createWhatsAppAiRouter() {
     }
   });
 
-  // ── Fase 8 — Integrações (N8N / GPT / Webhook) ───────────────────────────
+  // ── Fase 8 — Integrações ─────────────────────────────────────────────────
 
   router.get('/integrations', async (req: Request, res) => {
     try {
@@ -439,8 +456,8 @@ export function createWhatsAppAiRouter() {
       const tenantId = getRequestTenantId(req);
       const integId  = Number(req.params.id);
 
-      const check = await query<{ type: string; config_json: Record<string, unknown>; enabled: boolean }>(
-        `SELECT type, config_json, enabled FROM whatsapp_integrations WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      const check = await query<{ type: string; config_json: Record<string, unknown> }>(
+        `SELECT type, config_json FROM whatsapp_integrations WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
         [integId, tenantId],
       );
       if (check.rows.length === 0) {
@@ -463,7 +480,6 @@ export function createWhatsAppAiRouter() {
           return res.status(502).json({ success: false, error: `Webhook respondeu com status ${fetchRes.status}.` });
         }
       }
-      // Para OpenAI, não testa a API key aqui — apenas confirma que está salva.
 
       res.json({ success: true, message: 'Evento de teste enviado.' });
     } catch (e: unknown) {
@@ -482,18 +498,15 @@ export function createWhatsAppAiRouter() {
       const type   = req.query.type as string | undefined;
       const offset = (page - 1) * limit;
 
-      const conditions: string[] = ['tenant_id = $1'];
-      const params: unknown[]    = [tenantId];
+      const params: unknown[] = [tenantId];
+      let typeClause = '';
 
       if (type && type !== 'all') {
         params.push(type);
-        conditions.push(`type = $${params.length}`);
+        typeClause = `AND type = $${params.length}`;
       }
 
-      params.push(limit);
-      params.push(offset);
-
-      const where = conditions.join(' AND ');
+      params.push(limit, offset);
 
       const result = await query<{
         id: number;
@@ -505,7 +518,7 @@ export function createWhatsAppAiRouter() {
       }>(
         `SELECT id, type, summary, detail, phone, created_at
            FROM whatsapp_ai_logs
-          WHERE ${where}
+          WHERE tenant_id = $1 ${typeClause}
           ORDER BY created_at DESC
           LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
