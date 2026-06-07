@@ -25,7 +25,7 @@ export async function ensureWhatsAppIntegrationsTable(): Promise<void> {
       await query(`
         CREATE TABLE IF NOT EXISTS whatsapp_integrations (
           id          SERIAL PRIMARY KEY,
-          tenant_id   INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          tenant_id    INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
           type        VARCHAR(50) NOT NULL,
           config_json JSONB       NOT NULL DEFAULT '{}',
           enabled     BOOLEAN     NOT NULL DEFAULT FALSE,
@@ -44,7 +44,7 @@ export async function ensureWhatsAppIntegrationsTable(): Promise<void> {
       await query(`
         CREATE TABLE IF NOT EXISTS whatsapp_ai_logs (
           id         SERIAL PRIMARY KEY,
-          tenant_id  INTEGER     NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          tenant_id  INTEGER     NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
           type       VARCHAR(50) NOT NULL DEFAULT 'message',
           summary    TEXT        NOT NULL,
           detail     TEXT,

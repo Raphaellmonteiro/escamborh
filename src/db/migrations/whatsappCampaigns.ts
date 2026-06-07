@@ -26,7 +26,7 @@ export async function ensureWhatsAppCampaignsTable(): Promise<void> {
       await query(`
         CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
           id           SERIAL PRIMARY KEY,
-          tenant_id    INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          tenant_id    INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
           name         VARCHAR(255) NOT NULL,
           message      TEXT NOT NULL,
           target_type  VARCHAR(50)  NOT NULL DEFAULT 'all',

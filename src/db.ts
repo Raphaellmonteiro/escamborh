@@ -963,6 +963,15 @@ export async function runMigrations() {
       );
     `);
 
+
+// WhatsApp IA — novas tabelas
+const { ensureOrdersSourceColumns }       = await import('./db/migrations/ordersSource');
+const { ensureWhatsAppCampaignsTable }    = await import('./db/migrations/whatsappCampaigns');
+const { ensureWhatsAppIntegrationsTable } = await import('./db/migrations/whatsappIntegrations');
+await ensureOrdersSourceColumns();
+await ensureWhatsAppCampaignsTable();
+await ensureWhatsAppIntegrationsTable();
+
     console.log('Migracoes PostgreSQL concluidas.');
   } catch (err: any) {
     console.error('Erro nas migracoes:', err.message);
