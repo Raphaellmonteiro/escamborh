@@ -23,6 +23,8 @@ import {
 import { loadMenuContextForAI } from '../services/whatsAppMenuContextService';
 import { notifyTenantOrderStreams } from '../sse';
 import { logAIOrderCreated } from '../services/whatsAppAiLogService';
+import { runCampaign } from '../services/whatsAppCampaignWorker';
+import { logError } from '../utils/logger';
 import { AppError, isAppError } from '../utils/errors';
 import { sendInternalError } from '../utils/internalServerError';
 import { query } from '../db';
@@ -295,7 +297,94 @@ export function createWhatsAppAiRouter() {
     }
   });
 
-  // ── Fase 7 — Campanhas ────────────────────────────────────────────────────
+  // ── Fase 5 — PIX: confirmar pagamento de pedido WhatsApp ─────────────────
+
+  router.patch('/orders/:id/confirm-payment', async (req: Request, res) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const orderId  = Number(req.params.id);
+
+      const result = await query<{ id: number; total_amount: number }>(
+        `UPDATE pedidos
+            SET pagamento_confirmado_at = NOW(),
+                pagamento_tipo = COALESCE(pagamento_tipo, 'Pix'),
+                updated_at     = NOW()
+          WHERE id = $1
+            AND tenant_id = $2
+            AND canal = 'whatsapp_ai'
+            AND pagamento_confirmado_at IS NULL
+          RETURNING id, total_amount`,
+        [orderId, tenantId],
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Pedido não encontrado, não pertence a este tenant, ou pagamento já confirmado.',
+        });
+      }
+
+      res.json({ success: true, order_id: orderId, total: Number(result.rows[0].total_amount) });
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/whatsapp-ai:confirm-payment', e);
+    }
+  });
+
+  // ── Fase 6 — Consulta de pedidos por telefone (todos os canais) ──────────
+
+  router.get('/online-orders', async (req: Request, res) => {
+    try {
+      const tenantId = getRequestTenantId(req);
+      const phone    = String(req.query.phone ?? '').trim();
+
+      if (!phone) {
+        return res.status(400).json({ success: false, error: 'Parâmetro phone é obrigatório.' });
+      }
+
+      const digits = phone.replace(/\D/g, '');
+      const candidates: string[] = Array.from(new Set([
+        digits.slice(-11),
+        digits.slice(-10),
+      ])).filter((p) => p.length >= 8);
+
+      const result = await query<{
+        id: number;
+        order_number: string | null;
+        status: string;
+        canal: string | null;
+        total_amount: number;
+        pagamento_tipo: string | null;
+        created_at: string;
+      }>(
+        `SELECT id, order_number, status, canal, total_amount, pagamento_tipo, created_at
+           FROM pedidos
+          WHERE tenant_id = $1
+            AND RIGHT(REGEXP_REPLACE(COALESCE(cliente_tel,''), '[^0-9]', '', 'g'), 11) = ANY($2::text[])
+          ORDER BY created_at DESC
+          LIMIT 10`,
+        [tenantId, candidates],
+      );
+
+      res.json({
+        success: true,
+        orders: result.rows.map((o) => ({
+          id:             o.id,
+          order_number:   o.order_number,
+          status:         o.status,
+          canal:          o.canal,
+          total:          Number(o.total_amount),
+          payment_method: o.pagamento_tipo,
+          created_at:     o.created_at,
+        })),
+      });
+    } catch (e: unknown) {
+      if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message });
+      sendInternalError(res, 'routes/whatsapp-ai:online-orders', e);
+    }
+  });
+
+    // ── Fase 7 — Campanhas ────────────────────────────────────────────────────
 
   router.get('/campaigns', async (req: Request, res) => {
     try {
@@ -373,7 +462,12 @@ export function createWhatsAppAiRouter() {
         [campaignId],
       );
 
-      res.json({ success: true, message: 'Campanha marcada para disparo.' });
+      // Fase 7b — dispara o worker de envio em background (fire-and-forget)
+      runCampaign(campaignId).catch((err) => {
+        logError('routes/whatsapp-ai:campaigns-send.worker', err, { campaignId });
+      });
+
+      res.json({ success: true, message: 'Campanha iniciada. Envios acontecem em background.' });
     } catch (e: unknown) {
       if (isAppError(e)) return res.status(e.statusCode).json({ success: false, error: e.message });
       sendInternalError(res, 'routes/whatsapp-ai:campaigns-send', e);
