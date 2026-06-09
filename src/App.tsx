@@ -11,8 +11,6 @@ import {
 import type { Product, CaixaStatusApi, Order } from './types';
 import NavItem from './components/ui/NavItem';
 import PlanBadge from './components/ui/PlanBadge';
-import AIUsageWidget from './components/ui/AIUsageWidget';
-import AIUsageBanner from './components/ui/AIUsageBanner';
 import { getSegCfg, getOperationalSegment } from './config/segmentos';
 import {
   getSafeFallbackPlanFeatures,
@@ -1083,10 +1081,6 @@ const handleAuth = async (e: React.FormEvent) => {
           {canAccess('configuracoes')&& <NavItem active={activeTab === 'configuracoes'} onClick={() => handleTabChange('configuracoes')}  icon="⚙️"        label="Configurações" />}
         </nav>
 
-        {/* Widget de uso da IA — visível só quando tem acesso ao módulo WhatsApp IA */}
-        {canAccess('whatsapp-ia') && permiteDelivery && (
-          <AIUsageWidget token={token} />
-        )}
 
         </div>{/* fim área scrollável */}
 
@@ -1237,16 +1231,11 @@ const handleAuth = async (e: React.FormEvent) => {
             {activeTab === 'pos' && canAccess('pos') && <POSScreen token={token} products={products} estabelecimentoSegmento={segmentoOperacional} taxasPagamento={taxasPagamento} />}
             {activeTab === 'orders' && canAccess('orders') && <OrdersScreen token={token} segmento={segmentoOperacional} displaySlug={slugAtual} onShowQR={() => setShowQRModal(true)} />}
             {activeTab === 'central' && canAccess('orders') && (
-              <>
-                {canAccess('whatsapp-ia') && permiteDelivery && (
-                  <AIUsageBanner token={token} />
-                )}
-                <CentralPedidosScreen
+              <CentralPedidosScreen
                   token={token}
                   segmento={segmentoOperacional}
                   hasMotoboyFeature={tenantHasMotoboyFeature}
                 />
-              </>
             )}
             {activeTab === 'dashboard' && canAccess('dashboard') && <DashboardScreen token={token} segmento={segmentoOperacional} onGoToPOS={() => handleTabChange('pos')} />}
             {activeTab === 'products' && canAccess('products') && (

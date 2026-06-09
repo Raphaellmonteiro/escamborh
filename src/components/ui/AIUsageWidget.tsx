@@ -36,7 +36,7 @@ export default function AIUsageWidget({ token }: { token: string }) {
 
   const fetchUsage = async () => {
     try {
-      const res = await fetch('/api/whatsapp-ai/', {
+      const res = await fetch('/api/whatsapp/ai/', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
